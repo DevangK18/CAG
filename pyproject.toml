@@ -1,0 +1,45 @@
+
+
+[tool.poetry]
+name = "cag_rag"
+version = "0.1.0"
+description = "RAG-powered gateway to India's public audit reports."
+authors = "Devang K"
+readme = "README.md"
+[tool.poetry.dependencies]
+python = "^3.11"
+# Core Parsing Pipeline Dependencies
+docling-core = "*" # Placeholder, specify version once known
+pymupdf = "^1.24.1"
+ocrmypdf = "^16.1.1"
+# Vision Models for Image Analysis
+transformers = "^4.41.2"
+torch = "^2.3.1"
+pillow = "^10.3.0"
+# RAG Framework & Vector DB Client
+llama-index = "^0.10.40"
+qdrant-client = "^1.9.0"
+# Utilities
+python-dotenv = "^1.0.1"
+pandas = "^2.2.2"
+tqdm = "^4.66.4"
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.1"
+
+pre-commit = "^3.7.1"
+ruff = "^0.4.5"
+mypy = "^1.10.0"
+jupyterlab = "^4.2.1"
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+# Tool Configurations
+[tool.ruff]
+line-length = 88
+#select = ""
+#ignore = ""
+[tool.ruff.format]
+quote-style = "double"
+[tool.mypy]
+strict = true
+ignore_missing_imports = true

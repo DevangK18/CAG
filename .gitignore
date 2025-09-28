@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.vscode/
+# DVC
+.dvc/cache
+data/raw/reports/
+data/processed/json/
+# Notebooks
+.ipynb_checkpoints
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+# IDE
+.idea/
+memory_bank/
+.DS_Store
+.DS_Store/
