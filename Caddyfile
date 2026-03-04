@@ -1,0 +1,38 @@
+# ============================================
+# CAG-GATEWAY Caddyfile
+# ============================================
+# Currently: HTTP only (no domain)
+# To enable HTTPS: replace :80 with yourdomain.com
+# Caddy auto-provisions Let's Encrypt certs.
+# ============================================
+
+:80 {
+    # Everything goes to FastAPI (it serves both API and frontend)
+    reverse_proxy app:8000 {
+        # Pass real client IP for logging
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # SSE streaming: disable buffering so chunks arrive immediately
+        flush_interval -1
+    }
+
+    # Compress responses
+    encode gzip
+
+    # Basic security headers
+    header {
+        X-Content-Type-Options nosniff
+        # Allow same-origin iframes (needed for PDF viewer)
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Access logging
+    log {
+        output stdout
+        format console
+    }
+}

@@ -1,0 +1,43 @@
+# Dependencies & build artifacts
+node_modules
+frontend/node_modules
+frontend/dist
+__pycache__
+*.pyc
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Git
+.git
+.gitignore
+
+# Environment & secrets
+.env*
+!.env.production.template
+
+# Data (volume-mounted, not baked into image)
+data/
+logs/
+memory_bank/
+
+# Offline pipelines (not needed at runtime)
+src/parsing_pipeline/
+src/batch_pipeline/
+src/enrichment/
+
+# Dev & docs
+*.md
+.vscode
+.cursor
+tests/
+scripts/
+docs/
+*.xlsx
+*.yaml
+environment.yaml
+
+# Docker files (no inception)
+Dockerfile
+docker-compose*.yml
+Caddyfile

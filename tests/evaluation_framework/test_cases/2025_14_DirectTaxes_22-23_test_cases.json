@@ -1,0 +1,518 @@
+[
+  {
+    "id": "DT_2022-23_TC001",
+    "question": "How much did the Income Tax Department recover in the last three years from demands raised to rectify errors pointed out by Audit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The Income Tax Department (ITD) recovered ₹3,588.79 crore in the last three years from demands raised to rectify errors in assessments pointed out by Audit. This includes ₹3,474.89 crore recovered in FY 2022-23, which increased significantly compared to previous years' recoveries.",
+      "key_facts": [
+        "ITD recovered ₹3,588.79 crore in the last three years",
+        "₹3,474.89 crore was recovered in FY 2022-23 alone",
+        "Recovery in FY 2022-23 increased significantly compared to previous years"
+      ],
+      "key_amounts": [
+        {"value": 3588.79, "unit": "crore", "context": "Total recovery in last three years from audit-pointed errors", "required": true},
+        {"value": 3474.89, "unit": "crore", "context": "Recovery in FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "ITD", "Audit"],
+      "source_sections": ["Executive Summary", "2.7"],
+      "source_pages": [9, 57]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state tax recovery"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC002",
+    "question": "What was the total Direct Tax collection in FY 2022-23 and what was the growth rate?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "Direct Tax receipts were ₹16,63,686 crore in FY 2022-23, witnessing a growth of 17.8 per cent over the previous year. Direct Taxes accounted for 45.4 per cent of total revenue receipts in FY 2022-23.",
+      "key_facts": [
+        "Direct Tax receipts were ₹16,63,686 crore in FY 2022-23",
+        "Growth of 17.8 per cent over the previous year",
+        "Direct Taxes accounted for 45.4 per cent of total revenue receipts"
+      ],
+      "key_amounts": [
+        {"value": 1663686, "unit": "crore", "context": "Direct Tax receipts in FY 2022-23", "required": true},
+        {"value": 17.8, "unit": "per cent", "context": "Growth rate over previous year", "required": true}
+      ],
+      "key_entities": ["Direct Taxes", "Union Government"],
+      "source_sections": ["1.3.1", "Table 1.1"],
+      "source_pages": [16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect taxes collection details"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC003",
+    "question": "What was the sanctioned and working staff strength of the Income Tax Department as on 31 March 2023?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "As on 31 March 2023, the sanctioned staff strength of the Income Tax Department (ITD) was 77,626 and the working strength was 47,755. The sanctioned and working strength of officers was 10,862 and 9,328 respectively.",
+      "key_facts": [
+        "Sanctioned staff strength was 77,626",
+        "Working strength was 47,755",
+        "Sanctioned strength of officers was 10,862",
+        "Working strength of officers was 9,328"
+      ],
+      "key_amounts": [
+        {"value": 77626, "unit": "number", "context": "Sanctioned staff strength of ITD", "required": true},
+        {"value": 47755, "unit": "number", "context": "Working staff strength of ITD", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "ITD"],
+      "source_sections": ["1.2"],
+      "source_pages": [14]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["CBIC staff strength"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC004",
+    "question": "How many high-value cases were covered in the report and what was the total tax effect?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "There were 481 high-value cases with a tax effect of ₹7,929.21 crore covered in Chapters III and IV of the Report. Out of these, replies in respect of 414 cases having a tax effect of ₹6,526.27 crore were received, of which the Ministry/ITD accepted 238 cases (57.49 per cent) having a tax effect of ₹4,271.94 crore (65.46 per cent).",
+      "key_facts": [
+        "481 high-value cases with tax effect of ₹7,929.21 crore",
+        "414 cases with tax effect of ₹6,526.27 crore received replies",
+        "238 cases (57.49%) with tax effect of ₹4,271.94 crore (65.46%) were accepted"
+      ],
+      "key_amounts": [
+        {"value": 7929.21, "unit": "crore", "context": "Total tax effect of 481 high-value cases", "required": true},
+        {"value": 4271.94, "unit": "crore", "context": "Tax effect of accepted cases", "required": true}
+      ],
+      "key_entities": ["Ministry", "ITD", "CBDT"],
+      "source_sections": ["Executive Summary"],
+      "source_pages": [9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["low-value cases"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC005",
+    "question": "What was the total tax effect of audit observations that became time-barred for remedial action during FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "During FY 2022-23, 3,170 Audit Observations with a tax effect of ₹5,015.33 crore became time-barred for remedial action. Maharashtra alone accounted for 42.12 per cent of the total tax effect, followed by Chandigarh at 23.07 per cent.",
+      "key_facts": [
+        "3,170 Audit Observations became time-barred",
+        "Tax effect of ₹5,015.33 crore",
+        "Maharashtra accounted for 42.12 per cent",
+        "Chandigarh accounted for 23.07 per cent"
+      ],
+      "key_amounts": [
+        {"value": 5015.33, "unit": "crore", "context": "Tax effect of time-barred audit observations", "required": true},
+        {"value": 3170, "unit": "number", "context": "Number of time-barred audit observations", "required": true}
+      ],
+      "key_entities": ["Maharashtra", "Chandigarh"],
+      "source_sections": ["2.7.3"],
+      "source_pages": [58]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["other states percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC006",
+    "question": "What was the percentage share of Direct Taxes in Gross Tax Revenue and GDP during FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "Direct Taxes accounted for 54.5 per cent share of Gross Tax Revenue (GTR) in FY 2022-23, an increase of 2.4 per cent compared to FY 2021-22. Direct Tax was 6.2 per cent of the GDP during FY 2022-23 as compared to 6.0 per cent in FY 2021-22.",
+      "key_facts": [
+        "Direct Taxes accounted for 54.5 per cent of GTR",
+        "Increase of 2.4 per cent in share compared to FY 2021-22",
+        "Direct Tax was 6.2 per cent of GDP in FY 2022-23",
+        "GDP share increased from 6.0 per cent in FY 2021-22"
+      ],
+      "key_amounts": [
+        {"value": 54.5, "unit": "per cent", "context": "Share of Direct Taxes in GTR", "required": true},
+        {"value": 6.2, "unit": "per cent", "context": "Direct Tax as percentage of GDP", "required": true}
+      ],
+      "key_entities": ["Gross Tax Revenue", "GDP", "Direct Taxes"],
+      "source_sections": ["1.4.2"],
+      "source_pages": [17]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect taxes share"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC007",
+    "question": "How many audit observations were noticed during local audit in FY 2022-23 and what was the breakdown between under-assessment and over-assessment?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "Out of 17,317 audit observations with a tax effect of ₹64,462.99 crore noticed in the selected assessment cases in the local audit during FY 2022-23, 1,852 audit observations with a tax effect of ₹11,119.36 crore were related to over-assessment, and 15,465 audit observations with tax effect of ₹53,343.63 crore were related to under-assessment.",
+      "key_facts": [
+        "Total 17,317 audit observations with tax effect of ₹64,462.99 crore",
+        "1,852 observations (₹11,119.36 crore) related to over-assessment",
+        "15,465 observations (₹53,343.63 crore) related to under-assessment"
+      ],
+      "key_amounts": [
+        {"value": 64462.99, "unit": "crore", "context": "Total tax effect of audit observations", "required": true},
+        {"value": 53343.63, "unit": "crore", "context": "Tax effect of under-assessment observations", "required": true},
+        {"value": 11119.36, "unit": "crore", "context": "Tax effect of over-assessment observations", "required": false}
+      ],
+      "key_entities": ["Local Audit", "ITD"],
+      "source_sections": ["2.2.7"],
+      "source_pages": [45]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["central audit observations"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC008",
+    "question": "What was the total amount of arrears of tax demand pending and what percentage was classified as difficult to recover in FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "Total arrears of Demand in FY 2022-23 amounted to ₹22,05,046 crore, which increased by 17.5 per cent as compared to FY 2021-22 (₹19,35,438 crore). Demands classified as 'difficult to recover' were 96.95 per cent of the total arrears in FY 2022-23. The highest amount classified as difficult to recover was for 'No assets/inadequate assets for recovery' (30.1 per cent), followed by 'Assessees not traceable' (13.5 per cent).",
+      "key_facts": [
+        "Total arrears of Demand: ₹22,05,046 crore in FY 2022-23",
+        "Increase of 17.5 per cent compared to FY 2021-22",
+        "96.95 per cent classified as difficult to recover",
+        "No assets/inadequate assets: 30.1 per cent",
+        "Assessees not traceable: 13.5 per cent"
+      ],
+      "key_amounts": [
+        {"value": 2205046, "unit": "crore", "context": "Total arrears of Demand in FY 2022-23", "required": true},
+        {"value": 96.95, "unit": "per cent", "context": "Percentage classified as difficult to recover", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "Arrears"],
+      "source_sections": ["1.9.2", "Table 1.22", "Table 1.23"],
+      "source_pages": [36, 37]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["customs arrears"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC009",
+    "question": "What was the amount locked up in appeal cases pending with CIT (Appeals) in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The number of appeals pending with CIT (Appeals) increased from 5.02 lakh in FY 2021-22 to 5.30 lakh in FY 2022-23. The amount locked up in these cases increased from ₹14.38 lakh crore in FY 2021-22 to ₹16,53,320 crore (₹16.53 lakh crore) in FY 2022-23. However, pendency percentage reduced from 87.6 per cent in FY 2021-22 to 81.4 per cent in FY 2022-23.",
+      "key_facts": [
+        "5.30 lakh appeals pending with CIT (Appeals) in FY 2022-23",
+        "Amount locked up: ₹16,53,320 crore (₹16.53 lakh crore)",
+        "Increased from ₹14.38 lakh crore in FY 2021-22",
+        "Pendency percentage reduced from 87.6% to 81.4%"
+      ],
+      "key_amounts": [
+        {"value": 1653320, "unit": "crore", "context": "Amount locked up in CIT Appeals in FY 2022-23", "required": true},
+        {"value": 5.30, "unit": "lakh", "context": "Number of pending appeals", "required": true}
+      ],
+      "key_entities": ["CIT (Appeals)", "Income Tax Department"],
+      "source_sections": ["1.10.2", "1.10.3", "Table 1.24"],
+      "source_pages": [38]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["ITAT appeals amount"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC010",
+    "question": "What was the tax effect of non-levy of Dividend Distribution Tax (DDT) mentioned in the Corporation Tax chapter?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The Assessing Officer, while finalizing assessments for AY 2018-19 and AY 2019-20, decided to tax the distribution of surplus to Government of India amounting to ₹2,421.82 crore and ₹2,660.60 crore as dividend under Section 115O and worked out DDT at 20.36 per cent. However, these additional taxes were not levied in the income tax computation sheet, resulting in non-levy of Dividend Distribution Tax (DDT) of ₹1,034.66 crore in both AYs. The Department rectified the error by charging DDT of ₹611.35 crore for AY 2018-19 and ₹709.54 crore for AY 2019-20, including interest.",
+      "key_facts": [
+        "Non-levy of DDT of ₹1,034.66 crore",
+        "Distribution to Government of India: ₹2,421.82 crore (AY 2018-19) and ₹2,660.60 crore (AY 2019-20)",
+        "DDT rate was 20.36 per cent",
+        "Department rectified by charging ₹611.35 crore and ₹709.54 crore including interest"
+      ],
+      "key_amounts": [
+        {"value": 1034.66, "unit": "crore", "context": "Non-levy of DDT in both AYs", "required": true}
+      ],
+      "key_entities": ["Dividend Distribution Tax", "Section 115O"],
+      "source_sections": ["3.2.2", "Executive Summary"],
+      "source_pages": [9, 61]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["income tax cases"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC011",
+    "question": "What was the short levy of tax due to incorrect application of tax rate and surcharge for AOPs in the Income Tax chapter?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The AO concluded scrutiny assessment under Section 143(3) at an income of ₹3,213.71 crore. While finalising assessment, the AO denied exemption under Section 11 and treated the assessee as AOP for tax purpose. Tax payable was incorrectly computed by the system at ₹919.12 crore instead of the correct tax leviable of ₹1,373.67 crore due to incorrect application of tax rate of 25 per cent and surcharge of 10 per cent as against the applicable rate of 30 per cent and surcharge of 37 per cent relevant to AOPs. This resulted in a short levy of tax of ₹571.71 crore including interest.",
+      "key_facts": [
+        "Assessed income was ₹3,213.71 crore",
+        "Tax computed at ₹919.12 crore instead of ₹1,373.67 crore",
+        "Incorrect tax rate of 25% instead of 30%",
+        "Incorrect surcharge of 10% instead of 37%",
+        "Short levy of tax of ₹571.71 crore"
+      ],
+      "key_amounts": [
+        {"value": 571.71, "unit": "crore", "context": "Short levy of tax due to incorrect rate application", "required": true},
+        {"value": 3213.71, "unit": "crore", "context": "Assessed income", "required": false}
+      ],
+      "key_entities": ["AOP", "Section 143(3)", "Section 11"],
+      "source_sections": ["4.2.3", "Executive Summary"],
+      "source_pages": [10, 93, 94]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["corporation tax rate"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC012",
+    "question": "What was the short levy of interest under Section 234A for default in furnishing return mentioned in the Income Tax chapter?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The AO, while finalising assessment for AYs 2017-18 and 2018-19 under Section 153A read with Section 144 at incomes of ₹161.68 crore and ₹183.99 crore respectively, did not levy interest for default in furnishing return and for non-compliance to the notice. No interest was levied under Section 234A for AY 2017-18, whereas ₹15.47 crore was levied for AY 2018-19 instead of the leviable amounts of ₹61.76 crore and ₹52.03 crore respectively. These mistakes resulted in short levy of interest of ₹98.32 crore (₹61.76 crore plus ₹36.56 crore).",
+      "key_facts": [
+        "AY 2017-18 income: ₹161.68 crore; AY 2018-19 income: ₹183.99 crore",
+        "No interest levied for AY 2017-18 under Section 234A",
+        "₹15.47 crore levied instead of ₹52.03 crore for AY 2018-19",
+        "Leviable interest was ₹61.76 crore for AY 2017-18",
+        "Short levy of interest totaled ₹98.32 crore"
+      ],
+      "key_amounts": [
+        {"value": 98.32, "unit": "crore", "context": "Short levy of interest under Section 234A", "required": true}
+      ],
+      "key_entities": ["Section 234A", "Section 153A", "Section 144"],
+      "source_sections": ["4.2.4", "Executive Summary"],
+      "source_pages": [10, 95]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Section 234B or 234C"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC013",
+    "question": "What were the main categories of irregularities in Corporation Tax assessments and their tax effects?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "There were 287 high-value Corporation Tax cases with a total tax impact of ₹6,252.06 crore. The main categories of irregularities included: (1) Quality of assessments - 8,159 observations with tax effect of ₹19,165 crore; (2) Administration of tax concessions/exemptions/deductions - 2,319 observations with tax effect of ₹16,847 crore; (3) Income escaping assessments due to omissions - 1,100 observations with tax effect of ₹5,483 crore; (4) Others - 3,857 observations with tax effect of ₹11,796 crore. Specific irregularities included arithmetical errors (48 cases, ₹2,036.72 crore), incorrect rates of tax/surcharge (12 cases, ₹92.42 crore), errors in levy of interest (57 cases, ₹360.27 crore), and irregularities in depreciation/business losses (41 cases, ₹1,061.86 crore).",
+      "key_facts": [
+        "287 high-value Corporation Tax cases with tax effect of ₹6,252.06 crore",
+        "Quality of assessments: 8,159 observations, ₹19,165 crore",
+        "Arithmetical errors: 48 cases, ₹2,036.72 crore",
+        "Irregularities in depreciation/business losses: 41 cases, ₹1,061.86 crore"
+      ],
+      "key_amounts": [
+        {"value": 6252.06, "unit": "crore", "context": "Total tax impact of high-value Corporation Tax cases", "required": true},
+        {"value": 2036.72, "unit": "crore", "context": "Tax effect of arithmetical errors", "required": false}
+      ],
+      "key_entities": ["Corporation Tax", "CBDT", "Ministry"],
+      "source_sections": ["Chapter III", "3.1.1", "3.2", "3.3"],
+      "source_pages": [9, 45, 60, 61, 69]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["income tax irregularities details"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC014",
+    "question": "What was the excess levy of interest under Section 234B that resulted in over-assessment?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The AO, while finalizing assessment under Section 144 read with Section 147 at an income of ₹2,326.17 crore, erroneously levied interest under Section 234B at ₹1,385.09 crore against the leviable amount of ₹692.32 crore in the tax computation sheet. This resulted in excess levy of interest of ₹692.77 crore under Section 234B. The Department accepted the audit observation and rectified the error under Section 154 in January 2023.",
+      "key_facts": [
+        "Assessed income was ₹2,326.17 crore",
+        "Interest levied at ₹1,385.09 crore instead of ₹692.32 crore",
+        "Excess levy of interest: ₹692.77 crore",
+        "Error rectified under Section 154 in January 2023"
+      ],
+      "key_amounts": [
+        {"value": 692.77, "unit": "crore", "context": "Excess levy of interest under Section 234B", "required": true}
+      ],
+      "key_entities": ["Section 234B", "Section 144", "Section 147"],
+      "source_sections": ["3.5.1"],
+      "source_pages": [87]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Section 234A"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC015",
+    "question": "What was the revenue impact of tax incentives in FY 2022-23 and how did it compare with previous years?",
+    "category": {
+      "difficulty": "hard",
+      "type": "comparison",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "The revenue impact of tax incentives increased by 50.3 per cent from ₹2,06,113 crore in FY 2018-19 to ₹3,09,720 crore in FY 2022-23. Though tax incentives increased by 12.8 per cent in FY 2022-23 compared to FY 2021-22, there was a decrease in the percentage of revenue impact relative to Direct Taxes collection. The revenue impact was 1.1 per cent of GDP during FY 2022-23, compared to 1.2 per cent in FY 2021-22. Major tax incentives for non-corporate assessees included deductions under Section 80C (₹1,02,172 crore), rebate under Section 87A (₹40,953 crore), and contributions to New Pension Scheme under Section 80CCD (₹12,813 crore).",
+      "key_facts": [
+        "Revenue impact increased from ₹2,06,113 crore (FY 2018-19) to ₹3,09,720 crore (FY 2022-23)",
+        "50.3 per cent increase over five years",
+        "12.8 per cent increase in FY 2022-23 over FY 2021-22",
+        "Revenue impact was 1.1 per cent of GDP in FY 2022-23",
+        "Section 80C deductions: ₹1,02,172 crore"
+      ],
+      "key_amounts": [
+        {"value": 309720, "unit": "crore", "context": "Revenue impact of tax incentives in FY 2022-23", "required": true},
+        {"value": 206113, "unit": "crore", "context": "Revenue impact of tax incentives in FY 2018-19", "required": false},
+        {"value": 102172, "unit": "crore", "context": "Deduction under Section 80C", "required": false}
+      ],
+      "key_entities": ["Tax Incentives", "Section 80C", "Section 87A", "Section 80CCD"],
+      "source_sections": ["1.8.4", "1.8.6", "Table 1.21"],
+      "source_pages": [35]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect tax incentives"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC016",
+    "question": "What was the growth rate of Corporation Tax and Income Tax collections in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "There was an increase of 16.0 per cent in Corporation Tax in FY 2022-23 compared to FY 2021-22, and corresponding increase in Income Tax was 20.0 per cent in FY 2022-23. GDP increased by 13.9 per cent in FY 2022-23.",
+      "key_facts": [
+        "Corporation Tax increased by 16.0 per cent in FY 2022-23",
+        "Income Tax increased by 20.0 per cent in FY 2022-23",
+        "GDP increased by 13.9 per cent in FY 2022-23"
+      ],
+      "key_amounts": [
+        {"value": 16.0, "unit": "per cent", "context": "Corporation Tax growth rate in FY 2022-23", "required": true},
+        {"value": 20.0, "unit": "per cent", "context": "Income Tax growth rate in FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Income Tax", "GDP"],
+      "source_sections": ["1.4.4", "Table 1.4"],
+      "source_pages": [17]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect tax growth"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC017",
+    "question": "How many earlier year cases pointed out by audit remained unsettled as of March 2023?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "There are 59,352 cases of earlier years pointed out in the audit up to 31st March 2023, which could not be settled for want of replies from the ITD, as of 28th February 2025.",
+      "key_facts": [
+        "59,352 cases of earlier years remained unsettled",
+        "Cases pointed out up to 31st March 2023",
+        "Could not be settled for want of replies from ITD"
+      ],
+      "key_amounts": [
+        {"value": 59352, "unit": "number", "context": "Unsettled earlier year audit cases", "required": true}
+      ],
+      "key_entities": ["Audit", "ITD"],
+      "source_sections": ["Executive Summary"],
+      "source_pages": [9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["current year cases"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DT_2022-23_TC018",
+    "question": "What were the persistent and pervasive irregularities in Corporation Tax and Income Tax assessments?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["2025_14_Compliance_Audit_on_Direct_taxes_for_period_202223_for_the_Union_Government_Depa"]
+    },
+    "expected": {
+      "answer_summary": "Audit has been pointing out various irregularities with respect to Corporation and Income Tax assessments year after year, which are both persistent and pervasive. These include: (1) Irregularities in allowing depreciation, business losses, capital losses - involving incorrect allowance of set-off of brought forward losses, adoption of incorrect figures, and incorrect carry forward despite late filing; (2) Incorrect allowance of business expenditure - including capital expenditure, unpaid claims, and provisions deemed as unascertained liability; (3) Excess or irregular refunds or interest on refunds - caused by computing errors, not considering refunds already issued, and excess computation of interest. The recurrence despite implementing ITBA indicates lack of controls to prevent mistakes and absence of effective monitoring to address systematic weaknesses leading to revenue leakage.",
+      "key_facts": [
+        "Irregularities are persistent and pervasive across years",
+        "Irregularities in depreciation/business losses/capital losses",
+        "Incorrect allowance of business expenditure",
+        "Excess or irregular refunds/interest on refunds",
+        "Recurrence despite ITBA implementation indicates lack of controls"
+      ],
+      "key_amounts": [],
+      "key_entities": ["Corporation Tax", "Income Tax", "ITBA", "ITD"],
+      "source_sections": ["2.3", "2.3.1", "2.3.2", "2.3.3"],
+      "source_pages": [45, 46, 47, 48, 49]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["customs duty irregularities"],
+      "must_not_hallucinate": true
+    }
+  }
+]

@@ -1,0 +1,451 @@
+[
+  {
+    "id": "FRBM_2023-24_TC001",
+    "question": "What was the Central Government debt as a percentage of GDP at the end of FY 2023-24?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The Central Government debt as a percentage of GDP was 57.00 per cent at the end of FY 2023-24. In absolute terms, the Central Government debt was ₹171.71 lakh crore.",
+      "key_facts": [
+        "Central Government debt was 57.00 per cent of GDP at end of FY 2023-24",
+        "This represents a consistent decline from 61.38 per cent in FY 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 57.00, "unit": "per cent of GDP", "context": "Central Government debt ratio at end of FY 2023-24", "required": true},
+        {"value": 171.71, "unit": "lakh crore", "context": "Central Government debt in absolute terms", "required": true}
+      ],
+      "key_entities": ["Central Government", "FRBM Act"],
+      "source_sections": ["2.1.1", "Executive Summary"],
+      "source_pages": [7, 8, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["General Government debt percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC002",
+    "question": "What is the target for Central Government debt and General Government debt under the FRBM Act?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "Under the FRBM Amendment Act 2018, the Central Government shall ensure by the end of FY 2024-25 that the Central Government debt does not exceed 40 per cent of GDP and the General Government debt does not exceed 60 per cent of GDP.",
+      "key_facts": [
+        "Central Government debt target is 40 per cent of GDP",
+        "General Government debt target is 60 per cent of GDP",
+        "Both targets to be achieved by end of FY 2024-25"
+      ],
+      "key_amounts": [
+        {"value": 40, "unit": "per cent of GDP", "context": "Central Government debt target", "required": true},
+        {"value": 60, "unit": "per cent of GDP", "context": "General Government debt target", "required": true}
+      ],
+      "key_entities": ["FRBM Act", "Central Government"],
+      "source_sections": ["1.1", "2.1"],
+      "source_pages": [1, 7, 15]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["fiscal deficit target"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC003",
+    "question": "How much tax revenue was raised but not realised at the end of FY 2023-24?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "At the end of FY 2023-24, an amount of ₹31.11 lakh crore was reportedly raised as taxes but was yet to be realised as per Disclosure Statement D1. This unrealised amount registered an increase of ₹9.81 lakh crore over the previous year. Of this, ₹15.40 lakh crore was under dispute and ₹15.71 lakh crore was not under dispute.",
+      "key_facts": [
+        "Tax revenue raised but not realised was ₹31.11 lakh crore at end of FY 2023-24",
+        "This increased by ₹9.81 lakh crore over the previous year",
+        "Amount not under dispute was ₹15.71 lakh crore",
+        "This unrealised amount was 89.76 per cent of gross tax collected"
+      ],
+      "key_amounts": [
+        {"value": 31.11, "unit": "lakh crore", "context": "Tax revenue raised but not realised at end of FY 2023-24", "required": true},
+        {"value": 9.81, "unit": "lakh crore", "context": "Increase over previous year", "required": true},
+        {"value": 15.71, "unit": "lakh crore", "context": "Amount not under dispute", "required": false}
+      ],
+      "key_entities": ["D1 Statement", "Tax Revenue"],
+      "source_sections": ["3.1.1", "Executive Summary"],
+      "source_pages": [11, 23, 38]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["non-tax revenue arrears"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC004",
+    "question": "What was the fiscal deficit for FY 2023-24 and how was it financed?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The fiscal deficit for FY 2023-24 was ₹16.02 lakh crore (5.32% of GDP). It was financed primarily from net internal debt which contributed about 101.37 per cent, while external debt contributed 4.56 per cent. The share of public account was negative at -5.99 per cent, indicating that internal debt was partly used to discharge public account liabilities.",
+      "key_facts": [
+        "Fiscal deficit was ₹16.02 lakh crore in FY 2023-24",
+        "Fiscal deficit was 5.32 per cent of GDP",
+        "Internal debt financed 101.37 per cent of fiscal deficit",
+        "External debt share increased from 3.07 per cent to 4.56 per cent",
+        "Internal debt was partly used to discharge public account liabilities"
+      ],
+      "key_amounts": [
+        {"value": 16.02, "unit": "lakh crore", "context": "Fiscal deficit for FY 2023-24", "required": true},
+        {"value": 5.32, "unit": "per cent of GDP", "context": "Fiscal deficit as percentage of GDP", "required": true},
+        {"value": 101.37, "unit": "per cent", "context": "Share of internal debt in financing fiscal deficit", "required": true}
+      ],
+      "key_entities": ["Fiscal Deficit", "Internal Debt", "External Debt"],
+      "source_sections": ["2.5"],
+      "source_pages": [20, 21]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["revenue deficit financing"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC005",
+    "question": "What is the limit on additional guarantees that the Central Government can provide under the FRBM Act?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "Under Section 4(1) of the FRBM Act, the Central Government shall not give additional guarantees with respect to any loan on security of the Consolidated Fund of India in excess of one-half per cent of GDP (0.5 per cent) in any financial year. During FY 2023-24, the additional guarantee was 0.14 per cent of GDP, which was within the prescribed limit.",
+      "key_facts": [
+        "Additional guarantee limit is 0.5 per cent of GDP per financial year",
+        "FY 2023-24 additional guarantee was 0.14 per cent of GDP",
+        "The guarantee was within the prescribed FRBM limit"
+      ],
+      "key_amounts": [
+        {"value": 0.5, "unit": "per cent of GDP", "context": "Maximum additional guarantee limit under FRBM", "required": true},
+        {"value": 0.14, "unit": "per cent of GDP", "context": "Actual additional guarantee in FY 2023-24", "required": true}
+      ],
+      "key_entities": ["Consolidated Fund of India", "FRBM Act"],
+      "source_sections": ["1.1", "2.3"],
+      "source_pages": [12, 15, 34]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["borrowing limits"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC006",
+    "question": "What are the components of Central Government debt as defined under the FRBM Act?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "As per Section 2(aa) of the FRBM Act (amended in 2018), Central Government Debt at any date includes: (1) Total outstanding liabilities on the security of the Consolidated Fund of India, including external debt valued at current exchange rate, (2) Total outstanding liabilities in the Public Account of India, (3) The financial liabilities of any body corporate or other entity owned or controlled by the Central Government which the Government is to repay or service from the Annual Financial Statement, and (4) Cash Balance at the end of that date (which is deducted).",
+      "key_facts": [
+        "Internal debt is part of liabilities on Consolidated Fund of India",
+        "External debt is valued at current exchange rate",
+        "Public Account liabilities are included",
+        "EBR (Extra Budgetary Resources) liabilities are included",
+        "Cash balance is deducted from total"
+      ],
+      "key_amounts": [
+        {"value": 146.98, "unit": "lakh crore", "context": "Internal debt at end of FY 2023-24", "required": false},
+        {"value": 7.96, "unit": "lakh crore", "context": "External debt at current exchange rate", "required": false},
+        {"value": 17.14, "unit": "lakh crore", "context": "Public Account Liability", "required": false}
+      ],
+      "key_entities": ["Consolidated Fund of India", "Public Account of India", "FRBM Act"],
+      "source_sections": ["2.1"],
+      "source_pages": [7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["General Government debt components"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC007",
+    "question": "How did the Central Government debt increase during FY 2023-24?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The Central Government debt in absolute terms increased by ₹15.58 lakh crore in FY 2023-24 or 9.98 per cent over FY 2022-23. This was largely due to increase in internal debt of ₹16.24 lakh crore during this period. Additionally, external debt increased by ₹0.48 lakh crore and Public Account liability increased by ₹0.57 lakh crore.",
+      "key_facts": [
+        "Central Government debt increased by ₹15.58 lakh crore",
+        "Increase was 9.98 per cent over FY 2022-23",
+        "Internal debt increase was the primary contributor at ₹16.24 lakh crore",
+        "External debt increased by ₹0.48 lakh crore",
+        "Public Account liability increased by ₹0.57 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 15.58, "unit": "lakh crore", "context": "Increase in Central Government debt during FY 2023-24", "required": true},
+        {"value": 9.98, "unit": "per cent", "context": "Percentage increase over previous year", "required": true},
+        {"value": 16.24, "unit": "lakh crore", "context": "Increase in internal debt", "required": true}
+      ],
+      "key_entities": ["Central Government Debt", "Internal Debt"],
+      "source_sections": ["2.1.1", "Executive Summary"],
+      "source_pages": [7, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state government debt"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC008",
+    "question": "What were the actual revenue receipts for FY 2023-24 compared to budget estimates?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The overall revenue receipt collection was ₹30.88 lakh crore in FY 2023-24 against the budgeted ₹29.80 lakh crore, showing 3.62 per cent higher collection. Gross Tax Revenue collection was ₹34.66 lakh crore, which was 3.12 per cent higher than the budget estimate of ₹33.61 lakh crore. Non-tax revenue at ₹7.52 lakh crore was 17.50 per cent higher than budget estimates of ₹6.40 lakh crore.",
+      "key_facts": [
+        "Total revenue receipts were ₹30.88 lakh crore against BE of ₹29.80 lakh crore",
+        "Gross Tax Revenue was 3.12 per cent higher than BE",
+        "Non-tax revenue was 17.50 per cent higher than BE",
+        "Taxes on Income and Expenditure were 7.02 per cent higher than BE"
+      ],
+      "key_amounts": [
+        {"value": 30.88, "unit": "lakh crore", "context": "Actual revenue receipts for FY 2023-24", "required": true},
+        {"value": 34.66, "unit": "lakh crore", "context": "Gross Tax Revenue actual", "required": true},
+        {"value": 7.52, "unit": "lakh crore", "context": "Non-tax revenue actual", "required": false}
+      ],
+      "key_entities": ["Revenue Receipts", "Gross Tax Revenue", "Non-Tax Revenue"],
+      "source_sections": ["2.4 C"],
+      "source_pages": [14, 35]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["capital receipts"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC009",
+    "question": "What is the General Government debt status and how far is it from the FRBM target?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The General Government Debt to GDP ratio stood at 81.3 per cent at end of March 2023, compared to 83.0 per cent at end of March 2022. The FRBM Act target is to limit General Government debt to 60 per cent of GDP by the end of FY 2024-25. Thus, a significant targeted reduction was required during FY 2023-24 and FY 2024-25 to meet this target.",
+      "key_facts": [
+        "General Government Debt was 81.3 per cent of GDP at end of March 2023",
+        "This was down from 83.0 per cent at end of March 2022",
+        "Target is 60 per cent of GDP by end of FY 2024-25",
+        "Annual reduction targets were not prescribed under FRBM Rules"
+      ],
+      "key_amounts": [
+        {"value": 81.3, "unit": "per cent of GDP", "context": "GGD ratio at end of March 2023", "required": true},
+        {"value": 60, "unit": "per cent of GDP", "context": "Target for General Government debt", "required": true}
+      ],
+      "key_entities": ["General Government Debt", "FRBM Act"],
+      "source_sections": ["2.1.2"],
+      "source_pages": [9, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["fiscal deficit percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC010",
+    "question": "What proportion of total expenditure was financed by non-debt receipts in FY 2023-24?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "In FY 2023-24, 66.98 per cent of total expenditure was financed by non-debt receipts. The total non-debt receipts were ₹32.50 lakh crore against total expenditure of ₹48.52 lakh crore. This was higher than the pre-pandemic FY 2019-20 level of 66.17 per cent and showed steady improvement from FY 2020-21 when it had dropped to 49.44 per cent.",
+      "key_facts": [
+        "66.98 per cent of total expenditure was financed by non-debt receipts",
+        "Non-debt receipts were ₹32.50 lakh crore",
+        "Total expenditure was ₹48.52 lakh crore",
+        "This was higher than pre-pandemic FY 2019-20 level of 66.17 per cent"
+      ],
+      "key_amounts": [
+        {"value": 66.98, "unit": "per cent", "context": "Total expenditure financed by non-debt receipts in FY 2023-24", "required": true},
+        {"value": 32.50, "unit": "lakh crore", "context": "Total non-debt receipts", "required": true},
+        {"value": 48.52, "unit": "lakh crore", "context": "Total expenditure", "required": false}
+      ],
+      "key_entities": ["Non-Debt Receipts", "Total Expenditure"],
+      "source_sections": ["2.4 I"],
+      "source_pages": [19]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["debt receipts composition"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC011",
+    "question": "What was the disinvestment receipt in FY 2023-24 and how did it compare with the previous year?",
+    "category": {
+      "difficulty": "easy",
+      "type": "comparison",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "During FY 2023-24, the Government received ₹15,220 crore from disinvestment of its equities in PSUs compared to ₹30,184 crore in FY 2022-23. This represents a significant decrease of about 50 per cent from the previous year.",
+      "key_facts": [
+        "Disinvestment receipt in FY 2023-24 was ₹15,220 crore",
+        "Disinvestment in FY 2022-23 was ₹30,184 crore",
+        "There was a significant decrease compared to previous year"
+      ],
+      "key_amounts": [
+        {"value": 15220, "unit": "crore", "context": "Disinvestment receipt in FY 2023-24", "required": true},
+        {"value": 30184, "unit": "crore", "context": "Disinvestment in FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Disinvestment", "PSUs"],
+      "source_sections": ["2.4 F"],
+      "source_pages": [17]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["monetisation of highways"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC012",
+    "question": "What are the main transparency issues identified in the CAG report regarding disclosure statements?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The CAG report identified several transparency issues in disclosure statements: (1) D2 Statement on Arrears of Interest showed figures varying from those in the Union Government Finance Accounts - for State/UT Government the variation was ₹3,307.76 crore and for Public Sector Undertakings it was ₹3,035.45 crore; (2) The amount of financial assets (loans to Foreign Governments and States/UTs) disclosed in D4 Statement varied within the Receipt Budget itself; (3) Disclosure Statement D3 on Guarantees showed variance from the UGFA 2023-24; (4) There were variations in Budget Estimate figures of key fiscal indicators used in Half Yearly Statements and MTFP Statement from the Annual Financial Statement 2023-24.",
+      "key_facts": [
+        "D2 Statement figures varied from UGFA - ₹3,307.76 crore for State/UT Government",
+        "D2 Statement figures varied from UGFA - ₹3,035.45 crore for PSUs",
+        "D4 Statement showed ₹6.18 lakh crore variance in loans to States/UTs",
+        "D3 Statement on Guarantees showed variance from UGFA",
+        "BE figures in H1, H2 and MTFP statements did not match with AFS"
+      ],
+      "key_amounts": [
+        {"value": 3307.76, "unit": "crore", "context": "Variation in arrears of interest from State/UT Government", "required": true},
+        {"value": 3035.45, "unit": "crore", "context": "Variation in arrears from PSUs", "required": true},
+        {"value": 6.18, "unit": "lakh crore", "context": "Difference in loans to States/UTs between D4 and Receipt Budget", "required": false}
+      ],
+      "key_entities": ["D1 Statement", "D2 Statement", "D3 Statement", "D4 Statement", "UGFA"],
+      "source_sections": ["3.1.2", "3.1.3", "3.2"],
+      "source_pages": [24, 25, 26, 27, 28]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["debt sustainability analysis"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC013",
+    "question": "What was the composition of fiscal deficit in terms of revenue deficit and capital expenditure for FY 2023-24?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "Out of the fiscal deficit of ₹16.02 lakh crore during FY 2023-24, revenue deficit accounted for ₹7.66 lakh crore (47.82 per cent), net capital expenditure was ₹7.62 lakh crore (47.57 per cent), and net loans and advances were ₹0.74 lakh crore (4.61 per cent). This marks a significant improvement from FY 2022-23 where about 61 per cent of fiscal deficit was on account of revenue deficit. The ratio of revenue deficit to fiscal deficit has reduced considerably.",
+      "key_facts": [
+        "Revenue deficit was ₹7.66 lakh crore (47.82 per cent of fiscal deficit)",
+        "Net capital expenditure was ₹7.62 lakh crore (47.57 per cent)",
+        "Net loans and advances were ₹0.74 lakh crore (4.61 per cent)",
+        "Revenue deficit share reduced from 61 per cent in FY 2022-23 to 48 per cent",
+        "This represents marked improvement in quality of fiscal deficit"
+      ],
+      "key_amounts": [
+        {"value": 7.66, "unit": "lakh crore", "context": "Revenue deficit component of fiscal deficit", "required": true},
+        {"value": 47.82, "unit": "per cent", "context": "Revenue deficit as share of fiscal deficit", "required": true},
+        {"value": 7.62, "unit": "lakh crore", "context": "Net capital expenditure component", "required": true}
+      ],
+      "key_entities": ["Fiscal Deficit", "Revenue Deficit", "Capital Expenditure"],
+      "source_sections": ["2.5"],
+      "source_pages": [21]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["primary deficit composition"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC014",
+    "question": "How did expenditure on focus areas like health and agriculture compare to budget estimates in FY 2023-24?",
+    "category": {
+      "difficulty": "hard",
+      "type": "comparison",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The actual expenditure on focus areas showed mixed results against budget estimates in FY 2023-24. Agriculture expenditure was ₹2,13,094.72 crore which was 70.43 per cent higher than BE. Rural Development actual was ₹2,68,873.89 crore (12.52 per cent higher than BE). Education actual was ₹1,65,266.58 crore (6.69 per cent higher than BE). Drinking Water and Sanitation actual was ₹1,00,214.26 crore (2.95 per cent higher than BE). However, Health expenditure was ₹98,418.49 crore which was 8.59 per cent lower than BE. Notably, actual capital expenditure in all these sectors remained lower than budget estimates.",
+      "key_facts": [
+        "Agriculture actual was 70.43 per cent higher than BE",
+        "Health actual was 8.59 per cent lower than BE",
+        "Rural Development actual was 12.52 per cent higher than BE",
+        "Education actual was 6.69 per cent higher than BE",
+        "Capital expenditure in all focus sectors was lower than BE"
+      ],
+      "key_amounts": [
+        {"value": 213094.72, "unit": "crore", "context": "Agriculture total expenditure", "required": true},
+        {"value": 98418.49, "unit": "crore", "context": "Health total expenditure", "required": true},
+        {"value": 70.43, "unit": "per cent", "context": "Agriculture expenditure variation over BE", "required": true},
+        {"value": -8.59, "unit": "per cent", "context": "Health expenditure shortfall against BE", "required": true}
+      ],
+      "key_entities": ["Agriculture", "Health", "Education", "Rural Development"],
+      "source_sections": ["2.4 E"],
+      "source_pages": [16, 17, 37]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["defence expenditure"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2023-24_TC015",
+    "question": "What is the debt sustainability indicator for FY 2023-24 and what does it indicate?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FRBM_2023-24"]
+    },
+    "expected": {
+      "answer_summary": "The debt stabilization indicator for FY 2023-24 was positive at 4.09, which marks an improvement towards stability over FY 2022-23 (3.66). A positive indicator means the Debt-GDP ratio would eventually fall. The indicator is calculated as Quantum Spread plus Primary Deficit. For FY 2023-24, the quantum spread was 9.08 and primary deficit was ₹4.99 lakh crore. The interest spread (rate of GDP growth minus average interest cost) was 5.29 per cent. The YoY growth in GDP has outpaced YoY growth in Central Government Debt from FY 2021-22, indicating the economy has grown to be able to absorb and service the accumulated debt.",
+      "key_facts": [
+        "Debt stabilization indicator for FY 2023-24 was 4.09 (positive)",
+        "Positive indicator means Debt-GDP ratio would eventually fall",
+        "Quantum spread was 9.08",
+        "Primary deficit was ₹4.99 lakh crore",
+        "Interest spread was 5.29 per cent",
+        "GDP growth outpaced debt growth from FY 2021-22"
+      ],
+      "key_amounts": [
+        {"value": 4.09, "unit": "indicator value", "context": "Debt stabilization indicator for FY 2023-24", "required": true},
+        {"value": 9.08, "unit": "lakh crore", "context": "Quantum spread", "required": false},
+        {"value": 5.29, "unit": "per cent", "context": "Interest spread", "required": false}
+      ],
+      "key_entities": ["Debt Sustainability Analysis", "GDP", "Primary Deficit"],
+      "source_sections": ["2.2"],
+      "source_pages": [10, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["guarantee limits"],
+      "must_not_hallucinate": true
+    }
+  }
+]

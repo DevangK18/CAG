@@ -1,0 +1,32 @@
+test_id,question,difficulty,type,expected_summary,key_amounts,key_entities,actual_answer,factual_correct,amounts_correct,complete,relevant,citations_ok,issues,notes
+TC001,What was the revenue loss due to toll collection delays by NHAI?,easy,factual,NHAI suffered a revenue loss of ₹64.60 crore due to delays in commencing toll collection,64.60 crore,NHAI; NH Fee Rules 2008,,,,,,,
+TC002,What was the short collection of user fees on NH 44?,easy,factual,Short collection of ₹16.68 crore on Madurai-Kanyakumari stretch of NH 44,16.68 crore,NH 44; Tamil Nadu; Madurai,,,,,,,
+TC003,What fraud issues were found in Ayushman Bharat PMJAY?,medium,list,Multiple fraud issues including non-conducting of anti-fraud activities and ineligible beneficiaries,22.44 crore; 0.12 lakh,Bihar; Chandigarh; UP; NHA; SHA,,,,,,,
+TC004,How many CPSEs complied with all corporate governance requirements?,easy,factual,Only 3 out of 71 listed CPSEs fully compliant,3; 71,SBI Life; BEML; MMTC; DPE; SEBI,,,,,,,
+TC005,What are the main categories of irregularities in direct tax assessments?,medium,list,Categories include arithmetical errors; incorrect allowances; administration of exemptions,4761.37 crore; 690.5 crore,CBDT; CPC; AOs,,,,,,,
+TC006,Explain the systemic issues in NHAI toll collection operations,hard,explanation,Systemic issues include no centralized software; delays; missing clauses; poor data management,64.60 crore; 133.36 crore; 68.12 crore,NHAI; Concessionaires,,,,,,,
+TC007,What are the audit findings on Railways?,easy,negative,No Railways audit in indexed data,,,,,,,,
+TC008,Compare tax assessment issues across 2020-21 and 2021-22 periods,hard,comparison,Similar irregularities persist across periods indicating systemic weakness,,CBDT; CPC; AOs,,,,,,,
+
+Instructions for Manual Testing:
+"1. Run each query through the RAG system"
+"2. Record the actual answer in the 'actual_answer' column"
+"3. Mark yes/no for each quality dimension"
+"4. List any issues found (separate multiple issues with semicolons)"
+"5. Add notes for any observations"
+
+Scoring Guide:
+"factual_correct: All facts match expected? (yes/no)"
+"amounts_correct: All key amounts present and accurate? (yes/no)"
+"complete: Covers all key points? (yes/no)"
+"relevant: Directly answers the question? (yes/no)"
+"citations_ok: Sources cited and accurate? (yes/no)"
+
+Issue Codes:
+"R1: Wrong report retrieved"
+"R2: Right report wrong section"
+"G1: Hallucination"
+"G2: Misinterpretation"
+"G3: Incomplete synthesis"
+"C1: Wrong page number"
+"C2: Unsupported claim"

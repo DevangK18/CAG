@@ -1,0 +1,525 @@
+[
+  {
+    "id": "CPSE_GPFR_TC001",
+    "question": "How many Central Public Sector Enterprises were under CAG audit jurisdiction as on 31 March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "There were 698 Central Government Public Sector Enterprises (CPSEs) under the audit jurisdiction of the Comptroller and Auditor General of India as on 31 March, 2022. These included 490 Government companies, 202 Government controlled other companies and six Statutory Corporations. The Report deals with 454 Government companies and Corporations (including six Statutory Corporations) and 188 Government controlled other companies.",
+      "key_facts": [
+        "698 CPSEs under CAG audit jurisdiction as on 31 March 2022",
+        "490 Government companies",
+        "202 Government controlled other companies",
+        "Six Statutory Corporations",
+        "Report covers 454 Government companies and Corporations"
+      ],
+      "key_amounts": [
+        {"value": 698, "unit": "number", "context": "Total CPSEs under CAG audit jurisdiction", "required": true},
+        {"value": 454, "unit": "number", "context": "Government companies and Corporations covered in Report", "required": true}
+      ],
+      "key_entities": ["CAG", "CPSEs", "Statutory Corporations"],
+      "source_sections": ["Executive Summary", "Chapter I"],
+      "source_pages": [11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state PSEs"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC002",
+    "question": "What was the Central Government's equity holding in CPSEs as on 31 March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Central Government had an equity holding of ₹6,36,730 crore in share capital of 454 Government companies and Corporations as on 31 March, 2022. Compared to the previous year, holding of the Central Government in equity of CPSEs registered a net increase of ₹1,83,682 crore during 2021-22.",
+      "key_facts": [
+        "Central Government equity holding was ₹6,36,730 crore",
+        "Net increase of ₹1,83,682 crore compared to previous year"
+      ],
+      "key_amounts": [
+        {"value": 636730, "unit": "crore", "context": "Central Government equity holding in 454 CPSEs", "required": true},
+        {"value": 183682, "unit": "crore", "context": "Net increase in equity holding during 2021-22", "required": false}
+      ],
+      "key_entities": ["Central Government", "CPSEs"],
+      "source_sections": ["Executive Summary", "1.2.1"],
+      "source_pages": [11, 29]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state government holdings"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC003",
+    "question": "How much profit did the CPSEs earn during 2021-22 and how many CPSEs were profitable?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "258 Government companies and Corporations earned profit of ₹2,69,307 crore during 2021-22. Of this, 69.18 per cent (₹1,86,317 crore) was contributed by 90 CPSEs in three sectors viz., Petroleum & Natural Gas, Power and Financial Services. Return on Equity (ROE) of these 258 CPSEs was 15.50 per cent in 2021-22 as compared to 13.11 per cent of 239 CPSEs in 2020-21.",
+      "key_facts": [
+        "258 CPSEs earned profit of ₹2,69,307 crore",
+        "90 CPSEs contributed 69.18% (₹1,86,317 crore) from Petroleum, Power and Financial Services",
+        "ROE was 15.50% in 2021-22 vs 13.11% in 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 269307, "unit": "crore", "context": "Total profit earned by 258 CPSEs", "required": true},
+        {"value": 186317, "unit": "crore", "context": "Profit from top 3 sectors (69.18%)", "required": true}
+      ],
+      "key_entities": ["Petroleum & Natural Gas", "Power", "Financial Services"],
+      "source_sections": ["Executive Summary", "1.4.1"],
+      "source_pages": [11, 39, 41]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["loss making CPSEs details"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC004",
+    "question": "What was the total dividend declared by CPSEs in 2021-22 and how much did the Central Government receive?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "121 Government companies and Corporations declared a dividend of ₹1,11,061 crore for the year 2021-22. Out of this, the dividend received/receivable by Central Government amounted to ₹54,381 crore which represented 8.54 per cent return on the total investment by the Central Government (₹6,36,730 crore) in equity capital of all the 454 Government companies and Corporations. Nine Government companies under the Ministry of Petroleum and Natural Gas contributed ₹37,833 crore representing 34.07 per cent of the total dividend declared.",
+      "key_facts": [
+        "121 CPSEs declared dividend of ₹1,11,061 crore",
+        "Central Government received/receivable ₹54,381 crore (8.54% return)",
+        "Petroleum sector contributed ₹37,833 crore (34.07% of total)"
+      ],
+      "key_amounts": [
+        {"value": 111061, "unit": "crore", "context": "Total dividend declared by 121 CPSEs", "required": true},
+        {"value": 54381, "unit": "crore", "context": "Dividend received/receivable by Central Government", "required": true},
+        {"value": 37833, "unit": "crore", "context": "Dividend from Petroleum sector (34.07%)", "required": false}
+      ],
+      "key_entities": ["Central Government", "Ministry of Petroleum and Natural Gas"],
+      "source_sections": ["Executive Summary", "1.5"],
+      "source_pages": [12, 45]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state dividends"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC005",
+    "question": "How many CPSEs incurred losses in 2021-22 and what was the total loss amount?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "170 Government companies incurred losses amounting to ₹31,347 crore during the year 2021-22. There were 192 Government companies with accumulated losses of ₹1,83,356 crore as on 31 March, 2022. Of these, the net worth of 79 companies had been completely eroded by their accumulated losses, resulting in aggregate negative net worth of ₹75,186 crore.",
+      "key_facts": [
+        "170 CPSEs incurred losses of ₹31,347 crore in 2021-22",
+        "192 CPSEs had accumulated losses of ₹1,83,356 crore",
+        "79 companies had completely eroded net worth (negative ₹75,186 crore)"
+      ],
+      "key_amounts": [
+        {"value": 31347, "unit": "crore", "context": "Losses incurred by 170 CPSEs in 2021-22", "required": true},
+        {"value": 183356, "unit": "crore", "context": "Accumulated losses of 192 CPSEs", "required": true},
+        {"value": 75186, "unit": "crore", "context": "Negative net worth of 79 eroded companies", "required": false}
+      ],
+      "key_entities": ["Government companies", "CPSEs"],
+      "source_sections": ["Executive Summary", "1.4.3"],
+      "source_pages": [12, 42, 43]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["profit making CPSEs details"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC006",
+    "question": "What was the total disinvestment receipt in 2021-22 and how did it compare to the budget estimates?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Budget Estimates for disinvestment receipts was ₹1,75,000 crore for 2021-22, which was further downsized to ₹78,000 crore at Revised Estimates stage (reduction of 55 per cent). However, the actual realization was merely ₹13,534 crore, which was only 17 per cent of the Revised Estimates and substantially less (82.64 per cent less) than the target. The total disinvestment proceeds saw a declining trend from ₹1,00,058 crore in 2017-18 to ₹13,534 crore in 2021-22, a decline of more than 85 per cent.",
+      "key_facts": [
+        "Budget Estimates was ₹1,75,000 crore",
+        "Revised Estimates was ₹78,000 crore",
+        "Actual realization was ₹13,534 crore (17% of RE)",
+        "Decline of 85% from ₹1,00,058 crore in 2017-18"
+      ],
+      "key_amounts": [
+        {"value": 175000, "unit": "crore", "context": "Budget Estimates for disinvestment 2021-22", "required": true},
+        {"value": 78000, "unit": "crore", "context": "Revised Estimates for disinvestment", "required": true},
+        {"value": 13534, "unit": "crore", "context": "Actual disinvestment realization", "required": true}
+      ],
+      "key_entities": ["DIPAM", "DEA"],
+      "source_sections": ["Executive Summary", "Chapter IV", "4.2"],
+      "source_pages": [15, 151, 154]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["next year projections"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC007",
+    "question": "What was the net financial burden borne by the Government of India for the disinvestment of Air India Limited?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Strategic Disinvestment of Air India Limited was completed during 2021-22 at ₹18,000 crore (cash consideration of ₹2,700 crore and debts of ₹15,300 crore taken over by M/s. Talace Private Limited). However, the Government of India had to bear net financial burden of ₹88,036.17 crore during the process of disinvestment. This includes equity capital infused, non-convertible debentures, additional support through AI Assets Holding Limited, and outstanding NCDs of ₹14,985 crore yet to be matured.",
+      "key_facts": [
+        "Air India disinvestment completed at ₹18,000 crore",
+        "Cash consideration: ₹2,700 crore",
+        "Debt taken over by Talace: ₹15,300 crore",
+        "Net financial burden on GoI: ₹88,036.17 crore"
+      ],
+      "key_amounts": [
+        {"value": 88036.17, "unit": "crore", "context": "Net financial burden on GoI for Air India disinvestment", "required": true},
+        {"value": 18000, "unit": "crore", "context": "Total disinvestment value of Air India", "required": true},
+        {"value": 2700, "unit": "crore", "context": "Cash consideration received", "required": false}
+      ],
+      "key_entities": ["Air India Limited", "M/s. Talace Private Limited", "Tata Sons", "AI Assets Holding Limited"],
+      "source_sections": ["Executive Summary", "4.10"],
+      "source_pages": [16, 162, 163, 166, 167]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["other airline disinvestments"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC008",
+    "question": "What was the total CSR spending by CPSEs in 2021-22 and which sectors contributed the most?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Total spend on CSR activities by 63 CPSEs in 2021-22 was ₹4,005.30 crore. The Petroleum and Power sector spend accounted for 68.03 per cent of the total spend. The CPSEs with highest CSR spend were Oil and Natural Gas Corporation Limited (₹458.00 crore), NTPC Limited (₹356.72 crore) and Indian Oil Corporation Limited (₹298.29 crore). The mandatory 2% requirement allocation was ₹3,655.84 crore against which CPSEs had allocated ₹4,049.35 crore.",
+      "key_facts": [
+        "Total CSR spending: ₹4,005.30 crore by 63 CPSEs",
+        "Petroleum and Power sector contributed 68.03%",
+        "ONGC spent highest at ₹458.00 crore",
+        "NTPC spent ₹356.72 crore",
+        "IOC spent ₹298.29 crore"
+      ],
+      "key_amounts": [
+        {"value": 4005.30, "unit": "crore", "context": "Total CSR spending by 63 CPSEs", "required": true},
+        {"value": 458.00, "unit": "crore", "context": "ONGC CSR spending - highest", "required": false}
+      ],
+      "key_entities": ["ONGC", "NTPC", "Indian Oil Corporation", "Petroleum sector", "Power sector"],
+      "source_sections": ["Executive Summary", "Chapter V", "5.5.3"],
+      "source_pages": [17, 173, 174]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["private company CSR"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC009",
+    "question": "What was the financial impact of significant comments issued by CAG on financial statements of CPSEs?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The financial impact of significant comments, issued on the financial statements of the selected CPSEs, on profitability was ₹4,498 crore and on assets/liabilities was ₹2,88,460 crore. Comments were issued in respect of 92 CPSEs. Seven CPSEs amended their Financial Statements and statutory auditors of 88 CPSEs revised their Audit Report before laying of the Financial Statements in Annual General Meeting.",
+      "key_facts": [
+        "Financial impact on profitability: ₹4,498 crore",
+        "Financial impact on assets/liabilities: ₹2,88,460 crore",
+        "Comments issued on 92 CPSEs",
+        "7 CPSEs amended Financial Statements",
+        "88 CPSEs revised Audit Reports"
+      ],
+      "key_amounts": [
+        {"value": 4498, "unit": "crore", "context": "Financial impact on profitability", "required": true},
+        {"value": 288460, "unit": "crore", "context": "Financial impact on assets/liabilities", "required": true}
+      ],
+      "key_entities": ["CAG", "CPSEs", "Statutory Auditors"],
+      "source_sections": ["Executive Summary", "2.5"],
+      "source_pages": [13, 55]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["individual company comments"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC010",
+    "question": "What was the shortfall in dividend declaration by CPSEs due to non-compliance with Government guidelines?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Non-compliance with directive of Government of India on declaration of dividend by 45 CPSEs, which were having sufficient fund (retained earnings and General Reserves), resulted in a shortfall of ₹5,811 crore in declaration of dividend for the year 2021-22. As against the minimum dividend of ₹10,945 crore to be declared by these 45 Government companies, the dividend paid was only ₹5,134 crore. The shortfall was ₹11,532 crore during 2020-21 by 54 Government companies.",
+      "key_facts": [
+        "45 CPSEs did not comply with dividend guidelines",
+        "Shortfall in dividend: ₹5,811 crore",
+        "Minimum dividend required: ₹10,945 crore",
+        "Actual dividend paid: ₹5,134 crore"
+      ],
+      "key_amounts": [
+        {"value": 5811, "unit": "crore", "context": "Shortfall in dividend declaration", "required": true}
+      ],
+      "key_entities": ["DIPAM", "Government companies"],
+      "source_sections": ["Executive Summary", "1.5.1"],
+      "source_pages": [12, 45]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["private company dividends"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC011",
+    "question": "What were the main corporate governance issues found in listed CPSEs?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The review covered 71 listed CPSEs and 35 CPSEs with bonds/debentures listed. Key corporate governance issues included: Non-Executive Directors were less than 50% of Board strength in 26 CPSEs (37%); required number of Independent Directors were not on Board in 55 CPSEs (77%); 20 CPSEs (28%) did not have Women Director on Board; 41 listed CPSEs did not have Women Independent Director; Independent Directors of 7 CPSEs (10%) did not attend at least 80% meetings; Audit Committee was not constituted in 11 CPSEs (15%); two-thirds of Audit Committee members were not Independent Directors in 28 CPSEs (39%); Nomination and Remuneration Committee was not constituted in 12 CPSEs (17%); Risk Management Committee was not constituted in 6 CPSEs (8%).",
+      "key_facts": [
+        "55 CPSEs (77%) had inadequate Independent Directors",
+        "26 CPSEs (37%) had Non-Executive Directors less than 50%",
+        "20 CPSEs (28%) without Women Director",
+        "41 CPSEs without Women Independent Director",
+        "11 CPSEs (15%) without Audit Committee",
+        "12 CPSEs (17%) without Nomination and Remuneration Committee"
+      ],
+      "key_amounts": [],
+      "key_entities": ["SEBI", "DPE", "Board of Directors", "Audit Committee"],
+      "source_sections": ["Executive Summary", "Chapter III"],
+      "source_pages": [13, 14]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["unlisted company governance"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC012",
+    "question": "What were the key issues found in National Textile Corporation Limited (NTC)?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Key issues in NTC included: (1) Avoidable expenditure of ₹38.48 crore during April 2015 to March 2022 on procurement of costlier cotton from Cotton Corporation of India vis-à-vis open market; (2) Payment of ₹112.75 crore from May 2020 to March 2022 towards idle wages to 6,140 workers due to non-operation of mills; (3) Government loans of ₹270 crore with accrued interest of ₹631.19 crore outstanding as on 31 March 2022 due to non-submission of restructuring plan; (4) Funds of ₹191.45 crore (principal ₹66.10 crore + interest ₹125.35 crore) blocked with British India Corporation; (5) Inventory of yarn (₹8.28 crore) and fabric (₹32.29 crore) lying for more than one year; (6) Disposal of obsolete machinery not completed even after 15 years since initiated in 2009.",
+      "key_facts": [
+        "Avoidable expenditure on cotton: ₹38.48 crore",
+        "Idle wages paid: ₹112.75 crore to 6,140 workers",
+        "Government loan outstanding: ₹270 crore + interest ₹631.19 crore",
+        "Funds blocked with BIC: ₹191.45 crore",
+        "Old inventory lying: yarn ₹8.28 crore, fabric ₹32.29 crore"
+      ],
+      "key_amounts": [
+        {"value": 38.48, "unit": "crore", "context": "Avoidable expenditure on costlier cotton", "required": true},
+        {"value": 112.75, "unit": "crore", "context": "Idle wages paid to workers", "required": true},
+        {"value": 191.45, "unit": "crore", "context": "Funds blocked with British India Corporation", "required": true}
+      ],
+      "key_entities": ["National Textile Corporation", "Cotton Corporation of India", "British India Corporation", "Ministry of Textiles"],
+      "source_sections": ["Executive Summary", "6.5"],
+      "source_pages": [19, 210, 212, 213, 216, 217]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["other textile companies"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC013",
+    "question": "What was the total market capitalization of listed Government companies as on 31 March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The total market value of shares of 65 listed Government companies (including seven subsidiary companies), the shares of which were traded during 2021-22, stood at ₹15,88,664 crore as on 31 March, 2022. This increased by ₹3,01,782 crore (23.45 per cent) compared to ₹12,86,882 crore as on 31 March, 2021. Market value of shares held by the Central Government in 58 listed Government companies (excluding seven subsidiary companies) stood at ₹9,17,248 crore as on 31 March, 2022.",
+      "key_facts": [
+        "Market capitalization: ₹15,88,664 crore for 65 listed companies",
+        "Increase of ₹3,01,782 crore (23.45%) over previous year",
+        "Central Government share value: ₹9,17,248 crore in 58 companies"
+      ],
+      "key_amounts": [
+        {"value": 1588664, "unit": "crore", "context": "Total market capitalization of 65 listed CPSEs", "required": true},
+        {"value": 917248, "unit": "crore", "context": "Market value of Central Government shares", "required": false}
+      ],
+      "key_entities": ["Listed Government companies", "Central Government"],
+      "source_sections": ["Executive Summary", "1.3.1"],
+      "source_pages": [11, 36, 37]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["unlisted company values"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC014",
+    "question": "What was the total long term loan outstanding for CPSEs and how much was from Central Government?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The total long term loans outstanding in 187 CPSEs out of 454 Government companies and corporations from all sources as on 31 March, 2022 was ₹25,33,850 crore. Out of this, loans from Central Government was ₹1,47,563 crore in 45 CPSEs. Long term loans increased by ₹1,61,961 crore during 2021-22. Interest amounting to ₹4,184.16 crore was outstanding on Central Government loans of 25 CPSEs, of which 47.24% was outstanding for more than three years.",
+      "key_facts": [
+        "Total long term loans: ₹25,33,850 crore in 187 CPSEs",
+        "Central Government loans: ₹1,47,563 crore in 45 CPSEs",
+        "Increase of ₹1,61,961 crore during 2021-22",
+        "Interest outstanding: ₹4,184.16 crore in 25 CPSEs"
+      ],
+      "key_amounts": [
+        {"value": 2533850, "unit": "crore", "context": "Total long term loans in 187 CPSEs", "required": true},
+        {"value": 147563, "unit": "crore", "context": "Long term loans from Central Government", "required": true}
+      ],
+      "key_entities": ["Central Government", "CPSEs"],
+      "source_sections": ["Executive Summary", "1.2.2"],
+      "source_pages": [11, 31, 34, 35]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["short term loans"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC015",
+    "question": "What was the total sales of Government companies in 2021-22 and how much was sold to Government sector?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Total sales by 454 Government companies and Corporations was ₹31,18,281 crore in 2021-22. Out of these CPSEs, 142 CPSEs sold goods/rendered services worth ₹3,92,660 crore to Government sector which was 25.22 per cent of their total sales. Additionally, 60 CPSEs exported goods/services worth ₹1,35,658 crore (7.26% of their total sales) whereas 50 CPSEs imported goods/services worth ₹5,54,167 crore resulting in net import of ₹4,18,509 crore.",
+      "key_facts": [
+        "Total sales: ₹31,18,281 crore by 454 CPSEs",
+        "Sales to Government sector: ₹3,92,660 crore (25.22%)",
+        "Export sales: ₹1,35,658 crore by 60 CPSEs",
+        "Net import: ₹4,18,509 crore"
+      ],
+      "key_amounts": [
+        {"value": 3118281, "unit": "crore", "context": "Total sales by 454 CPSEs", "required": true},
+        {"value": 392660, "unit": "crore", "context": "Sales to Government sector", "required": false}
+      ],
+      "key_entities": ["Government companies", "Government sector"],
+      "source_sections": ["Executive Summary", "1.7"],
+      "source_pages": [12, 47, 48]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["private sector sales"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC016",
+    "question": "What was the status of Heavy Engineering Corporation Limited (HEC)?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Heavy Engineering Corporation Limited (HEC) had shortfall in production and low capacity utilisation due to shortage of working capital and liquidity problems, acute fund constraints, old plant and machinery with reduced efficiency and frequent breakdowns, lack of technology upgradation and low manpower productivity. The Company incurred loss continuously during last five years (except 2017-18 when profit was mainly from transfer of land to Government of Jharkhand - ₹559 crore). Accumulated loss as on 31 March 2022 was ₹1,528.54 crore and net worth was negative ₹844.07 crore. Equity of ₹606.08 crore was fully eroded. Working capital was negative ranging from ₹67.40 crore in 2017-18 to ₹937.69 crore in 2021-22. Liquidated damages of ₹107.94 crore were charged during 2016-17 to 2021-22 due to delay in order execution.",
+      "key_facts": [
+        "Accumulated loss: ₹1,528.54 crore as on 31 March 2022",
+        "Net worth: negative ₹844.07 crore",
+        "Equity of ₹606.08 crore fully eroded",
+        "Negative working capital up to ₹937.69 crore in 2021-22",
+        "Liquidated damages: ₹107.94 crore charged"
+      ],
+      "key_amounts": [
+        {"value": 1528.54, "unit": "crore", "context": "Accumulated loss of HEC", "required": true},
+        {"value": 844.07, "unit": "crore", "context": "Negative net worth of HEC", "required": false}
+      ],
+      "key_entities": ["Heavy Engineering Corporation Limited", "Ministry of Heavy Industries", "Government of Jharkhand"],
+      "source_sections": ["Executive Summary", "6.3"],
+      "source_pages": [18, 200, 201, 202, 204]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["other engineering companies"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC017",
+    "question": "What was the overstatement of disinvestment receipts due to inclusion of interest and dividend income?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Specified Undertaking of Unit Trust of India remitted interest and dividend income amounting to ₹1,107 crore to DIPAM which was included under disinvestment receipts. Since this income is not a part of remittance from Government shareholdings, it should not be included in the disinvestment receipts. This resulted in overstatement of disinvestment receipts by ₹1,107 crore during the year 2021-22.",
+      "key_facts": [
+        "Overstatement of disinvestment receipts: ₹1,107 crore",
+        "Income from SUUTI wrongly included in disinvestment receipts",
+        "Interest and dividend income not from Government shareholdings"
+      ],
+      "key_amounts": [
+        {"value": 1107, "unit": "crore", "context": "Overstatement of disinvestment receipts", "required": true}
+      ],
+      "key_entities": ["SUUTI", "DIPAM"],
+      "source_sections": ["Executive Summary", "4.9"],
+      "source_pages": [16, 161]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["other disinvestment issues"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CPSE_GPFR_TC018",
+    "question": "What was the Research and Development expenditure by CPSEs in 2021-22?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_06_CAG_General_Purpose_Financial_Reports_of_Central_Public_Sector_Compliance_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Research & Development expenditure increased by ₹1,483 crore during 2021-22 from ₹5,319 crore in 2020-21 to ₹6,802 crore in 2021-22. The number of patents also increased to 1,605 in 2021-22 from 1,457 in 2020-21. Out of 1,605 patents registered, 149 patents were commercialised by nine CPSEs and revenue of ₹42.05 crore was earned. Hindustan Aeronautics Limited incurred highest R&D expenditure of ₹1,967 crore, followed by Bharat Electronics Limited (₹1,069 crore) and Steel Authority of India Limited (₹815 crore).",
+      "key_facts": [
+        "R&D expenditure: ₹6,802 crore in 2021-22",
+        "Increase of ₹1,483 crore from previous year",
+        "1,605 patents registered, 149 commercialised",
+        "Revenue from patents: ₹42.05 crore",
+        "HAL spent highest at ₹1,967 crore"
+      ],
+      "key_amounts": [
+        {"value": 6802, "unit": "crore", "context": "Total R&D expenditure in 2021-22", "required": true},
+        {"value": 1967, "unit": "crore", "context": "HAL R&D expenditure - highest", "required": false}
+      ],
+      "key_entities": ["Hindustan Aeronautics Limited", "Bharat Electronics Limited", "SAIL"],
+      "source_sections": ["1.8"],
+      "source_pages": [49, 50]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["private sector R&D"],
+      "must_not_hallucinate": true
+    }
+  }
+]

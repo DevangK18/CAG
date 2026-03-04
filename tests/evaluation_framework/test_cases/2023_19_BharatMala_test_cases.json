@@ -1,0 +1,572 @@
+[
+  {
+    "id": "BMP_2023_TC001",
+    "question": "What was the total approved outlay for Bharatmala Pariyojana Phase-I?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Bharatmala Pariyojana Phase-I was approved in October 2017 with an estimated outlay of ₹5,35,000 crore for development of 34,800 km of National Highways over a five-year period from 2017-18 to 2021-22.",
+      "key_facts": [
+        "Approved outlay was ₹5,35,000 crore",
+        "Target was 34,800 km of National Highways",
+        "Implementation period was 2017-18 to 2021-22 (five years)"
+      ],
+      "key_amounts": [
+        {"value": 535000, "unit": "crore", "context": "Total approved outlay for Phase-I", "required": true},
+        {"value": 34800, "unit": "km", "context": "Target length of National Highways", "required": true}
+      ],
+      "key_entities": ["Bharatmala Pariyojana", "NHAI", "MoRTH"],
+      "source_sections": ["Executive Summary", "Chapter 1"],
+      "source_pages": [5, 1]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Phase-II"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC002",
+    "question": "How much length of National Highways was awarded under Bharatmala Pariyojana Phase-I as of March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "As of March 2022, a total length of 26,418 km was awarded under Bharatmala Pariyojana Phase-I, which was 76 per cent of the target of 34,800 km.",
+      "key_facts": [
+        "26,418 km length was awarded as of March 2022",
+        "This was 76 per cent of the target",
+        "Target was 34,800 km"
+      ],
+      "key_amounts": [
+        {"value": 26418, "unit": "km", "context": "Length awarded as of March 2022", "required": true},
+        {"value": 76, "unit": "per cent", "context": "Percentage of target achieved for awarding", "required": true}
+      ],
+      "key_entities": ["Bharatmala Pariyojana Phase-I", "NHAI"],
+      "source_sections": ["Executive Summary"],
+      "source_pages": [5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["100 per cent achieved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC003",
+    "question": "How much length of National Highways was constructed under Bharatmala Pariyojana Phase-I as of March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "As of March 2022, 13,499 km length was constructed under Bharatmala Pariyojana Phase-I, which was only 39 per cent of the target of 34,800 km.",
+      "key_facts": [
+        "13,499 km length was constructed as of March 2022",
+        "This was only 39 per cent of the target",
+        "Significant shortfall in construction achievement"
+      ],
+      "key_amounts": [
+        {"value": 13499, "unit": "km", "context": "Length constructed as of March 2022", "required": true},
+        {"value": 39, "unit": "per cent", "context": "Percentage of target achieved for construction", "required": true}
+      ],
+      "key_entities": ["Bharatmala Pariyojana Phase-I"],
+      "source_sections": ["Executive Summary"],
+      "source_pages": [5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["target achieved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC004",
+    "question": "What were the main components included under Bharatmala Pariyojana Phase-I?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Bharatmala Pariyojana Phase-I included development of Economic Corridors (9,000 km), Inter-corridors and feeder routes (6,000 km), National Corridor Efficiency Improvement (5,000 km), Border and International connectivity roads (2,000 km), Coastal and Port connectivity roads (2,000 km), and balance road works under NHDP (10,800 km).",
+      "key_facts": [
+        "Economic Corridors: 9,000 km",
+        "Inter-corridors and feeder routes: 6,000 km",
+        "National Corridor Efficiency Improvement: 5,000 km",
+        "Border and International connectivity roads: 2,000 km",
+        "Coastal and Port connectivity roads: 2,000 km",
+        "Balance NHDP works: 10,800 km"
+      ],
+      "key_amounts": [
+        {"value": 9000, "unit": "km", "context": "Economic Corridors", "required": true},
+        {"value": 6000, "unit": "km", "context": "Inter-corridors and feeder routes", "required": false},
+        {"value": 10800, "unit": "km", "context": "Balance NHDP works", "required": false}
+      ],
+      "key_entities": ["Economic Corridors", "NHDP", "Inter-corridors"],
+      "source_sections": ["Chapter 1", "1.2"],
+      "source_pages": [1, 2]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Phase-II components"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC005",
+    "question": "What was the fund allocated to NHAI from the Central Road and Infrastructure Fund for Bharatmala Pariyojana?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Out of the total approved outlay of ₹5,35,000 crore for Bharatmala Pariyojana Phase-I, ₹2,37,024 crore was to be funded from Central Road and Infrastructure Fund (CRIF), with ₹1,57,324 crore allocated to NHAI.",
+      "key_facts": [
+        "Total CRIF allocation was ₹2,37,024 crore",
+        "NHAI was allocated ₹1,57,324 crore from CRIF",
+        "This was part of the total outlay of ₹5,35,000 crore"
+      ],
+      "key_amounts": [
+        {"value": 237024, "unit": "crore", "context": "Total CRIF allocation for Bharatmala", "required": true},
+        {"value": 157324, "unit": "crore", "context": "CRIF allocation to NHAI", "required": true}
+      ],
+      "key_entities": ["NHAI", "CRIF", "Central Road and Infrastructure Fund"],
+      "source_sections": ["1.4", "Funding Pattern"],
+      "source_pages": [4]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["private funding"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC006",
+    "question": "What was the cost overrun in the sampled projects of Bharatmala Pariyojana Phase-I?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "In the 112 sampled projects, there was a cost overrun of ₹17,951 crore. The original cost of these projects was ₹1,22,413 crore which escalated to ₹1,40,364 crore, representing a 14.66 per cent increase.",
+      "key_facts": [
+        "Cost overrun was ₹17,951 crore in sampled projects",
+        "Original cost was ₹1,22,413 crore",
+        "Escalated cost was ₹1,40,364 crore",
+        "112 projects were sampled"
+      ],
+      "key_amounts": [
+        {"value": 17951, "unit": "crore", "context": "Cost overrun in sampled projects", "required": true},
+        {"value": 122413, "unit": "crore", "context": "Original cost of sampled projects", "required": false},
+        {"value": 140364, "unit": "crore", "context": "Escalated cost of sampled projects", "required": false}
+      ],
+      "key_entities": ["NHAI", "Bharatmala Pariyojana"],
+      "source_sections": ["3.1", "Cost Overrun"],
+      "source_pages": [17, 18]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no cost overrun"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC007",
+    "question": "What was the delay in completion of projects under Bharatmala Pariyojana Phase-I?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Out of 112 sampled projects, 87 projects were delayed. The average delay was 506 days in EPC projects and 559 days in HAM projects. Only 19 out of 62 completed EPC projects were completed on time, and only 6 out of 31 completed HAM projects were completed on time.",
+      "key_facts": [
+        "87 out of 112 sampled projects were delayed",
+        "Average delay in EPC projects was 506 days",
+        "Average delay in HAM projects was 559 days",
+        "Only 19 of 62 EPC projects completed on time",
+        "Only 6 of 31 HAM projects completed on time"
+      ],
+      "key_amounts": [
+        {"value": 506, "unit": "days", "context": "Average delay in EPC projects", "required": true},
+        {"value": 559, "unit": "days", "context": "Average delay in HAM projects", "required": true},
+        {"value": 87, "unit": "projects", "context": "Number of delayed projects", "required": false}
+      ],
+      "key_entities": ["EPC", "HAM", "NHAI"],
+      "source_sections": ["3.2", "Time Overrun"],
+      "source_pages": [19, 20]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all projects completed on time"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC008",
+    "question": "What were the main reasons for delay in Bharatmala Pariyojana projects?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "The main reasons for delay in Bharatmala projects included: delay in land acquisition and removal of encumbrances, delay in forest and wildlife clearances, utility shifting issues, design changes and scope variations, COVID-19 pandemic impact, poor performance of contractors, delay in appointment of authority's engineer, and issues related to drawings and approvals.",
+      "key_facts": [
+        "Land acquisition delays were a major cause",
+        "Forest and wildlife clearance delays",
+        "Utility shifting issues",
+        "Design changes and scope variations",
+        "COVID-19 pandemic impact",
+        "Poor contractor performance"
+      ],
+      "key_amounts": [],
+      "key_entities": ["NHAI", "Forest clearance", "Land acquisition"],
+      "source_sections": ["3.2", "Reasons for delay"],
+      "source_pages": [20, 21, 22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no delays"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC009",
+    "question": "What issues were found in DPR preparation for Bharatmala Pariyojana projects?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Audit found several issues in DPR preparation including: inadequate survey and investigation leading to design changes, incorrect traffic projections affecting project viability, lack of coordination with Railways and other agencies for ROB/RUB works, inadequate soil investigation causing changes in foundation design, non-consideration of utility shifting requirements, and deficiencies in estimation of quantities leading to cost variations.",
+      "key_facts": [
+        "Inadequate survey and investigation",
+        "Incorrect traffic projections",
+        "Lack of coordination with Railways for ROB/RUB",
+        "Inadequate soil investigation",
+        "Non-consideration of utility shifting",
+        "Deficiencies in quantity estimation"
+      ],
+      "key_amounts": [],
+      "key_entities": ["DPR", "NHAI", "Railways"],
+      "source_sections": ["2.1", "DPR Preparation"],
+      "source_pages": [7, 8, 9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["DPRs were perfect"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC010",
+    "question": "What was the status of land acquisition for Bharatmala Pariyojana projects?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Land acquisition was a major issue affecting project implementation. In sampled projects, land acquisition was not completed before awarding contracts in many cases. As per NHAI guidelines, 80 per cent of land should be available before awarding EPC contracts and 90 per cent before awarding HAM contracts, but this was not adhered to in several cases causing project delays.",
+      "key_facts": [
+        "80 per cent land required before EPC contract award",
+        "90 per cent land required before HAM contract award",
+        "Guidelines not followed in several cases",
+        "Land acquisition delays caused project delays"
+      ],
+      "key_amounts": [
+        {"value": 80, "unit": "per cent", "context": "Land required before EPC award", "required": true},
+        {"value": 90, "unit": "per cent", "context": "Land required before HAM award", "required": true}
+      ],
+      "key_entities": ["NHAI", "Land Acquisition"],
+      "source_sections": ["2.2", "Land Acquisition"],
+      "source_pages": [10, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["land acquisition completed fully"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC011",
+    "question": "What was the expenditure incurred on Bharatmala Pariyojana Phase-I till March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "The total expenditure incurred on Bharatmala Pariyojana Phase-I till March 2022 was ₹3,49,827 crore, which was 65 per cent of the total approved outlay of ₹5,35,000 crore.",
+      "key_facts": [
+        "Total expenditure till March 2022 was ₹3,49,827 crore",
+        "This was 65 per cent of approved outlay",
+        "Approved outlay was ₹5,35,000 crore"
+      ],
+      "key_amounts": [
+        {"value": 349827, "unit": "crore", "context": "Expenditure incurred till March 2022", "required": true},
+        {"value": 65, "unit": "per cent", "context": "Percentage of approved outlay spent", "required": true}
+      ],
+      "key_entities": ["Bharatmala Pariyojana Phase-I", "NHAI"],
+      "source_sections": ["1.5", "Expenditure"],
+      "source_pages": [5, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["full outlay utilized"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC012",
+    "question": "How many projects were selected for detailed audit examination?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Audit selected 112 projects for detailed examination out of the total projects awarded under Bharatmala Pariyojana Phase-I. These 112 projects included both EPC and HAM mode projects across different Regional Offices of NHAI.",
+      "key_facts": [
+        "112 projects were selected for detailed audit",
+        "Projects included both EPC and HAM modes",
+        "Projects were from different NHAI Regional Offices"
+      ],
+      "key_amounts": [
+        {"value": 112, "unit": "projects", "context": "Number of projects selected for audit", "required": true}
+      ],
+      "key_entities": ["NHAI", "EPC", "HAM"],
+      "source_sections": ["1.6", "Audit Scope"],
+      "source_pages": [6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all projects audited"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC013",
+    "question": "What issues were found regarding forest clearances in Bharatmala projects?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Audit found that forest clearances were delayed in several projects causing time overrun. Projects were awarded before obtaining Stage-I or Stage-II forest clearances. In some cases, final forest clearance was obtained years after project award. The delay in forest clearances affected project execution and led to extension of time claims by contractors.",
+      "key_facts": [
+        "Projects awarded before forest clearances",
+        "Delays in Stage-I and Stage-II clearances",
+        "Forest clearance delays caused time overrun",
+        "Contractors claimed extension of time"
+      ],
+      "key_amounts": [],
+      "key_entities": ["Forest clearance", "NHAI", "MoEFCC"],
+      "source_sections": ["2.3", "Forest Clearance"],
+      "source_pages": [12, 13]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all clearances obtained on time"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC014",
+    "question": "What was the role of MoRTH in Bharatmala Pariyojana implementation?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Ministry of Road Transport and Highways (MoRTH) is the nodal ministry for implementation of Bharatmala Pariyojana. MoRTH is responsible for policy formulation, monitoring progress, and providing budgetary support. The actual implementation is done through National Highways Authority of India (NHAI) and National Highways & Infrastructure Development Corporation Limited (NHIDCL).",
+      "key_facts": [
+        "MoRTH is the nodal ministry",
+        "Responsible for policy and monitoring",
+        "Implementation through NHAI and NHIDCL",
+        "Provides budgetary support"
+      ],
+      "key_amounts": [],
+      "key_entities": ["MoRTH", "NHAI", "NHIDCL"],
+      "source_sections": ["1.3", "Implementing Agencies"],
+      "source_pages": [3]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["MoRTH not involved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC015",
+    "question": "What were the quality control issues found in Bharatmala Pariyojana projects?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Audit found several quality control issues including: non-compliance with IRC specifications, deficiencies in testing of construction materials, inadequate monitoring by Independent Engineers, defects identified during inspection not rectified timely, premature failure of road stretches, and issues in maintenance of quality records.",
+      "key_facts": [
+        "Non-compliance with IRC specifications",
+        "Deficiencies in material testing",
+        "Inadequate Independent Engineer monitoring",
+        "Defects not rectified timely",
+        "Premature failure of road stretches",
+        "Quality record maintenance issues"
+      ],
+      "key_amounts": [],
+      "key_entities": ["IRC", "Independent Engineer", "NHAI"],
+      "source_sections": ["4.1", "Quality Control"],
+      "source_pages": [25, 26, 27]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no quality issues"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC016",
+    "question": "What was the target completion year for Bharatmala Pariyojana Phase-I?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Bharatmala Pariyojana Phase-I was to be implemented over a five-year period from 2017-18 to 2021-22. The target completion year was 2021-22, but as of March 2022, only 39 per cent of the target length was constructed.",
+      "key_facts": [
+        "Implementation period was 2017-18 to 2021-22",
+        "Target completion year was 2021-22",
+        "Five-year implementation period",
+        "Only 39 per cent constructed by target date"
+      ],
+      "key_amounts": [
+        {"value": 5, "unit": "years", "context": "Implementation period", "required": true}
+      ],
+      "key_entities": ["Bharatmala Pariyojana Phase-I"],
+      "source_sections": ["Executive Summary", "1.1"],
+      "source_pages": [5, 1]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["target achieved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC017",
+    "question": "What were the different modes of project implementation under Bharatmala Pariyojana?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Projects under Bharatmala Pariyojana Phase-I were implemented through different modes: Engineering, Procurement and Construction (EPC) mode, Hybrid Annuity Model (HAM), Build Operate Transfer (BOT) Toll mode, and BOT Annuity mode. EPC and HAM were the predominant modes of implementation.",
+      "key_facts": [
+        "EPC (Engineering, Procurement and Construction) mode",
+        "HAM (Hybrid Annuity Model)",
+        "BOT Toll mode",
+        "BOT Annuity mode",
+        "EPC and HAM were predominant modes"
+      ],
+      "key_amounts": [],
+      "key_entities": ["EPC", "HAM", "BOT", "NHAI"],
+      "source_sections": ["1.3", "Modes of Implementation"],
+      "source_pages": [3, 4]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["only one mode used"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC018",
+    "question": "What were the audit recommendations for improving Bharatmala Pariyojana implementation?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Key audit recommendations included: ensuring complete land acquisition before project award, obtaining all statutory clearances before award, improving DPR quality through detailed surveys, strengthening contract management and monitoring, ensuring strict adherence to quality standards, better coordination with Railways and other stakeholders, timely utility shifting, and strengthening the role of Independent Engineers.",
+      "key_facts": [
+        "Complete land acquisition before award",
+        "Obtain statutory clearances before award",
+        "Improve DPR quality through detailed surveys",
+        "Strengthen contract management",
+        "Ensure adherence to quality standards",
+        "Better coordination with stakeholders",
+        "Timely utility shifting"
+      ],
+      "key_amounts": [],
+      "key_entities": ["NHAI", "MoRTH", "Independent Engineer"],
+      "source_sections": ["Chapter 5", "Recommendations"],
+      "source_pages": [35, 36]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no recommendations"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC019",
+    "question": "What was the financial impact of design changes in Bharatmala projects?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Design changes in sampled projects led to significant cost escalation. Changes in scope of work, additional items not envisaged in original DPR, and changes in structure design contributed to cost overruns. The cost overrun of ₹17,951 crore in sampled projects was partially attributable to design changes and scope variations.",
+      "key_facts": [
+        "Design changes caused cost escalation",
+        "Changes in scope of work",
+        "Additional items not in original DPR",
+        "Changes in structure design",
+        "Part of ₹17,951 crore cost overrun due to design changes"
+      ],
+      "key_amounts": [
+        {"value": 17951, "unit": "crore", "context": "Total cost overrun including design changes", "required": true}
+      ],
+      "key_entities": ["NHAI", "DPR"],
+      "source_sections": ["3.1", "Cost Overrun"],
+      "source_pages": [17, 18, 19]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no financial impact"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "BMP_2023_TC020",
+    "question": "What was the shortfall in physical progress of Bharatmala Pariyojana Phase-I?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["BMP_2023"]
+    },
+    "expected": {
+      "answer_summary": "Against the target of 34,800 km, only 26,418 km (76%) was awarded and 13,499 km (39%) was constructed as of March 2022. This represents a shortfall of 8,382 km in awarding (24% shortfall) and 21,301 km in construction (61% shortfall) against the Phase-I targets.",
+      "key_facts": [
+        "Target was 34,800 km",
+        "Only 26,418 km awarded (76%)",
+        "Only 13,499 km constructed (39%)",
+        "Shortfall of 8,382 km in awarding",
+        "Shortfall of 21,301 km in construction"
+      ],
+      "key_amounts": [
+        {"value": 34800, "unit": "km", "context": "Target length", "required": true},
+        {"value": 26418, "unit": "km", "context": "Length awarded", "required": true},
+        {"value": 13499, "unit": "km", "context": "Length constructed", "required": true},
+        {"value": 21301, "unit": "km", "context": "Shortfall in construction", "required": false}
+      ],
+      "key_entities": ["Bharatmala Pariyojana Phase-I", "NHAI"],
+      "source_sections": ["Executive Summary", "Physical Progress"],
+      "source_pages": [5, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["targets fully achieved"],
+      "must_not_hallucinate": true
+    }
+  }
+]

@@ -1,0 +1,447 @@
+[
+  {
+    "id": "UGA_2023-24_TC001",
+    "question": "What was the total expenditure of the Union Government in FY 2023-24?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The total expenditure of the Union Government in FY 2023-24 was ₹48,52,572 crore, which increased by 6.64 per cent over the previous year FY 2022-23.",
+      "key_facts": [
+        "Total expenditure was ₹48,52,572 crore in FY 2023-24",
+        "Expenditure increased by 6.64 per cent over FY 2022-23",
+        "As a percentage of GDP, expenditure has been on a decreasing trend from 19.68 per cent in FY 2020-21 to 16.11 per cent in FY 2023-24"
+      ],
+      "key_amounts": [
+        {"value": 48525.72, "unit": "crore", "context": "Total expenditure of Union Government in FY 2023-24", "required": true}
+      ],
+      "key_entities": ["Union Government", "Consolidated Fund of India"],
+      "source_sections": ["Executive Summary", "Chapter 2"],
+      "source_pages": [10, 21]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state expenditure"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC002",
+    "question": "What was the fiscal deficit of the Union Government in FY 2023-24?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The fiscal deficit in FY 2023-24 was ₹16,02,143 crore, which was 5.32 per cent of GDP. This was lower in absolute numbers compared to FY 2022-23 when it was 6.53 per cent of GDP.",
+      "key_facts": [
+        "Fiscal deficit was ₹16,02,143 crore in FY 2023-24",
+        "Fiscal deficit was 5.32 per cent of GDP",
+        "This was lower than FY 2022-23 when fiscal deficit was 6.53 per cent of GDP"
+      ],
+      "key_amounts": [
+        {"value": 1602143, "unit": "crore", "context": "Fiscal deficit in FY 2023-24", "required": true},
+        {"value": 5.32, "unit": "per cent of GDP", "context": "Fiscal deficit as percentage of GDP", "required": true}
+      ],
+      "key_entities": ["Union Government", "Fiscal Deficit"],
+      "source_sections": ["2.11", "Executive Summary"],
+      "source_pages": [10, 46]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state fiscal deficit"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC003",
+    "question": "How much was collected as cess/charges/levies in FY 2023-24 and what percentage of Gross Tax Revenue did it represent?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "In FY 2023-24, an amount of ₹3,79,598 crore was collected as cess/charges/levies, which was 10.95 per cent of the Gross Tax Revenue of the Union Government.",
+      "key_facts": [
+        "Cess/charges/levies collection was ₹3,79,598 crore",
+        "This was 10.95 per cent of Gross Tax Revenue",
+        "GST Compensation Cess contributed 28.96 per cent of total cess collection"
+      ],
+      "key_amounts": [
+        {"value": 379598, "unit": "crore", "context": "Total cess/charges/levies collected in FY 2023-24", "required": true},
+        {"value": 10.95, "unit": "per cent", "context": "Cess as percentage of Gross Tax Revenue", "required": true}
+      ],
+      "key_entities": ["Gross Tax Revenue", "GST Compensation Cess"],
+      "source_sections": ["3.3.1"],
+      "source_pages": [57]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state cess collection"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC004",
+    "question": "What was the amount of back-to-back loans given to States/UTs for GST Compensation shortfall and how much was repaid in FY 2023-24?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Government of India borrowed ₹2,69,208 crore (₹1,10,208 crore + ₹1,59,000 crore) during FY 2020-21 and FY 2021-22 through a special borrowing window and passed it on to States/UTs as back-to-back loans for GST Compensation shortfall. Out of this, ₹78,104 crore was due for repayment during FY 2023-24. However, the repayment was actually made by the Union Government from GST Compensation Fund and the amount shown as recovered from States/UTs was merely an adjustment entry.",
+      "key_facts": [
+        "Total back-to-back loans were ₹2,69,208 crore",
+        "₹78,104 crore was due for repayment in FY 2023-24",
+        "The repayment was made from GST Compensation Fund, not from States/UTs",
+        "The recovery from States/UTs was an adjustment entry"
+      ],
+      "key_amounts": [
+        {"value": 269208, "unit": "crore", "context": "Total back-to-back loans to States/UTs", "required": true},
+        {"value": 78104, "unit": "crore", "context": "Amount due for repayment in FY 2023-24", "required": true}
+      ],
+      "key_entities": ["GST Compensation Fund", "States/UTs", "Union Government"],
+      "source_sections": ["2.6.1"],
+      "source_pages": [20, 22, 30]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["actual recovery from states"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC005",
+    "question": "What was the total amount of misclassification identified in the Union Government accounts for FY 2023-24?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Instances of misclassification in accounting amounted to ₹4,214.07 crore in FY 2023-24. Of these, ₹3,283.50 crore related to receipts and the remaining ₹930.57 crore related to expenditure. The expenditure misclassifications largely related to misclassification of capital expenditure as revenue expenditure and vice versa, amounting to ₹654.88 crore. Additionally, DoT misclassified ₹3,443.08 crore of regular pension payments as 'Incremental Pension Payment'.",
+      "key_facts": [
+        "Total misclassification was ₹4,214.07 crore",
+        "Receipts-related misclassification was ₹3,283.50 crore",
+        "Expenditure-related misclassification was ₹930.57 crore",
+        "Capital vs revenue expenditure misclassification was ₹654.88 crore",
+        "DoT misclassified ₹3,443.08 crore of pension payments"
+      ],
+      "key_amounts": [
+        {"value": 4214.07, "unit": "crore", "context": "Total misclassification amount", "required": true},
+        {"value": 3283.50, "unit": "crore", "context": "Receipts-related misclassification", "required": true},
+        {"value": 930.57, "unit": "crore", "context": "Expenditure-related misclassification", "required": false}
+      ],
+      "key_entities": ["Department of Telecommunications", "UGFA"],
+      "source_sections": ["3.5", "Executive Summary"],
+      "source_pages": [12, 65, 68]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state accounts misclassification"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC006",
+    "question": "What was the status of outstanding Utilization Certificates (UCs) as on 31 March 2024?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "As on 31 March 2024, 37,986 Utilization Certificates (UCs) aggregating to ₹72,764.09 crore were outstanding from 22 Departments/Ministries. Of these, 16,596 UCs amounting to ₹62,199.11 crore pertained to the last three years (FY 2020-21 to FY 2022-23). The earliest period of grants for which UCs were outstanding dated back to 1977-78, violating provisions of Rule 238 (1) & (2) of GFR 2017.",
+      "key_facts": [
+        "37,986 UCs were outstanding",
+        "Total outstanding amount was ₹72,764.09 crore",
+        "16,596 UCs worth ₹62,199.11 crore pertained to last three years",
+        "Earliest outstanding UC dates back to 1977-78",
+        "This violates Rule 238 of GFR 2017"
+      ],
+      "key_amounts": [
+        {"value": 72764.09, "unit": "crore", "context": "Total amount of outstanding UCs", "required": true},
+        {"value": 37986, "unit": "number", "context": "Number of outstanding UCs", "required": true},
+        {"value": 62199.11, "unit": "crore", "context": "UCs outstanding from last three years", "required": false}
+      ],
+      "key_entities": ["GFR 2017", "Utilization Certificates"],
+      "source_sections": ["4.7", "Executive Summary"],
+      "source_pages": [13, 87]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state utilization certificates"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC007",
+    "question": "What was the total Parliament approved appropriation for FY 2023-24 and what was the overall savings?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Parliament approved appropriations of ₹1,47,56,796.55 crore for FY 2023-24, against which the Government spent ₹1,29,74,923.11 crore, leading to overall savings of ₹17,81,873.44 crore. There were 102 Grants/Appropriations consisting of 6 Appropriations and 96 Grants.",
+      "key_facts": [
+        "Parliament approved appropriation was ₹1,47,56,796.55 crore",
+        "Actual expenditure was ₹1,29,74,923.11 crore",
+        "Overall savings were ₹17,81,873.44 crore",
+        "Total 102 Grants/Appropriations (6 Appropriations and 96 Grants)"
+      ],
+      "key_amounts": [
+        {"value": 14756796.55, "unit": "crore", "context": "Parliament approved appropriations", "required": true},
+        {"value": 12974923.11, "unit": "crore", "context": "Actual Government expenditure", "required": true},
+        {"value": 1781873.44, "unit": "crore", "context": "Overall savings", "required": true}
+      ],
+      "key_entities": ["Parliament", "Consolidated Fund of India"],
+      "source_sections": ["4.1.1", "Executive Summary"],
+      "source_pages": [12, 72, 73]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state appropriations"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC008",
+    "question": "What was the aggregate amount of short transfer to designated reserve funds in the Public Accounts?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Test check of records revealed aggregate impact of short transfer of ₹3,69,307 crore till 31 March 2024 to the designated reserve funds in the Public Accounts. This included short transfers to various funds including ₹2,93,948.16 crore for OIDB from FY 1974-75 to FY 2023-24, and other reserve funds like IEPF, MNHF, MUSK and PMSSN.",
+      "key_facts": [
+        "Total short transfer was ₹3,69,307 crore till 31 March 2024",
+        "OIDB received short transfer of ₹2,93,948.16 crore since FY 1974-75",
+        "Only ₹902.40 crore was transferred to OIDB since FY 1974-75 to FY 1991-92",
+        "No funds transferred to OIDB after FY 1991-92"
+      ],
+      "key_amounts": [
+        {"value": 369307, "unit": "crore", "context": "Aggregate short transfer to reserve funds", "required": true},
+        {"value": 293948.16, "unit": "crore", "context": "Short transfer to OIDB", "required": false}
+      ],
+      "key_entities": ["Reserve Funds", "Public Account", "OIDB"],
+      "source_sections": ["3.3.1"],
+      "source_pages": [11, 57, 58]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state reserve funds"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC009",
+    "question": "What was the capital expenditure of the Union Government in FY 2023-24 and how did it compare with the transport sector growth?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The capital expenditure of the Union Government in FY 2023-24 was ₹8,07,180 crore, increasing by 29.20 per cent compared to the previous year. As a percentage of total expenditure, capex was 16.63 per cent, and as a percentage of GDP, it stood at 2.68 per cent. Notably, capital expenditure on transport sector increased by 269.29 per cent compared to FY 2019-20, indicating strong government focus on infrastructure.",
+      "key_facts": [
+        "Capital expenditure was ₹8,07,180 crore",
+        "Capex increased by 29.20 per cent over previous year",
+        "Capex as percentage of total expenditure was 16.63 per cent",
+        "Capex as percentage of GDP was 2.68 per cent",
+        "Transport sector capex grew by 269.29 per cent compared to FY 2019-20"
+      ],
+      "key_amounts": [
+        {"value": 807180, "unit": "crore", "context": "Capital expenditure in FY 2023-24", "required": true},
+        {"value": 29.20, "unit": "per cent", "context": "Year-on-year growth in capex", "required": true},
+        {"value": 269.29, "unit": "per cent", "context": "Transport sector capex growth vs FY 2019-20", "required": true}
+      ],
+      "key_entities": ["Capital Expenditure", "Transport Sector"],
+      "source_sections": ["2.9", "Executive Summary"],
+      "source_pages": [10, 38, 39]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state capital expenditure"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC010",
+    "question": "What was the excess expenditure in Transfers to States (Capital Charged) that requires regularization?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "In respect of 'Transfers to States (Capital Charged)', there was excess expenditure of ₹31,308.41 crore during FY 2023-24 against the authorisation of ₹29,600 crore. This resulted in excess expenditure of ₹1,708.41 crore (₹17,08,40,95,000). The excess over the Appropriation is required to be regularised under Article 115(1)(b) of the Constitution.",
+      "key_facts": [
+        "Excess expenditure was ₹31,308.41 crore against authorization of ₹29,600 crore",
+        "Actual excess over appropriation was ₹1,708.41 crore",
+        "Regularization required under Article 115(1)(b) of Constitution"
+      ],
+      "key_amounts": [
+        {"value": 31308.41, "unit": "crore", "context": "Expenditure incurred on Transfers to States (Capital Charged)", "required": true},
+        {"value": 1708.41, "unit": "crore", "context": "Excess expenditure requiring regularization", "required": true}
+      ],
+      "key_entities": ["Transfers to States", "Parliament", "Constitution Article 115"],
+      "source_sections": ["4.2.1.1", "Executive Summary"],
+      "source_pages": [13, 76]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["revenue charged"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC011",
+    "question": "What were the main findings regarding expenditure incurred without budget provision in FY 2023-24?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "An amount of ₹66,507.20 crore was incurred under 34 minor/sub-heads, with expenditure of more than rupees one crore each, across 18 Grants/Appropriations without any budget provision, violating Constitutional provisions under Article 114(3). Additionally, ₹59,976.73 crore was re-appropriated to a Minor head under Appropriation-Repayment of Debt without any original budget provision and was spent without reporting to Parliament, violating Rule 10(6) of DFPRs 1978. This indicates significant procedural non-compliance in budget management.",
+      "key_facts": [
+        "₹66,507.20 crore spent without budget provision",
+        "34 minor/sub-heads across 18 Grants/Appropriations affected",
+        "Violated Article 114(3) of Constitution",
+        "₹59,976.73 crore re-appropriated without original provision for debt repayment",
+        "Not reported to Parliament as required"
+      ],
+      "key_amounts": [
+        {"value": 66507.20, "unit": "crore", "context": "Expenditure without budget provision", "required": true},
+        {"value": 59976.73, "unit": "crore", "context": "Re-appropriation without original provision", "required": true}
+      ],
+      "key_entities": ["Constitution Article 114", "Parliament", "DFPRs 1978"],
+      "source_sections": ["4.5.2"],
+      "source_pages": [13, 83, 84]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state budget provisions"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC012",
+    "question": "What were the key issues identified with Reserve Funds and Deposits accounts?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Multiple issues were identified with Reserve Funds and Deposits: (1) Nine Reserve Funds and 21 Deposits accounts were lying dormant for at least three years with accumulated net credit balance of ₹834.37 crore, the oldest since FY 2002-03; (2) Short transfer of ₹3,69,307 crore to designated reserve funds; (3) 53 cases of adverse balances in various funds and deposits, of which 43 remained unresolved for over five years; (4) More than 50% of expenditure (₹6,024.15 crore) and receipts (₹2,231.42 crore) were classified under omnibus Minor Head 800, compromising transparency; (5) SEBI General Fund retained surplus balance of ₹5,573 crore outside Government Account.",
+      "key_facts": [
+        "9 Reserve Funds and 21 Deposits were dormant with ₹834.37 crore balance",
+        "Short transfer of ₹3,69,307 crore to reserve funds",
+        "53 cases of adverse balances, 43 unresolved for over 5 years",
+        "₹6,024.15 crore expenditure under Minor Head 800",
+        "SEBI retained ₹5,573 crore surplus outside Government Account"
+      ],
+      "key_amounts": [
+        {"value": 834.37, "unit": "crore", "context": "Dormant Reserve Funds and Deposits balance", "required": true},
+        {"value": 5573, "unit": "crore", "context": "SEBI General Fund surplus", "required": true},
+        {"value": 6024.15, "unit": "crore", "context": "Expenditure under Minor Head 800", "required": false}
+      ],
+      "key_entities": ["Reserve Funds", "SEBI General Fund", "Public Account"],
+      "source_sections": ["3.2.2", "3.3.3", "3.3.4"],
+      "source_pages": [11, 12, 55, 60, 61]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state reserve funds"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC013",
+    "question": "What was the status of loans and advances outstanding and arrears in recovery?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "At the end of FY 2023-24, loans and advances of ₹9,41,560 crore were outstanding for recovery from State/UT Governments and other entities, as per Statement 15 of the Finance Accounts. Out of this, arrears in recovery (including principal and interest) amounted to ₹86,174 crore. Given the age of pendency, some of these loans may not be recoverable. Additionally, test check in 19 Ministries/Departments showed ₹27,675.15 crore outstanding, and short recovery of guarantee fee of ₹178.81 crore was observed.",
+      "key_facts": [
+        "Outstanding loans and advances were ₹9,41,560 crore",
+        "Arrears in recovery were ₹86,174 crore",
+        "Test check showed ₹27,675.15 crore outstanding across 19 Ministries",
+        "Short recovery of guarantee fee was ₹178.81 crore"
+      ],
+      "key_amounts": [
+        {"value": 941560, "unit": "crore", "context": "Outstanding loans and advances", "required": true},
+        {"value": 86174, "unit": "crore", "context": "Arrears in recovery", "required": true},
+        {"value": 178.81, "unit": "crore", "context": "Short recovery of guarantee fee", "required": false}
+      ],
+      "key_entities": ["State/UT Governments", "Finance Accounts Statement 15"],
+      "source_sections": ["3.2.3", "3.4.2"],
+      "source_pages": [12, 56]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["private sector loans"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC014",
+    "question": "How did revenue receipts and revenue expenditure compare in FY 2023-24, and what was the revenue deficit?",
+    "category": {
+      "difficulty": "hard",
+      "type": "comparison",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Revenue receipts increased by 13.82 per cent to ₹30,88,175 crore in FY 2023-24, while revenue expenditure increased by only 1.86 per cent. The Revenue Deficit was ₹7,65,907 crore (2.54 per cent of GDP), a reduction of 28.45 per cent over the previous year when it was 3.98 per cent of GDP. This positive trend indicates the government's improved ability to reduce reliance on borrowings for current revenue expenditure. Non-tax revenue saw substantial growth of 23.81 per cent, led by 71 per cent increase in dividend and profits.",
+      "key_facts": [
+        "Revenue receipts increased by 13.82 per cent to ₹30,88,175 crore",
+        "Revenue expenditure increased by only 1.86 per cent",
+        "Revenue deficit was ₹7,65,907 crore (2.54% of GDP)",
+        "Revenue deficit reduced by 28.45 per cent over previous year",
+        "Non-tax revenue grew by 23.81 per cent"
+      ],
+      "key_amounts": [
+        {"value": 3088175, "unit": "crore", "context": "Revenue receipts in FY 2023-24", "required": true},
+        {"value": 765907, "unit": "crore", "context": "Revenue deficit", "required": true},
+        {"value": 2.54, "unit": "per cent of GDP", "context": "Revenue deficit as percentage of GDP", "required": true}
+      ],
+      "key_entities": ["Revenue Receipts", "Revenue Deficit", "Non-Tax Revenue"],
+      "source_sections": ["2.11", "Executive Summary"],
+      "source_pages": [10, 20, 46]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state revenue deficit"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGA_2023-24_TC015",
+    "question": "What issues were identified regarding the understatement of internal debt and suspense accounts?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["2025_16_CAG_Report_on_Union_Government_Accounts_202324_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Several issues led to understatement in accounts: (1) Incorrect accounting for discharge of 1.44% Inflation Index G.S. 2023 resulted in understatement of Internal Debt by ₹372.64 crore, showing negative closing balance; (2) Statement 13 of UGFA shows only net balances under Suspense Heads, understating actual balances - 68.01 per cent in Suspense Account (Civil) and 54.89 per cent in Reserve Bank Suspense Central Accounts Office; (3) Netting of cash balances resulted in understatement, with total cash balance to be reconciled being ₹3,793.74 crore; (4) Under 'Departmental Cheques', increase from ₹441.02 crore (Debit) in FY 2022-23 to ₹3,796.87 crore (Credit) in FY 2023-24; (5) National CAMPA Fund was lower than National Authority figures by ₹866.41 crore, indicating potential understatement of Public Account.",
+      "key_facts": [
+        "Internal Debt understated by ₹372.64 crore due to incorrect IIB accounting",
+        "Suspense Account (Civil) understated by 68.01 per cent",
+        "Reserve Bank Suspense understated by 54.89 per cent",
+        "Total cash balance to reconcile was ₹3,793.74 crore",
+        "CAMPA Fund lower by ₹866.41 crore than Authority figures"
+      ],
+      "key_amounts": [
+        {"value": 372.64, "unit": "crore", "context": "Understatement of Internal Debt", "required": true},
+        {"value": 3793.74, "unit": "crore", "context": "Cash balance pending reconciliation with RBI", "required": true},
+        {"value": 866.41, "unit": "crore", "context": "CAMPA Fund potential understatement", "required": false}
+      ],
+      "key_entities": ["Internal Debt", "Suspense Account", "CAMPA Fund", "RBI"],
+      "source_sections": ["3.1.1", "3.2.1", "3.4.3"],
+      "source_pages": [11, 50, 51, 52, 53]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state debt understatement"],
+      "must_not_hallucinate": true
+    }
+  }
+]

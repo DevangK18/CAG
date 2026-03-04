@@ -1,0 +1,518 @@
+[
+  {
+    "id": "FRBM_2022_23_TC001",
+    "question": "What was the Central Government Debt as a percentage of GDP in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The Central Government Debt as a percentage of GDP was 57.93% at the end of FY 2022-23.",
+      "key_facts": [
+        "Central Government debt as percentage of GDP was 57.93% in FY 2022-23",
+        "This represented a decline from 58.76% in FY 2021-22"
+      ],
+      "key_amounts": [
+        {"value": 57.93, "unit": "percent", "context": "Central Government Debt as percentage of GDP in FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Central Government", "GDP"],
+      "source_sections": ["2.1.1", "Executive Summary"],
+      "source_pages": [5, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["General Government Debt percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC002",
+    "question": "By how much did the total Central Government debt increase in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The Central Government debt increased by ₹17.48 lakh crore or 12.61% over FY 2021-22, primarily due to an accumulation of internal debt of ₹16.12 lakh crore.",
+      "key_facts": [
+        "Central Government debt increased by ₹17.48 lakh crore in FY 2022-23",
+        "This represented a 12.61% increase over the previous year",
+        "Increase was largely due to internal debt increase of ₹16.12 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 17.48, "unit": "lakh crore", "context": "increase in Central Government debt in FY 2022-23", "required": true},
+        {"value": 12.61, "unit": "percent", "context": "percentage increase in Central Government debt", "required": true},
+        {"value": 16.12, "unit": "lakh crore", "context": "increase in internal debt", "required": false}
+      ],
+      "key_entities": ["Central Government"],
+      "source_sections": ["2.1.1", "Executive Summary"],
+      "source_pages": [5, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["State Government debt"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC003",
+    "question": "What are the FRBM targets for Central Government Debt and General Government Debt?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The FRBM Act targets are to limit the Central Government Debt to 40% of GDP and the General Government Debt to 60% of GDP by the end of FY 2024-25.",
+      "key_facts": [
+        "Central Government Debt target is 40% of GDP",
+        "General Government Debt target is 60% of GDP",
+        "Both targets are to be achieved by end of FY 2024-25"
+      ],
+      "key_amounts": [
+        {"value": 40, "unit": "percent", "context": "Central Government Debt target as percentage of GDP", "required": true},
+        {"value": 60, "unit": "percent", "context": "General Government Debt target as percentage of GDP", "required": true}
+      ],
+      "key_entities": ["FRBM Act", "Central Government", "General Government"],
+      "source_sections": ["1.1", "2.1"],
+      "source_pages": [1, 5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["achieved the target"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC004",
+    "question": "What was the amount of tax revenue raised but not realized at the end of FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "At the end of FY 2022-23, ₹21.30 lakh crore was raised as taxes but yet to be realized, which was 69.74% of the gross tax collected during the year. This represented an increase of ₹5.47 lakh crore over the previous year.",
+      "key_facts": [
+        "Tax revenue raised but not realized was ₹21.30 lakh crore",
+        "This was 69.74% of gross tax collected during the year",
+        "The unrealized amount increased by ₹5.47 lakh crore from FY 2021-22",
+        "Of the increase, ₹5.28 lakh crore was not under dispute"
+      ],
+      "key_amounts": [
+        {"value": 21.30, "unit": "lakh crore", "context": "tax revenue raised but not realized", "required": true},
+        {"value": 5.47, "unit": "lakh crore", "context": "increase in unrealized tax revenue over previous year", "required": true},
+        {"value": 69.74, "unit": "percent", "context": "percentage of gross tax collected", "required": false}
+      ],
+      "key_entities": ["Tax Revenue"],
+      "source_sections": ["3.1.1", "Executive Summary"],
+      "source_pages": [5, 25]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["non-tax revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC005",
+    "question": "What was the Fiscal Deficit for FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The Fiscal Deficit for FY 2022-23 was ₹17.56 lakh crore, which was 6.51% of GDP. Of this, ₹10.71 lakh crore (61%) was towards funding deficits on revenue account.",
+      "key_facts": [
+        "Fiscal Deficit was ₹17.56 lakh crore in FY 2022-23",
+        "Fiscal Deficit was 6.51% of GDP",
+        "Revenue Deficit component was ₹10.71 lakh crore (61% of Fiscal Deficit)"
+      ],
+      "key_amounts": [
+        {"value": 17.56, "unit": "lakh crore", "context": "Fiscal Deficit for FY 2022-23", "required": true},
+        {"value": 6.51, "unit": "percent", "context": "Fiscal Deficit as percentage of GDP", "required": true}
+      ],
+      "key_entities": ["Fiscal Deficit", "Consolidated Fund of India"],
+      "source_sections": ["2.6"],
+      "source_pages": [21, 22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Primary Deficit value without context"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC006",
+    "question": "What was the total outstanding guarantee at the end of FY 2022-23 and was the additional guarantee within FRBM limits?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The total outstanding guarantee at the end of FY 2022-23 was ₹3.14 lakh crore, which was 1.2% of GDP. Additional guarantees issued during FY 2022-23 were ₹0.61 lakh crore or 0.23% of GDP, which was well within the FRBM limit of 0.5% of GDP.",
+      "key_facts": [
+        "Outstanding guarantee at end of FY 2022-23 was ₹3.14 lakh crore",
+        "Outstanding guarantee was 1.2% of GDP",
+        "Additional guarantees during FY 2022-23 were ₹0.61 lakh crore",
+        "Additional guarantee was 0.23% of GDP",
+        "FRBM limit for additional guarantee is 0.5% of GDP",
+        "Additional guarantee was within the FRBM limit"
+      ],
+      "key_amounts": [
+        {"value": 3.14, "unit": "lakh crore", "context": "outstanding guarantee at end of FY 2022-23", "required": true},
+        {"value": 0.61, "unit": "lakh crore", "context": "additional guarantees during FY 2022-23", "required": true},
+        {"value": 0.23, "unit": "percent", "context": "additional guarantee as percentage of GDP", "required": true},
+        {"value": 0.5, "unit": "percent", "context": "FRBM limit for additional guarantee", "required": true}
+      ],
+      "key_entities": ["FRBM Act", "Consolidated Fund of India"],
+      "source_sections": ["2.4"],
+      "source_pages": [12, 13]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["exceeded limit"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC007",
+    "question": "How was the Fiscal Deficit financed in FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The Fiscal Deficit of ₹17.56 lakh crore in FY 2022-23 was financed mainly from: (1) Net internal debt - ₹16.12 lakh crore (91.80%), (2) External debt - ₹0.54 lakh crore (3.07%), (3) Public Account - ₹0.92 lakh crore (5.24%), and (4) Cash draw down - ₹0.02 lakh crore.",
+      "key_facts": [
+        "Internal debt financed 91.80% of fiscal deficit",
+        "Internal debt contribution was ₹16.12 lakh crore",
+        "External debt share increased from 2.89% in FY 2021-22 to 3.07% in FY 2022-23",
+        "Public Account contributed ₹0.92 lakh crore (5.24%)"
+      ],
+      "key_amounts": [
+        {"value": 16.12, "unit": "lakh crore", "context": "net internal debt used to finance fiscal deficit", "required": true},
+        {"value": 91.80, "unit": "percent", "context": "share of internal debt in financing fiscal deficit", "required": true},
+        {"value": 0.54, "unit": "lakh crore", "context": "external debt used to finance fiscal deficit", "required": false},
+        {"value": 3.07, "unit": "percent", "context": "share of external debt in financing fiscal deficit", "required": false}
+      ],
+      "key_entities": ["Internal Debt", "External Debt", "Public Account"],
+      "source_sections": ["2.6"],
+      "source_pages": [22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["borrowing from RBI"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC008",
+    "question": "What was the General Government Debt as percentage of GDP and how did it compare to previous years?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The General Government Debt was 81.35% of GDP in FY 2022-23, down from 87.68% during the pandemic year FY 2020-21 but still higher than the pre-pandemic 70.39% in FY 2018-19. The total General Government Debt was ₹219.23 lakh crore at end of FY 2022-23. The target under FRBM is 60% by FY 2024-25.",
+      "key_facts": [
+        "General Government Debt was 81.35% of GDP in FY 2022-23",
+        "It peaked at 87.68% during FY 2020-21 pandemic year",
+        "Pre-pandemic level was 70.39% in FY 2018-19",
+        "Total General Government Debt was ₹219.23 lakh crore",
+        "Target under FRBM is 60% by FY 2024-25"
+      ],
+      "key_amounts": [
+        {"value": 81.35, "unit": "percent", "context": "General Government Debt as percentage of GDP in FY 2022-23", "required": true},
+        {"value": 87.68, "unit": "percent", "context": "General Government Debt as percentage of GDP in FY 2020-21", "required": false},
+        {"value": 219.23, "unit": "lakh crore", "context": "total General Government Debt in FY 2022-23", "required": true}
+      ],
+      "key_entities": ["General Government Debt", "Central Government", "State Governments"],
+      "source_sections": ["2.1.2"],
+      "source_pages": [7, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["achieved target"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC009",
+    "question": "What was the capital expenditure in FY 2022-23 and how did it compare to previous years?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "Capital expenditure in FY 2022-23 was ₹6.25 lakh crore (13.73% of total expenditure), an increase of 16.17% over FY 2021-22 (₹5.38 lakh crore). It had declined to ₹3.43 lakh crore in FY 2020-21 from ₹4.0 lakh crore in FY 2018-19, but recovered significantly in subsequent years.",
+      "key_facts": [
+        "Capital expenditure was ₹6.25 lakh crore in FY 2022-23",
+        "Capital expenditure was 13.73% of total expenditure",
+        "Increased by 16.17% over FY 2021-22",
+        "Capital expenditure in FY 2021-22 was ₹5.38 lakh crore",
+        "Capital expenditure had dipped to ₹3.43 lakh crore in FY 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 6.25, "unit": "lakh crore", "context": "capital expenditure in FY 2022-23", "required": true},
+        {"value": 13.73, "unit": "percent", "context": "capital expenditure as percentage of total expenditure", "required": false},
+        {"value": 16.17, "unit": "percent", "context": "increase in capital expenditure over previous year", "required": true}
+      ],
+      "key_entities": ["Capital Expenditure"],
+      "source_sections": ["2.5 G"],
+      "source_pages": [18, 19]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["revenue expenditure figures without context"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC010",
+    "question": "What was the GDP of India for FY 2022-23 and what was the growth rate?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The GDP at current prices (nominal GDP) for FY 2022-23 was ₹269.50 lakh crore, representing a growth rate of 14.21% over the previous year. The GDP at constant prices (real GDP) was ₹160.71 lakh crore with a growth rate of 6.99%.",
+      "key_facts": [
+        "GDP at current prices was ₹269.50 lakh crore in FY 2022-23",
+        "Growth rate at current prices was 14.21%",
+        "GDP at constant prices was ₹160.71 lakh crore",
+        "Real GDP growth rate was 6.99%"
+      ],
+      "key_amounts": [
+        {"value": 269.50, "unit": "lakh crore", "context": "GDP at current prices for FY 2022-23", "required": true},
+        {"value": 14.21, "unit": "percent", "context": "GDP growth rate at current prices", "required": true}
+      ],
+      "key_entities": ["GDP", "NSO"],
+      "source_sections": ["2.5 B"],
+      "source_pages": [15]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["budget estimate"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC011",
+    "question": "What was the total revenue receipt collection in FY 2022-23 compared to budget estimates?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "Total revenue receipt collection in FY 2022-23 was ₹27.13 lakh crore against the budgeted ₹25.17 lakh crore, representing 7.79% higher than estimates. Gross Tax Revenue was ₹30.54 lakh crore (10.73% higher than BE), and Non-tax revenue was ₹6.07 lakh crore (5.38% higher than BE).",
+      "key_facts": [
+        "Total revenue receipts were ₹27.13 lakh crore",
+        "Budget estimate was ₹25.17 lakh crore",
+        "Actual was 7.79% higher than budget estimates",
+        "Gross Tax Revenue was ₹30.54 lakh crore",
+        "Non-tax revenue was ₹6.07 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 27.13, "unit": "lakh crore", "context": "total revenue receipts in FY 2022-23", "required": true},
+        {"value": 30.54, "unit": "lakh crore", "context": "Gross Tax Revenue in FY 2022-23", "required": true},
+        {"value": 7.79, "unit": "percent", "context": "revenue receipts higher than budget estimates", "required": false}
+      ],
+      "key_entities": ["Revenue Receipts", "Tax Revenue", "Non-Tax Revenue"],
+      "source_sections": ["2.5 C"],
+      "source_pages": [15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["lower than estimates"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC012",
+    "question": "What were the key findings on disclosure and transparency issues in the CAG report?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The CAG report identified several disclosure and transparency issues: (1) Inconsistency in arrears of interest receipts between D2 Form and UGFA 2022-23 - difference of ₹3,162.56 crore for State/UT Government and ₹214.12 crore for PSUs; (2) Variation in financial assets (loans) disclosed in D4 Statement vs Receipt Budget - loans to States/UTs showed ₹0.05 lakh crore in D4 vs ₹5.82 lakh crore in Statement 1(ii); (3) Variations in BE figures between H1/H2 statements and Annual Financial Statement; (4) Variations in BE figures between MTFP Statement and AFS.",
+      "key_facts": [
+        "Arrears of interest from State/UT Government showed difference of ₹3,162.56 crore",
+        "Arrears from PSUs showed difference of ₹214.12 crore",
+        "Loans to States/UTs showed ₹0.05 lakh crore in D4 vs ₹5.82 lakh crore in Receipt Budget",
+        "BE figures varied between H1/H2 statements and AFS",
+        "Ministry guidelines issued to ensure UBIS data tallies with Finance Accounts"
+      ],
+      "key_amounts": [
+        {"value": 3162.56, "unit": "crore", "context": "difference in arrears of interest from State/UT Government", "required": true},
+        {"value": 214.12, "unit": "crore", "context": "difference in arrears from PSUs", "required": false}
+      ],
+      "key_entities": ["UGFA", "Receipt Budget", "FRBM Rules", "UBIS"],
+      "source_sections": ["3.1.2", "3.2"],
+      "source_pages": [26, 27, 28, 29, 30]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no issues found"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC013",
+    "question": "What was the interest payment to revenue receipts ratio and what does it indicate?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The interest payments to revenue receipts ratio was 35.35% in FY 2022-23, increased from 33.99% in FY 2021-22. It had peaked at 38.66% in FY 2020-21. Interest paid on debt was ₹9.59 lakh crore and total revenue receipts were ₹27.13 lakh crore. This ratio measures how much of the Government's revenue is used to pay interest on its debt, indicating fiscal health. The increase shows Government used a comparatively larger part of revenue receipts towards interest obligations.",
+      "key_facts": [
+        "Interest payment to revenue receipt ratio was 35.35% in FY 2022-23",
+        "Ratio increased from 33.99% in FY 2021-22",
+        "Ratio had peaked at 38.66% in FY 2020-21",
+        "Interest paid on debt was ₹9.59 lakh crore",
+        "Total revenue receipts were ₹27.13 lakh crore",
+        "This is an important indicator of Government's fiscal health"
+      ],
+      "key_amounts": [
+        {"value": 35.35, "unit": "percent", "context": "interest payment to revenue receipt ratio in FY 2022-23", "required": true},
+        {"value": 9.59, "unit": "lakh crore", "context": "interest paid on debt in FY 2022-23", "required": true},
+        {"value": 38.66, "unit": "percent", "context": "interest payment to revenue receipt ratio at peak in FY 2020-21", "required": false}
+      ],
+      "key_entities": ["Interest Payments", "Revenue Receipts"],
+      "source_sections": ["2.3"],
+      "source_pages": [11, 12]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["decreased from previous year"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC014",
+    "question": "What was the disinvestment receipt in FY 2022-23 and how did it compare to budget estimates and previous year?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "Disinvestment receipts in FY 2022-23 were ₹30,184 crore, compared to ₹8,432 crore in FY 2021-22 but lower than the budget estimate of ₹0.65 lakh crore (₹65,000 crore). The receipts were also lower than the pre-pandemic period. Recovery of loans and advances was ₹0.36 lakh crore against BE of ₹0.14 lakh crore.",
+      "key_facts": [
+        "Disinvestment receipts were ₹30,184 crore in FY 2022-23",
+        "Previous year receipts were ₹8,432 crore",
+        "Budget estimate was ₹0.65 lakh crore",
+        "Receipts were lower than pre-pandemic period",
+        "Recovery of loans was ₹0.36 lakh crore against BE of ₹0.14 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 30184, "unit": "crore", "context": "disinvestment receipts in FY 2022-23", "required": true},
+        {"value": 8432, "unit": "crore", "context": "disinvestment receipts in FY 2021-22", "required": false},
+        {"value": 0.65, "unit": "lakh crore", "context": "budget estimate for disinvestment", "required": true}
+      ],
+      "key_entities": ["Disinvestment", "PSUs", "Non-Debt Capital Receipts"],
+      "source_sections": ["2.5 F"],
+      "source_pages": [18]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["exceeded budget estimates"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC015",
+    "question": "What is the debt stabilization indicator for FY 2022-23 and what does it signify?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "The debt stabilization indicator for FY 2022-23 was positive at 4.05, indicating that the debt-GDP ratio would eventually fall. This is calculated as Quantum Spread (12.02) plus Primary Deficit (-7.97). A positive indicator is favorable for debt sustainability. The indicator was negative (-21.79) in FY 2020-21 and turned positive (7.98) in FY 2021-22, continuing to be positive in FY 2022-23.",
+      "key_facts": [
+        "Debt stabilization indicator was positive at 4.05 in FY 2022-23",
+        "Positive indicator means debt-GDP ratio would eventually fall",
+        "Quantum Spread was 12.02",
+        "Primary Deficit was -7.97 (₹7.97 lakh crore)",
+        "Indicator was -21.79 in FY 2020-21",
+        "This indicates favorable conditions for debt sustainability"
+      ],
+      "key_amounts": [
+        {"value": 4.05, "unit": "index", "context": "debt stabilization indicator for FY 2022-23", "required": true},
+        {"value": 12.02, "unit": "lakh crore", "context": "Quantum Spread", "required": false},
+        {"value": 7.97, "unit": "lakh crore", "context": "Primary Deficit", "required": false}
+      ],
+      "key_entities": ["Debt Sustainability", "GDP", "Interest Spread"],
+      "source_sections": ["2.3"],
+      "source_pages": [10, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["negative indicator", "debt will rise"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC016",
+    "question": "What was the expenditure on focus areas like Agriculture, Education, Health in FY 2022-23 compared to budget estimates?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "Expenditure on focus areas in FY 2022-23 compared to BE showed mixed results: Agriculture - ₹1,10,150.69 crore (16.88% lower than BE); Education - ₹1,50,135.02 crore (9.90% lower than BE); Health - ₹1,01,417.81 crore (13.06% lower than BE); Drinking Water and Sanitation - ₹71,991.92 crore (53.09% lower than BE); and Rural Development - ₹3,33,079.93 crore (33.12% higher than BE).",
+      "key_facts": [
+        "Agriculture expenditure was ₹1,10,150.69 crore (16.88% lower than BE)",
+        "Education expenditure was ₹1,50,135.02 crore (9.90% lower than BE)",
+        "Health expenditure was ₹1,01,417.81 crore (13.06% lower than BE)",
+        "Drinking Water and Sanitation was ₹71,991.92 crore (53.09% lower than BE)",
+        "Rural Development was ₹3,33,079.93 crore (33.12% higher than BE)"
+      ],
+      "key_amounts": [
+        {"value": 110150.69, "unit": "crore", "context": "Agriculture expenditure in FY 2022-23", "required": true},
+        {"value": 150135.02, "unit": "crore", "context": "Education expenditure in FY 2022-23", "required": true},
+        {"value": 101417.81, "unit": "crore", "context": "Health expenditure in FY 2022-23", "required": false},
+        {"value": 333079.93, "unit": "crore", "context": "Rural Development expenditure in FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Agriculture", "Education", "Health", "Rural Development", "Drinking Water and Sanitation"],
+      "source_sections": ["2.5 E"],
+      "source_pages": [17, 40]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all sectors exceeded estimates"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2022_23_TC017",
+    "question": "What is the Extra Budgetary Resources (EBR) and what issues were identified with EBR disclosures?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FRBM_2022_23"]
+    },
+    "expected": {
+      "answer_summary": "Extra Budgetary Resources (EBR) are financial liabilities raised by PSUs for which repayment is done from Union Government Budget. These are not reflected in Demand for Grants or Annual Financial Statement. At end of FY 2022-23, EBR was ₹1.38 lakh crore. Issues identified: (1) Unreconciled variation of ₹1,418.70 crore between Statement 27 figures in Expenditure Profile 2023-24 and 2024-25; (2) NSSF loan of ₹350 crore to MTNL shown as outstanding in UGFA 2022-23 was not properly depicted in Statement 27.",
+      "key_facts": [
+        "EBR are borrowings by PSUs serviced from Union Budget",
+        "EBR was ₹1.38 lakh crore at end of FY 2022-23",
+        "Variation of ₹1,418.70 crore between consecutive Statement 27",
+        "Ministry acknowledged inadvertent errors",
+        "NSSF loan of ₹350 crore to MTNL was outstanding",
+        "EBR not reflected in Demand for Grants or AFS"
+      ],
+      "key_amounts": [
+        {"value": 1.38, "unit": "lakh crore", "context": "EBR outstanding at end of FY 2022-23", "required": true},
+        {"value": 1418.70, "unit": "crore", "context": "unreconciled variation in EBR figures", "required": true},
+        {"value": 350, "unit": "crore", "context": "NSSF loan to MTNL", "required": false}
+      ],
+      "key_entities": ["Extra Budgetary Resources", "PSUs", "NSSF", "MTNL"],
+      "source_sections": ["2.2"],
+      "source_pages": [9, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no discrepancies found"],
+      "must_not_hallucinate": true
+    }
+  }
+]

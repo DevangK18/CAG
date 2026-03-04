@@ -1,0 +1,518 @@
+[
+  {
+    "id": "UGFA_2022-23_TC001",
+    "question": "What was the GDP of India at current prices for FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The GDP of India at Current Prices (Nominal GDP) for FY 2022-23 was ₹2,69,49,646 crore. The GDP at Constant Prices (Real GDP) was ₹1,60,71,429 crore (base year 2011-12). The Real GDP increased by 6.99 per cent and Nominal GDP grew by 14.21 per cent over the previous year.",
+      "key_facts": [
+        "Nominal GDP was ₹2,69,49,646 crore at Current Prices",
+        "Real GDP was ₹1,60,71,429 crore at Constant Prices",
+        "Real GDP increased by 6.99 per cent over previous year",
+        "Nominal GDP grew by 14.21 per cent over previous year"
+      ],
+      "key_amounts": [
+        {"value": 26949646, "unit": "crore", "context": "GDP at Current Prices (Nominal GDP) FY 2022-23", "required": true},
+        {"value": 16071429, "unit": "crore", "context": "GDP at Constant Prices (Real GDP) FY 2022-23", "required": false}
+      ],
+      "key_entities": ["GDP", "Union Government"],
+      "source_sections": ["2.1", "Executive Summary"],
+      "source_pages": [10, 20]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["previous year GDP figures as current year"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC002",
+    "question": "What was the total revenue receipts of the Central Government in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The revenue receipts of Central Government were ₹27,13,267 crore in FY 2022-23, representing an increase of 11.36 per cent over the previous year (₹24,36,421 crore in FY 2021-22). Tax Revenue (net of taxes devolved to States) was ₹21,05,786 crore and Non-Tax Revenue was ₹6,07,481 crore.",
+      "key_facts": [
+        "Total revenue receipts were ₹27,13,267 crore",
+        "Increase of 11.36 per cent over FY 2021-22",
+        "Tax Revenue was ₹21,05,786 crore",
+        "Non-Tax Revenue was ₹6,07,481 crore"
+      ],
+      "key_amounts": [
+        {"value": 2713267, "unit": "crore", "context": "Net revenue receipts in FY 2022-23", "required": true},
+        {"value": 2105786, "unit": "crore", "context": "Tax Revenue net of devolution to States", "required": true}
+      ],
+      "key_entities": ["Central Government", "Revenue Receipts"],
+      "source_sections": ["2.2", "Executive Summary"],
+      "source_pages": [10, 21, 25]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["gross revenue receipts without specifying"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC003",
+    "question": "What was the share of direct taxes in Gross Tax Receipts (GTR) during FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The share of direct taxes in Gross Tax Receipts (GTR) rose to 53.50 per cent during FY 2022-23 from 51.14 per cent in FY 2021-22. Direct taxes have contributed more than 50 per cent of gross taxes during the last five years, except the Covid year when it was 45.80 per cent. Income Tax contributed 26.46 per cent to GTR while Corporation Tax contributed 27.04 per cent.",
+      "key_facts": [
+        "Direct taxes share was 53.50 per cent of GTR in FY 2022-23",
+        "Increased from 51.14 per cent in FY 2021-22",
+        "Income Tax contributed 26.46 per cent to GTR",
+        "Corporation Tax contributed 27.04 per cent to GTR"
+      ],
+      "key_amounts": [
+        {"value": 53.50, "unit": "per cent", "context": "Share of direct taxes in GTR for FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Direct Taxes", "Gross Tax Receipts", "Corporation Tax", "Income Tax"],
+      "source_sections": ["Executive Summary", "2.4.1"],
+      "source_pages": [10, 26]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect taxes share"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC004",
+    "question": "What was the total expenditure of the Union Government in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Total expenditure of the Union Government was ₹45,50,514 crore in FY 2022-23, which increased by 7.36 per cent over the previous year. This comprised Revenue Expenditure of ₹37,83,698 crore, Capital Expenditure of ₹6,24,757 crore, and Loans and Advances of ₹1,42,059 crore.",
+      "key_facts": [
+        "Total expenditure was ₹45,50,514 crore",
+        "Increase of 7.36 per cent over previous year",
+        "Revenue Expenditure was ₹37,83,698 crore",
+        "Capital Expenditure was ₹6,24,757 crore",
+        "Loans and Advances was ₹1,42,059 crore"
+      ],
+      "key_amounts": [
+        {"value": 4550514, "unit": "crore", "context": "Total expenditure of Union Government FY 2022-23", "required": true},
+        {"value": 3783698, "unit": "crore", "context": "Revenue Expenditure", "required": true},
+        {"value": 624757, "unit": "crore", "context": "Capital Expenditure", "required": true}
+      ],
+      "key_entities": ["Union Government", "Revenue Expenditure", "Capital Expenditure"],
+      "source_sections": ["2.2", "2.5"],
+      "source_pages": [22, 23, 30]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state expenditures"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC005",
+    "question": "What was the Fiscal Deficit during FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "As per Union Government Finance Accounts for FY 2022-23, the Fiscal Deficit was ₹17,54,940 crore, which was lower than Revised Estimates of ₹17,55,319 crore by 0.02 per cent. This was lower in absolute numbers from FY 2021-22, indicating a path of fiscal consolidation. The Revenue Deficit was ₹10,70,431 crore (3.97 per cent of GDP), lower than RE by 3.61 per cent.",
+      "key_facts": [
+        "Fiscal Deficit was ₹17,54,940 crore",
+        "Lower than RE of ₹17,55,319 crore by 0.02 per cent",
+        "Revenue Deficit was ₹10,70,431 crore",
+        "Revenue Deficit as percentage of GDP was 3.97 per cent"
+      ],
+      "key_amounts": [
+        {"value": 1754940, "unit": "crore", "context": "Fiscal Deficit FY 2022-23", "required": true},
+        {"value": 1070431, "unit": "crore", "context": "Revenue Deficit FY 2022-23", "required": false}
+      ],
+      "key_entities": ["Fiscal Deficit", "Revenue Deficit", "Ministry of Finance"],
+      "source_sections": ["2.9.1", "2.9.2"],
+      "source_pages": [44]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["primary deficit"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC006",
+    "question": "How much dividend and surplus did the Government receive from various entities in FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Union Government received dividend/surplus of ₹99,922 crore from 105 entities in FY 2022-23, compared to ₹1,60,653 crore from 98 entities in FY 2021-22. The surplus from RBI (₹30,307 crore) constituted 30.33 per cent of total receipts under this head. Other major contributors were ONGC Ltd. (₹10,372 crore), Coal India Ltd. (₹9,476 crore), Hindustan Zinc Ltd. (₹9,422 crore), Nationalised Banks (₹8,738 crore), Power Grid Corporation (₹4,387 crore), NTPC (₹3,593 crore), and Nuclear Power Corporation (₹2,058 crore).",
+      "key_facts": [
+        "Total dividend/surplus received was ₹99,922 crore from 105 entities",
+        "RBI surplus was ₹30,307 crore (30.33% of total)",
+        "ONGC contributed ₹10,372 crore",
+        "Decrease from ₹1,60,653 crore in FY 2021-22"
+      ],
+      "key_amounts": [
+        {"value": 99922, "unit": "crore", "context": "Total dividend/surplus received from entities", "required": true},
+        {"value": 30307, "unit": "crore", "context": "RBI surplus contribution", "required": true}
+      ],
+      "key_entities": ["RBI", "ONGC", "Coal India", "Power Grid Corporation", "NTPC"],
+      "source_sections": ["2.4.3"],
+      "source_pages": [29]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state dividends"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC007",
+    "question": "How much did the Government receive from disinvestment in FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Government received ₹30,184 crore from disinvestment of its equities in PSUs during FY 2022-23, compared to ₹8,432 crore in FY 2021-22 (increase of about 258%). The receipts came from: Initial Public Offer of Life Insurance Corporation (₹20,532 crore); Offers for Sale of ONGC (₹3,059 crore), Hindustan Aeronautics Ltd. (₹2,901 crore), Indian Railway Catering and Tourism Corporation (₹2,724 crore), and Paradeep Phosphate Ltd. (₹471 crore); and buyback of shares of GAIL (India) Ltd. (₹497 crore).",
+      "key_facts": [
+        "Disinvestment receipts were ₹30,184 crore",
+        "LIC IPO contributed ₹20,532 crore",
+        "Significant increase from ₹8,432 crore in FY 2021-22",
+        "ONGC OFS contributed ₹3,059 crore"
+      ],
+      "key_amounts": [
+        {"value": 30184, "unit": "crore", "context": "Total disinvestment receipts FY 2022-23", "required": true},
+        {"value": 20532, "unit": "crore", "context": "LIC IPO proceeds", "required": true}
+      ],
+      "key_entities": ["LIC", "ONGC", "Hindustan Aeronautics", "GAIL", "IRCTC"],
+      "source_sections": ["2.4.4"],
+      "source_pages": [30]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state disinvestment"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC008",
+    "question": "What was the overstatement of capital expenditure due to incorrect booking found by audit?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Audit found four instances of booking of expenditure through capital head of account, instead of revenue head of account, which led to overstatement of capital expenditure by ₹49,948 crore. This included: (1) Transfer to Roads & Bridges Fund - ₹10,000 crore overstated; (2) Universal Service Obligation Fund - ₹26,500 crore overstated; (3) Sovereign Green Fund - ₹13,442 crore overstated; and (4) Grants-in-Aid by Department of Atomic Energy - ₹6.34 crore overstated.",
+      "key_facts": [
+        "Total overstatement of capital expenditure was ₹49,948 crore",
+        "Roads & Bridges Fund: ₹10,000 crore overstated",
+        "Universal Service Obligation Fund: ₹26,500 crore overstated",
+        "Sovereign Green Fund: ₹13,442 crore overstated"
+      ],
+      "key_amounts": [
+        {"value": 49948, "unit": "crore", "context": "Overstatement of capital expenditure due to incorrect booking", "required": true}
+      ],
+      "key_entities": ["Roads & Bridges Fund", "Universal Service Obligation Fund", "Sovereign Green Fund"],
+      "source_sections": ["3.1.1", "3.1.2", "Executive Summary"],
+      "source_pages": [11, 48, 49, 50]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["revenue expenditure overstatement"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC009",
+    "question": "What was the total Parliamentary appropriation approved and actual expenditure during FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The Parliament approved appropriations of ₹1,29,48,803.37 crore for FY 2022-23, against which Government spent ₹1,26,07,539.04 crore, leading to overall savings of ₹3,41,264.33 crore. The Union Government Appropriation Accounts consisted of 102 Grants/Appropriations. Civil Ministries accounted for 91.58 per cent of total gross expenditure.",
+      "key_facts": [
+        "Total Parliamentary appropriation was ₹1,29,48,803.37 crore",
+        "Actual expenditure was ₹1,26,07,539.04 crore",
+        "Total savings were ₹3,41,264.33 crore",
+        "102 Grants/Appropriations in total"
+      ],
+      "key_amounts": [
+        {"value": 12948803.37, "unit": "crore", "context": "Total Parliamentary appropriation FY 2022-23", "required": true},
+        {"value": 12607539.04, "unit": "crore", "context": "Actual Government expenditure", "required": true},
+        {"value": 341264.33, "unit": "crore", "context": "Total savings", "required": true}
+      ],
+      "key_entities": ["Parliament", "Civil Ministries"],
+      "source_sections": ["4.1.1", "Executive Summary"],
+      "source_pages": [12, 65]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state appropriations"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC010",
+    "question": "What was the excess expenditure under Repayment of Debt in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Under 'Repayment of Debt (Capital Charged)', there was excess expenditure of ₹53,871.01 crore during FY 2022-23. Expenditure of ₹71,99,701.13 crore was incurred against Parliamentary authorisation of ₹71,45,830.12 crore. This excess was due to year-end withdrawal by the State Governments. The excess over the Appropriation is required to be regularised under Article 115(1)(b) of the Constitution.",
+      "key_facts": [
+        "Excess expenditure was ₹53,871.01 crore",
+        "Actual expenditure was ₹71,99,701.13 crore",
+        "Parliamentary authorisation was ₹71,45,830.12 crore",
+        "Excess due to year-end State Government withdrawals"
+      ],
+      "key_amounts": [
+        {"value": 53871.01, "unit": "crore", "context": "Excess expenditure under Repayment of Debt", "required": true}
+      ],
+      "key_entities": ["Repayment of Debt", "State Governments", "Parliament"],
+      "source_sections": ["4.2.1.1", "Executive Summary"],
+      "source_pages": [12, 67]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["savings under debt"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC011",
+    "question": "What was the short recovery of guarantee fee observed by audit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Audit observed short recovery of guarantee fee of ₹113.57 crore. At the end of FY 2022-23, total sum of guarantees outstanding was ₹3,14,293.80 crore. The Government collects guarantee fee from entities as per the Government Guarantee Policy (May 2022) which governs the grant of guarantees.",
+      "key_facts": [
+        "Short recovery of guarantee fee was ₹113.57 crore",
+        "Total guarantees outstanding was ₹3,14,293.80 crore"
+      ],
+      "key_amounts": [
+        {"value": 113.57, "unit": "crore", "context": "Short recovery of guarantee fee", "required": true},
+        {"value": 314293.80, "unit": "crore", "context": "Total guarantees outstanding", "required": false}
+      ],
+      "key_entities": ["Government Guarantee Policy", "Ministry of Finance"],
+      "source_sections": ["3.4.1", "Executive Summary"],
+      "source_pages": [12, 56]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state guarantees"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC012",
+    "question": "What was the total interest payments during FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Interest payments during FY 2022-23 was ₹9,58,715 crore. This comprised interest on internal debt (₹8,84,099 crore - 92.22 per cent), interest on Small Savings and Provident Fund (₹47,039 crore), interest on external debt (₹12,667 crore), interest on Reserve Funds (₹929 crore), interest on other obligations (₹12,955 crore) and appropriation for reduction or avoidance of debt (₹1,026 crore). Interest on Internal Debt grew by 17.54 per cent from ₹7,52,200 crore in FY 2021-22.",
+      "key_facts": [
+        "Total interest payments was ₹9,58,715 crore",
+        "Interest on internal debt was ₹8,84,099 crore (92.22%)",
+        "Interest on external debt was ₹12,667 crore",
+        "Internal debt interest grew by 17.54% over previous year"
+      ],
+      "key_amounts": [
+        {"value": 958715, "unit": "crore", "context": "Total interest payments FY 2022-23", "required": true},
+        {"value": 884099, "unit": "crore", "context": "Interest on internal debt", "required": true}
+      ],
+      "key_entities": ["Internal Debt", "External Debt", "Small Savings"],
+      "source_sections": ["2.5.4"],
+      "source_pages": [34]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state interest payments"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC013",
+    "question": "What were the main findings related to Reserve Funds transfer and short transfer?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "In respect of four Reserve Funds, out of receipts of ₹2,41,220.26 crore raised through cess/levies/deposits from FY 2018-19 to FY 2022-23, only ₹344.48 crore was transferred to the funds. This short transfer has an impact of understating the revenue deficit. Additionally, nine Reserve Funds and 24 Deposit accounts were lying dormant for at least three financial years or more with an accumulated net credit balance of ₹6,065 crore, implying they may have outlived their purpose. For CAMPA Fund, ₹20,082 crore was pending for disbursement to respective States/UTs at end of FY 2022-23, with a potential understatement of Public Account by ₹864.56 crore due to non-reconciliation.",
+      "key_facts": [
+        "Out of ₹2,41,220.26 crore collected, only ₹344.48 crore transferred to Reserve Funds",
+        "Nine Reserve Funds and 24 Deposit accounts dormant with ₹6,065 crore balance",
+        "₹20,082 crore pending disbursement to States under CAMPA",
+        "Potential understatement of Public Account by ₹864.56 crore"
+      ],
+      "key_amounts": [
+        {"value": 241220.26, "unit": "crore", "context": "Receipts raised for Reserve Funds (FY 2018-19 to 2022-23)", "required": true},
+        {"value": 344.48, "unit": "crore", "context": "Amount actually transferred to Reserve Funds", "required": true},
+        {"value": 6065, "unit": "crore", "context": "Accumulated balance in dormant funds and deposits", "required": false}
+      ],
+      "key_entities": ["Reserve Funds", "CAMPA", "Public Account"],
+      "source_sections": ["3.3.1", "3.3.3", "3.1.1.4", "Executive Summary"],
+      "source_pages": [11, 50, 54, 55]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state reserve funds"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC014",
+    "question": "What was the total loans and advances outstanding for recovery and arrears as on 31 March 2023?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "At the end of FY 2022-23, loans and advances of ₹8,69,479 crore were outstanding for recovery from State/UT Governments and other entities, out of which arrears in recovery (principal and interest) were ₹74,241 crore. Given the age of pendency, some of these loans may not be recoverable and potentially overstate the receivables.",
+      "key_facts": [
+        "Total loans outstanding was ₹8,69,479 crore",
+        "Arrears in recovery were ₹74,241 crore"
+      ],
+      "key_amounts": [
+        {"value": 869479, "unit": "crore", "context": "Total loans and advances outstanding", "required": true},
+        {"value": 74241, "unit": "crore", "context": "Arrears in recovery of loans", "required": true}
+      ],
+      "key_entities": ["State Governments", "UT Governments"],
+      "source_sections": ["3.2.3", "Executive Summary"],
+      "source_pages": [12, 53]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["federal loans"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC015",
+    "question": "What was the total amount of Cess and Surcharge collection in FY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Total collection under Cess and Surcharge during FY 2022-23 was ₹4,81,209 crore. Cess collections at ₹3,56,012 crore formed 11.66 per cent of the Gross Tax Revenue (₹30,54,192 crore), a reduction by 22.90 per cent from last year due to dip in Road and Infrastructure Cess. Surcharge increased dramatically from ₹40,758 crore in FY 2021-22 to ₹1,25,197 crore in FY 2022-23, a jump of 207.17 per cent. Major burden of Cess/Surcharge was on excise (27.38%), GST (26.16%), Income Tax (17.60%), and Corporation Tax (17.90%).",
+      "key_facts": [
+        "Total Cess and Surcharge collection was ₹4,81,209 crore",
+        "Cess collections were ₹3,56,012 crore (11.66% of GTR)",
+        "Surcharge increased by 207.17% to ₹1,25,197 crore",
+        "Cess reduced by 22.90% from previous year"
+      ],
+      "key_amounts": [
+        {"value": 481209, "unit": "crore", "context": "Total Cess and Surcharge collection", "required": true},
+        {"value": 356012, "unit": "crore", "context": "Cess collections", "required": false},
+        {"value": 125197, "unit": "crore", "context": "Surcharge collections", "required": false}
+      ],
+      "key_entities": ["Cess", "Surcharge", "GST Compensation Cess"],
+      "source_sections": ["2.4.2"],
+      "source_pages": [27, 28]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state cess"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC016",
+    "question": "What was the short receipt of dividend from CPSEs observed by audit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Audit observed short receipt of dividend of ₹669.13 crore from 16 entities functioning under seven Ministries/Departments. Against receivable dividend amounting to ₹736.10 crore, dividend amounting to only ₹66.97 crore was received during FY 2022-23. As per DIPAM Guidelines (May 2016), every CPSE should pay a minimum annual dividend of 30 per cent of Profit After Tax or five per cent of net worth, whichever is higher.",
+      "key_facts": [
+        "Short receipt of dividend was ₹669.13 crore",
+        "From 16 entities under seven Ministries",
+        "Receivable was ₹736.10 crore, received was ₹66.97 crore"
+      ],
+      "key_amounts": [
+        {"value": 669.13, "unit": "crore", "context": "Short receipt of dividend from CPSEs", "required": true}
+      ],
+      "key_entities": ["CPSEs", "DIPAM"],
+      "source_sections": ["3.4.2", "Executive Summary"],
+      "source_pages": [12, 56]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state dividends"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC017",
+    "question": "What was the total expenditure on pensions and retirement benefits in FY 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "The total expenditure incurred on pensions and other retirement benefits during FY 2022-23 increased by 17.69 per cent to ₹3,07,704 crore from ₹2,61,442 crore in FY 2021-22. The percentage of increase in Defence pensions is more than the percentage of increase in overall pension expenditure.",
+      "key_facts": [
+        "Pension expenditure was ₹3,07,704 crore",
+        "Increased by 17.69 per cent from FY 2021-22",
+        "Previous year expenditure was ₹2,61,442 crore"
+      ],
+      "key_amounts": [
+        {"value": 307704, "unit": "crore", "context": "Total pension and retirement benefits expenditure FY 2022-23", "required": true}
+      ],
+      "key_entities": ["Defence pensions", "Retirement Benefits"],
+      "source_sections": ["2.5.5"],
+      "source_pages": [35]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state pensions"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "UGFA_2022-23_TC018",
+    "question": "What was the total misclassification in accounting found during audit?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["2025_04_CAG_Report_on_Union_Government_Accounts_202223_Financial_Audit"]
+    },
+    "expected": {
+      "answer_summary": "Audit found several deviations leading to misclassification amounting to ₹5,522 crore. Of these, ₹4,289 crore related to receipts and ₹1,233 crore related to expenditure. The expenditure misclassifications occurred largely at the level of Object Head (₹1,023 crore), ₹198 crore at minor head level, and ₹12 crore at Detailed head level. Additionally, receipts of non-tax revenue nature (₹848 crore in CBDT and ₹2,258 crore in CBIC) were wrongly booked under Tax Revenue heads.",
+      "key_facts": [
+        "Total misclassification was ₹5,522 crore",
+        "Receipts misclassification was ₹4,289 crore",
+        "Expenditure misclassification was ₹1,233 crore",
+        "Object Head level misclassification was ₹1,023 crore"
+      ],
+      "key_amounts": [
+        {"value": 5522, "unit": "crore", "context": "Total misclassification in accounting", "required": true},
+        {"value": 4289, "unit": "crore", "context": "Misclassification related to receipts", "required": false}
+      ],
+      "key_entities": ["CBDT", "CBIC", "Ministry of Finance"],
+      "source_sections": ["3.5", "Executive Summary"],
+      "source_pages": [12, 58]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["state misclassification"],
+      "must_not_hallucinate": true
+    }
+  }
+]

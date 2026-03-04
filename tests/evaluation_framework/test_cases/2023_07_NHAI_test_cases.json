@@ -1,0 +1,586 @@
+[
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC001",
+    "question": "How much toll revenue did the Southern States contribute to NHAI during the audit period?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "The Southern States contributed ₹28,523.88 crore (28.75 per cent) of the toll revenue earned by NHAI and its Concessionaires during the period from 2017-18 to 2020-21.",
+      "key_facts": [
+        "Southern States contributed ₹28,523.88 crore toll revenue",
+        "This represented 28.75 per cent of total toll revenue",
+        "Period covered was 2017-18 to 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 28523.88, "unit": "crore", "context": "toll revenue from Southern States", "required": true},
+        {"value": 28.75, "unit": "per cent", "context": "share of total toll revenue", "required": true}
+      ],
+      "key_entities": ["NHAI", "Southern States", "Tamil Nadu", "Karnataka", "Andhra Pradesh", "Telangana", "Kerala"],
+      "source_sections": ["2.1", "Executive Summary"],
+      "source_pages": [3, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Northern India", "Western India"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC002",
+    "question": "What was the total undue burden on road users due to incorrect application of NH Fee Rules during highway upgradation?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "Due to non-implementation of amended toll fee rules during upgradation of existing four lane highways, NHAI collected user fee of ₹132.05 crore from road users leading to undue burden. This included ₹124.18 crore collected during May 2020 to March 2021 from three toll plazas (Nathavalasa, Chalageri, Hebbalu) and ₹7.87 crore from Paranur and Madapam toll plazas.",
+      "key_facts": [
+        "Total undue burden on road users was ₹132.05 crore",
+        "₹124.18 crore was collected from three HAM toll plazas during delayed construction",
+        "₹7.87 crore was collected from Paranur and Madapam toll plazas"
+      ],
+      "key_amounts": [
+        {"value": 132.05, "unit": "crore", "context": "total undue burden on road users", "required": true},
+        {"value": 124.18, "unit": "crore", "context": "user fee collected during delayed period from 3 toll plazas", "required": true}
+      ],
+      "key_entities": ["NHAI", "Nathavalasa Toll Plaza", "Chalageri Toll Plaza", "Hebbalu Toll Plaza", "Paranur Toll Plaza", "Madapam Toll Plaza"],
+      "source_sections": ["3.1.1", "Executive Summary"],
+      "source_pages": [5, 6, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["BOT projects"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC003",
+    "question": "How much excess toll was collected from road users due to incorrect inclusion of old Palar Bridge in toll rate calculation?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI collected excess toll fee of ₹22.10 crore from road users during 2017-2018 to 2020-2021 by incorrectly including the Left Hand Side Palar Bridge (630 meters) in toll rate calculation. This bridge was constructed in 1954, prior to September 1956, and toll fee was not to be levied for bridges constructed before that date.",
+      "key_facts": [
+        "Excess toll collection was ₹22.10 crore",
+        "Period was 2017-2018 to 2020-2021",
+        "Palar Bridge was constructed in 1954",
+        "Bridges constructed before 11 September 1956 were exempt from toll fee"
+      ],
+      "key_amounts": [
+        {"value": 22.10, "unit": "crore", "context": "excess toll collected for Palar Bridge", "required": true}
+      ],
+      "key_entities": ["NHAI", "Palar Bridge", "Paranur Toll Plaza", "NH 32", "Tamil Nadu"],
+      "source_sections": ["3.1.2", "Executive Summary"],
+      "source_pages": [7, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Right Hand Side bridge"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC004",
+    "question": "What was the loss of revenue to NHAI due to delay in toll collection in public funded projects?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "Delay in toll collection as per time limits prescribed by NH Fee Rules, 2008 in four stretches of public funded projects led to loss of revenue to NHAI amounting to ₹64.60 crore. The affected stretches were Pollachi-Coimbatore (₹48.66 crore), Kerala Border to Kollegala (₹7.85 crore), Kazhakoottam to Mukkola (₹7.14 crore), and Trichy-Karaikudi (₹0.95 crore).",
+      "key_facts": [
+        "Total loss of revenue was ₹64.60 crore",
+        "Four stretches of public funded projects were affected",
+        "Pollachi-Coimbatore had highest loss at ₹48.66 crore",
+        "Toll was to commence within 45 days from completion as per NH Fee Rules"
+      ],
+      "key_amounts": [
+        {"value": 64.60, "unit": "crore", "context": "total loss due to delay in toll collection", "required": true},
+        {"value": 48.66, "unit": "crore", "context": "loss at Pollachi-Coimbatore stretch", "required": false}
+      ],
+      "key_entities": ["NHAI", "Pollachi-Coimbatore", "Kerala Border to Kollegala", "Kazhakoottam to Mukkola", "Trichy-Karaikudi"],
+      "source_sections": ["3.2.1", "Executive Summary"],
+      "source_pages": [8, 12, 13, 14]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["BOT projects"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC005",
+    "question": "How much revenue did NHAI lose due to lack of provision for revenue sharing in Concession Agreements for sections constructed by NHAI?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI lost revenue of ₹133.36 crore due to lack of provision for revenue sharing in Concession Agreements for two sections of NH 44 in Tamil Nadu constructed by NHAI and handed over to BOT Concessionaires for toll collection. This comprised ₹78.88 crore for Krishnagiri to Thumbipadi stretch and ₹54.48 crore for Thumbipadi to Namakkal stretch.",
+      "key_facts": [
+        "Total revenue loss was ₹133.36 crore",
+        "Two sections of NH 44 in Tamil Nadu were affected",
+        "Krishnagiri to Thumbipadi stretch lost ₹78.88 crore",
+        "Thumbipadi to Namakkal stretch lost ₹54.48 crore"
+      ],
+      "key_amounts": [
+        {"value": 133.36, "unit": "crore", "context": "total revenue loss due to lack of revenue sharing clause", "required": true},
+        {"value": 78.88, "unit": "crore", "context": "loss for Krishnagiri to Thumbipadi stretch", "required": false}
+      ],
+      "key_entities": ["NHAI", "NH 44", "Tamil Nadu", "L&T Krishnagiri Thoppur Toll Road Private Limited", "MVR Infrastructure and Tollways Private Limited"],
+      "source_sections": ["3.3", "Executive Summary"],
+      "source_pages": [8, 16, 17, 18]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Karnataka", "Andhra Pradesh"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC006",
+    "question": "How much negative grant and interest could not be recovered by NHAI from Guruvayoor Infrastructure Private Limited?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI failed to recover negative grant and interest thereon amounting to ₹295.78 crore from M/s Guruvayoor Infrastructure Private Limited (Paliyekkara Toll Plaza on NH 544 in Kerala). This comprised ₹200 crore as negative grant and ₹95.78 crore as interest up to 31 March 2021.",
+      "key_facts": [
+        "Total unrecovered amount was ₹295.78 crore",
+        "Negative grant component was ₹200 crore",
+        "Interest component was ₹95.78 crore",
+        "Relates to Paliyekkara Toll Plaza on NH 544 in Kerala"
+      ],
+      "key_amounts": [
+        {"value": 295.78, "unit": "crore", "context": "negative grant and interest not recovered from Guruvayoor Infrastructure", "required": true},
+        {"value": 200, "unit": "crore", "context": "negative grant component", "required": false}
+      ],
+      "key_entities": ["NHAI", "Guruvayoor Infrastructure Private Limited", "Paliyekkara Toll Plaza", "NH 544", "Kerala"],
+      "source_sections": ["3.4.2", "Executive Summary"],
+      "source_pages": [8, 21, 22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Karnataka", "Tamil Nadu"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC007",
+    "question": "What was the total amount of Corporate Guarantee waived off by NHAI for a Concessionaire in the premium deferment scheme?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI waived off Corporate Guarantee for an amount of ₹1,073.55 crore in respect of M/s L&T Deccan Tollways Limited (Kamkole Toll Plaza on NH 65). This was the deferred premium amount out of total premium of ₹1,233.51 crore payable from 2017-18 to 2028-29, despite the deferment scheme requiring Corporate Guarantee to protect NHAI's interest.",
+      "key_facts": [
+        "Corporate Guarantee waived was ₹1,073.55 crore",
+        "Total premium payable was ₹1,233.51 crore",
+        "Relates to M/s L&T Deccan Tollways Limited",
+        "Kamkole Toll Plaza on NH 65 in Karnataka and Andhra Pradesh"
+      ],
+      "key_amounts": [
+        {"value": 1073.55, "unit": "crore", "context": "Corporate Guarantee waived off", "required": true},
+        {"value": 1233.51, "unit": "crore", "context": "total premium payable", "required": false}
+      ],
+      "key_entities": ["NHAI", "L&T Deccan Tollways Limited", "Kamkole Toll Plaza", "NH 65", "Conciliation Committee of Independent Experts"],
+      "source_sections": ["3.4.3", "Executive Summary"],
+      "source_pages": [8, 23, 24]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Tamil Nadu", "Kerala"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC008",
+    "question": "How much could NHAI not recover from Concessionaires as damages for non-conduct and delay in overlay works?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI failed to recover ₹445.11 crore from Concessionaires as damages for not taking up overlay, delay in completion of overlay and for work taken up by NHAI at risk and cost of Concessionaires. This comprised ₹391.27 crore from nine BOT Concessionaires and ₹53.84 crore as risk and cost damages from one Operation and Maintenance Concessionaire (Madurai-Kanyakumari stretch).",
+      "key_facts": [
+        "Total unrecovered damages was ₹445.11 crore",
+        "₹391.27 crore was due from nine BOT Concessionaires",
+        "₹53.84 crore was due from one O&M Concessionaire for Madurai-Kanyakumari stretch",
+        "Delay in overlay work ranged from 2 to 76 months in seven stretches"
+      ],
+      "key_amounts": [
+        {"value": 445.11, "unit": "crore", "context": "total damages not recovered for overlay works", "required": true},
+        {"value": 391.27, "unit": "crore", "context": "damages from BOT Concessionaires", "required": true},
+        {"value": 53.84, "unit": "crore", "context": "risk and cost damages from O&M Concessionaire", "required": false}
+      ],
+      "key_entities": ["NHAI", "BOT Concessionaires", "Madurai-Kanyakumari stretch"],
+      "source_sections": ["4.1", "Executive Summary"],
+      "source_pages": [9, 29, 30]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll collection", "revenue sharing"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC009",
+    "question": "How much penalty was due from BOT Concessionaires for failure to conduct regular maintenance works?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI failed to recover an amount of ₹174.63 crore from four BOT(Toll) Concessionaires for non-maintenance of the stretches. The four affected stretches were Pondicherry-Tindivanam (₹1.31 crore), Krishnagiri-Thoppur (₹17.10 crore), Thrissur-Edapally (₹137.74 crore including interest of ₹69.09 crore), and Tada-Nellore (₹18.48 crore).",
+      "key_facts": [
+        "Total penalty due was ₹174.63 crore",
+        "Four BOT(Toll) Concessionaires failed to conduct regular maintenance",
+        "Thrissur-Edapally had highest pending penalty at ₹137.74 crore",
+        "This included interest component of ₹69.09 crore for Thrissur-Edapally"
+      ],
+      "key_amounts": [
+        {"value": 174.63, "unit": "crore", "context": "penalty for non-maintenance from four BOT Concessionaires", "required": true},
+        {"value": 137.74, "unit": "crore", "context": "penalty for Thrissur-Edapally stretch including interest", "required": false}
+      ],
+      "key_entities": ["NHAI", "Pondicherry-Tindivanam", "Krishnagiri-Thoppur", "Thrissur-Edapally", "Tada-Nellore"],
+      "source_sections": ["4.3.2", "Executive Summary"],
+      "source_pages": [9, 34, 35, 36]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll collection", "revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC010",
+    "question": "What percentage of black spots identified during 2011-14 and 2015-18 were pending long-term rectification?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "For black spots identified during 2011-14, 37.95 per cent (74 out of 195 black spots) of long term rectifications were pending as of March 2021. For black spots identified during 2015-18, 60.11 per cent (886 out of 1,474 black spots) of long term rectifications were not carried out. Additionally, 17.70 per cent (319 out of 1,802 black spots) of short term rectifications were pending for 2015-18.",
+      "key_facts": [
+        "37.95 per cent (74 out of 195) of 2011-14 black spots pending long-term rectification",
+        "60.11 per cent (886 out of 1,474) of 2015-18 black spots pending long-term rectification",
+        "17.70 per cent (319 out of 1,802) of 2015-18 black spots pending short-term rectification"
+      ],
+      "key_amounts": [
+        {"value": 37.95, "unit": "per cent", "context": "2011-14 black spots pending long-term rectification", "required": true},
+        {"value": 60.11, "unit": "per cent", "context": "2015-18 black spots pending long-term rectification", "required": true},
+        {"value": 17.70, "unit": "per cent", "context": "2015-18 black spots pending short-term rectification", "required": false}
+      ],
+      "key_entities": ["NHAI", "MoRTH", "Regional Offices"],
+      "source_sections": ["4.4", "Executive Summary"],
+      "source_pages": [9, 10, 36, 37]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll", "revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC011",
+    "question": "How many Toll Plazas were selected for the audit and how were they distributed between Public Funded and BOT?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "Audit randomly selected 41 Toll Plazas covering 37 NH stretches in five Southern States. These comprised 20 Public Funded Toll Plazas (which included six BOT-Annuity and four HAM Toll Plazas) and 21 Build, Operate and Transfer (Toll) Toll Plazas. There were 37 stretches (18 Public Funded stretches and 19 BOT stretches) under the 41 selected Toll Plazas.",
+      "key_facts": [
+        "41 Toll Plazas were selected for audit",
+        "20 Public Funded Toll Plazas",
+        "21 BOT(Toll) Toll Plazas",
+        "37 NH stretches covered",
+        "Five Southern States covered"
+      ],
+      "key_amounts": [
+        {"value": 41, "unit": "Toll Plazas", "context": "total toll plazas audited", "required": true},
+        {"value": 20, "unit": "Toll Plazas", "context": "Public Funded Toll Plazas", "required": true},
+        {"value": 21, "unit": "Toll Plazas", "context": "BOT(Toll) Toll Plazas", "required": true}
+      ],
+      "key_entities": ["NHAI", "Tamil Nadu", "Karnataka", "Andhra Pradesh", "Telangana", "Kerala"],
+      "source_sections": ["2.1", "Executive Summary"],
+      "source_pages": [3, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Northern States", "Western States"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC012",
+    "question": "What were the issues found with Swachh Bharat Mission toilets at Toll Plazas?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "Out of 41 Toll Plazas audited, toilets under Swachh Bharat Mission were not constructed in five Toll Plazas, and were constructed only on one side in 13 Toll Plazas. In three Toll Plazas (Kumbalam, Chalageri, and Sadahalli), toilets were constructed but were found non-operational. At Paliyekkara Toll Plaza, road users were charged for using toilets meant to be free under Swachh Bharat Mission. At Morattandi Toll Plaza, toilet was found in dilapidated condition.",
+      "key_facts": [
+        "5 Toll Plazas had no SBM toilets constructed",
+        "13 Toll Plazas had toilets constructed only on one side",
+        "3 Toll Plazas had non-operational toilets",
+        "Road users were charged at Paliyekkara despite SBM toilets being free",
+        "Dilapidated toilet found at Morattandi Toll Plaza"
+      ],
+      "key_amounts": [
+        {"value": 5, "unit": "Toll Plazas", "context": "without SBM toilets", "required": true},
+        {"value": 13, "unit": "Toll Plazas", "context": "with toilets only on one side", "required": true}
+      ],
+      "key_entities": ["NHAI", "MoRTH", "Swachh Bharat Mission", "Paliyekkara Toll Plaza", "Morattandi Toll Plaza"],
+      "source_sections": ["5.1", "Executive Summary"],
+      "source_pages": [10, 43, 44, 45, 46]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll collection", "revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC013",
+    "question": "What was the status of Highway Nest Mini facilities at Toll Plazas?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI decided in November 2017 to develop Highway Nest Mini on both sides of Toll Plazas with essential facilities like toilets, water ATM, packaged food and beverages, to be operationalized by March 2018. However, out of 41 Toll Plazas, Highway Nest Mini were not constructed in 11 Toll Plazas and constructed only on Right Hand Side in one Toll Plaza (Morattandi). Out of 29 Toll Plazas where Highway Nest Mini were constructed on both sides, they were not operationalized in six Toll Plazas.",
+      "key_facts": [
+        "Highway Nest Mini was to have toilets, water ATM, packaged food, hot and cold beverages",
+        "Target was to operationalize at all Toll Plazas by March 2018",
+        "11 Toll Plazas had no Highway Nest Mini constructed",
+        "1 Toll Plaza (Morattandi) had it only on one side",
+        "6 Toll Plazas had non-operational Highway Nest Mini"
+      ],
+      "key_amounts": [
+        {"value": 11, "unit": "Toll Plazas", "context": "without Highway Nest Mini", "required": true},
+        {"value": 6, "unit": "Toll Plazas", "context": "with non-operational Highway Nest Mini", "required": true}
+      ],
+      "key_entities": ["NHAI", "Highway Nest Mini", "Morattandi Toll Plaza"],
+      "source_sections": ["5.2", "Executive Summary"],
+      "source_pages": [10, 46, 47, 48]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll fee", "revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC014",
+    "question": "What was the shortfall in avenue and median plantations along National Highways?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "On the total project length of 8,814 km under five Regional Offices, the shortfall in avenue plantations was 65.63 per cent and in median plantations was 34.65 per cent from the target plantation as of March 2021. This indicated NHAI's failure to achieve eco-friendly highways as per Green Highways Policy 2015 and Indian Roads Congress guidelines.",
+      "key_facts": [
+        "Avenue plantation shortfall was 65.63 per cent",
+        "Median plantation shortfall was 34.65 per cent",
+        "Total project length covered was 8,814 km",
+        "Five Regional Offices covered"
+      ],
+      "key_amounts": [
+        {"value": 65.63, "unit": "per cent", "context": "shortfall in avenue plantation", "required": true},
+        {"value": 34.65, "unit": "per cent", "context": "shortfall in median plantation", "required": true}
+      ],
+      "key_entities": ["NHAI", "Green Highways Policy 2015", "Indian Roads Congress"],
+      "source_sections": ["5.3", "Executive Summary"],
+      "source_pages": [10, 11, 49]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll", "revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC015",
+    "question": "What was the issue with overloaded vehicles penalty collection at Toll Plazas?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "The NH Fee Rules required charging 2 to 10 times the base fee for overloaded vehicles based on percentage of excess load. However, In-motion Weigh Bridges and Static Weigh Bridges were not installed in 11 Public Funded Toll Plazas. In the remaining 9 Toll Plazas, weigh bridges were installed but either not integrated to Toll Management Software or not in working condition. In 21 BOT Toll Plazas, weigh bridges were installed but not integrated with Toll Management Software. Concessionaires at Bollapalli and Tanguturu Toll Plazas collected ₹4.47 crore from overloaded vehicles but retained it without remitting to NHAI.",
+      "key_facts": [
+        "11 Public Funded Toll Plazas had no weigh bridges installed",
+        "9 Toll Plazas had weigh bridges not integrated or not working",
+        "13 BOT Toll Plazas were not collecting applicable fee from overloaded vehicles",
+        "₹4.47 crore collected but not remitted by Bollapalli and Tanguturu Concessionaires"
+      ],
+      "key_amounts": [
+        {"value": 4.47, "unit": "crore", "context": "fee collected but not remitted by two Concessionaires", "required": true}
+      ],
+      "key_entities": ["NHAI", "Bollapalli Toll Plaza", "Tanguturu Toll Plaza", "IHMCL", "System Integrators"],
+      "source_sections": ["3.1.4"],
+      "source_pages": [9, 10, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Palar Bridge", "revenue sharing"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC016",
+    "question": "What were the findings related to exemptions and violations at Public Funded Toll Plazas?",
+    "category": {
+      "difficulty": "medium",
+      "type": "explanation",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "The percentage of exempted/violating vehicles at Public Funded Toll Plazas was significantly higher than BOT Toll Plazas. At Public Funded Toll Plazas, exemptions and violations ranged from 18.32 per cent (Lembalakudi) to 53.27 per cent (Paranur). In comparison, BOT Toll Plazas had exemptions and violations ranging from only 6.06 per cent (Kodai Road) to 12.60 per cent (Sengurichi). Toll plaza operators were neither collecting proof of exemption nor recording it.",
+      "key_facts": [
+        "Paranur Toll Plaza had highest exemptions/violations at 53.27 per cent",
+        "Lembalakudi Toll Plaza had lowest among Public Funded at 18.32 per cent",
+        "BOT Toll Plazas had much lower rates (6.06 to 12.60 per cent)",
+        "No proof of exemption was being collected or recorded"
+      ],
+      "key_amounts": [
+        {"value": 53.27, "unit": "per cent", "context": "highest exemption/violation rate at Paranur", "required": true},
+        {"value": 18.32, "unit": "per cent", "context": "lowest exemption/violation at Lembalakudi", "required": false}
+      ],
+      "key_entities": ["NHAI", "Paranur Toll Plaza", "Lembalakudi Toll Plaza", "User Fee Collection Agents"],
+      "source_sections": ["3.6.3"],
+      "source_pages": [27, 28]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["overlay", "maintenance"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC017",
+    "question": "What were the main issues with Incident Management Services vehicles at Toll Plazas?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI issued policy guidelines in March 2018 on strengthening Incident Management Services with uniform specifications for Ambulance and Patrol vehicles. However, audit inspection revealed that IMS vehicles at 14 Toll Plazas (six Public Funded and eight BOT) were not upgraded in line with NHAI Policy. The vehicles were old, overused and condemnable; ambulances were of smaller dimension against norms; and envisaged equipment in Patrol Vehicles were not available. At KN Hundy Toll Plaza, no ambulances, patrol vehicles and cranes were operated since toll commencement.",
+      "key_facts": [
+        "14 Toll Plazas had non-upgraded IMS vehicles",
+        "6 Public Funded and 8 BOT Toll Plazas affected",
+        "Vehicles were old, overused and condemnable",
+        "Ambulances were smaller than specifications",
+        "KN Hundy Toll Plaza had no IMS vehicles since December 2019"
+      ],
+      "key_amounts": [
+        {"value": 14, "unit": "Toll Plazas", "context": "with non-upgraded IMS vehicles", "required": true}
+      ],
+      "key_entities": ["NHAI", "Incident Management Services", "KN Hundy Toll Plaza"],
+      "source_sections": ["5.4", "Executive Summary"],
+      "source_pages": [10, 11, 49, 50, 51]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["toll fee", "revenue"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC018",
+    "question": "What was the total financial impact on NHAI due to non-recovery from Concessionaires in deferment of premium cases?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI failed to recover a total of ₹314.07 crore from two Concessionaires in premium deferment cases. This comprised ₹295.78 crore from M/s Guruvayoor Infrastructure Private Limited (₹200 crore negative grant plus ₹95.78 crore interest) and ₹18.29 crore from M/s JSR Mulbagal Tollways Private Limited (₹6.24 crore revised premium plus ₹12.05 crore interest). Additionally, Corporate Guarantee of ₹1,073.55 crore was waived for M/s L&T Deccan Tollways Limited.",
+      "key_facts": [
+        "Total unrecovered amount from two Concessionaires was ₹314.07 crore",
+        "₹295.78 crore from Guruvayoor Infrastructure",
+        "₹18.29 crore from JSR Mulbagal Tollways",
+        "₹1,073.55 crore Corporate Guarantee waived for L&T Deccan Tollways",
+        "NHAI failed to obtain Bank/Corporate Guarantees as per deferment scheme"
+      ],
+      "key_amounts": [
+        {"value": 314.07, "unit": "crore", "context": "total unrecovered from two Concessionaires", "required": true},
+        {"value": 295.78, "unit": "crore", "context": "from Guruvayoor Infrastructure", "required": true},
+        {"value": 18.29, "unit": "crore", "context": "from JSR Mulbagal Tollways", "required": true}
+      ],
+      "key_entities": ["NHAI", "Guruvayoor Infrastructure Private Limited", "JSR Mulbagal Tollways Private Limited", "L&T Deccan Tollways Limited", "MoRTH"],
+      "source_sections": ["3.4.1", "3.4.2", "3.4.3", "Executive Summary"],
+      "source_pages": [8, 19, 20, 21, 22, 23, 24]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["overlay", "black spots"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC019",
+    "question": "What was the total revenue loss to NHAI due to delayed commencement of toll operations?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "NHAI suffered a total revenue loss of ₹68.12 crore due to delayed commencement of toll operations in five stretches. This comprised ₹64.60 crore from delay in toll collection in four public funded stretches (Pollachi-Coimbatore: ₹48.66 crore, Kerala Border to Kollegala: ₹7.85 crore, Kazhakoottam to Mukkola: ₹7.14 crore, Trichy-Karaikudi: ₹0.95 crore) and ₹3.52 crore from delay in completion of approach road at Kappalur Toll Plaza on Madurai-Kanyakumari stretch.",
+      "key_facts": [
+        "Total revenue loss was ₹68.12 crore",
+        "₹64.60 crore from delay in four public funded stretches",
+        "₹3.52 crore from delay in approach road at Kappalur",
+        "Pollachi-Coimbatore had highest loss at ₹48.66 crore",
+        "NH Fee Rules require toll to commence within 45 days of completion"
+      ],
+      "key_amounts": [
+        {"value": 68.12, "unit": "crore", "context": "total revenue loss from delayed toll commencement", "required": true},
+        {"value": 64.60, "unit": "crore", "context": "loss from four public funded stretches", "required": true},
+        {"value": 3.52, "unit": "crore", "context": "loss from delayed approach road at Kappalur", "required": false}
+      ],
+      "key_entities": ["NHAI", "Pollachi-Coimbatore", "Kerala Border to Kollegala", "Kazhakoottam to Mukkola", "Trichy-Karaikudi", "Kappalur Toll Plaza"],
+      "source_sections": ["3.2.1", "3.2.2"],
+      "source_pages": [12, 13, 14, 15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["premium deferment", "overlay"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_NHAI_TOLL_2023_TC020",
+    "question": "What were the major audit recommendations for improving toll collection and preventing revenue losses?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["CAG_Report_7_2023_NHAI_Toll_Southern_India"]
+    },
+    "expected": {
+      "answer_summary": "Key audit recommendations for toll collection included: (1) Ministry to ensure amendments to NH Fee Rules are adhered by NHAI to avoid undue burden on road users; (2) MoRTH/NHAI to ensure Toll Plazas are constructed in time and toll collection commences within 45 days; (3) Include suitable revenue sharing clauses in bid documents for NH stretches built by NHAI; (4) NHAI to protect Government's financial interest by obtaining appropriate Bank/Corporate Guarantees; (5) Ensure priority of NHAI dues over Concessionaire in Escrow Agreements; (6) Consider separate banks as Escrow banker and lender bank; (7) Ministry to review circumstances leading to non-obtaining of Bank/Corporate Guarantees and fix responsibility.",
+      "key_facts": [
+        "Ensure NH Fee Rules amendments are implemented to avoid undue burden",
+        "Toll collection to commence within 45 days of project completion",
+        "Include revenue sharing clauses for NHAI-built stretches",
+        "Obtain Bank/Corporate Guarantees as per deferment scheme",
+        "Ensure NHAI dues priority in Escrow Agreements",
+        "Use separate banks for Escrow and lending"
+      ],
+      "key_amounts": [],
+      "key_entities": ["NHAI", "MoRTH", "Escrow Agreement"],
+      "source_sections": ["3.1.1", "3.2.1", "3.3", "3.4.3", "Executive Summary"],
+      "source_pages": [8, 9, 14, 19, 24]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["black spots", "plantation"],
+      "must_not_hallucinate": true
+    }
+  }
+]

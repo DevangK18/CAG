@@ -1,0 +1,565 @@
+[
+  {
+    "id": "FCI_STORAGE_2023_TC001",
+    "question": "What was the total storage losses of foodgrains during the period 2017-18 to 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The total storage losses of foodgrains during 2017-18 to 2021-22 amounted to 249.74 Lakh Metric Tonnes (LMT) valued at ₹29,140.71 crore.",
+      "key_facts": [
+        "Storage losses were 249.74 LMT during 2017-18 to 2021-22",
+        "Value of storage losses was ₹29,140.71 crore",
+        "Period covered was five years from 2017-18 to 2021-22"
+      ],
+      "key_amounts": [
+        {"value": 249.74, "unit": "LMT", "context": "Total storage losses of foodgrains", "required": true},
+        {"value": 29140.71, "unit": "crore", "context": "Value of storage losses", "required": true}
+      ],
+      "key_entities": ["FCI", "Food grains"],
+      "source_sections": ["Executive Summary", "3.1"],
+      "source_pages": ["iii", 27]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["transit losses"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC002",
+    "question": "What was the total transit losses during the audit period?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The total transit losses during 2017-18 to 2021-22 were 21.92 LMT valued at ₹2,650.79 crore.",
+      "key_facts": [
+        "Transit losses were 21.92 LMT",
+        "Value of transit losses was ₹2,650.79 crore",
+        "Losses occurred during movement of foodgrains"
+      ],
+      "key_amounts": [
+        {"value": 21.92, "unit": "LMT", "context": "Total transit losses", "required": true},
+        {"value": 2650.79, "unit": "crore", "context": "Value of transit losses", "required": true}
+      ],
+      "key_entities": ["FCI", "Transit losses"],
+      "source_sections": ["Executive Summary", "4.1"],
+      "source_pages": ["iii", 39]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["storage losses"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC003",
+    "question": "What was the total storage capacity of FCI as on 31 March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The total storage capacity of FCI as on 31 March 2022 was 810.69 LMT, comprising owned capacity of 152.41 LMT and hired capacity of 658.28 LMT.",
+      "key_facts": [
+        "Total storage capacity was 810.69 LMT",
+        "Owned capacity was 152.41 LMT",
+        "Hired capacity was 658.28 LMT"
+      ],
+      "key_amounts": [
+        {"value": 810.69, "unit": "LMT", "context": "Total storage capacity as on 31 March 2022", "required": true},
+        {"value": 152.41, "unit": "LMT", "context": "Owned storage capacity", "required": false},
+        {"value": 658.28, "unit": "LMT", "context": "Hired storage capacity", "required": false}
+      ],
+      "key_entities": ["FCI", "Storage capacity"],
+      "source_sections": ["2.2", "Storage Capacity"],
+      "source_pages": [9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["CWC capacity", "SWC capacity"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC004",
+    "question": "What was the total foodgrain procurement during 2017-18 to 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The total foodgrain procurement during 2017-18 to 2021-22 was 3,178.74 LMT, comprising 2,291.17 LMT of wheat and 887.57 LMT of rice.",
+      "key_facts": [
+        "Total procurement was 3,178.74 LMT",
+        "Wheat procurement was 2,291.17 LMT",
+        "Rice procurement was 887.57 LMT"
+      ],
+      "key_amounts": [
+        {"value": 3178.74, "unit": "LMT", "context": "Total foodgrain procurement", "required": true},
+        {"value": 2291.17, "unit": "LMT", "context": "Wheat procurement", "required": false},
+        {"value": 887.57, "unit": "LMT", "context": "Rice procurement", "required": false}
+      ],
+      "key_entities": ["FCI", "Wheat", "Rice"],
+      "source_sections": ["1.4", "Procurement"],
+      "source_pages": [5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["coarse grains"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC005",
+    "question": "What percentage of FCI's storage capacity was hired as on 31 March 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "As on 31 March 2022, 81.20 per cent of FCI's total storage capacity was hired capacity. Out of total capacity of 810.69 LMT, hired capacity was 658.28 LMT.",
+      "key_facts": [
+        "Hired capacity was 81.20 per cent of total",
+        "Total capacity was 810.69 LMT",
+        "Hired capacity was 658.28 LMT"
+      ],
+      "key_amounts": [
+        {"value": 81.20, "unit": "per cent", "context": "Percentage of hired storage capacity", "required": true}
+      ],
+      "key_entities": ["FCI", "Hired storage"],
+      "source_sections": ["2.2", "Storage Capacity"],
+      "source_pages": [9, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["owned capacity percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC006",
+    "question": "What were the main issues found in CAP storage of foodgrains?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The main issues in Cover and Plinth (CAP) storage included: continuation of CAP storage beyond the permissible period of 12 months, storage of foodgrains in CAP for more than five years at some locations, inadequate cover management leading to damage, stocks stored in CAP during monsoon season without adequate protection, and higher storage losses in CAP compared to covered godowns.",
+      "key_facts": [
+        "CAP storage continued beyond permissible 12 months",
+        "Some stocks stored in CAP for more than five years",
+        "Inadequate cover management caused damage",
+        "Storage during monsoon without adequate protection",
+        "Higher storage losses in CAP than covered godowns"
+      ],
+      "key_amounts": [
+        {"value": 12, "unit": "months", "context": "Permissible CAP storage period", "required": true}
+      ],
+      "key_entities": ["FCI", "CAP storage", "Cover and Plinth"],
+      "source_sections": ["2.5", "CAP Storage"],
+      "source_pages": [17, 18, 19]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["silo storage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC007",
+    "question": "What was the total quantity of foodgrains damaged due to inadequate storage infrastructure?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "A total of 2.39 LMT of foodgrains valued at ₹583.94 crore were damaged due to inadequate storage infrastructure during the audit period. This included damage due to leaking roofs, damaged floors, and improper drainage systems.",
+      "key_facts": [
+        "2.39 LMT foodgrains damaged due to inadequate infrastructure",
+        "Value of damaged foodgrains was ₹583.94 crore",
+        "Damage due to leaking roofs, damaged floors, improper drainage"
+      ],
+      "key_amounts": [
+        {"value": 2.39, "unit": "LMT", "context": "Foodgrains damaged due to inadequate storage infrastructure", "required": true},
+        {"value": 583.94, "unit": "crore", "context": "Value of damaged foodgrains", "required": true}
+      ],
+      "key_entities": ["FCI", "Storage infrastructure"],
+      "source_sections": ["2.4", "Storage Infrastructure"],
+      "source_pages": [15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["transit damage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC008",
+    "question": "What was the extent of foodgrain movement by rail during the audit period?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "During 2017-18 to 2021-22, FCI moved 1,200.05 LMT of foodgrains by rail, which constituted about 70 per cent of total inter-state movement. Rail was the predominant mode of transportation for foodgrain movement.",
+      "key_facts": [
+        "1,200.05 LMT moved by rail during audit period",
+        "Rail movement was about 70 per cent of total",
+        "Rail was predominant mode of transportation"
+      ],
+      "key_amounts": [
+        {"value": 1200.05, "unit": "LMT", "context": "Foodgrains moved by rail", "required": true},
+        {"value": 70, "unit": "per cent", "context": "Percentage of movement by rail", "required": false}
+      ],
+      "key_entities": ["FCI", "Rail movement", "Indian Railways"],
+      "source_sections": ["4.2", "Movement by Rail"],
+      "source_pages": [40, 41]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["road movement percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC009",
+    "question": "What were the main reasons for storage losses in FCI?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The main reasons for storage losses included: inadequate storage infrastructure with leaking roofs and damaged floors, prolonged storage in CAP beyond permissible period, improper pest management and fumigation, inadequate prophylactic measures, non-adherence to first-in-first-out principle, storage beyond shelf life of foodgrains, and ineffective quality monitoring. Additionally, high moisture content at the time of procurement and inadequate drying facilities contributed to deterioration.",
+      "key_facts": [
+        "Inadequate storage infrastructure",
+        "Prolonged CAP storage beyond permissible period",
+        "Improper pest management and fumigation",
+        "Non-adherence to first-in-first-out principle",
+        "Storage beyond shelf life",
+        "High moisture content at procurement"
+      ],
+      "key_amounts": [],
+      "key_entities": ["FCI", "Storage losses", "CAP storage"],
+      "source_sections": ["3.2", "Reasons for Storage Losses"],
+      "source_pages": [28, 29, 30]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["transit loss reasons"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC010",
+    "question": "What was the quantity of foodgrains stored beyond the shelf life?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "A total of 10.44 LMT of wheat and 7.96 LMT of rice were found stored beyond their prescribed shelf life. The shelf life for wheat is 12 months in identified states and 24 months elsewhere, while for rice it is 12 months in identified states and 36 months elsewhere.",
+      "key_facts": [
+        "10.44 LMT wheat stored beyond shelf life",
+        "7.96 LMT rice stored beyond shelf life",
+        "Wheat shelf life: 12 months in identified states, 24 months elsewhere",
+        "Rice shelf life: 12 months in identified states, 36 months elsewhere"
+      ],
+      "key_amounts": [
+        {"value": 10.44, "unit": "LMT", "context": "Wheat stored beyond shelf life", "required": true},
+        {"value": 7.96, "unit": "LMT", "context": "Rice stored beyond shelf life", "required": true}
+      ],
+      "key_entities": ["FCI", "Shelf life", "Wheat", "Rice"],
+      "source_sections": ["3.3", "Shelf Life"],
+      "source_pages": [31, 32]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["coarse grains shelf life"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC011",
+    "question": "How much expenditure was incurred on hiring of storage capacity during the audit period?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "FCI incurred an expenditure of ₹14,245.72 crore on hiring of storage capacity during 2017-18 to 2021-22.",
+      "key_facts": [
+        "Expenditure on hiring storage was ₹14,245.72 crore",
+        "Period was 2017-18 to 2021-22",
+        "Hiring from CWC, SWC, private parties and State agencies"
+      ],
+      "key_amounts": [
+        {"value": 14245.72, "unit": "crore", "context": "Expenditure on hiring storage capacity", "required": true}
+      ],
+      "key_entities": ["FCI", "CWC", "SWC", "Storage hiring"],
+      "source_sections": ["2.3", "Hiring of Storage"],
+      "source_pages": [11, 12]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["construction cost"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC012",
+    "question": "What was the permissible storage and transit loss norm for wheat and rice?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The permissible storage loss norm was 0.1 per cent for wheat and 0.05 per cent for rice per month. The permissible transit loss norm was 0.1 per cent for both wheat and rice for movement within 1000 km by rail.",
+      "key_facts": [
+        "Storage loss norm: 0.1 per cent for wheat per month",
+        "Storage loss norm: 0.05 per cent for rice per month",
+        "Transit loss norm: 0.1 per cent for both wheat and rice",
+        "Transit norm applicable for movement within 1000 km by rail"
+      ],
+      "key_amounts": [
+        {"value": 0.1, "unit": "per cent", "context": "Storage loss norm for wheat per month", "required": true},
+        {"value": 0.05, "unit": "per cent", "context": "Storage loss norm for rice per month", "required": true}
+      ],
+      "key_entities": ["FCI", "Storage loss norms", "Transit loss norms"],
+      "source_sections": ["1.5", "Loss Norms"],
+      "source_pages": [6, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["coarse grain norms"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC013",
+    "question": "What were the issues found in pest management by FCI?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "Issues in pest management included: non-conduct of fumigation as per prescribed schedule, inadequate prophylactic treatment, shortage of fumigation covers, non-availability of required fumigants, delay in disposal of pest infested stocks, and non-functioning of pest control laboratories at some locations.",
+      "key_facts": [
+        "Non-conduct of fumigation as per schedule",
+        "Inadequate prophylactic treatment",
+        "Shortage of fumigation covers",
+        "Non-availability of required fumigants",
+        "Delay in disposal of pest infested stocks",
+        "Non-functioning pest control laboratories"
+      ],
+      "key_amounts": [],
+      "key_entities": ["FCI", "Pest management", "Fumigation"],
+      "source_sections": ["3.4", "Pest Management"],
+      "source_pages": [33, 34]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["quality control at procurement"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC014",
+    "question": "What was the total off-take of foodgrains during 2017-18 to 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The total off-take of foodgrains during 2017-18 to 2021-22 was 2,880.95 LMT, which included distribution under NFSA, PMGKAY and other welfare schemes.",
+      "key_facts": [
+        "Total off-take was 2,880.95 LMT",
+        "Distribution under NFSA, PMGKAY and other schemes",
+        "Period was 2017-18 to 2021-22"
+      ],
+      "key_amounts": [
+        {"value": 2880.95, "unit": "LMT", "context": "Total off-take of foodgrains", "required": true}
+      ],
+      "key_entities": ["FCI", "NFSA", "PMGKAY", "Off-take"],
+      "source_sections": ["1.4", "Off-take"],
+      "source_pages": [5, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["procurement figures"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC015",
+    "question": "What were the deficiencies in silo storage operations?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "Deficiencies in silo storage included: lower than envisaged capacity utilization, issues in integration of silos with rail connectivity, higher operational costs compared to conventional storage, technical problems in temperature and moisture control systems, delays in operationalization of constructed silos, and inadequate training of personnel for silo operations.",
+      "key_facts": [
+        "Lower than envisaged capacity utilization",
+        "Issues in rail connectivity integration",
+        "Higher operational costs than conventional storage",
+        "Technical problems in temperature and moisture control",
+        "Delays in operationalization of silos",
+        "Inadequate personnel training"
+      ],
+      "key_amounts": [],
+      "key_entities": ["FCI", "Silo storage"],
+      "source_sections": ["2.6", "Silo Storage"],
+      "source_pages": [20, 21, 22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["CAP storage deficiencies"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC016",
+    "question": "What was the average closing stock of foodgrains during the audit period?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "The average closing stock of foodgrains with FCI during 2017-18 to 2021-22 was significantly higher than the buffer stock norms. As on 1st January 2022, the total stock was 586.83 LMT against the buffer norm of 214.60 LMT, indicating excess stock of 372.23 LMT.",
+      "key_facts": [
+        "Total stock as on 1st January 2022 was 586.83 LMT",
+        "Buffer norm was 214.60 LMT",
+        "Excess stock was 372.23 LMT",
+        "Stock consistently higher than buffer norms"
+      ],
+      "key_amounts": [
+        {"value": 586.83, "unit": "LMT", "context": "Total stock as on 1st January 2022", "required": true},
+        {"value": 214.60, "unit": "LMT", "context": "Buffer norm", "required": true}
+      ],
+      "key_entities": ["FCI", "Buffer stock", "Closing stock"],
+      "source_sections": ["2.1", "Stock Position"],
+      "source_pages": [8, 9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["strategic reserve"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC017",
+    "question": "What were the audit recommendations for improving storage management?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "Key audit recommendations included: creation of adequate owned storage capacity to reduce dependence on hired storage, phasing out CAP storage and ensuring time-bound liquidation of stocks in CAP, strengthening pest management and prophylactic measures, ensuring adherence to first-in-first-out principle, timely repair and maintenance of storage infrastructure, implementation of real-time inventory management system, and establishing scientific storage facilities at strategic locations.",
+      "key_facts": [
+        "Create adequate owned storage capacity",
+        "Phase out CAP storage",
+        "Strengthen pest management",
+        "Adhere to first-in-first-out principle",
+        "Timely infrastructure maintenance",
+        "Implement real-time inventory management",
+        "Establish scientific storage at strategic locations"
+      ],
+      "key_amounts": [],
+      "key_entities": ["FCI", "Storage management", "Recommendations"],
+      "source_sections": ["Chapter 5", "Recommendations"],
+      "source_pages": [51, 52, 53]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["procurement recommendations"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC018",
+    "question": "What was the financial loss due to excess transit time?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "FCI suffered financial loss due to excess transit time beyond the prescribed norms. Delays in transit resulted in additional storage costs and deterioration of grain quality. The transit loss beyond permissible norms during the audit period resulted in avoidable loss.",
+      "key_facts": [
+        "Delays in transit beyond prescribed norms",
+        "Additional storage costs incurred",
+        "Deterioration of grain quality",
+        "Transit losses exceeded permissible limits"
+      ],
+      "key_amounts": [],
+      "key_entities": ["FCI", "Transit time", "Financial loss"],
+      "source_sections": ["4.3", "Transit Time"],
+      "source_pages": [42, 43]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["storage time"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC019",
+    "question": "How many godowns were inspected during the audit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "Audit covered 203 godowns across 17 States/UTs for physical verification and detailed examination of storage operations.",
+      "key_facts": [
+        "203 godowns were inspected",
+        "Inspection covered 17 States/UTs",
+        "Physical verification conducted",
+        "Detailed examination of storage operations"
+      ],
+      "key_amounts": [
+        {"value": 203, "unit": "godowns", "context": "Number of godowns inspected", "required": true},
+        {"value": 17, "unit": "States/UTs", "context": "Number of States/UTs covered", "required": true}
+      ],
+      "key_entities": ["FCI", "Audit coverage", "Godowns"],
+      "source_sections": ["1.6", "Audit Scope"],
+      "source_pages": [7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all FCI godowns"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FCI_STORAGE_2023_TC020",
+    "question": "What were the issues with quality control and grading of foodgrains?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FCI_STORAGE_2023"]
+    },
+    "expected": {
+      "answer_summary": "Quality control issues included: absence of regular testing of stocks at prescribed intervals, non-functioning quality control laboratories at some locations, inadequate sampling procedures, acceptance of stocks with higher than permissible moisture content, lack of proper grading leading to mixing of different quality stocks, and non-adherence to uniform specifications across regions.",
+      "key_facts": [
+        "Absence of regular testing at prescribed intervals",
+        "Non-functioning quality control laboratories",
+        "Inadequate sampling procedures",
+        "Acceptance of stocks with high moisture content",
+        "Mixing of different quality stocks",
+        "Non-adherence to uniform specifications"
+      ],
+      "key_amounts": [],
+      "key_entities": ["FCI", "Quality control", "Grading"],
+      "source_sections": ["3.5", "Quality Control"],
+      "source_pages": [35, 36, 37]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["procurement quality"],
+      "must_not_hallucinate": true
+    }
+  }
+]

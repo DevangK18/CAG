@@ -6,21 +6,55 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 .env
-.vscode/
+.env.production 
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Notebooks
+.ipynb_checkpoints/
+notebooks/
+
 # DVC
 .dvc/cache
 data/raw/reports/
 data/processed/json/
-# Notebooks
-.ipynb_checkpoints
 
 # Build artifacts
 dist/
 build/
 *.egg-info/
-# IDE
+
+# Frontend
+node_modules/
+.vite/
+
+# IDE & Editors
 .idea/
-memory_bank/
+.vscode/
 .DS_Store
-.DS_Store/
+*.swp
+*.swo
+*~
+
+# Project-specific
+memory_bank/
+.claude/
+docs/
+data/
+CLAUDE.md 
+src/parsing_pipeline/
+src/batch_pipeline/
+
+# Logs
+*.log
+logs/.env.production
+tests/parsing_pipeline/
+tests/batch_pipeline/
+/logs 

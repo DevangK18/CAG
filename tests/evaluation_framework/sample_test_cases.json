@@ -1,0 +1,855 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-01-03",
+    "description": "Ground truth test cases for CAG RAG evaluation",
+    "total_cases": 30
+  },
+  "test_cases": [
+    {
+      "id": "TC001",
+      "question": "What was the revenue loss due to toll collection delays by NHAI?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "NHAI suffered a revenue loss of ₹64.60 crore due to delays in commencing toll collection within the time limits prescribed by NH Fee Rules, 2008 in four stretches of public-funded projects.",
+        "key_facts": [
+          "Revenue loss of ₹64.60 crore",
+          "Delay in toll collection in four stretches",
+          "Violation of NH Fee Rules, 2008 time limits",
+          "Public-funded projects affected"
+        ],
+        "key_amounts": [
+          {"value": 64.60, "unit": "crore", "context": "revenue loss from delays", "required": true},
+          {"value": 129.20, "unit": "crore", "context": "total amount (doubled)", "required": false}
+        ],
+        "key_entities": ["NHAI", "NH Fee Rules 2008"],
+        "source_sections": ["3.2.1"],
+        "source_pages": [36, 37, 38]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["Railways", "PMJAY", "Ayushman"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC002",
+      "question": "What was the short collection of user fees on NH 44?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "There was a short collection of user fees amounting to ₹16.68 crore on the Madurai-Kanyakumari stretch of NH 44 in Tamil Nadu due to incorrect conversion of vehicle length for toll calculation.",
+        "key_facts": [
+          "Short collection of ₹16.68 crore",
+          "Madurai-Kanyakumari stretch",
+          "NH 44 in Tamil Nadu",
+          "Incorrect vehicle length conversion"
+        ],
+        "key_amounts": [
+          {"value": 16.68, "unit": "crore", "context": "short collection on NH 44", "required": true}
+        ],
+        "key_entities": ["NH 44", "Tamil Nadu", "Madurai", "Kanyakumari"],
+        "source_sections": ["Executive Summary", "3.3"],
+        "source_pages": [11, 42, 43]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["Karnataka", "Maharashtra"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC003",
+      "question": "What is the total tax effect of arithmetical errors in direct tax assessments?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": ["2024_13_Direct_taxes", "2025_14_Direct_taxes"]
+      },
+      "expected": {
+        "answer_summary": "Arithmetical errors in computation of income and tax had significant tax effects across multiple assessment years, with amounts ranging from ₹4,591 crore to ₹4,761.37 crore in different audit periods.",
+        "key_facts": [
+          "Arithmetical errors in computation of income and tax",
+          "Errors found across multiple states",
+          "Persistent/pervasive irregularity type",
+          "Affects both income computation and tax calculation"
+        ],
+        "key_amounts": [
+          {"value": 4761.37, "unit": "crore", "context": "tax effect in one period", "required": false},
+          {"value": 4591, "unit": "crore", "context": "tax effect in another period", "required": false}
+        ],
+        "key_entities": ["CBDT", "CPC", "Assessment Officers"],
+        "source_sections": ["3.2.2", "4.2.4"],
+        "source_pages": [58, 59, 129]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "NHAI", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC004",
+      "question": "What fraud issues were found in Ayushman Bharat PMJAY implementation?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": ["2023_11_PMJAY"]
+      },
+      "expected": {
+        "answer_summary": "The audit identified multiple fraud-related issues including non-conducting of anti-fraud awareness activities, deficiency in medical audits, ineligible beneficiaries receiving benefits, errors in beneficiary database, and hospitals admitting more patients than their declared bed strength.",
+        "key_facts": [
+          "Non-conducting of anti-fraud awareness activities in Bihar, Chandigarh, UP",
+          "Deficiency in medical audits by SHAs in Nagaland and Tripura",
+          "Ineligible beneficiaries registered and received benefits",
+          "Database errors: invalid names, duplicate PMJAY IDs, unrealistic DOBs",
+          "Hospitals exceeded declared bed strength"
+        ],
+        "key_amounts": [
+          {"value": 22.44, "unit": "crore", "context": "expenditure on ineligible beneficiaries in Tamil Nadu", "required": false},
+          {"value": 0.12, "unit": "lakh", "context": "expenditure in Chandigarh", "required": false}
+        ],
+        "key_entities": ["NHA", "SHA", "Bihar", "Chandigarh", "Uttar Pradesh", "Nagaland", "Tripura", "Tamil Nadu"],
+        "source_sections": ["7.8", "Chapter I", "Executive Summary"],
+        "source_pages": [70, 95, 96]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "NHAI", "tax assessment"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC005",
+      "question": "What was the revenue loss due to non-inclusion of revenue sharing clause by NHAI?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "The non-inclusion of a revenue-sharing clause in Concession Agreements resulted in a revenue loss of ₹133.36 crore to NHAI.",
+        "key_facts": [
+          "Revenue loss of ₹133.36 crore",
+          "Non-inclusion of revenue sharing clause",
+          "Issue with Concession Agreements"
+        ],
+        "key_amounts": [
+          {"value": 133.36, "unit": "crore", "context": "loss from missing revenue sharing clause", "required": true},
+          {"value": 266.72, "unit": "crore", "context": "total amount mentioned", "required": false}
+        ],
+        "key_entities": ["NHAI", "Concessionaires"],
+        "source_sections": ["3.4"],
+        "source_pages": [43, 44]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "healthcare", "tax"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC006",
+      "question": "How many CPSEs complied with all corporate governance requirements?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2025_06_CPSE"]
+      },
+      "expected": {
+        "answer_summary": "Out of 71 listed CPSEs, only three companies complied with all corporate governance requirements: SBI Life Insurance Company Limited, BEML Limited, and MMTC Limited.",
+        "key_facts": [
+          "Only 3 out of 71 listed CPSEs fully compliant",
+          "SBI Life Insurance Company Limited compliant",
+          "BEML Limited compliant",
+          "MMTC Limited compliant",
+          "Requirements include DPE Guidelines, SEBI Regulations, Companies Act 2013"
+        ],
+        "key_amounts": [
+          {"value": 3, "unit": "count", "context": "compliant CPSEs", "required": true},
+          {"value": 71, "unit": "count", "context": "total listed CPSEs", "required": true}
+        ],
+        "key_entities": ["SBI Life Insurance", "BEML Limited", "MMTC Limited", "DPE", "SEBI"],
+        "source_sections": ["3.18"],
+        "source_pages": [135]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC007",
+      "question": "What issues were found with NHAI's toll data management?",
+      "category": {
+        "difficulty": "medium",
+        "type": "explanation",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "NHAI did not maintain a centralized Toll Management Software mechanism, leading to difficulties in readily accessing toll data. This lack of a centralized database could impact assessment of revenue potential for future agreements.",
+        "key_facts": [
+          "No centralized Toll Management Software",
+          "Difficulty in accessing toll data readily",
+          "Impact on revenue potential assessment",
+          "Affects future agreement planning"
+        ],
+        "key_amounts": [],
+        "key_entities": ["NHAI", "Toll Management Software"],
+        "source_sections": ["3.6", "3.6.2"],
+        "source_pages": [49, 50]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "tax", "cooperative"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC008",
+      "question": "What was the loss due to delay in completion of approach roads by NHAI?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "NHAI suffered a total revenue loss of ₹68.12 crore due to delayed commencement of toll operations immediately after the completion of projects in five stretches, caused by delay in completion of approach roads.",
+        "key_facts": [
+          "Revenue loss of ₹68.12 crore",
+          "Delayed toll operations in five stretches",
+          "Caused by approach road completion delays"
+        ],
+        "key_amounts": [
+          {"value": 68.12, "unit": "crore", "context": "loss from approach road delays", "required": true},
+          {"value": 136.24, "unit": "crore", "context": "total amount mentioned", "required": false}
+        ],
+        "key_entities": ["NHAI"],
+        "source_sections": ["3.2.2"],
+        "source_pages": [39, 40, 41, 42]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "tax", "cooperative"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC009",
+      "question": "What percentage of CPSEs delayed submission of financial results?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2025_06_CPSE"]
+      },
+      "expected": {
+        "answer_summary": "9% of CPSEs (3 out of 35 CPSEs/Statutory Corporations) failed to submit their annual audited standalone and consolidated financial results to the stock exchange within the required 60 days.",
+        "key_facts": [
+          "3 out of 35 CPSEs delayed submission",
+          "Represents 9% non-compliance",
+          "60-day deadline for submission",
+          "Both standalone and consolidated results affected"
+        ],
+        "key_amounts": [
+          {"value": 9, "unit": "percent", "context": "CPSEs with delayed submission", "required": true},
+          {"value": 3, "unit": "count", "context": "number of non-compliant CPSEs", "required": false},
+          {"value": 35, "unit": "count", "context": "total CPSEs examined", "required": false}
+        ],
+        "key_entities": ["CPSEs", "Statutory Corporations"],
+        "source_sections": ["3.32"],
+        "source_pages": [145]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC010",
+      "question": "What errors were found in Ayushman Bharat beneficiary database?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": ["2023_11_PMJAY"]
+      },
+      "expected": {
+        "answer_summary": "Due to inadequate validation controls, multiple errors were found in the PMJAY beneficiary database including invalid names, unrealistic dates of birth, duplicate PMJAY IDs, and unrealistic family sizes. In Tamil Nadu, 4,761 registrations were made against just seven Aadhaar numbers.",
+        "key_facts": [
+          "Invalid names in database",
+          "Unrealistic dates of birth",
+          "Duplicate PMJAY IDs",
+          "Unrealistic family sizes",
+          "4,761 registrations against 7 Aadhaar numbers in Tamil Nadu",
+          "Inadequate validation controls"
+        ],
+        "key_amounts": [
+          {"value": 4761, "unit": "count", "context": "registrations against 7 Aadhaar numbers", "required": true},
+          {"value": 7, "unit": "count", "context": "Aadhaar numbers with multiple registrations", "required": true}
+        ],
+        "key_entities": ["PMJAY", "Tamil Nadu", "Aadhaar", "SECC"],
+        "source_sections": ["Executive Summary", "Chapter I"],
+        "source_pages": [10, 17]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "NHAI", "tax"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC011",
+      "question": "What are the main categories of irregularities in direct tax assessments?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": ["2024_13_Direct_taxes", "2025_14_Direct_taxes", "2022_29_Direct_taxes"]
+      },
+      "expected": {
+        "answer_summary": "The main categories include: irregularities in assessment proceedings, administration of tax concessions/exemptions/deductions, incorrect allowance of business expenditure, errors in assessment while giving effect to appellate orders, and income escaping assessment due to omissions.",
+        "key_facts": [
+          "Irregularities in assessment proceedings",
+          "Administration of tax concessions/exemptions/deductions",
+          "Incorrect allowance of business expenditure",
+          "Errors in assessment while giving effect to appellate orders",
+          "Income escaping assessment due to omissions",
+          "Arithmetical errors in computation"
+        ],
+        "key_amounts": [],
+        "key_entities": ["CBDT", "Assessment Officers", "CPC"],
+        "source_sections": ["Chapter 3", "Chapter 4"],
+        "source_pages": [46, 47, 52, 53]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare", "PMJAY"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC012",
+      "question": "How many hospitals admitted more patients than their bed capacity under PMJAY?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": ["2023_11_PMJAY"]
+      },
+      "expected": {
+        "answer_summary": "In January 2020, 195 hospitals (103 private and 92 public) admitted more patients than their declared bed strength, indicating potential issues with the Transaction Management System allowing over-admissions.",
+        "key_facts": [
+          "195 hospitals exceeded bed capacity",
+          "103 private hospitals",
+          "92 public hospitals",
+          "Occurred in January 2020",
+          "TMS allowed over-admissions"
+        ],
+        "key_amounts": [
+          {"value": 195, "unit": "count", "context": "hospitals exceeding capacity", "required": true},
+          {"value": 103, "unit": "count", "context": "private hospitals", "required": true},
+          {"value": 92, "unit": "count", "context": "public hospitals", "required": true}
+        ],
+        "key_entities": ["TMS", "Transaction Management System"],
+        "source_sections": ["Chapter I"],
+        "source_pages": [70]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "tax", "NHAI"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC013",
+      "question": "What are the audit findings on Railways?",
+      "category": {
+        "difficulty": "easy",
+        "type": "negative",
+        "reports": []
+      },
+      "expected": {
+        "answer_summary": "No information available about Railways audit findings in the indexed reports. The available reports cover NHAI toll operations, Ayushman Bharat, direct taxes, FRBM compliance, and CPSE audits.",
+        "key_facts": [
+          "No Railways report in indexed data"
+        ],
+        "key_amounts": [],
+        "key_entities": [],
+        "source_sections": [],
+        "source_pages": []
+      },
+      "negative_criteria": {
+        "must_not_contain": [],
+        "must_not_hallucinate": true,
+        "should_acknowledge_no_data": true
+      }
+    },
+    {
+      "id": "TC014",
+      "question": "What was the tax effect of incorrect application of tax rates?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": ["2024_13_Direct_taxes", "2025_14_Direct_taxes"]
+      },
+      "expected": {
+        "answer_summary": "Errors in applying the correct tax rates and surcharges resulted in significant tax effects, with amounts ranging from ₹690.5 crore to ₹4,385 crore across different audit periods.",
+        "key_facts": [
+          "Incorrect application of tax rates",
+          "Incorrect application of surcharge",
+          "Multiple assessment years affected"
+        ],
+        "key_amounts": [
+          {"value": 690.5, "unit": "crore", "context": "tax effect from rate errors", "required": false},
+          {"value": 4385, "unit": "crore", "context": "tax effect in another period", "required": false}
+        ],
+        "key_entities": ["CBDT"],
+        "source_sections": ["4.3", "4.2.4"],
+        "source_pages": [124, 129]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC015",
+      "question": "What states did not conduct anti-fraud activities for PMJAY?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_11_PMJAY"]
+      },
+      "expected": {
+        "answer_summary": "Three States/UTs - Bihar, Chandigarh, and Uttar Pradesh - did not plan or conduct anti-fraud awareness activities as required by the Anti-Fraud guidelines.",
+        "key_facts": [
+          "Bihar did not conduct anti-fraud activities",
+          "Chandigarh did not conduct anti-fraud activities",
+          "Uttar Pradesh did not conduct anti-fraud activities",
+          "Violation of Anti-Fraud guidelines"
+        ],
+        "key_amounts": [],
+        "key_entities": ["Bihar", "Chandigarh", "Uttar Pradesh", "NHA"],
+        "source_sections": ["7.8"],
+        "source_pages": [95]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["Tamil Nadu", "Karnataka", "Maharashtra"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC016",
+      "question": "Explain the systemic issues in NHAI toll collection operations.",
+      "category": {
+        "difficulty": "hard",
+        "type": "explanation",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "Systemic issues include: lack of centralized toll management software, non-compliance with toll fee rules and guidelines, delays in toll collection commencement, missing revenue sharing clauses in concession agreements, inadequate maintenance cost recovery, and poor data management affecting future revenue assessments.",
+        "key_facts": [
+          "No centralized Toll Management Software",
+          "Non-compliance with NH Fee Rules 2008",
+          "Delays in toll collection start",
+          "Missing revenue sharing clauses",
+          "Non-recovery of maintenance costs",
+          "Poor data management",
+          "Impact on future agreement planning"
+        ],
+        "key_amounts": [
+          {"value": 64.60, "unit": "crore", "context": "loss from delays", "required": false},
+          {"value": 133.36, "unit": "crore", "context": "loss from missing clauses", "required": false},
+          {"value": 68.12, "unit": "crore", "context": "loss from approach road delays", "required": false}
+        ],
+        "key_entities": ["NHAI", "Concessionaires", "NH Fee Rules"],
+        "source_sections": ["Executive Summary", "Chapter III", "3.6"],
+        "source_pages": [3, 11, 13, 14, 29, 36, 40, 43, 49, 50]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "healthcare", "tax"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC017",
+      "question": "What was the expenditure on ineligible beneficiaries in PMJAY?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": ["2023_11_PMJAY"]
+      },
+      "expected": {
+        "answer_summary": "In six States/UTs, ineligible households were registered as PMJAY beneficiaries and availed benefits. The expenditure ranged from ₹0.12 lakh in Chandigarh to ₹22.44 crore in Tamil Nadu.",
+        "key_facts": [
+          "Six States/UTs had ineligible beneficiaries",
+          "Ineligible households registered and received benefits",
+          "Tamil Nadu had highest expenditure",
+          "Chandigarh had lowest expenditure"
+        ],
+        "key_amounts": [
+          {"value": 22.44, "unit": "crore", "context": "expenditure in Tamil Nadu", "required": true},
+          {"value": 0.12, "unit": "lakh", "context": "expenditure in Chandigarh", "required": true}
+        ],
+        "key_entities": ["Tamil Nadu", "Chandigarh", "PMJAY"],
+        "source_sections": ["Executive Summary"],
+        "source_pages": [10, 17]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "NHAI", "tax"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC018",
+      "question": "Compare the tax assessment issues across 2020-21, 2021-22, and 2022-23 periods.",
+      "category": {
+        "difficulty": "hard",
+        "type": "comparison",
+        "reports": ["2022_29_Direct_taxes", "2024_13_Direct_taxes", "2025_14_Direct_taxes"]
+      },
+      "expected": {
+        "answer_summary": "Tax assessment issues persist across all three periods, with similar categories of irregularities: arithmetical errors, incorrect allowances, and administration of exemptions. The recurring nature of these issues indicates systemic weaknesses in tax administration.",
+        "key_facts": [
+          "Persistent irregularities across all three years",
+          "Similar error categories recur",
+          "Systemic weakness indicated",
+          "CBDT directives not consistently followed"
+        ],
+        "key_amounts": [],
+        "key_entities": ["CBDT", "CPC", "AOs"],
+        "source_sections": ["2.3", "2.4"],
+        "source_pages": [46, 47, 52]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare", "PMJAY"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC019",
+      "question": "What is the total revenue loss across all NHAI toll findings?",
+      "category": {
+        "difficulty": "hard",
+        "type": "aggregation",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "The major revenue losses include: ₹64.60 crore from toll collection delays, ₹68.12 crore from approach road delays, ₹133.36 crore from missing revenue sharing clauses, and ₹16.68 crore from short collection on NH 44. Individual losses should not necessarily be summed as they may overlap.",
+        "key_facts": [
+          "₹64.60 crore from toll delays",
+          "₹68.12 crore from approach road delays",
+          "₹133.36 crore from missing clauses",
+          "₹16.68 crore short collection NH 44",
+          "Caution against simple aggregation"
+        ],
+        "key_amounts": [
+          {"value": 64.60, "unit": "crore", "context": "toll delays", "required": true},
+          {"value": 68.12, "unit": "crore", "context": "approach road delays", "required": true},
+          {"value": 133.36, "unit": "crore", "context": "missing clauses", "required": true},
+          {"value": 16.68, "unit": "crore", "context": "short collection", "required": true}
+        ],
+        "key_entities": ["NHAI"],
+        "source_sections": ["Executive Summary", "3.2.1", "3.2.2", "3.4"],
+        "source_pages": [11, 13, 36, 40, 43]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "tax"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC020",
+      "question": "Which states had deficiency in medical audits for PMJAY?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_11_PMJAY"]
+      },
+      "expected": {
+        "answer_summary": "Nagaland and Tripura had significant shortfalls in conducting medical and other audits by their State Health Agencies, undermining the anti-fraud investigation and audit system under PMJAY.",
+        "key_facts": [
+          "Nagaland had medical audit deficiency",
+          "Tripura had medical audit deficiency",
+          "SHAs responsible for audits",
+          "Undermined anti-fraud system"
+        ],
+        "key_amounts": [],
+        "key_entities": ["Nagaland", "Tripura", "SHA", "State Health Agency"],
+        "source_sections": ["Chapter I"],
+        "source_pages": [96]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["Bihar", "Chandigarh", "Tamil Nadu"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC021",
+      "question": "What are the findings on Bharatmala Phase I implementation?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": ["2023_19_Bharatmala"]
+      },
+      "expected": {
+        "answer_summary": "The audit of Bharatmala Pariyojana Phase I found issues related to project planning, execution delays, cost overruns, competing infrastructure considerations, and development of national highways.",
+        "key_facts": [
+          "Issues in project planning",
+          "Execution delays",
+          "Cost overruns",
+          "Competing infrastructure issues",
+          "National highway development concerns"
+        ],
+        "key_amounts": [],
+        "key_entities": ["NHAI", "MoRTH", "Bharatmala Pariyojana"],
+        "source_sections": ["Executive Summary"],
+        "source_pages": [1, 2, 3]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "tax", "toll collection"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC022",
+      "question": "What were the fiscal deficit targets under FRBM Act?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": ["2024_01_FRBM", "2025_03_FRBM", "2025_18_FRBM"]
+      },
+      "expected": {
+        "answer_summary": "The FRBM Act 2003 sets targets for fiscal deficit as a percentage of GDP. The audit examines compliance with these targets and fiscal consolidation roadmap.",
+        "key_facts": [
+          "FRBM Act 2003 compliance examined",
+          "Fiscal deficit targets as % of GDP",
+          "Fiscal consolidation roadmap",
+          "Multiple year compliance tracked"
+        ],
+        "key_amounts": [],
+        "key_entities": ["FRBM Act 2003", "Ministry of Finance"],
+        "source_sections": ["Chapter I", "Chapter II"],
+        "source_pages": [1, 2, 3]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare", "PMJAY"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC023",
+      "question": "What issues were found with FCI food grain storage?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": ["2023_20_Food_grains"]
+      },
+      "expected": {
+        "answer_summary": "The audit found issues with modernization of bulk grain handling facilities, storage capacity utilization, movement of food grains, and storage management practices by FCI.",
+        "key_facts": [
+          "Modernization of bulk grain handling issues",
+          "Storage capacity concerns",
+          "Food grain movement issues",
+          "Storage management deficiencies"
+        ],
+        "key_amounts": [],
+        "key_entities": ["FCI", "Food Corporation of India"],
+        "source_sections": ["Executive Summary"],
+        "source_pages": [1, 2, 3]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare", "tax"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC024",
+      "question": "What is the breakdown of tax irregularities by type?",
+      "category": {
+        "difficulty": "hard",
+        "type": "aggregation",
+        "reports": ["2024_13_Direct_taxes"]
+      },
+      "expected": {
+        "answer_summary": "Tax irregularities are categorized into: arithmetical errors (₹4,761.37 crore), incorrect application of tax rates (₹690.5 crore), administration of tax concessions/exemptions (₹1,553.05 crore), and other assessment errors.",
+        "key_facts": [
+          "Arithmetical errors category",
+          "Incorrect tax rate application category",
+          "Tax concessions/exemptions category",
+          "Assessment errors category"
+        ],
+        "key_amounts": [
+          {"value": 4761.37, "unit": "crore", "context": "arithmetical errors", "required": false},
+          {"value": 690.5, "unit": "crore", "context": "rate application errors", "required": false},
+          {"value": 1553.05, "unit": "crore", "context": "concession/exemption errors", "required": false}
+        ],
+        "key_entities": ["CBDT"],
+        "source_sections": ["3.2", "4.3"],
+        "source_pages": [58, 124]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC025",
+      "question": "How much did Cooperative Societies audit find in irregularities?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": ["2020_16_Cooperative"]
+      },
+      "expected": {
+        "answer_summary": "The audit of cooperative societies and cooperative banks examined assessment procedures, compliance with provisions, and tax implications in the cooperative sector.",
+        "key_facts": [
+          "Assessment of cooperative societies examined",
+          "Cooperative banks included",
+          "Compliance with statutory provisions",
+          "Tax assessment issues identified"
+        ],
+        "key_amounts": [],
+        "key_entities": ["Cooperative Societies", "Cooperative Banks"],
+        "source_sections": ["Executive Summary"],
+        "source_pages": [1, 2]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC026",
+      "question": "Give me a one-sentence summary of NHAI toll audit findings.",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2023_07_NHAI_Toll"]
+      },
+      "expected": {
+        "answer_summary": "The NHAI toll audit found revenue losses exceeding ₹200 crore due to toll collection delays, missing revenue sharing clauses, and inadequate data management systems.",
+        "key_facts": [
+          "Multiple revenue loss categories",
+          "Toll collection delays",
+          "Missing contractual clauses",
+          "Data management issues"
+        ],
+        "key_amounts": [],
+        "key_entities": ["NHAI"],
+        "source_sections": ["Executive Summary"],
+        "source_pages": [3, 11, 13, 14]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["PMJAY", "tax"],
+        "must_not_hallucinate": true
+      },
+      "style_test": {
+        "expected_style": "concise",
+        "max_sentences": 4
+      }
+    },
+    {
+      "id": "TC027",
+      "question": "What reports are available from 2025?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": ["2025_03_FRBM", "2025_04_Union_Accounts", "2025_06_CPSE", "2025_14_Direct_taxes", "2025_16_Union_Accounts", "2025_18_FRBM"]
+      },
+      "expected": {
+        "answer_summary": "Six reports from 2025 are available: FRBM Compliance reports (Report 3 and 18), Union Government Accounts (Reports 4 and 16), CPSE Financial Reports (Report 6), and Direct Taxes Compliance (Report 14).",
+        "key_facts": [
+          "FRBM Compliance Report 3 of 2025",
+          "Union Government Accounts 2022-23 Report 4",
+          "CPSE Financial Reports Report 6",
+          "Direct Taxes 2022-23 Report 14",
+          "Union Government Accounts 2023-24 Report 16",
+          "FRBM Compliance Report 18"
+        ],
+        "key_amounts": [
+          {"value": 6, "unit": "count", "context": "reports from 2025", "required": true}
+        ],
+        "key_entities": [],
+        "source_sections": [],
+        "source_pages": []
+      },
+      "negative_criteria": {
+        "must_not_contain": [],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC028",
+      "question": "What is the Union Government's fiscal position as per CAG audit?",
+      "category": {
+        "difficulty": "hard",
+        "type": "explanation",
+        "reports": ["2025_04_Union_Accounts", "2025_16_Union_Accounts"]
+      },
+      "expected": {
+        "answer_summary": "The CAG audit of Union Government Accounts examines fiscal position including balances awaiting clearance in suspense heads, netting of suspense heads, and overall financial management.",
+        "key_facts": [
+          "Balances awaiting clearance examined",
+          "Suspense heads issues",
+          "Financial management assessment"
+        ],
+        "key_amounts": [],
+        "key_entities": ["Union Government", "CAG"],
+        "source_sections": ["Chapter I", "Chapter II"],
+        "source_pages": [1, 2, 3]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "PMJAY"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC029",
+      "question": "Find audit findings mentioning amounts over 500 crore.",
+      "category": {
+        "difficulty": "hard",
+        "type": "aggregation",
+        "reports": ["2024_13_Direct_taxes", "2025_14_Direct_taxes"]
+      },
+      "expected": {
+        "answer_summary": "Major findings over ₹500 crore include: arithmetical errors (₹4,761.37 crore tax effect), incorrect tax rate application (₹4,385 crore), and administration of exemptions (₹1,553.05 crore to ₹1,722 crore).",
+        "key_facts": [
+          "Arithmetical errors over ₹500 crore",
+          "Tax rate errors over ₹500 crore",
+          "Exemption administration errors over ₹500 crore"
+        ],
+        "key_amounts": [
+          {"value": 4761.37, "unit": "crore", "context": "arithmetical errors", "required": true},
+          {"value": 4385, "unit": "crore", "context": "tax rate errors", "required": false},
+          {"value": 1553.05, "unit": "crore", "context": "exemption errors", "required": false}
+        ],
+        "key_entities": [],
+        "source_sections": ["3.2.2", "4.2.4", "4.3"],
+        "source_pages": [58, 124, 129]
+      },
+      "negative_criteria": {
+        "must_not_contain": ["toll", "healthcare"],
+        "must_not_hallucinate": true
+      }
+    },
+    {
+      "id": "TC030",
+      "question": "What are the defense audit findings?",
+      "category": {
+        "difficulty": "easy",
+        "type": "negative",
+        "reports": []
+      },
+      "expected": {
+        "answer_summary": "No defense audit findings are available in the indexed reports. The available reports cover highways (NHAI), healthcare (PMJAY), taxation, fiscal management, CPSEs, and food storage.",
+        "key_facts": [
+          "No defense audit in indexed data"
+        ],
+        "key_amounts": [],
+        "key_entities": [],
+        "source_sections": [],
+        "source_pages": []
+      },
+      "negative_criteria": {
+        "must_not_contain": [],
+        "must_not_hallucinate": true,
+        "should_acknowledge_no_data": true
+      }
+    }
+  ]
+}

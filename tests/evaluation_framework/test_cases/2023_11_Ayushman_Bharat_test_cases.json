@@ -1,0 +1,577 @@
+[
+  {
+    "id": "CAG_PMJAY_2023_TC001",
+    "question": "What was the total value of claims settled under AB-PMJAY as of November 2022?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "As of November 2022, 3.57 crore claims amounting to ₹42,433.57 crore were settled under AB-PMJAY.",
+      "key_facts": [
+        "3.57 crore claims were settled",
+        "Total amount was ₹42,433.57 crore",
+        "Data is as of November 2022"
+      ],
+      "key_amounts": [
+        {"value": 42433.57, "unit": "crore", "context": "total claims settled under PMJAY as of November 2022", "required": true},
+        {"value": 3.57, "unit": "crore claims", "context": "number of claims settled", "required": true}
+      ],
+      "key_entities": ["NHA", "PMJAY"],
+      "source_sections": ["5.1.1", "Executive Summary"],
+      "source_pages": [35, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["RSBY", "Health and Wellness Centres"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC002",
+    "question": "How many beneficiary households were registered under PMJAY against the target?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "As per NHA records, 7.87 crore beneficiary households were registered, constituting 73 per cent of the targeted households of 10.74 crore (as of November 2022). Out of this, 2.08 crore households had been identified from SECC-2011 database.",
+      "key_facts": [
+        "7.87 crore beneficiary households were registered",
+        "Target was 10.74 crore households",
+        "73 per cent of target achieved",
+        "2.08 crore households identified from SECC-2011 database"
+      ],
+      "key_amounts": [
+        {"value": 7.87, "unit": "crore households", "context": "beneficiary households registered", "required": true},
+        {"value": 10.74, "unit": "crore households", "context": "targeted households", "required": true},
+        {"value": 73, "unit": "per cent", "context": "percentage of target achieved", "required": true}
+      ],
+      "key_entities": ["NHA", "SECC-2011"],
+      "source_sections": ["3.2", "Executive Summary"],
+      "source_pages": [11, 5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["NFSA", "12 crore"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC003",
+    "question": "What was the health cover provided per family per year under PMJAY?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "PMJAY provides a health cover of ₹5 lakh per family per year for secondary and tertiary care hospitalization through a network of public and empanelled private healthcare providers.",
+      "key_facts": [
+        "Health cover is ₹5 lakh per family per year",
+        "Coverage is on family floater basis",
+        "Covers secondary and tertiary care hospitalization",
+        "Services available through public and private empanelled hospitals"
+      ],
+      "key_amounts": [
+        {"value": 5, "unit": "lakh per family per year", "context": "health cover amount under PMJAY", "required": true}
+      ],
+      "key_entities": ["PMJAY", "NHA"],
+      "source_sections": ["1.3", "Executive Summary"],
+      "source_pages": [1, 5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["RSBY amount", "₹30,000"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC004",
+    "question": "What was the excess payment made to EHCPs in four States?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "In four States (Andhra Pradesh, Madhya Pradesh, Punjab and Tamil Nadu), excess payment amounting to ₹57.53 crore was made to the Empanelled Health Care Providers (EHCPs).",
+      "key_facts": [
+        "Four States involved: Andhra Pradesh, Madhya Pradesh, Punjab and Tamil Nadu",
+        "Total excess payment was ₹57.53 crore",
+        "Payments were made to EHCPs"
+      ],
+      "key_amounts": [
+        {"value": 57.53, "unit": "crore", "context": "excess payment to EHCPs in four States", "required": true}
+      ],
+      "key_entities": ["Andhra Pradesh", "Madhya Pradesh", "Punjab", "Tamil Nadu", "EHCPs"],
+      "source_sections": ["5.2", "Executive Summary"],
+      "source_pages": [37, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Gujarat", "Maharashtra"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC005",
+    "question": "How much amount was recoverable from insurance companies in six States/UTs?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "₹458.19 crore was recoverable from the insurance companies in six States/UTs viz. Gujarat, Jammu and Kashmir, Ladakh, Maharashtra, Meghalaya and Tamil Nadu. Partial recovery of ₹241.91 crore had been made in three States/UTs.",
+      "key_facts": [
+        "₹458.19 crore was recoverable from insurance companies",
+        "Six States/UTs involved: Gujarat, J&K, Ladakh, Maharashtra, Meghalaya, Tamil Nadu",
+        "Partial recovery of ₹241.91 crore was made"
+      ],
+      "key_amounts": [
+        {"value": 458.19, "unit": "crore", "context": "amount recoverable from insurance companies", "required": true},
+        {"value": 241.91, "unit": "crore", "context": "partial recovery made", "required": false}
+      ],
+      "key_entities": ["Gujarat", "Jammu and Kashmir", "Ladakh", "Maharashtra", "Meghalaya", "Tamil Nadu"],
+      "source_sections": ["6.8", "Executive Summary"],
+      "source_pages": [68, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Bihar", "Uttar Pradesh"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC006",
+    "question": "How much grant did NHA release to Chhattisgarh in contravention of guidelines?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "In contravention of guidelines, NHA released grants of ₹280.20 crore, ₹217.60 crore and ₹112.62 crore in three different bank accounts to SHA Chhattisgarh during 2018-21, instead of the stipulated two separate designated escrow accounts.",
+      "key_facts": [
+        "Grants released in three different bank accounts instead of two designated escrow accounts",
+        "First account received ₹280.20 crore",
+        "Second account received ₹217.60 crore",
+        "Third account received ₹112.62 crore",
+        "Period was 2018-21"
+      ],
+      "key_amounts": [
+        {"value": 280.20, "unit": "crore", "context": "first grant to Chhattisgarh in different account", "required": true},
+        {"value": 217.60, "unit": "crore", "context": "second grant to Chhattisgarh", "required": true},
+        {"value": 112.62, "unit": "crore", "context": "third grant to Chhattisgarh", "required": true}
+      ],
+      "key_entities": ["NHA", "Chhattisgarh", "SHA"],
+      "source_sections": ["6.3.1", "Executive Summary"],
+      "source_pages": [63, 9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Punjab", "Uttarakhand"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC007",
+    "question": "What were the main findings regarding ineligible beneficiaries availing PMJAY benefits?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "In six States/UTs, ineligible households (government pensioners and their families) were found registered as PMJAY beneficiaries and had availed benefits. The expenditure ranged from ₹0.12 lakh in Chandigarh to ₹22.44 crore in Tamil Nadu. States included Chandigarh (₹11,700 for 2 pensioners), Haryana (₹26.81 lakh for 114 pensioners), Himachal Pradesh (₹3.33 lakh for 22 pensioners), Karnataka (₹4.65 crore for 1,558 pensioners), Maharashtra (₹1.47 crore for 477 government servants/families), and Tamil Nadu (₹22.44 crore premium for 1,07,040 pensioners).",
+      "key_facts": [
+        "Six States/UTs had ineligible beneficiaries",
+        "Government pensioners and their families were wrongly included",
+        "Expenditure ranged from ₹0.12 lakh in Chandigarh to ₹22.44 crore in Tamil Nadu",
+        "Tamil Nadu had 1,07,040 pensioners wrongly included"
+      ],
+      "key_amounts": [
+        {"value": 22.44, "unit": "crore", "context": "premium paid for ineligible pensioners in Tamil Nadu", "required": true},
+        {"value": 4.65, "unit": "crore", "context": "treatment cost for 1558 ineligible pensioners in Karnataka", "required": false}
+      ],
+      "key_entities": ["Chandigarh", "Haryana", "Himachal Pradesh", "Karnataka", "Maharashtra", "Tamil Nadu"],
+      "source_sections": ["3.7", "Executive Summary"],
+      "source_pages": [19, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Gujarat", "Bihar"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC008",
+    "question": "What amount did West Bengal not refund to NHA after withdrawing from PMJAY?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "The State of West Bengal withdrew from PMJAY in January 2019 but did not refund ₹31.28 crore to NHA. NHA had released ₹193.34 crore (₹176.56 crore for implementation and ₹16.78 crore for administrative expenses). West Bengal utilized ₹31.28 crore and refunded only ₹162.06 crore.",
+      "key_facts": [
+        "West Bengal withdrew from PMJAY in January 2019",
+        "₹31.28 crore was not refunded to NHA",
+        "Total grant released was ₹193.34 crore",
+        "₹162.06 crore was refunded"
+      ],
+      "key_amounts": [
+        {"value": 31.28, "unit": "crore", "context": "amount not refunded by West Bengal", "required": true},
+        {"value": 193.34, "unit": "crore", "context": "total grant released to West Bengal", "required": false}
+      ],
+      "key_entities": ["West Bengal", "NHA"],
+      "source_sections": ["6.9", "Executive Summary"],
+      "source_pages": [68, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Delhi", "Odisha"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC009",
+    "question": "How much interest earned on unspent grants was not remitted to NHA by SHAs?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Ten SHAs (Andaman and Nicobar Island, Bihar, Chandigarh, Jammu & Kashmir, Jharkhand, Madhya Pradesh, Puducherry, Rajasthan, Tamil Nadu and Uttarakhand) did not remit interest of ₹22.17 crore earned by them on unspent grants to NHA.",
+      "key_facts": [
+        "Ten SHAs did not remit interest to NHA",
+        "Total interest not remitted was ₹22.17 crore",
+        "Interest was earned on unspent grants"
+      ],
+      "key_amounts": [
+        {"value": 22.17, "unit": "crore", "context": "interest not remitted by 10 SHAs to NHA", "required": true}
+      ],
+      "key_entities": ["Andaman and Nicobar Islands", "Bihar", "Chandigarh", "Jammu & Kashmir", "Jharkhand", "Madhya Pradesh", "Puducherry", "Rajasthan", "Tamil Nadu", "Uttarakhand", "NHA"],
+      "source_sections": ["6.7", "Executive Summary"],
+      "source_pages": [67, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Gujarat", "Kerala"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC010",
+    "question": "What was the expenditure incurred by NHA on IEC activities during 2018-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "During 2018-19 to 2020-21, NHA incurred an expenditure of ₹64.07 crore on Information, Education and Communication (IEC) activities. The year-wise expenditure was ₹32.86 crore in 2018-19, ₹10.42 crore in 2019-20, and ₹20.79 crore in 2020-21. NHA did not allot a specific budget for these activities.",
+      "key_facts": [
+        "Total IEC expenditure was ₹64.07 crore during 2018-21",
+        "2018-19: ₹32.86 crore",
+        "2019-20: ₹10.42 crore",
+        "2020-21: ₹20.79 crore",
+        "No separate budget was allocated for IEC activities"
+      ],
+      "key_amounts": [
+        {"value": 64.07, "unit": "crore", "context": "total IEC expenditure by NHA during 2018-21", "required": true}
+      ],
+      "key_entities": ["NHA", "IEC"],
+      "source_sections": ["3.9"],
+      "source_pages": [21, 22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["SHA expenditure", "State IEC"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC011",
+    "question": "How much grant was diverted by seven SHAs from one head to another?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Seven SHAs (Dadra Nagar Haveli and Daman Diu, Himachal Pradesh, Jharkhand, Nagaland, Rajasthan, Tamil Nadu and Uttarakhand) diverted the grant of ₹50.61 crore from one head to another head i.e. administrative grant to implementation and vice-versa.",
+      "key_facts": [
+        "Seven SHAs diverted grants",
+        "Total diverted amount was ₹50.61 crore",
+        "Diversion was between administrative and implementation heads"
+      ],
+      "key_amounts": [
+        {"value": 50.61, "unit": "crore", "context": "grant diverted by seven SHAs from one head to another", "required": true}
+      ],
+      "key_entities": ["Dadra Nagar Haveli", "Daman Diu", "Himachal Pradesh", "Jharkhand", "Nagaland", "Rajasthan", "Tamil Nadu", "Uttarakhand"],
+      "source_sections": ["6.5", "Executive Summary"],
+      "source_pages": [67, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Bihar", "Gujarat"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC012",
+    "question": "How much amount was lying unutilized in RSBY fund in Jharkhand after PMJAY launch?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "In Jharkhand, PMJAY was launched in September 2018 by subsuming Rashtriya Swasthya Bima Yojana (RSBY), but ₹96.63 crore was still lying unutilized in RSBY fund as of March 2021. The amount lying on the date of implementation was ₹121.63 crore, out of which ₹25 crore was transferred to the Insurance company.",
+      "key_facts": [
+        "₹96.63 crore lying unutilized in RSBY fund",
+        "PMJAY subsumed RSBY in September 2018",
+        "Original balance was ₹121.63 crore",
+        "₹25 crore was transferred to insurance company"
+      ],
+      "key_amounts": [
+        {"value": 96.63, "unit": "crore", "context": "amount lying unutilized in RSBY fund in Jharkhand", "required": true}
+      ],
+      "key_entities": ["Jharkhand", "RSBY", "PMJAY"],
+      "source_sections": ["6.4.3", "Executive Summary"],
+      "source_pages": [66, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Bihar", "West Bengal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC013",
+    "question": "What were the issues with grievance redressal under PMJAY?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Out of 37,903 grievances, only 3,718 complaints (9.80 per cent) were redressed within turn-around-time (TAT) of 15 days, while 33,100 complaints (87.33 per cent) were redressed beyond TAT, and 1,085 complaints were under process. For appeals, out of 1,111 appeals received, 593 appeals (53.38 per cent) were resolved beyond TAT of 30 days. Additionally, SGRC meetings were not held in five States/UTs, and DGRC meetings were not held in six States/UTs.",
+      "key_facts": [
+        "Only 9.80% grievances (3,718 out of 37,903) redressed within TAT",
+        "87.33% grievances (33,100) redressed beyond TAT",
+        "53.38% appeals (593 out of 1,111) resolved beyond TAT",
+        "SGRC meetings not held in five States/UTs",
+        "DGRC meetings not held in six States/UTs"
+      ],
+      "key_amounts": [
+        {"value": 37903, "unit": "grievances", "context": "total grievances received", "required": true},
+        {"value": 9.80, "unit": "per cent", "context": "grievances redressed within TAT", "required": true}
+      ],
+      "key_entities": ["SGRC", "DGRC", "NHA"],
+      "source_sections": ["7.5.1", "Executive Summary"],
+      "source_pages": [76, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["100% compliance", "all grievances resolved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC014",
+    "question": "What was the penalty amount pending from hospitals and insurers?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Penalty amounting to ₹12.32 crore from 100 hospitals was pending in nine States/UTs. Additionally, SHAs Jammu & Kashmir and Ladakh failed to levy penalties amounting to ₹20.93 crore and ₹39.66 lakh respectively on Insurers for non-performance of various activities.",
+      "key_facts": [
+        "₹12.32 crore penalty pending from 100 hospitals in nine States/UTs",
+        "J&K SHA failed to levy ₹20.93 crore penalty on insurer",
+        "Ladakh SHA failed to levy ₹39.66 lakh penalty on insurer"
+      ],
+      "key_amounts": [
+        {"value": 12.32, "unit": "crore", "context": "penalty pending from 100 hospitals", "required": true},
+        {"value": 20.93, "unit": "crore", "context": "penalty not levied by J&K SHA on insurer", "required": true},
+        {"value": 39.66, "unit": "lakh", "context": "penalty not levied by Ladakh SHA on insurer", "required": true}
+      ],
+      "key_entities": ["Jammu & Kashmir", "Ladakh"],
+      "source_sections": ["7.12", "Executive Summary"],
+      "source_pages": [83, 12]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Gujarat", "Maharashtra"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC015",
+    "question": "What were the findings regarding beneficiaries paying out-of-pocket for treatment in empanelled hospitals?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Despite PMJAY being cashless, beneficiaries had to pay out-of-pocket in several States. In Himachal Pradesh, 50 beneficiaries had to manage diagnostic tests elsewhere. In Jammu and Kashmir, 459 patients paid ₹43.27 lakh initially (reimbursement pending for 75 patients - ₹6.70 lakh). In Meghalaya, 13,418 beneficiaries (69% of 19,459) paid ₹12.34 crore at the time of discharge from five private EHCPs.",
+      "key_facts": [
+        "PMJAY is designed as cashless but patients paid out-of-pocket",
+        "Meghalaya: 13,418 beneficiaries paid ₹12.34 crore at discharge",
+        "J&K: 459 patients paid ₹43.27 lakh",
+        "HP: 50 beneficiaries paid for diagnostic tests"
+      ],
+      "key_amounts": [
+        {"value": 12.34, "unit": "crore", "context": "out-of-pocket payment by beneficiaries in Meghalaya", "required": true},
+        {"value": 43.27, "unit": "lakh", "context": "out-of-pocket payment in Jammu and Kashmir", "required": false}
+      ],
+      "key_entities": ["Himachal Pradesh", "Jammu and Kashmir", "Meghalaya"],
+      "source_sections": ["4.9", "Executive Summary"],
+      "source_pages": [32, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["100% cashless", "no out-of-pocket"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC016",
+    "question": "What is the sharing ratio of funding between Centre and States under PMJAY?",
+    "category": {
+      "difficulty": "easy",
+      "type": "explanation",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Funding of PMJAY is shared between Central and State Governments with ratio of 60:40 (Centre:State) for all States except North-Eastern States, two Himalayan States (Himachal Pradesh and Uttarakhand) and Jammu and Kashmir, where the sharing ratio is 90:10 (Centre:State). For Union Territories without legislatures, Central Government may provide up to 100 per cent on case-to-case basis.",
+      "key_facts": [
+        "60:40 sharing ratio for most states",
+        "90:10 ratio for NE states, HP, Uttarakhand and J&K",
+        "100% central funding possible for UTs without legislature"
+      ],
+      "key_amounts": [
+        {"value": 60, "unit": "per cent", "context": "central share for most states", "required": true},
+        {"value": 90, "unit": "per cent", "context": "central share for special category states", "required": true}
+      ],
+      "key_entities": ["Centre", "States", "North-Eastern States", "Himachal Pradesh", "Uttarakhand", "Jammu and Kashmir"],
+      "source_sections": ["1.6"],
+      "source_pages": [5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["50:50", "equal sharing"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC017",
+    "question": "What percentage of claims pertained to Brownfield States using their own IT platforms?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Out of the total claims of ₹42,433.57 crore settled as of November 2022, claims amounting to ₹22,619.86 crore (53.30 per cent) pertained to six Brownfield States (Andhra Pradesh, Arunachal Pradesh, Rajasthan, Karnataka, Maharashtra and Tamil Nadu) which use their own IT platforms to process claims and subsequently feed data into TMS through API.",
+      "key_facts": [
+        "53.30% of claims from Brownfield States",
+        "Brownfield claims amounted to ₹22,619.86 crore",
+        "Six states: AP, Arunachal Pradesh, Rajasthan, Karnataka, Maharashtra, Tamil Nadu",
+        "These states use their own IT platform"
+      ],
+      "key_amounts": [
+        {"value": 22619.86, "unit": "crore", "context": "claims from Brownfield States", "required": true},
+        {"value": 53.30, "unit": "per cent", "context": "percentage of total claims from Brownfield States", "required": true}
+      ],
+      "key_entities": ["Andhra Pradesh", "Arunachal Pradesh", "Rajasthan", "Karnataka", "Maharashtra", "Tamil Nadu"],
+      "source_sections": ["5.1.1", "Executive Summary"],
+      "source_pages": [35, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all states use TMS", "100% NHA platform"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC018",
+    "question": "What were the key issues with hospital empanelment and infrastructure under PMJAY?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Multiple issues were found with hospital empanelment: (1) In 12 States/UTs, EHCPs did not meet minimum empanelment criteria regarding support systems and infrastructure like pharmacy, blood bank, laboratory, ICU; (2) In 7 States, EHCPs were empanelled without fire safety measures and bio-medical waste management compliance; (3) Physical verification was not conducted by DEC before empanelment in 163 EHCPs in Manipur (17), Tripura (103) and Uttarakhand (43); (4) In 14 States/UTs, 2,733 hospitals were empanelled with delays ranging from 1 day to 44 months; (5) EHCPs availability ranged from 1.8 per lakh beneficiaries in Bihar to 26.6 in Goa.",
+      "key_facts": [
+        "12 States/UTs had EHCPs not meeting minimum criteria",
+        "163 EHCPs empanelled without physical verification",
+        "2,733 hospitals empanelled with delays up to 44 months",
+        "EHCPs availability: 1.8 (Bihar) to 26.6 (Goa) per lakh beneficiaries"
+      ],
+      "key_amounts": [
+        {"value": 163, "unit": "EHCPs", "context": "hospitals empanelled without physical verification", "required": true},
+        {"value": 2733, "unit": "hospitals", "context": "hospitals empanelled with delays", "required": true}
+      ],
+      "key_entities": ["Manipur", "Tripura", "Uttarakhand", "Bihar", "Goa", "DEC"],
+      "source_sections": ["4.2.1", "4.2.2", "4.4", "4.8", "Executive Summary"],
+      "source_pages": [25, 26, 27, 31, 6, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["100% compliance", "all hospitals met criteria"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC019",
+    "question": "What were the data quality issues found in the Beneficiary Identification System (BIS)?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "Multiple data quality issues were found in BIS: (1) Invalid/blank names in 22,78,579 cases; (2) Unrealistic dates of birth (e.g., years 1814, 1824, 1841); (3) 1,57,176 duplicate PMJAY IDs; (4) 43,197 households with unrealistic family size (11 to 201 members); (5) In Tamil Nadu, 4,761 registrations against seven Aadhaar numbers; (6) 7,49,820 beneficiaries linked to single mobile number (9999999999); (7) In J&K and Ladakh, 16,865 and 335 ineligible beneficiaries respectively identified after SECC data cleaning.",
+      "key_facts": [
+        "22,78,579 cases with blank/invalid names",
+        "1,57,176 duplicate PMJAY IDs",
+        "43,197 households with unrealistic family size",
+        "7,49,820 beneficiaries linked to single mobile number",
+        "4,761 registrations against seven Aadhaar in Tamil Nadu"
+      ],
+      "key_amounts": [
+        {"value": 157176, "unit": "cases", "context": "duplicate PMJAY IDs", "required": true},
+        {"value": 43197, "unit": "households", "context": "unrealistic household size", "required": true}
+      ],
+      "key_entities": ["BIS", "NHA", "Tamil Nadu", "SECC"],
+      "source_sections": ["3.6.1", "3.6.2", "3.6.3", "3.6.4", "3.6.5", "Executive Summary"],
+      "source_pages": [15, 16, 17, 18, 6]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["clean data", "no duplicates"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_PMJAY_2023_TC020",
+    "question": "What amount of administrative grants remained unspent with SHAs during 2018-21?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_11_2023_PMJAY"]
+    },
+    "expected": {
+      "answer_summary": "In 20 SHAs, administrative grants remained unspent at the close of each financial year: ₹98.98 crore in 2018-19, ₹128.13 crore in 2019-20, and ₹139.67 crore in 2020-21, with utilization ranging from 16 to 100 per cent.",
+      "key_facts": [
+        "20 SHAs had unspent administrative grants",
+        "2018-19: ₹98.98 crore unspent",
+        "2019-20: ₹128.13 crore unspent",
+        "2020-21: ₹139.67 crore unspent"
+      ],
+      "key_amounts": [
+        {"value": 98.98, "unit": "crore", "context": "unspent administrative grant 2018-19", "required": true},
+        {"value": 128.13, "unit": "crore", "context": "unspent administrative grant 2019-20", "required": true},
+        {"value": 139.67, "unit": "crore", "context": "unspent administrative grant 2020-21", "required": true}
+      ],
+      "key_entities": ["SHAs", "NHA"],
+      "source_sections": ["6.6", "Executive Summary"],
+      "source_pages": [67, 10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["100% utilized", "no unspent balance"],
+      "must_not_hallucinate": true
+    }
+  }
+]

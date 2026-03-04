@@ -1,0 +1,613 @@
+[
+  {
+    "id": "FRBM_2021_22_TC001",
+    "question": "What was the Central Government Debt as a percentage of GDP at the end of 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The Central Government Debt at the end of 2021-22 was 58.59 per cent of GDP, which was a reduction from the peak of 61.55 per cent in 2020-21. The target under the FRBM Act is to limit Central Government Debt to 40 per cent of GDP by the end of 2024-25.",
+      "key_facts": [
+        "Central Government debt reduced to 58.59 per cent of GDP in 2021-22",
+        "This was down from peak of 61.55 per cent in 2020-21",
+        "Target under FRBM Act is 40 per cent of GDP by end of 2024-25"
+      ],
+      "key_amounts": [
+        {"value": 58.59, "unit": "per cent of GDP", "context": "Central Government Debt at end of 2021-22", "required": true},
+        {"value": 40, "unit": "per cent of GDP", "context": "Target by end of 2024-25", "required": true}
+      ],
+      "key_entities": ["Central Government", "FRBM Act"],
+      "source_sections": ["Executive Summary", "2.1.1"],
+      "source_pages": [9, 19, 20]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["General Government Debt percentage"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC002",
+    "question": "What was the total Central Government Debt in absolute terms at the end of 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The total Central Government Debt at the end of 2021-22 was ₹138.65 lakh crore as computed by audit based on the FRBM Act definition. This comprised Internal Debt of ₹114.62 lakh crore, External Debt of ₹6.58 lakh crore at current exchange rate, Public Account Liability of ₹16.44 lakh crore, EBR of ₹1.39 lakh crore, minus Cash Balance of ₹0.38 lakh crore.",
+      "key_facts": [
+        "Central Government Debt was ₹138.65 lakh crore at end of 2021-22",
+        "Internal Debt was ₹114.62 lakh crore",
+        "External Debt at current exchange rate was ₹6.58 lakh crore",
+        "Public Account Liability was ₹16.44 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 138.65, "unit": "lakh crore", "context": "Total Central Government Debt", "required": true},
+        {"value": 114.62, "unit": "lakh crore", "context": "Internal Debt", "required": true},
+        {"value": 6.58, "unit": "lakh crore", "context": "External Debt at current exchange rate", "required": false}
+      ],
+      "key_entities": ["Central Government"],
+      "source_sections": ["2.1.1", "Table 2.1"],
+      "source_pages": [19, 20]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Receipt Budget figure of 135.67"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC003",
+    "question": "What was the General Government Debt as a percentage of GDP in 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The General Government Debt stood at 82.63 per cent of GDP at the end of 2021-22. This was a decline from the all-time high of 87.91 per cent during 2020-21. The target set by the FRBM Act is to limit General Government Debt to 60 per cent of GDP by 2024-25.",
+      "key_facts": [
+        "General Government Debt was 82.63 per cent of GDP at end of 2021-22",
+        "This was down from 87.91 per cent in 2020-21",
+        "Target is 60 per cent of GDP by 2024-25"
+      ],
+      "key_amounts": [
+        {"value": 82.63, "unit": "per cent of GDP", "context": "General Government Debt at end of 2021-22", "required": true},
+        {"value": 87.91, "unit": "per cent of GDP", "context": "General Government Debt in 2020-21 (all-time high)", "required": false},
+        {"value": 60, "unit": "per cent of GDP", "context": "Target by 2024-25", "required": true}
+      ],
+      "key_entities": ["General Government", "FRBM Act"],
+      "source_sections": ["Executive Summary", "2.1.2", "Table 2.3"],
+      "source_pages": [9, 21]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Central Government Debt percentage confused with General Government Debt"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC004",
+    "question": "What was the actual Fiscal Deficit for 2021-22 and how did it compare to the budget estimates?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The actual Fiscal Deficit for 2021-22 was 7.4 per cent of GDP as per actuals, against the Budget Estimate of 6.8 per cent and Revised Estimate of 6.9 per cent. As per UGFA calculation, the Fiscal Deficit was ₹17.63 lakh crore (7.45 per cent of GDP), while Budget at a Glance showed it as ₹15.85 lakh crore (6.70 per cent of GDP). The variation was due to inclusion of certain transactions in UGFA like Back to Back Loans to States in lieu of GST Compensation shortfall.",
+      "key_facts": [
+        "Actual Fiscal Deficit was 7.4 per cent of GDP",
+        "Budget Estimate was 6.8 per cent of GDP",
+        "Revised Estimate was 6.9 per cent of GDP",
+        "Fiscal Deficit as per UGFA was ₹17.63 lakh crore",
+        "Fiscal Deficit as per BAG was ₹15.85 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 7.4, "unit": "per cent of GDP", "context": "Actual Fiscal Deficit for 2021-22", "required": true},
+        {"value": 6.8, "unit": "per cent of GDP", "context": "Budget Estimate for 2021-22", "required": true},
+        {"value": 17.63, "unit": "lakh crore", "context": "Fiscal Deficit as per UGFA", "required": false}
+      ],
+      "key_entities": ["UGFA", "Budget at a Glance"],
+      "source_sections": ["Table 2.4", "2.5", "Table 2.11"],
+      "source_pages": [24, 29]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["targets achieved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC005",
+    "question": "What was the amount of additional guarantees given by the Government in 2021-22 and was it within the prescribed limit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "During FY 2021-22, the additional guarantee given by the Government was ₹0.96 lakh crore or 0.40 per cent of GDP, which was well within the limit of 0.5 per cent of GDP set under the FRBM Act, 2003. The total outstanding guarantee at the end of FY 2021-22 was ₹5.19 lakh crore (2.19 per cent of GDP).",
+      "key_facts": [
+        "Additional guarantee in 2021-22 was ₹0.96 lakh crore",
+        "This was 0.40 per cent of GDP",
+        "Within the FRBM limit of 0.5 per cent of GDP",
+        "Total outstanding guarantee was ₹5.19 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 0.96, "unit": "lakh crore", "context": "Additional guarantee in 2021-22", "required": true},
+        {"value": 0.40, "unit": "per cent of GDP", "context": "Additional guarantee as percentage of GDP", "required": true},
+        {"value": 0.5, "unit": "per cent of GDP", "context": "FRBM prescribed limit", "required": true},
+        {"value": 5.19, "unit": "lakh crore", "context": "Total outstanding guarantee at end of 2021-22", "required": false}
+      ],
+      "key_entities": ["Central Government", "FRBM Act"],
+      "source_sections": ["2.2"],
+      "source_pages": [22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["limit exceeded"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC006",
+    "question": "What was the Gross Tax Revenue collection in 2021-22 compared to Budget Estimates?",
+    "category": {
+      "difficulty": "easy",
+      "type": "comparison",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The Gross Tax Revenue collection in FY 2021-22 was ₹27.09 lakh crore, which was 22.19 per cent higher than the Budget Estimate of ₹22.17 lakh crore. This robust collection led to overall revenue receipt collection of ₹24.36 lakh crore against budgeted ₹21.05 lakh crore.",
+      "key_facts": [
+        "Gross Tax Revenue collected was ₹27.09 lakh crore",
+        "Budget Estimate was ₹22.17 lakh crore",
+        "Collection was 22.19 per cent higher than BE",
+        "Overall revenue receipts were ₹24.36 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 27.09, "unit": "lakh crore", "context": "Actual Gross Tax Revenue 2021-22", "required": true},
+        {"value": 22.19, "unit": "per cent", "context": "Increase over Budget Estimates", "required": true},
+        {"value": 24.36, "unit": "lakh crore", "context": "Total revenue receipts", "required": false}
+      ],
+      "key_entities": ["Gross Tax Revenue"],
+      "source_sections": ["2.4 C", "Graph 2.6", "Annexure-2.3"],
+      "source_pages": [25, 44]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["shortfall in collection"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC007",
+    "question": "What was the status of disinvestment receipts in 2021-22?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The Budget Estimate 2021-22 projected ₹1.75 lakh crore from disinvestment but only ₹0.15 lakh crore was actually collected. Of these actual receipts, the Government received ₹0.08 lakh crore from disinvestment of its equity in PSUs. This included sale of stake in NMDC (₹3,654 crore), HUDCO (₹720 crore), Hindustan Copper (₹742 crore), strategic disinvestment of Air India (₹2,700 crore), sale of IPCL shares (₹219 crore), and buyback of MOIL shares (₹394 crore).",
+      "key_facts": [
+        "Budget Estimate projected ₹1.75 lakh crore from disinvestment",
+        "Actual collection was only ₹0.15 lakh crore",
+        "₹0.08 lakh crore came from disinvestment of equity in PSUs",
+        "Strategic disinvestment of Air India yielded ₹2,700 crore"
+      ],
+      "key_amounts": [
+        {"value": 1.75, "unit": "lakh crore", "context": "BE disinvestment target", "required": true},
+        {"value": 0.15, "unit": "lakh crore", "context": "Actual disinvestment receipts", "required": true},
+        {"value": 0.08, "unit": "lakh crore", "context": "From PSU equity disinvestment", "required": false},
+        {"value": 2700, "unit": "crore", "context": "Air India strategic disinvestment", "required": false}
+      ],
+      "key_entities": ["NMDC", "HUDCO", "Air India", "Hindustan Copper", "MOIL"],
+      "source_sections": ["2.4 F"],
+      "source_pages": [28]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["target achieved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC008",
+    "question": "What was the tax revenue raised but not realized in 2021-22?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "In FY 2021-22, tax revenue raised but not realized was ₹15.83 lakh crore, which was 58.42 per cent of total tax collected. This was an improvement from ₹16.19 lakh crore (68.81 per cent) in FY 2020-21. Of this, ₹12.03 lakh crore was under dispute (including ₹10.36 lakh crore for Income Tax) and ₹3.80 lakh crore was not under dispute (including ₹3.54 lakh crore for Income Tax).",
+      "key_facts": [
+        "Tax revenue raised but not realized was ₹15.83 lakh crore",
+        "This was 58.42 per cent of total tax collected",
+        "Amount under dispute was ₹12.03 lakh crore",
+        "Amount not under dispute was ₹3.80 lakh crore",
+        "Income Tax under dispute was ₹10.36 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 15.83, "unit": "lakh crore", "context": "Tax revenue raised but not realized in 2021-22", "required": true},
+        {"value": 58.42, "unit": "per cent", "context": "As percentage of total tax collected", "required": true},
+        {"value": 12.03, "unit": "lakh crore", "context": "Amount under dispute", "required": false},
+        {"value": 3.80, "unit": "lakh crore", "context": "Amount not under dispute", "required": false}
+      ],
+      "key_entities": ["Income Tax", "Taxes on Commodities and Services"],
+      "source_sections": ["3.1.1", "Disclosure Form D1"],
+      "source_pages": [36]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all taxes recovered"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC009",
+    "question": "What was the Capital Expenditure in 2021-22 and how did it change from 2020-21?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "Capital expenditure increased significantly from ₹3.43 lakh crore in FY 2020-21 to ₹5.38 lakh crore in FY 2021-22, representing a growth of 56.9 per cent. The main component of this increase was in Economic Services (₹1.82 lakh crore), which included increased expenditure on Indian Railways (₹0.87 lakh crore), Civil Aviation (₹0.62 lakh crore), and Roads and Bridges (₹0.25 lakh crore).",
+      "key_facts": [
+        "Capital expenditure was ₹5.38 lakh crore in 2021-22",
+        "Increased from ₹3.43 lakh crore in 2020-21",
+        "Growth rate was 56.9 per cent",
+        "Major increase in Economic Services of ₹1.82 lakh crore",
+        "Indian Railways increase was ₹0.87 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 5.38, "unit": "lakh crore", "context": "Capital Expenditure in 2021-22", "required": true},
+        {"value": 3.43, "unit": "lakh crore", "context": "Capital Expenditure in 2020-21", "required": true},
+        {"value": 56.9, "unit": "per cent", "context": "Growth rate of capital expenditure", "required": true}
+      ],
+      "key_entities": ["Indian Railways", "Civil Aviation", "Roads and Bridges"],
+      "source_sections": ["2.4 E", "Table 2.9"],
+      "source_pages": [27]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["capital expenditure decreased"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC010",
+    "question": "What was the GDP growth rate in 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The GDP at current prices (Nominal GDP) in 2021-22 was ₹236.65 lakh crore with a growth rate of 19.51 per cent over the previous year. The GDP at constant (2011-12) prices (Real GDP) was ₹147.36 lakh crore with a growth rate of 8.68 per cent over the previous year.",
+      "key_facts": [
+        "Nominal GDP in 2021-22 was ₹236.65 lakh crore",
+        "Nominal GDP growth rate was 19.51 per cent",
+        "Real GDP was ₹147.36 lakh crore",
+        "Real GDP growth rate was 8.68 per cent"
+      ],
+      "key_amounts": [
+        {"value": 236.65, "unit": "lakh crore", "context": "GDP at current prices 2021-22", "required": true},
+        {"value": 19.51, "unit": "per cent", "context": "Nominal GDP growth rate", "required": true},
+        {"value": 8.68, "unit": "per cent", "context": "Real GDP growth rate", "required": false}
+      ],
+      "key_entities": ["National Statistical Office"],
+      "source_sections": ["2.4 B", "Table 2.5"],
+      "source_pages": [25]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["GDP contracted"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC011",
+    "question": "What was the debt sustainability indicator in 2021-22 and what does it signify?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The debt stabilization indicator turned positive at 8.89 in 2021-22, which is a positive indicator towards stability. A positive debt stabilization indicator means the Debt-GDP ratio would eventually fall. The indicator is calculated as Quantum Spread plus Primary Deficit. In 2021-22, the Quantum Spread was 18.23 and Primary Deficit was -9.34 (negative). The interest paid on debt was ₹8.28 lakh crore and interest payment to revenue receipt ratio improved to 33.99 per cent from 38.66 per cent in 2020-21.",
+      "key_facts": [
+        "Debt stabilization indicator was 8.89 in 2021-22",
+        "Positive indicator means Debt-GDP ratio would eventually fall",
+        "Quantum Spread was 18.23",
+        "Primary Deficit was -9.34",
+        "Interest paid on debt was ₹8.28 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 8.89, "unit": "indicator value", "context": "Debt Stabilization indicator 2021-22", "required": true},
+        {"value": 8.28, "unit": "lakh crore", "context": "Interest paid on debt", "required": false},
+        {"value": 33.99, "unit": "per cent", "context": "Interest payment to revenue receipt ratio", "required": false}
+      ],
+      "key_entities": ["Central Government"],
+      "source_sections": ["2.7", "Table 2.12"],
+      "source_pages": [30, 31]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["debt is unsustainable"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC012",
+    "question": "What are the components of Extra Budgetary Resources (EBR) and what issues were identified?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "Extra Budgetary Resources are financial liabilities raised by PSUs for which repayment is done from Union Government Budget. EBRs are mobilized through Government fully serviced bonds and loans from NSSF. Key issues identified include: (1) Long Term Irrigation Fund was overstated by ₹9 crore for Polavaram Project funding; (2) LTIF loan of ₹55,438 crore was to be serviced 64.8% by NABARD and 35.2% by Government, with ₹1,445.43 crore principal serviced by Government not deducted from Central Government Debt; (3) IRFC utilized EBR of ₹71,065.90 crore in 2021-22 which was excluded from Statement 27 disclosure.",
+      "key_facts": [
+        "EBR disclosed through Government fully serviced bonds and NSSF loans",
+        "LTIF overstatement of ₹9 crore for Polavaram Project",
+        "LTIF total loan was ₹55,438 crore",
+        "Government serviced ₹1,445.43 crore not deducted from Central Government Debt",
+        "IRFC EBR of ₹71,065.90 crore excluded from Statement 27"
+      ],
+      "key_amounts": [
+        {"value": 9, "unit": "crore", "context": "LTIF overstatement", "required": true},
+        {"value": 55438, "unit": "crore", "context": "LTIF total loan", "required": false},
+        {"value": 1445.43, "unit": "crore", "context": "Principal serviced by Government", "required": true},
+        {"value": 71065.90, "unit": "crore", "context": "IRFC EBR utilized in 2021-22", "required": true}
+      ],
+      "key_entities": ["NABARD", "LTIF", "IRFC", "NSSF", "Polavaram Project"],
+      "source_sections": ["2.3"],
+      "source_pages": [22, 23, 24]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no issues with EBR"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC013",
+    "question": "What were the back-to-back loans given to States in lieu of GST Compensation shortfall?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "In lieu of shortfall in GST Compensation, Government of India extended back-to-back loans of ₹1.10 lakh crore during 2020-21 and ₹1.59 lakh crore during 2021-22 to States/UTs. These loans were to be fully serviced by GoI and recouped from future Compensation Cess collections.",
+      "key_facts": [
+        "Back-to-back loan in 2020-21 was ₹1.10 lakh crore",
+        "Back-to-back loan in 2021-22 was ₹1.59 lakh crore",
+        "Loans to be fully serviced by GoI",
+        "To be recouped from future Compensation Cess collections"
+      ],
+      "key_amounts": [
+        {"value": 1.10, "unit": "lakh crore", "context": "Back-to-back loan in 2020-21", "required": true},
+        {"value": 1.59, "unit": "lakh crore", "context": "Back-to-back loan in 2021-22", "required": true}
+      ],
+      "key_entities": ["States", "Union Territories", "GST Compensation"],
+      "source_sections": ["2.4 E"],
+      "source_pages": [28]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no loans given"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC014",
+    "question": "What were the inconsistencies found in disclosure Form D-4 regarding financial assets?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "Significant differences were found in Form D-4 (Asset Register) regarding financial assets. For Loans to State and Union Territories, Form D-4 showed ₹0.05 lakh crore while Statement No.1(ii) of Receipt Budget 2023-24 and UGFA 2021-22 showed ₹4.92 lakh crore - a difference of ₹4.87 lakh crore. For Loans to Foreign Governments, Form D-4 showed ₹0.16 lakh crore against ₹0.15 lakh crore in UGFA, a difference of ₹0.01 lakh crore.",
+      "key_facts": [
+        "Loans to States/UTs in D-4 was ₹0.05 lakh crore",
+        "UGFA showed ₹4.92 lakh crore for Loans to States/UTs",
+        "Difference was ₹4.87 lakh crore",
+        "Loans to Foreign Governments showed ₹0.01 lakh crore difference"
+      ],
+      "key_amounts": [
+        {"value": 4.87, "unit": "lakh crore", "context": "Difference in Loans to States/UTs", "required": true},
+        {"value": 0.05, "unit": "lakh crore", "context": "Loans to States/UTs as per D-4", "required": false},
+        {"value": 4.92, "unit": "lakh crore", "context": "Loans to States/UTs as per UGFA", "required": false}
+      ],
+      "key_entities": ["Form D-4", "Receipt Budget", "UGFA"],
+      "source_sections": ["3.1.2", "Table 3.3"],
+      "source_pages": [37]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no inconsistencies found"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC015",
+    "question": "What guarantee-related omissions were found in disclosure statements?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "Two guarantee-related omissions were found: (1) A single default guarantee of ₹9,495 crore issued to Department of Food & Public Distribution (after merger of pulses guarantee of ₹500 crore) valid up to 31.03.2022 was not disclosed in footnote in D-3; (2) An amount of ₹1,770.84 crore relating to nine guarantees that was invoked during the year and shown as 'Discharged' by Department of Financial Services was not properly disclosed. The Ministry advised the concerned departments to disclose such details in Form D3 footnotes.",
+      "key_facts": [
+        "Single default guarantee of ₹9,495 crore not disclosed",
+        "Pulses guarantee of ₹500 crore was merged in food guarantee",
+        "₹1,770.84 crore invoked relating to nine guarantees",
+        "Ministry advised disclosure in D3 footnotes"
+      ],
+      "key_amounts": [
+        {"value": 9495, "unit": "crore", "context": "Single default guarantee not disclosed", "required": true},
+        {"value": 1770.84, "unit": "crore", "context": "Amount of guarantees invoked", "required": true},
+        {"value": 500, "unit": "crore", "context": "Pulses guarantee merged", "required": false}
+      ],
+      "key_entities": ["Department of Food & Public Distribution", "Department of Financial Services", "Form D-3"],
+      "source_sections": ["3.1.3"],
+      "source_pages": [38]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all guarantees properly disclosed"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC016",
+    "question": "What was the trend in expenditure on Health and Family Welfare sector in 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "Expenditure on Health and Family Welfare increased to ₹70,236 crore in 2021-22, representing a 107.3 per cent increase over 2020-21 when it was ₹33,884 crore. This was part of the Government's focus on health as a priority sector as stated in MTFP 2021-22.",
+      "key_facts": [
+        "Health and Family Welfare expenditure was ₹70,236 crore in 2021-22",
+        "Increase of 107.3 per cent over previous year",
+        "2020-21 expenditure was ₹33,884 crore",
+        "Health was identified as a focus sector"
+      ],
+      "key_amounts": [
+        {"value": 70236, "unit": "crore", "context": "Health and Family Welfare expenditure 2021-22", "required": true},
+        {"value": 107.3, "unit": "per cent", "context": "Increase over previous year", "required": true},
+        {"value": 33884, "unit": "crore", "context": "Health expenditure in 2020-21", "required": false}
+      ],
+      "key_entities": ["Health and Family Welfare"],
+      "source_sections": ["2.4 D", "Table 2.8"],
+      "source_pages": [27]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["health expenditure decreased"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC017",
+    "question": "What was the variation found in the annuity project disclosure for New Police Headquarters?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "For the project 'Development of new police headquarters at Jai Singh Road, Parliament Street, New Delhi' under Ministry of Home Affairs, a variation of ₹164.8 crore was found in Form D-5 disclosure. The total annuity committed was stated as ₹1,178.80 crore, but based on annual annuity of ₹78 crore for 13 years, the calculated value should be ₹1,014 crore. The project value was ₹286 crore. The Ministry explained that variation was due to pre-payment of two installments (₹80.80 crore) and lump sum payment of ₹84 crore towards change of scope.",
+      "key_facts": [
+        "Project value was ₹286 crore",
+        "Total Annuity Committed stated as ₹1,178.80 crore",
+        "Annual Annuity was ₹78 crore for 13 years",
+        "Calculated value should be ₹1,014 crore",
+        "Variation was ₹164.8 crore",
+        "Variation due to pre-payment and lump sum payment"
+      ],
+      "key_amounts": [
+        {"value": 1178.8, "unit": "crore", "context": "Total Annuity Committed as stated", "required": true},
+        {"value": 1014, "unit": "crore", "context": "Calculated annuity value", "required": true},
+        {"value": 164.8, "unit": "crore", "context": "Variation amount", "required": true},
+        {"value": 286, "unit": "crore", "context": "Project value", "required": false}
+      ],
+      "key_entities": ["Ministry of Home Affairs", "Form D-5", "Police Headquarters"],
+      "source_sections": ["3.1.4", "Table 3.4"],
+      "source_pages": [38]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["no variation found"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC018",
+    "question": "How many times has the FRBM Act been amended since its enactment and what are the key fiscal targets?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The FRBM Act was enacted on 26 August 2003 and has been amended four times - in 2004, 2012, 2015, and 2018. The key targets set by the 2018 Amendment Act (to be achieved by end of FY 2024-25) are: General Government debt not to exceed 60 per cent of GDP, Central Government debt not to exceed 40 per cent of GDP, and additional guarantees not to exceed one-half per cent (0.5%) of GDP in any financial year. The fiscal deficit target was to reduce to 3 per cent of GDP by 31 March 2021, and Government has committed to reach below 4.5 per cent by FY 2025-26.",
+      "key_facts": [
+        "FRBM Act enacted on 26 August 2003",
+        "Amended four times: 2004, 2012, 2015, 2018",
+        "General Government debt target: 60 per cent of GDP by 2024-25",
+        "Central Government debt target: 40 per cent of GDP by 2024-25",
+        "Additional guarantees limit: 0.5 per cent of GDP per year",
+        "Fiscal deficit target below 4.5 per cent by FY 2025-26"
+      ],
+      "key_amounts": [
+        {"value": 60, "unit": "per cent of GDP", "context": "General Government debt target", "required": true},
+        {"value": 40, "unit": "per cent of GDP", "context": "Central Government debt target", "required": true},
+        {"value": 0.5, "unit": "per cent of GDP", "context": "Additional guarantees limit", "required": true},
+        {"value": 4.5, "unit": "per cent of GDP", "context": "Fiscal deficit target by 2025-26", "required": false}
+      ],
+      "key_entities": ["FRBM Act 2003"],
+      "source_sections": ["1.1", "Annexure-1.1"],
+      "source_pages": [13, 39, 40]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["targets already achieved"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC019",
+    "question": "What was the outcome of the mid-year review for 2021-22 under FRBM Act?",
+    "category": {
+      "difficulty": "hard",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The mid-year review for 2021-22 showed compliance with all FRBM benchmarks. Non-Debt Receipt at mid-year was ₹10.99 lakh crore (55.60% of BE of ₹19.76 lakh crore), exceeding the minimum benchmark of 40%. Revenue Deficit was ₹3.16 lakh crore (27.70% of BE of ₹11.41 lakh crore), well below the maximum 70% benchmark. Fiscal Deficit was ₹5.27 lakh crore (35.00% of BE of ₹15.07 lakh crore), also below the maximum 70% benchmark. There were no adverse variations.",
+      "key_facts": [
+        "Non-Debt Receipt at mid-year was 55.60% of BE (benchmark: not less than 40%)",
+        "Revenue Deficit was 27.70% of BE (benchmark: not more than 70%)",
+        "Fiscal Deficit was 35.00% of BE (benchmark: not more than 70%)",
+        "All benchmarks were met with no adverse variations"
+      ],
+      "key_amounts": [
+        {"value": 55.60, "unit": "per cent of BE", "context": "Non-Debt Receipt at mid-year", "required": true},
+        {"value": 27.70, "unit": "per cent of BE", "context": "Revenue Deficit at mid-year", "required": true},
+        {"value": 35.00, "unit": "per cent of BE", "context": "Fiscal Deficit at mid-year", "required": true}
+      ],
+      "key_entities": ["Mid-Year Review"],
+      "source_sections": ["1.1", "Annexure-1.2"],
+      "source_pages": [14, 41]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["benchmarks not met"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "FRBM_2021_22_TC020",
+    "question": "What percentage of total expenditure was financed by non-debt receipts in 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["FRBM_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "In 2021-22, total expenditure financed by Non-Debt Receipts was 58.41 per cent. The Non-Debt Receipts were ₹24.76 lakh crore against total expenditure of ₹42.39 lakh crore. The year-on-year increase in non-debt receipts was 28.16 per cent, while total expenditure increased by 8.47 per cent. This was an improvement from 2020-21 when only 49.44 per cent of expenditure was financed by non-debt receipts.",
+      "key_facts": [
+        "58.41 per cent of total expenditure financed by non-debt receipts",
+        "Non-Debt Receipts were ₹24.76 lakh crore",
+        "Total Expenditure was ₹42.39 lakh crore",
+        "Improvement from 49.44 per cent in 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 58.41, "unit": "per cent", "context": "Total expenditure financed by Non-Debt Receipts", "required": true},
+        {"value": 24.76, "unit": "lakh crore", "context": "Non-Debt Receipts", "required": false},
+        {"value": 42.39, "unit": "lakh crore", "context": "Total Expenditure", "required": false}
+      ],
+      "key_entities": ["Non-Debt Receipts"],
+      "source_sections": ["2.4 G", "Table 2.10"],
+      "source_pages": [28]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["all expenditure from debt"],
+      "must_not_hallucinate": true
+    }
+  }
+]

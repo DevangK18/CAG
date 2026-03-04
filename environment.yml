@@ -1,8 +1,0 @@
-name: cag-gateway
-channels:
-- conda-forge
-- defaults
-dependencies:
-- python=3.11
-- tesseract # Required by ocrmypdf
-- poppler # Required by some PDF libraries

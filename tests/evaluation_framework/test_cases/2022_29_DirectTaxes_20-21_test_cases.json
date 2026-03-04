@@ -1,0 +1,581 @@
+[
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC001",
+    "question": "What was the total direct taxes receipt of the Union Government in FY 2020-21 and how did it compare to the previous year?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Direct taxes receipts of Union Government in FY 2020-21 amounting to ₹9,47,174 crore decreased by 9.9 per cent over FY 2019-20 (₹10,50,686 crore). Direct taxes represented 4.8 per cent of GDP in FY 2020-21.",
+      "key_facts": [
+        "Direct taxes receipts in FY 2020-21 were ₹9,47,174 crore",
+        "Decrease of 9.9 per cent compared to FY 2019-20",
+        "FY 2019-20 direct taxes were ₹10,50,686 crore",
+        "Direct taxes represented 4.8 per cent of GDP in FY 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 947174, "unit": "crore", "context": "direct taxes receipts in FY 2020-21", "required": true},
+        {"value": 9.9, "unit": "per cent", "context": "decrease over previous year", "required": true}
+      ],
+      "key_entities": ["Union Government", "CBDT", "Income Tax Department"],
+      "source_sections": ["Highlights", "1.3"],
+      "source_pages": [3, 4]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect taxes"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC002",
+    "question": "How much refund was issued by the Income Tax Department in FY 2020-21 and what was the percentage increase?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Despite decrease in direct tax collection in FY 2020-21, there was an increase of 41.6 per cent in refunds issued during FY 2020-21 amounting to ₹2,59,715 crore. A possible reason for this higher refund could be exaggerated demands raised by the Department during previous financial years to meet revenue collection targets.",
+      "key_facts": [
+        "Refunds issued in FY 2020-21 were ₹2,59,715 crore",
+        "Increase of 41.6 per cent over previous year",
+        "Higher refunds despite decrease in tax collection"
+      ],
+      "key_amounts": [
+        {"value": 259715, "unit": "crore", "context": "refunds issued in FY 2020-21", "required": true},
+        {"value": 41.6, "unit": "per cent", "context": "increase in refunds over previous year", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "CBDT"],
+      "source_sections": ["Highlights", "1.5"],
+      "source_pages": [3, 7, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["penalty", "prosecution"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC003",
+    "question": "What was the tax effect of the 467 high value cases reported by Audit and how many were accepted by the Ministry?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Audit covered 467 high value cases with total tax effect of ₹8,413.10 crore. Out of 315 replies received as on 31st July 2022, the Ministry/ITD accepted 305 cases (96.82 per cent) having a tax effect of ₹6,440.9 crore (98.22 per cent). The Ministry did not accept 10 cases having tax effect of ₹116.26 crore. Replies to remaining 152 cases having tax effect of ₹1,855.94 crore were not received.",
+      "key_facts": [
+        "467 high value cases reported to Ministry",
+        "305 cases accepted by Ministry (96.82 per cent)",
+        "Tax effect of accepted cases was ₹6,440.9 crore (98.22 per cent)",
+        "10 cases not accepted with tax effect of ₹116.26 crore",
+        "152 cases pending reply with tax effect of ₹1,855.94 crore"
+      ],
+      "key_amounts": [
+        {"value": 8413.10, "unit": "crore", "context": "total tax effect of 467 high value cases", "required": true},
+        {"value": 6440.9, "unit": "crore", "context": "tax effect of accepted cases", "required": true}
+      ],
+      "key_entities": ["Ministry of Finance", "Income Tax Department", "CAG"],
+      "source_sections": ["Highlights", "2.4"],
+      "source_pages": [4, 35, 36]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["GST", "customs"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC004",
+    "question": "How much did the ITD recover in the last three years from demands raised to rectify errors pointed out by Audit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "In the last three years, the ITD recovered ₹415.37 crore from demands raised to rectify the errors in assessments pointed out by Audit. There are 62,709 cases involving revenue effect of ₹1.54 lakh crore pointed out in audit which remained unsettled as of 31 March 2021 for want of replies from the ITD.",
+      "key_facts": [
+        "ITD recovered ₹415.37 crore in last three years",
+        "62,709 cases remained unsettled as on 31 March 2021",
+        "Revenue effect of unsettled cases was ₹1.54 lakh crore"
+      ],
+      "key_amounts": [
+        {"value": 415.37, "unit": "crore", "context": "recovery at instance of Audit in last three years", "required": true},
+        {"value": 62709, "unit": "cases", "context": "unsettled audit cases", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "CAG"],
+      "source_sections": ["Highlights", "2.6"],
+      "source_pages": [5, 40]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "penalty"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC005",
+    "question": "How many cases became time-barred for initiating remedial action during FY 2020-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "During FY 2020-21, 3,754 cases with tax effect of ₹6,189.11 crore became time-barred for initiating any remedial action.",
+      "key_facts": [
+        "3,754 cases became time-barred in FY 2020-21",
+        "Tax effect of time-barred cases was ₹6,189.11 crore"
+      ],
+      "key_amounts": [
+        {"value": 3754, "unit": "cases", "context": "time-barred cases in FY 2020-21", "required": true},
+        {"value": 6189.11, "unit": "crore", "context": "tax effect of time-barred cases", "required": true}
+      ],
+      "key_entities": ["Income Tax Department"],
+      "source_sections": ["Highlights", "2.7"],
+      "source_pages": [5, 40, 41]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "appeal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC006",
+    "question": "What was the incidence of errors in assessments checked by Audit during FY 2020-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "The incidence of errors in assessments checked in audit during FY 2020-21 was 5.97 per cent (9,839 cases). Out of 1,54,546 scrutiny assessments completed by ITD in FY 2019-20 in units audited, ITD produced 1,48,256 cases. Audit noticed 10,592 mistakes in 9,839 assessment orders.",
+      "key_facts": [
+        "Incidence of errors was 5.97 per cent",
+        "9,839 assessment cases had errors",
+        "10,592 mistakes were noticed in total"
+      ],
+      "key_amounts": [
+        {"value": 5.97, "unit": "per cent", "context": "incidence of errors in assessments", "required": true},
+        {"value": 9839, "unit": "cases", "context": "assessments with errors", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "CAG"],
+      "source_sections": ["Highlights", "2.2"],
+      "source_pages": [4, 28, 29]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "appeal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC007",
+    "question": "What were the main findings on Corporation Tax cases reported by Audit?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Audit pointed out 319 high value cases pertaining to Corporation Tax with tax effect of ₹7,788.98 crore, classified into four categories: (a) Quality of assessments - 124 cases; (b) Administration of tax concessions/exemptions/deductions - 126 cases; (c) Income escaping assessment due to errors - 51 cases; (d) Over-charge of tax/interest - 18 cases. Out of 319 cases, 57 instances of significant errors were illustrated involving tax effect of ₹6,304.56 crore.",
+      "key_facts": [
+        "319 high value Corporation Tax cases reported",
+        "Total tax effect of ₹7,788.98 crore",
+        "124 cases related to quality of assessments",
+        "126 cases related to tax concessions/exemptions/deductions",
+        "51 cases of income escaping assessment",
+        "18 cases of over-charge of tax/interest",
+        "57 instances illustrated with tax effect of ₹6,304.56 crore"
+      ],
+      "key_amounts": [
+        {"value": 7788.98, "unit": "crore", "context": "tax effect of Corporation Tax cases", "required": true},
+        {"value": 319, "unit": "cases", "context": "high value Corporation Tax cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Income Tax Department"],
+      "source_sections": ["Highlights", "Chapter III", "3.1"],
+      "source_pages": [6, 43]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax individual", "non-corporate"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC008",
+    "question": "What were the main findings on Income Tax cases reported by Audit?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Audit pointed out 148 high value cases of income tax with tax effect of ₹624.12 crore, classified into four categories: (a) Quality of assessments - 108 cases; (b) Administration of tax concessions/exemptions/deductions - 17 cases; (c) Income escaping assessments due to errors - 18 cases; (d) Overcharge of tax/interest - five cases. Out of 148 cases, 47 instances of significant errors were illustrated involving tax effect of ₹505.68 crore.",
+      "key_facts": [
+        "148 high value Income Tax cases reported",
+        "Total tax effect of ₹624.12 crore",
+        "108 cases related to quality of assessments",
+        "17 cases related to tax concessions/exemptions/deductions",
+        "18 cases of income escaping assessment",
+        "5 cases of overcharge of tax/interest",
+        "47 instances illustrated with tax effect of ₹505.68 crore"
+      ],
+      "key_amounts": [
+        {"value": 624.12, "unit": "crore", "context": "tax effect of Income Tax cases", "required": true},
+        {"value": 148, "unit": "cases", "context": "high value Income Tax cases", "required": true}
+      ],
+      "key_entities": ["Income Tax", "Income Tax Department"],
+      "source_sections": ["Highlights", "Chapter IV", "4.1"],
+      "source_pages": [6, 7, 77]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Corporation Tax", "corporate"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC009",
+    "question": "What was the largest single error reported in Corporation Tax involving incorrect adoption of taxable income?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "In a Corporation Tax case, there was incorrect adoption of figure of taxable income as ₹110.40 crore in the tax computation form instead of the correct figure of ₹7,995.06 crore involving tax effect of ₹4,430.13 crore including interest.",
+      "key_facts": [
+        "Taxable income incorrectly adopted as ₹110.40 crore",
+        "Correct figure should have been ₹7,995.06 crore",
+        "Tax effect was ₹4,430.13 crore including interest"
+      ],
+      "key_amounts": [
+        {"value": 4430.13, "unit": "crore", "context": "tax effect of incorrect adoption of taxable income", "required": true},
+        {"value": 7995.06, "unit": "crore", "context": "correct taxable income", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Income Tax Department"],
+      "source_sections": ["Highlights", "3.2"],
+      "source_pages": [6, 43, 44]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax individual", "refund"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC010",
+    "question": "What was the amount locked up in appeal cases with CIT (Appeals) in FY 2020-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "The amount locked up in appeal cases with CIT (Appeals) increased to ₹24.65 lakh crore in FY 2020-21 from ₹8.83 lakh crore in FY 2019-20. The number of appeals pending with CIT (Appeals) increased slightly from 4.58 lakh in FY 2019-20 to 4.59 lakh in FY 2020-21.",
+      "key_facts": [
+        "Amount locked up in FY 2020-21 was ₹24.65 lakh crore",
+        "Previous year amount was ₹8.83 lakh crore",
+        "4.59 lakh appeals pending in FY 2020-21",
+        "Amount locked up is more than total revenue receipts of Government of India"
+      ],
+      "key_amounts": [
+        {"value": 24.65, "unit": "lakh crore", "context": "amount locked in CIT Appeals in FY 2020-21", "required": true},
+        {"value": 8.83, "unit": "lakh crore", "context": "amount locked in CIT Appeals in FY 2019-20", "required": false}
+      ],
+      "key_entities": ["CIT (Appeals)", "Income Tax Department"],
+      "source_sections": ["Highlights", "1.10"],
+      "source_pages": [4, 21]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Supreme Court", "High Court"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC011",
+    "question": "What was the total arrears of demand and how much was classified as difficult to recover in FY 2020-21?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "The arrears of demand decreased from ₹16.19 lakh crore in FY 2019-20 to ₹15.12 lakh crore in FY 2020-21. The Department indicated that more than 98.3 per cent of uncollected demand (₹14,85,289 crore) would be difficult to recover. The net collectible demand decreased to ₹26,473 crore in FY 2020-21 as compared to ₹38,734 crore in FY 2019-20.",
+      "key_facts": [
+        "Total arrears in FY 2020-21 were ₹15.12 lakh crore",
+        "Previous year arrears were ₹16.19 lakh crore",
+        "98.26 per cent classified as difficult to recover",
+        "Net collectible demand was ₹26,473 crore"
+      ],
+      "key_amounts": [
+        {"value": 15.12, "unit": "lakh crore", "context": "total arrears of demand in FY 2020-21", "required": true},
+        {"value": 26473, "unit": "crore", "context": "net collectible demand in FY 2020-21", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "CBDT"],
+      "source_sections": ["Highlights", "1.9"],
+      "source_pages": [3, 20]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "appeal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC012",
+    "question": "What was the revenue impact of tax incentives in FY 2020-21?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "The revenue impact of tax incentives increased by 81.4 per cent from ₹1,55,840 crore in FY 2016-17 to ₹2,82,697 crore in FY 2020-21. Revenue impact of tax incentives was 1.4 per cent of GDP and 29.9 per cent of Direct Taxes during FY 2020-21. Major tax incentives included deductions under Section 80C (₹88,301 crore), accelerated depreciation under Section 32 (₹39,593 crore), rebate under Section 87A (₹29,204 crore), and deduction of export profits to SEZ units under Section 10AA (₹24,928 crore).",
+      "key_facts": [
+        "Tax incentives in FY 2020-21 were ₹2,82,697 crore",
+        "Increase of 81.4 per cent from FY 2016-17",
+        "Tax incentives were 1.4 per cent of GDP",
+        "Tax incentives were 29.9 per cent of Direct Taxes"
+      ],
+      "key_amounts": [
+        {"value": 282697, "unit": "crore", "context": "revenue impact of tax incentives in FY 2020-21", "required": true},
+        {"value": 81.4, "unit": "per cent", "context": "increase in tax incentives from FY 2016-17", "required": false}
+      ],
+      "key_entities": ["CBDT", "Income Tax Department"],
+      "source_sections": ["1.8"],
+      "source_pages": [19, 20]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "penalty"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC013",
+    "question": "How many records were not produced by ITD during FY 2020-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "ITD did not produce 11,946 out of 1,80,627 records (6.61 per cent) requisitioned by Audit during FY 2020-21, of which 6 records pertaining to the same assessees were not produced in three or more consecutive audit cycles.",
+      "key_facts": [
+        "11,946 records not produced out of 1,80,627 requisitioned",
+        "Non-production rate was 6.61 per cent",
+        "6 records not produced in three or more consecutive audit cycles"
+      ],
+      "key_amounts": [
+        {"value": 11946, "unit": "records", "context": "records not produced during FY 2020-21", "required": true},
+        {"value": 6.61, "unit": "per cent", "context": "percentage of records not produced", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "CAG"],
+      "source_sections": ["Highlights", "2.8"],
+      "source_pages": [5, 41, 42]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "appeal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC014",
+    "question": "What was the change in Corporation Tax and Income Tax collection in FY 2020-21?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Collections from Corporation Tax decreased by 17.8 per cent, from ₹5.56 lakh crore in FY 2019-20 to ₹4.58 lakh crore in FY 2020-21. Collections from Income Tax decreased by 4.0 per cent (2.0 per cent as per detailed analysis) from ₹4.80 lakh crore in FY 2019-20 to ₹4.71 lakh crore in FY 2020-21.",
+      "key_facts": [
+        "Corporation Tax decreased by 17.8 per cent",
+        "Corporation Tax was ₹4.58 lakh crore in FY 2020-21",
+        "Income Tax decreased by approximately 2-4 per cent",
+        "Income Tax was ₹4.71 lakh crore in FY 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 17.8, "unit": "per cent", "context": "decrease in Corporation Tax", "required": true},
+        {"value": 4.58, "unit": "lakh crore", "context": "Corporation Tax collection in FY 2020-21", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Income Tax", "CBDT"],
+      "source_sections": ["Highlights", "1.4"],
+      "source_pages": [3, 4, 5]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "penalty"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC015",
+    "question": "What was the staff strength of the Income Tax Department and its revenue expenditure in FY 2020-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "As on 1 September 2021, the overall sanctioned strength of the Income Tax Department was 76,246 and working strength was 45,810. The sanctioned and working strength of officers was 10,863 and 9,393 respectively. The revenue expenditure of the ITD for the year 2020-21 was ₹7,319 crore.",
+      "key_facts": [
+        "Sanctioned strength was 76,246",
+        "Working strength was 45,810",
+        "Officer sanctioned strength was 10,863",
+        "Revenue expenditure was ₹7,319 crore"
+      ],
+      "key_amounts": [
+        {"value": 7319, "unit": "crore", "context": "revenue expenditure of ITD in FY 2020-21", "required": true},
+        {"value": 76246, "unit": "staff", "context": "sanctioned strength of ITD", "required": false}
+      ],
+      "key_entities": ["Income Tax Department", "CBDT"],
+      "source_sections": ["1.2"],
+      "source_pages": [1, 2]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "appeal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC016",
+    "question": "What were the findings related to undisclosed income in search and seizure operations in FY 2020-21?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "During FY 2020-21, undisclosed income admitted during search & seizure decreased by 60.0 per cent to ₹4,145 crore from ₹10,370 crore in FY 2019-20. The number of groups searched was 569 in FY 2020-21. Undisclosed income detected during survey decreased by 77.0 per cent to ₹5,111 crore from ₹22,244 crore in FY 2019-20, with only 426 surveys conducted.",
+      "key_facts": [
+        "Undisclosed income in search & seizure was ₹4,145 crore",
+        "Decrease of 60 per cent from previous year",
+        "569 groups were searched",
+        "Undisclosed income in surveys was ₹5,111 crore",
+        "Only 426 surveys conducted in FY 2020-21"
+      ],
+      "key_amounts": [
+        {"value": 4145, "unit": "crore", "context": "undisclosed income in search & seizure FY 2020-21", "required": true},
+        {"value": 60.0, "unit": "per cent", "context": "decrease in search & seizure undisclosed income", "required": false}
+      ],
+      "key_entities": ["Income Tax Department", "Investigation Wing", "CBDT"],
+      "source_sections": ["1.11"],
+      "source_pages": [22]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "appeal"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC017",
+    "question": "What amendments were made to the Income Tax Act based on Audit recommendations?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Based on Performance Audit Reports, several amendments were made: (1) From Report No. 27 of 2017 on Medical Sector - Rule 18AB notified, new provisions in Sections 80G(2)(vii), 80G(2)(ix) and Section 35(1A) via Finance Act 2020, and provisos to Section 11 via Finance Act 2020; (2) From Report No. 1 of 2019 on Entertainment Sector - Finance Act 2020 modified definition of Royalty in Section 9 to include cinematographic films; (3) From Report No. 14 of 2020 on Search and Seizure - Finance Act 2022 introduced new Section 79A and Finance Act 2021 amended Sections 153A/153C.",
+      "key_facts": [
+        "Rule 18AB notified vide Notification No 19 of 2021",
+        "New provisions in Section 80G via Finance Act 2020",
+        "Section 9 definition of Royalty modified",
+        "New Section 79A introduced via Finance Act 2022",
+        "Sections 153A/153C amended via Finance Act 2021"
+      ],
+      "key_amounts": [],
+      "key_entities": ["CBDT", "Finance Act 2020", "Finance Act 2021", "Finance Act 2022", "Income Tax Act 1961"],
+      "source_sections": ["Highlights", "2.5"],
+      "source_pages": [4, 5, 37, 38, 39, 40]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Corporation Tax specific", "penalty"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC018",
+    "question": "What were the persistent and pervasive irregularities noticed in Corporation Tax and Income Tax assessments?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "Audit identified persistent and pervasive irregularities including: (i) Irregularities in allowing depreciation/business losses/capital losses; (ii) Incorrect allowance of business expenditure; (iii) Excess or irregular refunds/interest on refunds; (iv) Mistakes under special provisions including MAT/AMT/Tonnage Tax. These irregularities occurred despite ITBA implementation, indicating lack of appropriate controls and effective monitoring. For Corporation Tax, Delhi had 79 observations with tax effect of ₹5,041.71 crore out of total ₹7,788.98 crore. For Income Tax, Delhi had 31 observations while Maharashtra had highest tax effect of ₹109.75 crore.",
+      "key_facts": [
+        "Four main categories of persistent irregularities identified",
+        "Irregularities continued despite ITBA implementation",
+        "Delhi had highest Corporation Tax irregularities (₹5,041.71 crore)",
+        "Maharashtra had highest Income Tax effect (₹109.75 crore)"
+      ],
+      "key_amounts": [
+        {"value": 5041.71, "unit": "crore", "context": "Corporation Tax irregularities in Delhi", "required": false}
+      ],
+      "key_entities": ["Income Tax Department", "CBDT", "ITBA"],
+      "source_sections": ["2.3"],
+      "source_pages": [30, 31, 32, 33, 34, 35]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["GST", "customs"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC019",
+    "question": "What was the trend in PAN allotments and Income Tax Return filing from FY 2018-19 to FY 2020-21?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "There was year-on-year increase in absolute number of PAN allotments from FY 2018-19 to FY 2020-21, reaching 55.37 lakh crore cumulative by March 2021. However, percentage increase in PAN allotment witnessed year-on-year decline. Similarly, there was year-on-year increase in persons filing ITR from FY 2017-18 to FY 2020-21, with 6.72 crore returns filed in FY 2020-21. The number of non-corporate assessees increased from 6.39 crore to 6.63 crore (3.67% increase) and corporate assessees increased from 8.38 lakh to 9.21 lakh (9.9% increase) in FY 2020-21.",
+      "key_facts": [
+        "PAN allotments increased year-on-year in absolute terms",
+        "Percentage increase in PAN declined year-on-year",
+        "6.72 crore ITRs filed in FY 2020-21",
+        "Non-corporate assessees increased by 3.67 per cent to 6.63 crore",
+        "Corporate assessees increased by 9.9 per cent to 9.21 lakh"
+      ],
+      "key_amounts": [
+        {"value": 6.63, "unit": "crore", "context": "non-corporate assessees in FY 2020-21", "required": true},
+        {"value": 9.21, "unit": "lakh", "context": "corporate assessees in FY 2020-21", "required": true}
+      ],
+      "key_entities": ["Income Tax Department", "PAN", "CBDT"],
+      "source_sections": ["Highlights", "1.6"],
+      "source_pages": [3, 4, 9, 10, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["refund", "penalty"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_DIRECT_TAXES_2022_TC020",
+    "question": "What was the share of direct taxes in gross tax revenue and GDP in FY 2020-21?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["CAG_Report_29_2022_Direct_Taxes"]
+    },
+    "expected": {
+      "answer_summary": "The share of direct taxes in gross tax revenue decreased to 46.7 per cent in FY 2020-21 from 52.3 per cent in FY 2019-20. Direct taxes represented 4.8 per cent of GDP in FY 2020-21 compared to 5.2 per cent in FY 2019-20. Direct taxes accounted for 38.5 per cent of total revenue receipts in FY 2020-21.",
+      "key_facts": [
+        "Direct taxes were 46.7 per cent of gross tax revenue",
+        "Previous year share was 52.3 per cent",
+        "Direct taxes were 4.8 per cent of GDP",
+        "Direct taxes were 38.5 per cent of total revenue receipts"
+      ],
+      "key_amounts": [
+        {"value": 46.7, "unit": "per cent", "context": "share of direct taxes in gross tax revenue", "required": true},
+        {"value": 4.8, "unit": "per cent", "context": "direct taxes as percentage of GDP", "required": true}
+      ],
+      "key_entities": ["Union Government", "CBDT"],
+      "source_sections": ["Highlights", "1.3", "1.4"],
+      "source_pages": [3, 4]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect taxes specific", "customs"],
+      "must_not_hallucinate": true
+    }
+  }
+]

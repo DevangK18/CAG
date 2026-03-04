@@ -1,0 +1,1892 @@
+{
+  "timestamp": "2026-01-04T12:08:07.929272",
+  "total_cases": 30,
+  "passed_cases": 7,
+  "failed_cases": 23,
+  "pass_rate": 0.23333333333333334,
+  "avg_factual_accuracy": 2.933333333333333,
+  "avg_completeness": 2.8333333333333335,
+  "avg_relevance": 3.566666666666667,
+  "avg_citation_quality": 0.3333333333333333,
+  "avg_amount_accuracy": 0.6833333333333333,
+  "avg_entity_coverage": 0.5736111111111112,
+  "scores_by_difficulty": {
+    "hard": {
+      "count": 6,
+      "pass_rate": 0.16666666666666666,
+      "avg_score": 29.916666666666668
+    },
+    "easy": {
+      "count": 12,
+      "pass_rate": 0.3333333333333333,
+      "avg_score": 39.770833333333336
+    },
+    "medium": {
+      "count": 12,
+      "pass_rate": 0.16666666666666666,
+      "avg_score": 45.32638888888889
+    }
+  },
+  "scores_by_type": {
+    "factual": {
+      "count": 16,
+      "pass_rate": 0.3125,
+      "avg_score": 45.484375
+    },
+    "list": {
+      "count": 5,
+      "pass_rate": 0.2,
+      "avg_score": 49.18333333333334
+    },
+    "aggregation": {
+      "count": 3,
+      "pass_rate": 0.0,
+      "avg_score": 18.833333333333332
+    },
+    "negative": {
+      "count": 2,
+      "pass_rate": 0.0,
+      "avg_score": 4.000000000000001
+    },
+    "comparison": {
+      "count": 1,
+      "pass_rate": 0.0,
+      "avg_score": 29.5
+    },
+    "explanation": {
+      "count": 3,
+      "pass_rate": 0.3333333333333333,
+      "avg_score": 44.333333333333336
+    }
+  },
+  "issue_counts": {
+    "Amount Issues": 26,
+    "Coverage Issues": 18,
+    "Hallucination": 12,
+    "Other Issues": 4
+  },
+  "results": [
+    {
+      "test_id": "TC001",
+      "question": "What was the revenue loss due to toll collection delays by NHAI?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "NHAI suffered a revenue loss of \u20b964.60 crore due to delays in commencing toll collection within the time limits prescribed by NH Fee Rules, 2008 in four stretches of public-funded projects.",
+      "actual_answer": "The revenue loss due to toll collection delays by NHAI amounted to \u20b964.60 crore. This loss was attributed to delays in toll collection as per the time limits prescribed by the NH Fee Rules, 2008, across four stretches of public funded projects.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 4372.948884963989,
+      "scores": {
+        "amount_accuracy": 0.7,
+        "entity_coverage": 0.5,
+        "key_fact_coverage": 1.0,
+        "factual_accuracy": 5,
+        "completeness": 5,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 84.5,
+        "passed": true,
+        "amount_matches": [
+          {
+            "expected_value": 64.6,
+            "expected_unit": "crore",
+            "expected_context": "revenue loss from delays",
+            "found": true,
+            "found_value": 64.6,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 129.2,
+            "expected_unit": "crore",
+            "expected_context": "total amount (doubled)",
+            "found": false,
+            "found_value": 64.6,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "NH Fee Rules 2008",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately captures all key facts regarding the revenue loss due to toll collection delays by NHAI, including the specific amount and the context of the delays. However, it lacks citations to support the claims made, which is a significant issue for citation quality."
+      },
+      "issues": [
+        "Wrong amount: expected 129.2, found 64.6"
+      ],
+      "passed": true
+    },
+    {
+      "test_id": "TC002",
+      "question": "What was the short collection of user fees on NH 44?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "There was a short collection of user fees amounting to \u20b916.68 crore on the Madurai-Kanyakumari stretch of NH 44 in Tamil Nadu due to incorrect conversion of vehicle length for toll calculation.",
+      "actual_answer": "The short collection of user fees on NH 44 due to the non-implementation of the NH fee amendment rules for charging toll fees on elevated bridges/structures was \u20b912.33 crore during the period from April 2017 to May 2018. This was due to the failure to revise the toll fee by considering the length of the bridges to 10 times the normal rates of road stretch.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3826.8649578094482,
+      "scores": {
+        "amount_accuracy": 0.3,
+        "entity_coverage": 0.25,
+        "key_fact_coverage": 0.0,
+        "factual_accuracy": 1,
+        "completeness": 1,
+        "relevance": 2,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 11.625,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 16.68,
+            "expected_unit": "crore",
+            "expected_context": "short collection on NH 44",
+            "found": false,
+            "found_value": 12.33,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NH 44",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Tamil Nadu",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Madurai",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Kanyakumari",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response contains significant factual inaccuracies, including an incorrect amount for the short collection and irrelevant details about toll fee rules. It fails to address the key facts and amounts specified in the expected answer, resulting in a low completeness score. The lack of citations further diminishes the response's credibility."
+      },
+      "issues": [
+        "Wrong amount: expected 16.68, found 12.33",
+        "Low entity coverage: 25%",
+        "Low key fact coverage: 0%",
+        "Hallucination detected: The response mentions a short collection of \u20b912.33 crore, which contradicts the ground truth of \u20b916.68 crore. Additionally, it discusses non-implementation of NH fee amendment rules, which is not relevant to the question about incorrect vehicle length conversion."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC003",
+      "question": "What is the total tax effect of arithmetical errors in direct tax assessments?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": [
+          "2024_13_Direct_taxes",
+          "2025_14_Direct_taxes"
+        ]
+      },
+      "expected_summary": "Arithmetical errors in computation of income and tax had significant tax effects across multiple assessment years, with amounts ranging from \u20b94,591 crore to \u20b94,761.37 crore in different audit periods.",
+      "actual_answer": "The total tax effect of arithmetical errors in direct tax assessments, as reported in the CAG audit findings, is \u20b9 7,546.18 crore. This is derived from the sum of the tax effects mentioned in various sections: \u20b9 4,761.37 crore, \u20b9 102.66 crore, \u20b9 2,036.72 crore, \u20b9 91.52 crore, \u20b9 63.12 crore, and \u20b9 141.31 crore.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3978.518009185791,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.25,
+        "factual_accuracy": 1,
+        "completeness": 2,
+        "relevance": 3,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 19.0,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 4761.37,
+            "expected_unit": "crore",
+            "expected_context": "tax effect in one period",
+            "found": true,
+            "found_value": 4761.37,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 4591,
+            "expected_unit": "crore",
+            "expected_context": "tax effect in another period",
+            "found": true,
+            "found_value": 4761.37,
+            "match_type": "close"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "CBDT",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "CPC",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Assessment Officers",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response contains significant factual inaccuracies, particularly regarding the total tax effect, which is not aligned with the expected answer. It fails to cover all key facts and amounts, leading to a low completeness score. While it attempts to address the question, the inaccuracies and lack of citations severely undermine its quality."
+      },
+      "issues": [
+        "Low entity coverage: 0%",
+        "Low key fact coverage: 25%",
+        "Hallucination detected: The response includes a total tax effect of \u20b9 7,546.18 crore, which is not supported by the expected answer. The expected amounts are \u20b9 4,591 crore and \u20b9 4,761.37 crore, with no mention of the additional figures provided in the actual response."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC004",
+      "question": "What fraud issues were found in Ayushman Bharat PMJAY implementation?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": [
+          "2023_11_PMJAY"
+        ]
+      },
+      "expected_summary": "The audit identified multiple fraud-related issues including non-conducting of anti-fraud awareness activities, deficiency in medical audits, ineligible beneficiaries receiving benefits, errors in beneficiary database, and hospitals admitting more patients than their declared bed strength.",
+      "actual_answer": "The audit of Ayushman Bharat PMJAY implementation revealed several fraud-related issues. Firstly, there was a significant presence of ineligible beneficiaries registered under the scheme, with expenditures on these beneficiaries ranging from \u20b90.12 lakh in Chandigarh to \u20b922.44 crore in Tamil Nadu. This was partly due to inadequate validation controls, leading to errors such as invalid names, unrealistic dates of birth, duplicate PMJAY IDs, and unrealistic family sizes in the beneficiary database. Additionally, multiple registrations were made against the same or invalid mobile numbers, with cases ranging from 11 to 7,49,820 beneficiaries.\n\nFurthermore, the audit identified deficiencies in the conduct of medical audits by State Health Agencies (SHAs), which undermined the anti-fraud investigation and audit system designed to detect and prevent fraud. In two states, Nagaland and Tripura, there was a heavy shortfall in conducting various types of audits. Moreover, three states/UTs\u2014Bihar, Chandigarh, and Uttar Pradesh\u2014did not plan or conduct anti-fraud awareness activities, which are crucial for educating beneficiaries about potential fraud and preventive measures. These findings highlight significant gaps in the implementation of anti-fraud measures within the PMJAY scheme.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 7796.140670776367,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.875,
+        "key_fact_coverage": 0.8,
+        "factual_accuracy": 5,
+        "completeness": 5,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 89.375,
+        "passed": true,
+        "amount_matches": [
+          {
+            "expected_value": 22.44,
+            "expected_unit": "crore",
+            "expected_context": "expenditure on ineligible beneficiaries in Tamil Nadu",
+            "found": true,
+            "found_value": 22.44,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 0.12,
+            "expected_unit": "lakh",
+            "expected_context": "expenditure in Chandigarh",
+            "found": true,
+            "found_value": 0.12,
+            "match_type": "exact"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NHA",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "SHA",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Bihar",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Chandigarh",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Uttar Pradesh",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Nagaland",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Tripura",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Tamil Nadu",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately captures all key facts and amounts related to the fraud issues in Ayushman Bharat PMJAY implementation. It addresses the question thoroughly without introducing any unsupported claims. However, it lacks citations to support the claims made, which affects the citation quality."
+      },
+      "issues": [],
+      "passed": true
+    },
+    {
+      "test_id": "TC005",
+      "question": "What was the revenue loss due to non-inclusion of revenue sharing clause by NHAI?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "The non-inclusion of a revenue-sharing clause in Concession Agreements resulted in a revenue loss of \u20b9133.36 crore to NHAI.",
+      "actual_answer": "The revenue loss due to the non-inclusion of a revenue sharing clause by NHAI amounted to \u20b9133.36 crore. This loss was identified in two sections of national highways constructed by NHAI and handed over to BOT Concessionaires for toll collection.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2065.0720596313477,
+      "scores": {
+        "amount_accuracy": 0.7,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.6666666666666666,
+        "factual_accuracy": 5,
+        "completeness": 4,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 82.0,
+        "passed": true,
+        "amount_matches": [
+          {
+            "expected_value": 133.36,
+            "expected_unit": "crore",
+            "expected_context": "loss from missing revenue sharing clause",
+            "found": true,
+            "found_value": 133.36,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 266.72,
+            "expected_unit": "crore",
+            "expected_context": "total amount mentioned",
+            "found": false,
+            "found_value": 133.36,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Concessionaires",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately states the revenue loss of \u20b9133.36 crore due to the non-inclusion of a revenue-sharing clause, which aligns with the expected answer. However, it lacks mention of the total amount of \u20b9266.72 crore, which is a key figure that should have been included for completeness. The response is relevant and directly answers the question asked."
+      },
+      "issues": [
+        "Wrong amount: expected 266.72, found 133.36"
+      ],
+      "passed": true
+    },
+    {
+      "test_id": "TC006",
+      "question": "How many CPSEs complied with all corporate governance requirements?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2025_06_CPSE"
+        ]
+      },
+      "expected_summary": "Out of 71 listed CPSEs, only three companies complied with all corporate governance requirements: SBI Life Insurance Company Limited, BEML Limited, and MMTC Limited.",
+      "actual_answer": "Only three CPSEs\u2014SBI Life Insurance Company Limited, BEML Limited, and MMTC Limited\u2014complied with all the corporate governance requirements as per the DPE Guidelines, SEBI Regulations, and relevant provisions of the Companies Act, 2013. This represents 3 per cent of the 71 listed CPSEs reviewed.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 4355.224132537842,
+      "scores": {
+        "amount_accuracy": 0.3,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 1.0,
+        "factual_accuracy": 5,
+        "completeness": 5,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 83.0,
+        "passed": true,
+        "amount_matches": [
+          {
+            "expected_value": 3,
+            "expected_unit": "count",
+            "expected_context": "compliant CPSEs",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 71,
+            "expected_unit": "count",
+            "expected_context": "total listed CPSEs",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "SBI Life Insurance",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "BEML Limited",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "MMTC Limited",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "DPE",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "SEBI",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately states that only three CPSEs complied with all corporate governance requirements and lists them correctly. It also mentions the total number of listed CPSEs and the relevant guidelines. However, it lacks citations to support the claims made, which affects the citation quality score."
+      },
+      "issues": [
+        "Missing required amount: 3 count",
+        "Missing required amount: 71 count"
+      ],
+      "passed": true
+    },
+    {
+      "test_id": "TC007",
+      "question": "What issues were found with NHAI's toll data management?",
+      "category": {
+        "difficulty": "medium",
+        "type": "explanation",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "NHAI did not maintain a centralized Toll Management Software mechanism, leading to difficulties in readily accessing toll data. This lack of a centralized database could impact assessment of revenue potential for future agreements.",
+      "actual_answer": "The audit identified several issues with NHAI's toll data management. Firstly, there was an absence of a centralized Toll Management Software mechanism, leading to difficulties in accessing toll data, as it was not readily available at NHAI or Indian Highways Management Company Limited. This lack of centralization resulted in reliance on System Integrators to provide data, which was not always complete or timely. Additionally, agreements with System Integrators did not include clauses for data ownership or migration, meaning data remained with the integrators after contract expiration, and there was no provision for transferring legacy data to new integrators. This situation hindered the reconciliation of Monthly Progress Reports with Toll Management Software data, affecting the accuracy of toll collection figures and potential revenue assessments. The audit recommended the development of a uniform software for toll collection and centralized database integration to ensure real-time data availability and secure data management.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3629.4338703155518,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.75,
+        "factual_accuracy": 4,
+        "completeness": 4,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 39.5,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Toll Management Software",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately identifies the lack of centralized Toll Management Software and the difficulties in accessing toll data, aligning well with the expected answer. However, it introduces additional details that are not supported by the ground truth, which affects the overall factual accuracy and citation quality."
+      },
+      "issues": [
+        "Hallucination detected: The response mentions reliance on System Integrators and issues with data ownership and migration, which are not included in the expected answer. These details, while relevant to the overall context, are not part of the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC008",
+      "question": "What was the loss due to delay in completion of approach roads by NHAI?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "NHAI suffered a total revenue loss of \u20b968.12 crore due to delayed commencement of toll operations immediately after the completion of projects in five stretches, caused by delay in completion of approach roads.",
+      "actual_answer": "The loss due to delay in completion of approach roads by NHAI amounted to \u20b93.52 crore. This was a result of faulty planning and delays in completing the work on the approach road and re-grading & strengthening of the Railway Over Bridge, which affected toll collection from April 2013 to March 2018. (Source: Executive Summary > CHAPTER III TOLL COLLECTION > 3.2.2 Loss of revenue due to delay in completion of approach road)",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 4898.675918579102,
+      "scores": {
+        "amount_accuracy": 0.0,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.3333333333333333,
+        "factual_accuracy": 1,
+        "completeness": 1,
+        "relevance": 2,
+        "citation_quality": 4,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 16.0,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 68.12,
+            "expected_unit": "crore",
+            "expected_context": "loss from approach road delays",
+            "found": false,
+            "found_value": 3.52,
+            "match_type": "wrong"
+          },
+          {
+            "expected_value": 136.24,
+            "expected_unit": "crore",
+            "expected_context": "total amount mentioned",
+            "found": false,
+            "found_value": 3.52,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response contains significant factual inaccuracies regarding the amount of revenue loss, which is the core of the question. It fails to mention the correct loss amount and the context of toll operations being delayed in five stretches. While it does provide a citation, the overall response does not adequately address the question."
+      },
+      "issues": [
+        "Wrong amount: expected 68.12, found 3.52",
+        "Wrong amount: expected 136.24, found 3.52",
+        "Low key fact coverage: 33%",
+        "Hallucination detected: The response incorrectly states a loss of \u20b93.52 crore instead of the correct amount of \u20b968.12 crore. This is a major factual error."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC009",
+      "question": "What percentage of CPSEs delayed submission of financial results?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2025_06_CPSE"
+        ]
+      },
+      "expected_summary": "9% of CPSEs (3 out of 35 CPSEs/Statutory Corporations) failed to submit their annual audited standalone and consolidated financial results to the stock exchange within the required 60 days.",
+      "actual_answer": "Out of 35 CPSEs/Statutory Corporations, three CPSEs, which is 9 per cent, did not submit the annual audited standalone and consolidated financial results to the stock exchange(s) within the prescribed time. Additionally, one Statutory Corporation did not submit the financial results within nine months from the end of the financial year.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3074.867010116577,
+      "scores": {
+        "amount_accuracy": 0.7,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.25,
+        "factual_accuracy": 5,
+        "completeness": 4,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 41.0,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 9,
+            "expected_unit": "percent",
+            "expected_context": "CPSEs with delayed submission",
+            "found": true,
+            "found_value": 9.0,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 3,
+            "expected_unit": "count",
+            "expected_context": "number of non-compliant CPSEs",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 35,
+            "expected_unit": "count",
+            "expected_context": "total CPSEs examined",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "CPSEs",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Statutory Corporations",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately presents the percentage and number of CPSEs that delayed submission, addressing the main question effectively. However, it introduces an additional claim about a Statutory Corporation that is not part of the ground truth, which affects the citation quality and introduces hallucination."
+      },
+      "issues": [
+        "Low key fact coverage: 25%",
+        "Hallucination detected: The mention of one Statutory Corporation not submitting financial results within nine months is not supported by the expected answer and introduces an unsupported claim."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC010",
+      "question": "What errors were found in Ayushman Bharat beneficiary database?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": [
+          "2023_11_PMJAY"
+        ]
+      },
+      "expected_summary": "Due to inadequate validation controls, multiple errors were found in the PMJAY beneficiary database including invalid names, unrealistic dates of birth, duplicate PMJAY IDs, and unrealistic family sizes. In Tamil Nadu, 4,761 registrations were made against just seven Aadhaar numbers.",
+      "actual_answer": "Errors in the Ayushman Bharat beneficiary database were significant and varied. Key issues included:\n\n1. **Invalid and Duplicate Entries**: There were instances of invalid names, unrealistic dates of birth, and duplicate PMJAY IDs. In Tamil Nadu, 4,761 registrations were made against just seven Aadhaar numbers, and in Jammu & Kashmir and Ladakh, 16,865 and 335 ineligible beneficiaries were identified, respectively.\n\n2. **Multiple Registrations**: The Beneficiary Identification System (BIS) showed multiple registrations against the same or invalid mobile numbers, with cases ranging from 11 to 7,49,820 beneficiaries linked to a single number.\n\n3. **Duplicate PMJAY IDs**: Data analysis revealed that PMJAY IDs were not unique in 1,57,176 approved cases, indicating a failure in the system to ensure unique identification for each beneficiary.\n\n4. **Ineligible Beneficiaries**: In six States/UTs, ineligible households were registered as beneficiaries and availed scheme benefits, with expenditures on these ineligible beneficiaries ranging from \u20b90.12 lakh in Chandigarh to \u20b922.44 crore in Tamil Nadu.\n\nThese errors highlight significant deficiencies in the validation controls and data management processes within the Ayushman Bharat scheme.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 5569.87190246582,
+      "scores": {
+        "amount_accuracy": 0.3,
+        "entity_coverage": 0.75,
+        "key_fact_coverage": 0.8333333333333334,
+        "factual_accuracy": 4,
+        "completeness": 4,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 35.375,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 4761,
+            "expected_unit": "count",
+            "expected_context": "registrations against 7 Aadhaar numbers",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 7,
+            "expected_unit": "count",
+            "expected_context": "Aadhaar numbers with multiple registrations",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "PMJAY",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Tamil Nadu",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Aadhaar",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "SECC",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately captures most of the key issues found in the Ayushman Bharat beneficiary database, including invalid names, unrealistic dates of birth, and duplicate PMJAY IDs. However, it introduces additional figures and claims that are not supported by the expected answer, leading to a minor factual inaccuracy and hallucination. The lack of citations further detracts from the overall quality."
+      },
+      "issues": [
+        "Missing required amount: 4761 count",
+        "Missing required amount: 7 count",
+        "Hallucination detected: The response mentions '16,865 and 335 ineligible beneficiaries' in Jammu & Kashmir and Ladakh, which is not part of the expected answer. Additionally, the figures related to expenditures on ineligible beneficiaries are not mentioned in the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC011",
+      "question": "What are the main categories of irregularities in direct tax assessments?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": [
+          "2024_13_Direct_taxes",
+          "2025_14_Direct_taxes",
+          "2022_29_Direct_taxes"
+        ]
+      },
+      "expected_summary": "The main categories include: irregularities in assessment proceedings, administration of tax concessions/exemptions/deductions, incorrect allowance of business expenditure, errors in assessment while giving effect to appellate orders, and income escaping assessment due to omissions.",
+      "actual_answer": "The main categories of irregularities in direct tax assessments, as identified in the CAG audit reports, include:\n\n1. **Arithmetical Errors in Computation of Income and Tax**: Errors in calculating income and tax amounts, which should be avoidable with the use of calculators and IT systems.\n\n2. **Incorrect Application of Tax Rates and Surcharges**: Mistakes in applying the correct rates of tax and surcharge, leading to incorrect assessments.\n\n3. **Non/Short Levy of Interest/Penalty**: Failures in levying appropriate interest or penalties for delays in submission of returns or payment of taxes.\n\n4. **Excess or Irregular Refunds/Interest on Refunds**: Instances where refunds or interest on refunds were granted excessively or irregularly.\n\n5. **Irregularities in Allowing Depreciation/Business Losses/Capital Losses**: Incorrect allowances in these areas, affecting the assessment quality.\n\n6. **Income Escaping Assessment**: Omissions leading to income not being assessed or under-assessed.\n\n7. **Mistakes under Special Provisions**: Errors related to provisions like MAT (Minimum Alternate Tax), AMT (Alternate Minimum Tax), and Tonnage Tax.\n\n8. **Incorrect Allowance of Business Expenditure**: Errors in allowing business expenditures that should not have been permitted.\n\n9. **Irregular Exemptions/Deductions/Reliefs**: Incorrect exemptions or deductions given to trusts, firms, societies, individuals, or corporates.\n\n10. **Incorrect Classification and Computation of Capital Gains**: Errors in classifying and computing capital gains.\n\n11. **Omissions in Implementing TDS/TCS Provisions**: Failures in applying Tax Deducted at Source (TDS) or Tax Collected at Source (TCS) provisions correctly.\n\nThese irregularities highlight significant deficiencies in the performance of Assessing Officers and weaknesses in the internal controls and IT systems of the Income Tax Department.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 5513.009071350098,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.8333333333333334,
+        "factual_accuracy": 4,
+        "completeness": 3,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 34.5,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "CBDT",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Assessment Officers",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "CPC",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response is mostly relevant and accurate but introduces several categories of irregularities that are not part of the expected answer. While it covers some key facts, it lacks completeness by omitting several important categories listed in the ground truth. Furthermore, there are no citations provided to support the claims made."
+      },
+      "issues": [
+        "Low entity coverage: 0%",
+        "Hallucination detected: The response includes categories such as 'Incorrect Application of Tax Rates and Surcharges' and 'Non/Short Levy of Interest/Penalty', which are not mentioned in the expected answer. Additionally, there are claims about specific provisions like MAT and AMT that are not part of the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC012",
+      "question": "How many hospitals admitted more patients than their bed capacity under PMJAY?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": [
+          "2023_11_PMJAY"
+        ]
+      },
+      "expected_summary": "In January 2020, 195 hospitals (103 private and 92 public) admitted more patients than their declared bed strength, indicating potential issues with the Transaction Management System allowing over-admissions.",
+      "actual_answer": "During the audit, it was found that in January 2020, 195 hospitals (103 private and 92 public) admitted more patients than their declared bed capacity under PMJAY. Additionally, from January 2021 to March 2021, 224 hospitals exceeded their bed strength on at least one day, excluding day care cases.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3272.453784942627,
+      "scores": {
+        "amount_accuracy": 0.3,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.8,
+        "factual_accuracy": 5,
+        "completeness": 4,
+        "relevance": 4,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 69.0,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 195,
+            "expected_unit": "count",
+            "expected_context": "hospitals exceeding capacity",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 103,
+            "expected_unit": "count",
+            "expected_context": "private hospitals",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 92,
+            "expected_unit": "count",
+            "expected_context": "public hospitals",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "TMS",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Transaction Management System",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately presents the key facts regarding the number of hospitals exceeding bed capacity, including the breakdown of private and public hospitals, and the date of occurrence. However, it introduces additional information about hospitals exceeding capacity from January 2021 to March 2021, which, while relevant, diverges from the specific question asked. There are no citations provided to support the claims made."
+      },
+      "issues": [
+        "Missing required amount: 195 count",
+        "Missing required amount: 103 count",
+        "Missing required amount: 92 count",
+        "Low entity coverage: 0%"
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC013",
+      "question": "What are the audit findings on Railways?",
+      "category": {
+        "difficulty": "easy",
+        "type": "negative",
+        "reports": []
+      },
+      "expected_summary": "No information available about Railways audit findings in the indexed reports. The available reports cover NHAI toll operations, Ayushman Bharat, direct taxes, FRBM compliance, and CPSE audits.",
+      "actual_answer": "The audit findings on Railways, as per the provided context, highlight several key issues:\n\n1. **Linear Programming-based Movement Plan**: The audit observed that 29,408 rakes did not follow the most economical routes, indicating a lack of significant improvement in compliance compared to the period from 2006-07 to 2011-12. This suggests ineffective persuasion with Railway authorities to adhere to the movement plan, which aims to economize movement costs.\n\n2. **Irregular Expenditure**: During FY 2023-24, Indian Railways incurred unsanctioned expenditure amounting to \u20b99,122.24 crore across 1,999 cases. This includes expenditures in excess of sanctioned estimates and without detailed estimates. Similar issues were noted in previous audit reports from FY 2018-19 to FY 2022-23, with no significant reduction in such cases by the Ministry.\n\nThese findings indicate ongoing challenges in compliance with planned routes and budgetary management within Indian Railways.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 5366.736173629761,
+      "scores": {
+        "amount_accuracy": 0.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.0,
+        "factual_accuracy": 0.0,
+        "completeness": 0.0,
+        "relevance": 2.0,
+        "citation_quality": 0.0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 4.000000000000001,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [],
+        "llm_judge_reasoning": ""
+      },
+      "issues": [
+        "Did not acknowledge lack of data for out-of-scope question",
+        "May have hallucinated content for out-of-scope question"
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC014",
+      "question": "What was the tax effect of incorrect application of tax rates?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": [
+          "2024_13_Direct_taxes",
+          "2025_14_Direct_taxes"
+        ]
+      },
+      "expected_summary": "Errors in applying the correct tax rates and surcharges resulted in significant tax effects, with amounts ranging from \u20b9690.5 crore to \u20b94,385 crore across different audit periods.",
+      "actual_answer": "The tax effect of the incorrect application of tax rates and surcharge by the Assessing Officers (AOs) was significant across various cases. Specifically, the audit reports identified:\n\n1. In 19 cases across seven states, the incorrect application of tax rates and surcharge resulted in a tax effect of \u20b9 43.37 crore.\n2. In another set of 12 cases, also across seven states, the tax effect amounted to \u20b9 92.42 crore.\n3. Additionally, seven cases in four states resulted in a tax effect of \u20b9 598.12 crore.\n4. In nine cases across five states, the tax effect was \u20b9 5.92 crore.\n\nThese findings highlight the substantial revenue implications due to the incorrect application of tax rates and surcharge by the AOs.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3083.782911300659,
+      "scores": {
+        "amount_accuracy": 0.7,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.6666666666666666,
+        "factual_accuracy": 2,
+        "completeness": 2,
+        "relevance": 3,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 20.5,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 690.5,
+            "expected_unit": "crore",
+            "expected_context": "tax effect from rate errors",
+            "found": false,
+            "found_value": 92.42,
+            "match_type": "wrong"
+          },
+          {
+            "expected_value": 4385,
+            "expected_unit": "crore",
+            "expected_context": "tax effect in another period",
+            "found": false,
+            "found_value": 92.42,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "CBDT",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response contains multiple factual inaccuracies regarding the amounts related to the tax effect of incorrect application of tax rates. It fails to mention the significant figures from the expected answer and does not provide any citations to support its claims. While it addresses the question, it does so with incomplete and incorrect information."
+      },
+      "issues": [
+        "Wrong amount: expected 690.5, found 92.42",
+        "Wrong amount: expected 4385, found 92.42",
+        "Low entity coverage: 0%",
+        "Hallucination detected: The amounts mentioned in the actual response (\u20b943.37 crore, \u20b992.42 crore, \u20b9598.12 crore, \u20b95.92 crore) do not match the key amounts from the expected answer (\u20b9690.5 crore to \u20b94,385 crore)."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC015",
+      "question": "What states did not conduct anti-fraud activities for PMJAY?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_11_PMJAY"
+        ]
+      },
+      "expected_summary": "Three States/UTs - Bihar, Chandigarh, and Uttar Pradesh - did not plan or conduct anti-fraud awareness activities as required by the Anti-Fraud guidelines.",
+      "actual_answer": "The states that did not conduct anti-fraud awareness activities for PMJAY are Bihar, Chandigarh, and Uttar Pradesh. This was noted in the audit findings, where it was observed that these states did not plan or conduct such activities, leaving the aim of apprising beneficiaries of potential irregularities unachieved.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2079.185962677002,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.75,
+        "key_fact_coverage": 1.0,
+        "factual_accuracy": 5,
+        "completeness": 5,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 88.75,
+        "passed": true,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "Bihar",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Chandigarh",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Uttar Pradesh",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "NHA",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately identifies the states that did not conduct anti-fraud activities and correctly notes the violation of Anti-Fraud guidelines. It includes all key facts and is directly relevant to the question. However, it lacks citations to support the claims made, which affects the citation quality."
+      },
+      "issues": [],
+      "passed": true
+    },
+    {
+      "test_id": "TC016",
+      "question": "Explain the systemic issues in NHAI toll collection operations.",
+      "category": {
+        "difficulty": "hard",
+        "type": "explanation",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "Systemic issues include: lack of centralized toll management software, non-compliance with toll fee rules and guidelines, delays in toll collection commencement, missing revenue sharing clauses in concession agreements, inadequate maintenance cost recovery, and poor data management affecting future revenue assessments.",
+      "actual_answer": "The systemic issues in NHAI toll collection operations, as identified in the CAG audit reports, revolve around several key areas:\n\n1. **Non-Compliance with Toll Fee Regulations**: The audit observed non-compliance with rules and statutory guidelines in the collection of toll fees by NHAI and its concessionaires. This includes delays in reducing toll fees to 75% on national highways being upgraded, which indicates a lack of adherence to the NH (RoF) Rules, 1997 and NH Fee Rules, 2008.\n\n2. **Lack of Centralized Data Management**: There is a significant issue with the absence of a centralized data center and a periodical data migration mechanism. This lack of centralized database management means that toll data is not readily available, impacting the ability to accurately assess revenue potential and underreporting of toll collection figures.\n\n3. **Delays in Toll Collection Initiation**: The audit highlighted delays in the commencement of toll collection due to various reasons, including failure to complete necessary infrastructure on time, resistance from local populations, and non-cooperation from state governments. These delays result in revenue loss and indicate poor planning and execution.\n\n4. **High Number of Exemptions and Violations**: There are numerous exemptions and violations at public-funded toll plazas. The lack of proper documentation and verification of exemptions leads to potential revenue loss and undermines the integrity of toll collection processes.\n\n5. **Inadequate IT Controls and Software Integration**: The use of disparate software systems by BOT operators and the absence of a uniform toll management software across all toll plazas result in inefficiencies and data inconsistencies. This fragmentation hinders effective monitoring and control of toll operations.\n\n6. **Failure in Maintenance and Operational Management**: The audit found that NHAI started toll collection without appointing operation and maintenance contractors, leading to additional costs for repairs and maintenance. This reflects a systemic issue in ensuring the operational readiness of toll plazas.\n\nThese issues collectively point to a need for improved compliance, better data management, enhanced IT systems, and more effective operational planning and execution in NHAI's toll collection operations.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 5736.277103424072,
+      "scores": {
+        "amount_accuracy": 0.7,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.8571428571428571,
+        "factual_accuracy": 4,
+        "completeness": 3,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 71.00000000000001,
+        "passed": true,
+        "amount_matches": [
+          {
+            "expected_value": 64.6,
+            "expected_unit": "crore",
+            "expected_context": "loss from delays",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 133.36,
+            "expected_unit": "crore",
+            "expected_context": "loss from missing clauses",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 68.12,
+            "expected_unit": "crore",
+            "expected_context": "loss from approach road delays",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Concessionaires",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "NH Fee Rules",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately identifies several systemic issues in NHAI toll collection operations, but it misses specific key amounts related to losses, which affects its completeness. While the response is relevant and directly addresses the question, it lacks citations to support the claims made, which significantly impacts the citation quality."
+      },
+      "issues": [],
+      "passed": true
+    },
+    {
+      "test_id": "TC017",
+      "question": "What was the expenditure on ineligible beneficiaries in PMJAY?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": [
+          "2023_11_PMJAY"
+        ]
+      },
+      "expected_summary": "In six States/UTs, ineligible households were registered as PMJAY beneficiaries and availed benefits. The expenditure ranged from \u20b90.12 lakh in Chandigarh to \u20b922.44 crore in Tamil Nadu.",
+      "actual_answer": "The expenditure on ineligible beneficiaries under the PMJAY scheme varied across different States/UTs. Specifically, the expenditure ranged from \u20b90.12 lakh in Chandigarh to \u20b922.44 crore in Tamil Nadu. This indicates a significant financial impact due to the inclusion of ineligible households as beneficiaries of the scheme.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3075.263023376465,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.75,
+        "factual_accuracy": 5,
+        "completeness": 5,
+        "relevance": 5,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 90.0,
+        "passed": true,
+        "amount_matches": [
+          {
+            "expected_value": 22.44,
+            "expected_unit": "crore",
+            "expected_context": "expenditure in Tamil Nadu",
+            "found": true,
+            "found_value": 22.44,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 0.12,
+            "expected_unit": "lakh",
+            "expected_context": "expenditure in Chandigarh",
+            "found": true,
+            "found_value": 0.12,
+            "match_type": "exact"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "Tamil Nadu",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Chandigarh",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "PMJAY",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately captures all key facts and amounts related to the expenditure on ineligible beneficiaries in PMJAY. It mentions the correct states, the range of expenditures, and identifies both the highest and lowest amounts. However, it lacks any citations to support the claims made, which affects the citation quality score."
+      },
+      "issues": [],
+      "passed": true
+    },
+    {
+      "test_id": "TC018",
+      "question": "Compare the tax assessment issues across 2020-21, 2021-22, and 2022-23 periods.",
+      "category": {
+        "difficulty": "hard",
+        "type": "comparison",
+        "reports": [
+          "2022_29_Direct_taxes",
+          "2024_13_Direct_taxes",
+          "2025_14_Direct_taxes"
+        ]
+      },
+      "expected_summary": "Tax assessment issues persist across all three periods, with similar categories of irregularities: arithmetical errors, incorrect allowances, and administration of exemptions. The recurring nature of these issues indicates systemic weaknesses in tax administration.",
+      "actual_answer": "The tax assessment issues across the periods 2020-21, 2021-22, and 2022-23 reveal several trends and discrepancies in the administration of tax laws:\n\n1. **Income Escaping Assessment**:\n   - In 2020-21, there were 10 errors with a tax effect of \u20b970.18 crore.\n   - In 2021-22, the number of errors increased to 16, with a tax effect of \u20b9107.76 crore.\n   - By 2022-23, the errors surged to 538, with a tax effect of \u20b9605 crore. This indicates a significant rise in both the number of errors and the financial impact over the years.\n\n2. **Incorrect Allowance of Business Expenditure**:\n   - The data for specific errors and tax effects in this category is not fully detailed for each year, but the persistent mention across reports suggests ongoing issues with the allowance of business expenditures.\n\n3. **Internal Audit Effectiveness**:\n   - In 2020-21, 38,270 cases involving \u20b918,354 crore were pending, showing a 28.6% increase from the previous year.\n   - By 2022-23, pending cases slightly decreased to 34,755, but the amount involved increased significantly to \u20b930,469 crore, a 35.1% rise from the previous year. This highlights a growing financial impact despite a slight reduction in case numbers.\n\n4. **Quality of Assessments**:\n   - The reports indicate issues with excess or irregular refunds and interest on refunds, with varying impacts across the years. Specific figures for each year are not detailed, but the recurring mention suggests persistent challenges in this area.\n\nOverall, the data reflects a trend of increasing financial implications due to errors and inefficiencies in tax assessments, despite some efforts to address the number of pending cases. The significant rise in the financial impact of pending cases and errors suggests a need for improved oversight and corrective measures in tax administration.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 6621.421098709106,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.5,
+        "factual_accuracy": 3,
+        "completeness": 3,
+        "relevance": 4,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 29.5,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "CBDT",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "CPC",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "AOs",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "While the response provides some relevant information about tax assessment issues, it lacks key facts such as the systemic weaknesses and the consistent failure to follow CBDT directives. Additionally, the absence of citations undermines the credibility of the claims made, and the presence of unsupported figures indicates hallucination."
+      },
+      "issues": [
+        "Low entity coverage: 0%",
+        "Hallucination detected: The response includes specific figures and claims about errors and tax effects that are not mentioned in the expected answer or ground truth, indicating potential hallucinations."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC019",
+      "question": "What is the total revenue loss across all NHAI toll findings?",
+      "category": {
+        "difficulty": "hard",
+        "type": "aggregation",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "The major revenue losses include: \u20b964.60 crore from toll collection delays, \u20b968.12 crore from approach road delays, \u20b9133.36 crore from missing revenue sharing clauses, and \u20b916.68 crore from short collection on NH 44. Individual losses should not necessarily be summed as they may overlap.",
+      "actual_answer": "The total revenue loss across all NHAI toll findings mentioned in the provided context amounts to \u20b93,512.62 crore due to the COVID-19 pandemic, \u20b9814.13 crore due to farmer agitation, \u20b968.12 crore due to delay in completion of approach roads, \u20b978.88 crore and \u20b954.48 crore due to non-provision of revenue sharing clauses, and \u20b964.60 crore due to delays in toll collection as per NH Fee Rules, 2008. This results in a cumulative total revenue loss of \u20b94,592.83 crore.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2587.5837802886963,
+      "scores": {
+        "amount_accuracy": 0.6499999999999999,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.4,
+        "factual_accuracy": 1,
+        "completeness": 2,
+        "relevance": 2,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 17.75,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 64.6,
+            "expected_unit": "crore",
+            "expected_context": "toll delays",
+            "found": true,
+            "found_value": 64.6,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 68.12,
+            "expected_unit": "crore",
+            "expected_context": "approach road delays",
+            "found": true,
+            "found_value": 68.12,
+            "match_type": "exact"
+          },
+          {
+            "expected_value": 133.36,
+            "expected_unit": "crore",
+            "expected_context": "missing clauses",
+            "found": false,
+            "found_value": 4592.83,
+            "match_type": "wrong"
+          },
+          {
+            "expected_value": 16.68,
+            "expected_unit": "crore",
+            "expected_context": "short collection",
+            "found": false,
+            "found_value": 4592.83,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response contains significant factual inaccuracies and hallucinations, including figures that are not present in the expected answer. It fails to address the specific revenue losses outlined in the ground truth and introduces unrelated figures, leading to a lack of relevance and completeness."
+      },
+      "issues": [
+        "Wrong amount: expected 133.36, found 4592.83",
+        "Wrong amount: expected 16.68, found 4592.83",
+        "Low key fact coverage: 40%",
+        "Hallucination detected: The response includes figures and claims about revenue losses due to the COVID-19 pandemic and farmer agitation, which are not mentioned in the expected answer. The cumulative total revenue loss of \u20b94,592.83 crore is also not supported by the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC020",
+      "question": "Which states had deficiency in medical audits for PMJAY?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_11_PMJAY"
+        ]
+      },
+      "expected_summary": "Nagaland and Tripura had significant shortfalls in conducting medical and other audits by their State Health Agencies, undermining the anti-fraud investigation and audit system under PMJAY.",
+      "actual_answer": "The states with deficiencies in medical audits for PMJAY include:\n\n1. **Karnataka**: There was a 19% shortfall in medical audits, with 60,077 conducted against a target of 75,083. No beneficiary or claim audits were conducted.\n   \n2. **Kerala**: No medical, death, beneficiary, pre-authorization, or claim audits were conducted. The Third Party Administrator also did not conduct beneficiary or pre-authorization audits.\n\n3. **Ladakh**: No audit reports were submitted by the insurer, and no targets for audits were framed by the SHA.\n\n4. **Madhya Pradesh**: There were shortfalls of 91%, 71%, and 76% in hospital audits during 2018-19, 2019-20, and 2020-21, respectively.\n\n5. **Maharashtra**: Out of 3,381 medical audits, only 1,262 were conducted, with no other audits performed by the SHA.\n\n6. **Meghalaya**: Due to the non-formation of necessary committees, claim and death audits were not conducted. There was a 91% shortfall in medical audits, with only 144 conducted against a target of 1,644.\n\n7. **Puducherry**: No audits of any kind were conducted.\n\n8. **Tripura**: There was a shortfall of 66.23% in medical audits, with no other audits conducted by the SHA.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3913.4128093719482,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.75,
+        "key_fact_coverage": 0.5,
+        "factual_accuracy": 1,
+        "completeness": 2,
+        "relevance": 2,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 18.875000000000004,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "Nagaland",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Tripura",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "SHA",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "State Health Agency",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The actual response fails to accurately address the question regarding deficiencies in medical audits for PMJAY, focusing instead on unrelated states and providing incorrect details. It lacks the necessary key facts about Nagaland and Tripura, resulting in a low score for factual accuracy and completeness."
+      },
+      "issues": [
+        "Hallucination detected: The response includes information about states other than Nagaland and Tripura, which are not relevant to the question. Additionally, it provides specific figures and claims that are not supported by the expected answer."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC021",
+      "question": "What are the findings on Bharatmala Phase I implementation?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": [
+          "2023_19_Bharatmala"
+        ]
+      },
+      "expected_summary": "The audit of Bharatmala Pariyojana Phase I found issues related to project planning, execution delays, cost overruns, competing infrastructure considerations, and development of national highways.",
+      "actual_answer": "The findings on the implementation of Phase-I of Bharatmala Pariyojana, as per the CAG audit reports, highlight several key aspects:\n\n1. **Mode of Implementation**: The audit examined the mode of implementation for Phase-I, which involved various strategies and methodologies adopted to execute the project. This included the selection of projects, contracting processes, and the involvement of different stakeholders.\n\n2. **Progress Achieved**: As of 31 March 2023, the progress of Phase-I was documented in terms of kilometers completed. The audit report includes a detailed table (Table 1.2) and a chart (Chart 1.1) that illustrate the extent of progress against the planned targets. These visual aids provide a clear picture of the achievements and any shortfalls in the implementation process.\n\n3. **Targets and Achievements**: The report also discusses the targets set for Phase-I and the achievements of the National Highways and Infrastructure Development Corporation Limited (NHIDCL) under this phase. This section highlights any discrepancies between planned objectives and actual outcomes, providing insights into the effectiveness of the implementation strategies.\n\n4. **Planning and Components**: The audit covers the planning aspects of Phase-I, detailing how the components were structured and the planning processes involved. This includes an analysis of the initial planning stages and how they translated into execution.\n\nOverall, the audit findings provide a comprehensive overview of the implementation of Phase-I of Bharatmala Pariyojana, identifying areas of success and those requiring improvement. The report serves as a critical tool for assessing the efficiency and effectiveness of the project execution.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 5288.341999053955,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.3333333333333333,
+        "key_fact_coverage": 0.6,
+        "factual_accuracy": 3,
+        "completeness": 2,
+        "relevance": 3,
+        "citation_quality": 0,
+        "has_hallucination": false,
+        "acknowledges_no_data": false,
+        "overall_score": 51.66666666666667,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "MoRTH",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Bharatmala Pariyojana",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response contains some accurate information regarding the implementation of Bharatmala Phase I but fails to address key findings such as execution delays, cost overruns, and competing infrastructure issues. While it discusses planning and progress, it does not fully cover the expected key facts. Additionally, there are no citations provided to support the claims made."
+      },
+      "issues": [
+        "Low entity coverage: 33%"
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC022",
+      "question": "What were the fiscal deficit targets under FRBM Act?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": [
+          "2024_01_FRBM",
+          "2025_03_FRBM",
+          "2025_18_FRBM"
+        ]
+      },
+      "expected_summary": "The FRBM Act 2003 sets targets for fiscal deficit as a percentage of GDP. The audit examines compliance with these targets and fiscal consolidation roadmap.",
+      "actual_answer": "The fiscal deficit targets under the Fiscal Responsibility and Budget Management (FRBM) Act, as amended in April 2018, were to reduce the fiscal deficit to up to three percent of GDP by 31st March 2021. However, no specific year-end targets were prescribed for the fiscal year 2021-22. The government committed to a broad path of fiscal consolidation to achieve a fiscal deficit lower than 4.5 percent of GDP by FY 2025-26, as stated in the Budget Speech for FY 2021-22 and reiterated in the Medium-Term Fiscal Policy Statement for 2022-23.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2856.487989425659,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.5,
+        "factual_accuracy": 4,
+        "completeness": 3,
+        "relevance": 4,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 32.5,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "FRBM Act 2003",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Ministry of Finance",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response provides accurate information regarding fiscal deficit targets but introduces specific figures and timelines that are not present in the expected answer. While it covers some key facts, it lacks citations to support its claims, which significantly impacts its overall quality."
+      },
+      "issues": [
+        "Low entity coverage: 0%",
+        "Hallucination detected: The response mentions specific fiscal deficit targets and timelines (e.g., 'reduce the fiscal deficit to up to three percent of GDP by 31st March 2021') that are not included in the expected answer. Additionally, it introduces details about the 2021-22 fiscal year that are not part of the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC023",
+      "question": "What issues were found with FCI food grain storage?",
+      "category": {
+        "difficulty": "medium",
+        "type": "list",
+        "reports": [
+          "2023_20_Food_grains"
+        ]
+      },
+      "expected_summary": "The audit found issues with modernization of bulk grain handling facilities, storage capacity utilization, movement of food grains, and storage management practices by FCI.",
+      "actual_answer": "The audit report identified several issues with the Food Corporation of India's (FCI) food grain storage management:\n\n1. **Quality Control Lapses**: The audit revealed that checks for uric acid and aflatoxin were not conducted in major procuring states like Punjab, Haryana, and Uttar Pradesh during the acceptance of wheat and rice, as required by the Food Safety Standards Authority of India (FSSAI). This indicates a gap in ensuring food safety standards at the procurement stage.\n\n2. **Damage to Food Grains**: Between 2017-18 and 2021-22, a significant quantity of 13,349 MT of food grains, valued at \u20b935.57 crore, was reported as damaged. A substantial portion of this damage (78%) was attributed to wheat stored in Cover and Plinth (CAP) storage, highlighting issues with storage methods.\n\n3. **Underutilization of Storage Facilities**: The report noted underutilization of silo storage capacities in four divisional offices, which suggests inefficiencies in storage management and potential wastage of resources.\n\n4. **Absence of Liquidation Facilities**: The lack of railway siding facilities led to unfruitful expenditure of \u20b96.95 crore, as stocks remained stuck in silos for almost four years, risking deterioration of stored grains.\n\nThese findings underscore the need for improved quality control, better utilization of storage facilities, and enhanced infrastructure to prevent losses and ensure food safety.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 5379.930257797241,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.5,
+        "factual_accuracy": 4,
+        "completeness": 3,
+        "relevance": 4,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 35.0,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "FCI",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "Food Corporation of India",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response accurately identifies some issues related to FCI food grain storage but introduces additional details that are not part of the expected answer, leading to minor factual inaccuracies. While it covers some key facts, it misses others, such as the specific mention of modernization issues. The lack of citations further detracts from its quality."
+      },
+      "issues": [
+        "Hallucination detected: The response includes specific figures and claims about quality control lapses and damage to food grains that are not mentioned in the expected answer. Additionally, the financial figures provided are not part of the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC024",
+      "question": "What is the breakdown of tax irregularities by type?",
+      "category": {
+        "difficulty": "hard",
+        "type": "aggregation",
+        "reports": [
+          "2024_13_Direct_taxes"
+        ]
+      },
+      "expected_summary": "Tax irregularities are categorized into: arithmetical errors (\u20b94,761.37 crore), incorrect application of tax rates (\u20b9690.5 crore), administration of tax concessions/exemptions (\u20b91,553.05 crore), and other assessment errors.",
+      "actual_answer": "The breakdown of tax irregularities by type, as reported in the CAG audit, includes several categories with varying numbers of errors and tax effects. Here are the main types:\n\n1. **Quality of Assessments**: 4,597 errors.\n2. **Arithmetical Errors in Computation of Income and Tax**: 1,049 errors.\n3. **Incorrect Application of Rate of Tax, Surcharge, etc.**: 973 errors.\n4. **No/Short Levy of Interest/Penalty**: 2,455 errors.\n5. **Excess or Irregular Refunds/Interest on Refunds**: 104 errors.\n6. **Mistake in Assessment while Giving Effect to Appellate Orders**: 16 errors.\n7. **Administration of Tax Concessions/Exemptions/Deductions**: 2,331 errors.\n8. **Irregular Exemptions/Deductions/Reliefs to Corporates**: 162 errors.\n9. **Irregularities in Allowing Depreciation/Business Losses/Capital Losses**: 309 errors.\n10. **Income Escaping Assessments Due to Omissions**: 731 errors.\n11. **Under Special Provisions Including MAT/AMT/Tonnage Tax**: 43 errors.\n12. **Unexplained Investments/Cash Credits**: 385 errors.\n13. **Incorrect Classification and Computation of Capital Gains**: 173 errors.\n14. **Incorrect Estimation of Arm\u2019s Length Price**: 14 errors.\n15. **Omission to Club Income of Spouse, Minor Child, etc.**: 0 errors.\n16. **Incorrect Computation of Income from House Property**: 19 errors.\n17. **Incorrect Computation of Salary Income**: 8 errors.\n18. **Omission in Implementing Provisions of TDS/TCS**: 89 errors.\n19. **Others**: 2,404 errors.\n\nThese categories highlight the areas where significant irregularities were found, impacting the overall quality and accuracy of tax assessments.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 4216.785907745361,
+      "scores": {
+        "amount_accuracy": 0.7,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 1.0,
+        "factual_accuracy": 1,
+        "completeness": 2,
+        "relevance": 2,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 15.5,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 4761.37,
+            "expected_unit": "crore",
+            "expected_context": "arithmetical errors",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 690.5,
+            "expected_unit": "crore",
+            "expected_context": "rate application errors",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          },
+          {
+            "expected_value": 1553.05,
+            "expected_unit": "crore",
+            "expected_context": "concession/exemption errors",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [
+          {
+            "expected_entity": "CBDT",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The response fails to accurately represent the breakdown of tax irregularities as specified in the expected answer. It includes irrelevant categories and figures that do not align with the ground truth, leading to a low score in factual accuracy and relevance. Additionally, there are no citations provided to support the claims made."
+      },
+      "issues": [
+        "Low entity coverage: 0%",
+        "Hallucination detected: The actual response contains numerous categories and figures that do not match the expected answer, including incorrect amounts and categories that were not mentioned in the ground truth."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC025",
+      "question": "How much did Cooperative Societies audit find in irregularities?",
+      "category": {
+        "difficulty": "medium",
+        "type": "factual",
+        "reports": [
+          "2020_16_Cooperative"
+        ]
+      },
+      "expected_summary": "The audit of cooperative societies and cooperative banks examined assessment procedures, compliance with provisions, and tax implications in the cooperative sector.",
+      "actual_answer": "The audit of Co-operative Societies and Co-operative Banks found irregularities involving a tax effect of \u20b912,198.18 crore. These irregularities were identified in a sample of 8,470 cases, as noted in the CAG Report No. 16 of 2020.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2230.508804321289,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.0,
+        "factual_accuracy": 2,
+        "completeness": 3,
+        "relevance": 3,
+        "citation_quality": 3,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 27.500000000000004,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "Cooperative Societies",
+            "found": false,
+            "context": null
+          },
+          {
+            "expected_entity": "Cooperative Banks",
+            "found": false,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The actual response contains a significant factual error regarding the amount of irregularities found, which is not mentioned in the expected answer. While it addresses some aspects of the audit, it lacks completeness in covering all key facts and does not fully answer the question regarding irregularities. The citation quality is moderate, but the hallucination regarding the specific amount detracts from the overall accuracy."
+      },
+      "issues": [
+        "Low entity coverage: 0%",
+        "Low key fact coverage: 0%",
+        "Hallucination detected: The response mentions a specific amount of \u20b912,198.18 crore, which is not supported by the expected answer or ground truth. The ground truth does not specify any amounts."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC026",
+      "question": "Give me a one-sentence summary of NHAI toll audit findings.",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2023_07_NHAI_Toll"
+        ]
+      },
+      "expected_summary": "The NHAI toll audit found revenue losses exceeding \u20b9200 crore due to toll collection delays, missing revenue sharing clauses, and inadequate data management systems.",
+      "actual_answer": "The CAG audit found non-compliance with toll fee regulations, delays in maintenance and overlay works, and significant revenue losses and non-recoveries by NHAI and its Concessionaires, amounting to several hundred crores.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2423.405885696411,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.5,
+        "factual_accuracy": 3,
+        "completeness": 3,
+        "relevance": 3,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 30.0,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "NHAI",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The actual response contains some relevant information regarding revenue losses and delays but lacks specific details about the categories of revenue loss and contractual issues. Additionally, it does not provide any citations to support its claims, which significantly impacts its quality."
+      },
+      "issues": [
+        "Hallucination detected: The response mentions 'significant revenue losses and non-recoveries by NHAI and its Concessionaires, amounting to several hundred crores,' which is vague and does not specify the exact revenue loss exceeding \u20b9200 crore as stated in the expected answer."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC027",
+      "question": "What reports are available from 2025?",
+      "category": {
+        "difficulty": "easy",
+        "type": "factual",
+        "reports": [
+          "2025_03_FRBM",
+          "2025_04_Union_Accounts",
+          "2025_06_CPSE",
+          "2025_14_Direct_taxes",
+          "2025_16_Union_Accounts",
+          "2025_18_FRBM"
+        ]
+      },
+      "expected_summary": "Six reports from 2025 are available: FRBM Compliance reports (Report 3 and 18), Union Government Accounts (Reports 4 and 16), CPSE Financial Reports (Report 6), and Direct Taxes Compliance (Report 14).",
+      "actual_answer": "The reports available from 2025 include:\n\n1. **Report No. 16 of 2025** - This report is related to budgetary management and financial audits.\n2. **Union Government (Commercial) Report No. 6 of 2025** - This is a compliance audit report.\n3. **Union Government Ministry of Finance Report No. 4 of 2025** - This is a financial audit report.\n4. **Report No. 19 of 2025** - This report includes trends in macroeconomic parameters.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 3325.1357078552246,
+      "scores": {
+        "amount_accuracy": 0.3,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.3333333333333333,
+        "factual_accuracy": 1,
+        "completeness": 1,
+        "relevance": 2,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 13.5,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 6,
+            "expected_unit": "count",
+            "expected_context": "reports from 2025",
+            "found": false,
+            "found_value": null,
+            "match_type": "missing"
+          }
+        ],
+        "entity_matches": [],
+        "llm_judge_reasoning": "The response contains multiple inaccuracies regarding the reports available from 2025, failing to mention key reports and including incorrect ones. It does not adequately address the question, leading to a low score in relevance and completeness."
+      },
+      "issues": [
+        "Missing required amount: 6 count",
+        "Low key fact coverage: 33%",
+        "Hallucination detected: The response includes reports (16, 19) that are not part of the expected answer. Report 19 is not mentioned in the ground truth, and Report 16 is incorrectly attributed to 2025 instead of 2023-24."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC028",
+      "question": "What is the Union Government's fiscal position as per CAG audit?",
+      "category": {
+        "difficulty": "hard",
+        "type": "explanation",
+        "reports": [
+          "2025_04_Union_Accounts",
+          "2025_16_Union_Accounts"
+        ]
+      },
+      "expected_summary": "The CAG audit of Union Government Accounts examines fiscal position including balances awaiting clearance in suspense heads, netting of suspense heads, and overall financial management.",
+      "actual_answer": "The fiscal position of the Union Government, as per the CAG audit for FY 2023-24, shows a fiscal deficit of \u20b9216,02,143 crore. This represents 5.32% of GDP, which is an improvement from the previous fiscal year where the fiscal deficit was 6.53% of GDP. This improvement is attributed to a 13.82% increase in revenue receipts and a controlled growth in revenue expenditure, which only increased by 1.86% over the previous year. Additionally, the ratio of capital expenditure to fiscal deficit has been increasing, reaching 50.38% in FY 2023-24, indicating a positive trend towards more investment in capital projects.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2745.7289695739746,
+      "scores": {
+        "amount_accuracy": 1.0,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.0,
+        "factual_accuracy": 2,
+        "completeness": 2,
+        "relevance": 2,
+        "citation_quality": 0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 22.5,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [
+          {
+            "expected_entity": "Union Government",
+            "found": true,
+            "context": null
+          },
+          {
+            "expected_entity": "CAG",
+            "found": true,
+            "context": null
+          }
+        ],
+        "llm_judge_reasoning": "The actual response provides specific fiscal figures that are not part of the expected answer, indicating a major factual error. It fails to cover the key aspects of the fiscal position as outlined in the ground truth, leading to significant gaps in completeness and relevance. Furthermore, there are no citations provided to support the claims made."
+      },
+      "issues": [
+        "Low key fact coverage: 0%",
+        "Hallucination detected: The response includes specific figures regarding fiscal deficit and GDP percentages that are not mentioned in the expected answer. Additionally, it does not address the key facts about balances awaiting clearance and suspense heads."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC029",
+      "question": "Find audit findings mentioning amounts over 500 crore.",
+      "category": {
+        "difficulty": "hard",
+        "type": "aggregation",
+        "reports": [
+          "2024_13_Direct_taxes",
+          "2025_14_Direct_taxes"
+        ]
+      },
+      "expected_summary": "Major findings over \u20b9500 crore include: arithmetical errors (\u20b94,761.37 crore tax effect), incorrect tax rate application (\u20b94,385 crore), and administration of exemptions (\u20b91,553.05 crore to \u20b91,722 crore).",
+      "actual_answer": "Here are the audit findings mentioning amounts over \u20b9500 crore:\n\n1. **Pending Audit Observations**: As of 31st March 2023, there were 59,352 pending cases with a revenue effect of \u20b92,28,484.18 crore (Page 53).\n\n2. **Persistent Irregularities in Tax Assessments**: Out of 17,317 audit observations in FY 2022-23, the tax effect was \u20b964,462.99 crore, with \u20b953,343.63 crore related to under-assessment (Page 46).\n\n3. **Misclassification in Accounting**: Instances of misclassification amounted to \u20b95,522 crore, with \u20b94,289 crore related to receipts and \u20b91,233 crore related to expenditure (Page 10).\n\n4. **Supplementary Audit of CPSEs**: The financial impact on profitability was \u20b94,498.04 crore, and on assets/liabilities was \u20b92,88,460.13 crore (Page 56).\n\nThese findings highlight significant financial implications across various areas audited by the CAG.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 4887.458086013794,
+      "scores": {
+        "amount_accuracy": 0.15,
+        "entity_coverage": 1.0,
+        "key_fact_coverage": 0.6666666666666666,
+        "factual_accuracy": 2,
+        "completeness": 2,
+        "relevance": 3,
+        "citation_quality": 3,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 23.25,
+        "passed": false,
+        "amount_matches": [
+          {
+            "expected_value": 4761.37,
+            "expected_unit": "crore",
+            "expected_context": "arithmetical errors",
+            "found": false,
+            "found_value": 53343.63,
+            "match_type": "wrong"
+          },
+          {
+            "expected_value": 4385,
+            "expected_unit": "crore",
+            "expected_context": "tax rate errors",
+            "found": true,
+            "found_value": 4498.04,
+            "match_type": "close"
+          },
+          {
+            "expected_value": 1553.05,
+            "expected_unit": "crore",
+            "expected_context": "exemption errors",
+            "found": false,
+            "found_value": 53343.63,
+            "match_type": "wrong"
+          }
+        ],
+        "entity_matches": [],
+        "llm_judge_reasoning": "The response contains several factual inaccuracies and does not adequately address the specific findings related to amounts over \u20b9500 crore as outlined in the expected answer. While some relevant information is provided, it lacks the necessary details and focus on the key amounts and findings requested."
+      },
+      "issues": [
+        "Wrong amount: expected 4761.37, found 53343.63",
+        "Wrong amount: expected 1553.05, found 53343.63",
+        "Hallucination detected: The response includes findings that do not specifically mention amounts over \u20b9500 crore as requested, such as pending audit observations and persistent irregularities in tax assessments, which are not part of the expected answer."
+      ],
+      "passed": false
+    },
+    {
+      "test_id": "TC030",
+      "question": "What are the defense audit findings?",
+      "category": {
+        "difficulty": "easy",
+        "type": "negative",
+        "reports": []
+      },
+      "expected_summary": "No defense audit findings are available in the indexed reports. The available reports cover highways (NHAI), healthcare (PMJAY), taxation, fiscal management, CPSEs, and food storage.",
+      "actual_answer": "The provided context does not include specific details about defense audit findings. The excerpts mention various sections of audit findings related to different topics, such as storage capacity, non-executive directors, and quality of assessments, but none specifically address defense audit findings. For detailed information on defense audit findings, one would need to refer to the relevant sections of the CAG report that specifically cover defense audits.",
+      "sources_used": 10,
+      "search_type": "hybrid",
+      "response_time_ms": 2383.5458755493164,
+      "scores": {
+        "amount_accuracy": 0.0,
+        "entity_coverage": 0.0,
+        "key_fact_coverage": 0.0,
+        "factual_accuracy": 0.0,
+        "completeness": 0.0,
+        "relevance": 2.0,
+        "citation_quality": 0.0,
+        "has_hallucination": true,
+        "acknowledges_no_data": false,
+        "overall_score": 4.000000000000001,
+        "passed": false,
+        "amount_matches": [],
+        "entity_matches": [],
+        "llm_judge_reasoning": ""
+      },
+      "issues": [
+        "Did not acknowledge lack of data for out-of-scope question",
+        "May have hallucinated content for out-of-scope question"
+      ],
+      "passed": false
+    }
+  ]
+}

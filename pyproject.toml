@@ -1,45 +1,91 @@
-
-
 [tool.poetry]
-name = "cag_rag"
+name = "cag-interactive-gateway"
 version = "0.1.0"
-description = "RAG-powered gateway to India's public audit reports."
-authors = "Devang K"
+description = "AI-powered gateway to India's public audit reports."
+authors = ["K Devang"]
 readme = "README.md"
+package-mode = false
+
+# =============================================================================
+# PRODUCTION RUNTIME — Only what the API server needs to run
+# Exported for Docker with: poetry export --only main -o requirements.docker.txt
+# =============================================================================
 [tool.poetry.dependencies]
 python = "^3.11"
-# Core Parsing Pipeline Dependencies
-docling-core = "*" # Placeholder, specify version once known
-pymupdf = "^1.24.1"
-ocrmypdf = "^16.1.1"
-# Vision Models for Image Analysis
-transformers = "^4.41.2"
-torch = "^2.3.1"
-pillow = "^10.3.0"
-# RAG Framework & Vector DB Client
-llama-index = "^0.10.40"
+
+# Web framework
+fastapi = "^0.128.0"
+uvicorn = {extras = ["standard"], version = "^0.40.0"}
+pydantic-settings = "^2.12.0"
+httpx = ">=0.28.1,<1.0.0"
+
+# LLM providers
+openai = "^1.0.0"
+anthropic = "^0.77.0"
+cohere = "^4.0.0"
+google-genai = "^1.64.0"
+
+# Vector database
 qdrant-client = "^1.9.0"
+
 # Utilities
 python-dotenv = "^1.0.1"
-pandas = "^2.2.2"
+tenacity = "^8.2.3"
 tqdm = "^4.66.4"
+slowapi = "^0.1.9"
+
+# =============================================================================
+# PARSING PIPELINE — Heavy offline deps, run locally, NOT in Docker
+# Install with: poetry install --with parsing
+# =============================================================================
+[tool.poetry.group.parsing.dependencies]
+
+# PDF extraction & OCR
+docling = "^2.54.0"
+pymupdf = "^1.24.1"
+ocrmypdf = "^16.1.1"
+pdfplumber = "^0.11.9"
+ghostscript = "^0.8.1"
+pytesseract = "^0.3.10"
+
+# Vision models for table/chart extraction
+transformers = "^4.35.0"
+torch = "^2.3.1"
+pillow = "^10.3.0"
+timm = "^0.9.12"
+einops = "^0.7.0"
+
+# Data processing & analysis
+pandas = "^2.2.2"
+openpyxl = "^3.1.2"
+scikit-learn = "^1.4.0"
+
+# =============================================================================
+# DEV — Testing, linting, notebooks
+# Install with: poetry install --with dev
+# =============================================================================
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.1"
-
 pre-commit = "^3.7.1"
 ruff = "^0.4.5"
 mypy = "^1.10.0"
 jupyterlab = "^4.2.1"
+pytest-httpx = ">=0.35.0"
+
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-# Tool Configurations
+
 [tool.ruff]
 line-length = 88
-#select = ""
-#ignore = ""
+
 [tool.ruff.format]
 quote-style = "double"
+
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+anyio_backend = "asyncio"

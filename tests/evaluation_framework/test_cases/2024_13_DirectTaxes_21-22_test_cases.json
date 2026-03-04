@@ -1,0 +1,478 @@
+[
+  {
+    "id": "DIRECT_TAX_2022_TC001",
+    "question": "What was the total tax effect of all audit observations in the Direct Tax Compliance Audit Report for 2021-22?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The total tax effect of all audit observations was ₹6,365.47 crore involving 1,614 cases.",
+      "key_facts": [
+        "Total 1,614 cases were identified with audit observations",
+        "Total tax effect was ₹6,365.47 crore"
+      ],
+      "key_amounts": [
+        {"value": 6365.47, "unit": "crore", "context": "total tax effect of all audit observations", "required": true},
+        {"value": 1614, "unit": "cases", "context": "total number of cases with audit observations", "required": true}
+      ],
+      "key_entities": ["ITD", "CBDT"],
+      "source_sections": ["Executive Summary", "Preface"],
+      "source_pages": [5, 7]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["State taxes", "Indirect taxes"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC002",
+    "question": "How much was the tax effect under Corporation Tax cases in the audit report?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The tax effect under Corporation Tax was ₹4,904.73 crore involving 1,086 cases.",
+      "key_facts": [
+        "Corporation Tax cases numbered 1,086",
+        "Tax effect was ₹4,904.73 crore"
+      ],
+      "key_amounts": [
+        {"value": 4904.73, "unit": "crore", "context": "tax effect under Corporation Tax", "required": true},
+        {"value": 1086, "unit": "cases", "context": "number of Corporation Tax cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "ITD"],
+      "source_sections": ["Executive Summary", "Chapter 2"],
+      "source_pages": [7, 15]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax effect"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC003",
+    "question": "What was the tax effect of Income Tax cases in the compliance audit?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The tax effect under Income Tax was ₹1,460.74 crore involving 528 cases.",
+      "key_facts": [
+        "Income Tax cases numbered 528",
+        "Tax effect was ₹1,460.74 crore"
+      ],
+      "key_amounts": [
+        {"value": 1460.74, "unit": "crore", "context": "tax effect under Income Tax", "required": true},
+        {"value": 528, "unit": "cases", "context": "number of Income Tax cases", "required": true}
+      ],
+      "key_entities": ["Income Tax", "ITD"],
+      "source_sections": ["Executive Summary", "Chapter 3"],
+      "source_pages": [7, 45]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Corporation Tax effect"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC004",
+    "question": "How much tax was recovered by ITD from draft audit findings?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "ITD recovered ₹117.68 crore in 247 cases from the draft audit findings. Additionally, ₹32.45 crore was recovered after issue of draft paragraphs.",
+      "key_facts": [
+        "ITD recovered ₹117.68 crore from draft audit findings",
+        "Recovery was made in 247 cases",
+        "Additional ₹32.45 crore recovered after issue of draft paragraphs"
+      ],
+      "key_amounts": [
+        {"value": 117.68, "unit": "crore", "context": "tax recovered from draft audit findings", "required": true},
+        {"value": 32.45, "unit": "crore", "context": "tax recovered after issue of draft paragraphs", "required": true},
+        {"value": 247, "unit": "cases", "context": "number of cases where recovery was made", "required": false}
+      ],
+      "key_entities": ["ITD"],
+      "source_sections": ["Executive Summary"],
+      "source_pages": [7, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["pending recovery"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC005",
+    "question": "What was the total direct tax collection for Assessment Year 2022-23?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The total direct tax collection for Assessment Year 2022-23 was ₹14,12,422 crore, comprising ₹8,32,666 crore from Corporation Tax and ₹5,79,756 crore from Income Tax.",
+      "key_facts": [
+        "Total direct tax collection was ₹14,12,422 crore",
+        "Corporation Tax contributed ₹8,32,666 crore",
+        "Income Tax contributed ₹5,79,756 crore"
+      ],
+      "key_amounts": [
+        {"value": 1412422, "unit": "crore", "context": "total direct tax collection for AY 2022-23", "required": true},
+        {"value": 832666, "unit": "crore", "context": "Corporation Tax collection", "required": true},
+        {"value": 579756, "unit": "crore", "context": "Income Tax collection", "required": true}
+      ],
+      "key_entities": ["ITD", "CBDT"],
+      "source_sections": ["Chapter 1", "1.3"],
+      "source_pages": [10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect tax"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC006",
+    "question": "What was the tax effect due to excess or irregular refunds in Corporation Tax cases?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The tax effect due to excess or irregular refunds in Corporation Tax cases was ₹1,065.91 crore in 111 cases.",
+      "key_facts": [
+        "Excess/irregular refunds involved 111 cases",
+        "Tax effect was ₹1,065.91 crore"
+      ],
+      "key_amounts": [
+        {"value": 1065.91, "unit": "crore", "context": "tax effect due to excess/irregular refunds in Corporation Tax", "required": true},
+        {"value": 111, "unit": "cases", "context": "number of excess/irregular refund cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "ITD"],
+      "source_sections": ["Chapter 2", "2.2"],
+      "source_pages": [15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax refunds"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC007",
+    "question": "How many employees does the Income Tax Department have?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The Income Tax Department has around 60,000 employees working across India.",
+      "key_facts": [
+        "ITD has around 60,000 employees",
+        "Employees work across the country"
+      ],
+      "key_amounts": [
+        {"value": 60000, "unit": "employees", "context": "approximate number of ITD employees", "required": true}
+      ],
+      "key_entities": ["ITD", "Income Tax Department"],
+      "source_sections": ["Chapter 1", "1.2"],
+      "source_pages": [9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["exact count"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC008",
+    "question": "What was the tax effect due to arithmetical errors in Corporation Tax assessments?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The tax effect due to arithmetical errors in Corporation Tax assessments was ₹52.22 crore in 16 cases.",
+      "key_facts": [
+        "Arithmetical errors involved 16 cases",
+        "Tax effect was ₹52.22 crore"
+      ],
+      "key_amounts": [
+        {"value": 52.22, "unit": "crore", "context": "tax effect due to arithmetical errors in Corporation Tax", "required": true},
+        {"value": 16, "unit": "cases", "context": "number of arithmetical error cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "ITD"],
+      "source_sections": ["Chapter 2"],
+      "source_pages": [15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax arithmetical errors"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC009",
+    "question": "What was the tax effect due to error in allowing depreciation in Corporation Tax?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The tax effect due to error in allowing depreciation was ₹120.38 crore in 13 cases under Corporation Tax.",
+      "key_facts": [
+        "Error in allowing depreciation involved 13 cases",
+        "Tax effect was ₹120.38 crore"
+      ],
+      "key_amounts": [
+        {"value": 120.38, "unit": "crore", "context": "tax effect due to error in allowing depreciation", "required": true},
+        {"value": 13, "unit": "cases", "context": "number of depreciation error cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Depreciation"],
+      "source_sections": ["Chapter 2"],
+      "source_pages": [15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax depreciation"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC010",
+    "question": "How many Principal Chief Commissioners of Income Tax are there in India?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "There are 18 Principal Chief Commissioners of Income Tax (Pr. CCsIT) in India.",
+      "key_facts": [
+        "ITD has 18 Principal Chief Commissioners of Income Tax",
+        "They head the regional charges"
+      ],
+      "key_amounts": [
+        {"value": 18, "unit": "number", "context": "Principal Chief Commissioners of Income Tax in India", "required": true}
+      ],
+      "key_entities": ["ITD", "Pr. CCIT", "Principal Chief Commissioner"],
+      "source_sections": ["Chapter 1", "1.2"],
+      "source_pages": [9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["approximate"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC011",
+    "question": "What are the main categories of errors found in Corporation Tax assessments?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The main categories of errors in Corporation Tax assessments include: (1) Quality of assessments with overcharge of tax, (2) Excess/irregular refunds, (3) Mistake in assessment, (4) Error in allowing depreciation, (5) Arithmetical errors, (6) Error in computation of book profit for MAT, (7) Incorrect allowance of expenditure/deductions, (8) Error in set-off/carry forward of losses, (9) Income escaping assessment due to omission of TDS/TCS, and (10) Underassessment of income.",
+      "key_facts": [
+        "Multiple categories of errors identified in Corporation Tax",
+        "Excess/irregular refunds had highest tax effect at ₹1,065.91 crore",
+        "Total 1,086 cases were found under Corporation Tax"
+      ],
+      "key_amounts": [
+        {"value": 1065.91, "unit": "crore", "context": "tax effect of excess/irregular refunds", "required": true},
+        {"value": 1086, "unit": "cases", "context": "total Corporation Tax cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "MAT", "TDS", "TCS"],
+      "source_sections": ["Chapter 2", "2.1"],
+      "source_pages": [15, 16]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Income Tax categories"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC012",
+    "question": "What were the main findings regarding Income Tax assessments in the audit report?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The main findings in Income Tax assessments include: errors in allowing exemptions/deductions leading to underassessment, excess/irregular refunds, mistake in assessments, arithmetical errors, incorrect allowance of business expenditure, error in set-off/carry forward of losses, incorrect computation of capital gains, and errors in clubbing of income. Total 528 cases were found with tax effect of ₹1,460.74 crore.",
+      "key_facts": [
+        "Total 528 Income Tax cases identified",
+        "Tax effect was ₹1,460.74 crore",
+        "Various categories of assessment errors found"
+      ],
+      "key_amounts": [
+        {"value": 1460.74, "unit": "crore", "context": "total tax effect in Income Tax cases", "required": true},
+        {"value": 528, "unit": "cases", "context": "total Income Tax cases", "required": true}
+      ],
+      "key_entities": ["Income Tax", "ITD"],
+      "source_sections": ["Chapter 3", "3.1"],
+      "source_pages": [45, 46]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["Corporation Tax findings"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC013",
+    "question": "How does the Corporation Tax collection compare with Income Tax collection for AY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "comparison",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "For AY 2022-23, Corporation Tax collection was ₹8,32,666 crore while Income Tax collection was ₹5,79,756 crore. Corporation Tax contributed approximately 59% of total direct tax collection while Income Tax contributed about 41%.",
+      "key_facts": [
+        "Corporation Tax collection was ₹8,32,666 crore",
+        "Income Tax collection was ₹5,79,756 crore",
+        "Corporation Tax was higher than Income Tax",
+        "Total collection was ₹14,12,422 crore"
+      ],
+      "key_amounts": [
+        {"value": 832666, "unit": "crore", "context": "Corporation Tax collection for AY 2022-23", "required": true},
+        {"value": 579756, "unit": "crore", "context": "Income Tax collection for AY 2022-23", "required": true},
+        {"value": 1412422, "unit": "crore", "context": "total direct tax collection", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Income Tax", "Direct Tax"],
+      "source_sections": ["Chapter 1", "1.3"],
+      "source_pages": [10]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect tax"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC014",
+    "question": "What was the total number of income tax returns filed and cases assessed for AY 2022-23?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "For AY 2022-23, the total number of returns received was 7.14 crore and total cases assessed/processed were 7.23 crore.",
+      "key_facts": [
+        "Total returns received were 7.14 crore",
+        "Total cases assessed/processed were 7.23 crore"
+      ],
+      "key_amounts": [
+        {"value": 7.14, "unit": "crore", "context": "total returns received for AY 2022-23", "required": true},
+        {"value": 7.23, "unit": "crore", "context": "total cases assessed/processed for AY 2022-23", "required": true}
+      ],
+      "key_entities": ["ITD", "Income Tax Returns"],
+      "source_sections": ["Chapter 1", "1.4"],
+      "source_pages": [10, 11]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["previous year data"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC015",
+    "question": "What is the overall summary of audit findings by tax type and their respective tax effects?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The compliance audit identified a total of 1,614 cases with aggregate tax effect of ₹6,365.47 crore. Corporation Tax cases numbered 1,086 with tax effect of ₹4,904.73 crore (77% of total tax effect). Income Tax cases numbered 528 with tax effect of ₹1,460.74 crore (23% of total tax effect). ITD recovered ₹117.68 crore from draft audit findings and an additional ₹32.45 crore after issue of draft paragraphs.",
+      "key_facts": [
+        "Total 1,614 cases with ₹6,365.47 crore tax effect",
+        "Corporation Tax: 1,086 cases with ₹4,904.73 crore",
+        "Income Tax: 528 cases with ₹1,460.74 crore",
+        "Recovery of ₹117.68 crore from draft findings",
+        "Additional recovery of ₹32.45 crore after draft paragraphs"
+      ],
+      "key_amounts": [
+        {"value": 6365.47, "unit": "crore", "context": "total tax effect", "required": true},
+        {"value": 4904.73, "unit": "crore", "context": "Corporation Tax effect", "required": true},
+        {"value": 1460.74, "unit": "crore", "context": "Income Tax effect", "required": true},
+        {"value": 1614, "unit": "cases", "context": "total cases", "required": true}
+      ],
+      "key_entities": ["Corporation Tax", "Income Tax", "ITD", "CBDT"],
+      "source_sections": ["Executive Summary", "Preface"],
+      "source_pages": [5, 7, 8]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect tax", "GST"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC016",
+    "question": "What is the organizational structure of the Income Tax Department as described in the report?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The Income Tax Department is headed by the Central Board of Direct Taxes (CBDT), which is the apex body for administration of direct tax laws. The ITD has 18 Principal Chief Commissioners of Income Tax (Pr. CCsIT) heading regional charges across India. The department has around 60,000 employees working across the country. The organizational hierarchy includes Chairman CBDT at the top, followed by Members, Principal Chief Commissioners, Chief Commissioners, Principal Commissioners, Commissioners, and various other ranks of assessing officers.",
+      "key_facts": [
+        "CBDT is the apex body for direct tax administration",
+        "18 Principal Chief Commissioners head regional charges",
+        "Around 60,000 employees in ITD",
+        "Hierarchical structure from Chairman CBDT downwards"
+      ],
+      "key_amounts": [
+        {"value": 18, "unit": "number", "context": "Principal Chief Commissioners", "required": true},
+        {"value": 60000, "unit": "employees", "context": "approximate ITD staff strength", "required": true}
+      ],
+      "key_entities": ["CBDT", "ITD", "Pr. CCIT", "Chairman CBDT"],
+      "source_sections": ["Chapter 1", "1.2"],
+      "source_pages": [9]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["GST", "Customs"],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "DIRECT_TAX_2022_TC017",
+    "question": "What systemic issues were identified in the audit regarding assessment quality?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": ["direct_tax_2021_22"]
+    },
+    "expected": {
+      "answer_summary": "The audit identified several systemic issues in assessment quality including: recurring errors in allowing depreciation, persistent arithmetical mistakes in computations, inadequate verification of claims for deductions and exemptions, errors in computation of book profit for MAT purposes, mistakes in set-off and carry forward of losses, failure to consider TDS/TCS information leading to income escaping assessment, and excess/irregular refunds being granted without proper verification. These issues led to significant revenue loss totaling ₹6,365.47 crore across 1,614 cases.",
+      "key_facts": [
+        "Recurring depreciation allowance errors",
+        "Arithmetical mistakes in computations",
+        "Inadequate verification of deduction claims",
+        "MAT computation errors",
+        "TDS/TCS information not properly utilized",
+        "Excess refunds without verification"
+      ],
+      "key_amounts": [
+        {"value": 6365.47, "unit": "crore", "context": "total tax effect due to assessment quality issues", "required": true}
+      ],
+      "key_entities": ["ITD", "MAT", "TDS", "TCS"],
+      "source_sections": ["Chapter 2", "Chapter 3", "Executive Summary"],
+      "source_pages": [7, 15, 45]
+    },
+    "negative_criteria": {
+      "must_not_contain": ["indirect tax issues"],
+      "must_not_hallucinate": true
+    }
+  }
+]

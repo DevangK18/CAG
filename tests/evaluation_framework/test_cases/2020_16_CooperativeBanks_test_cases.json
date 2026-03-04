@@ -1,0 +1,1072 @@
+[
+  {
+    "id": "CAG_2020_16_TC001",
+    "question": "What was the total tax effect of irregular allowance of deductions under sections 36(1)(viia), 36(1)(viii), 36(1)(xvii) and various subsections of section 80P of the Act?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "The total tax effect of irregular allowance of deductions under sections 36(1)(viia), 36(1)(viii), 36(1)(xvii) and various subsections of section 80P of the Act was Rs. 694.50 crore in 649 cases.",
+      "key_facts": [
+        "Tax effect was Rs. 694.50 crore",
+        "This was found in 649 cases",
+        "Deductions were under sections 36(1)(viia), 36(1)(viii), 36(1)(xvii) and various subsections of section 80P"
+      ],
+      "key_amounts": [
+        {
+          "value": 694.5,
+          "unit": "crore",
+          "context": "Total tax effect of irregular allowance of deductions under specific sections",
+          "required": true
+        },
+        {
+          "value": 649,
+          "unit": "cases",
+          "context": "Number of cases with irregular deductions",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Income Tax Department",
+        "Co-operative Societies",
+        "Co-operative Banks"
+      ],
+      "source_sections": [
+        "Executive Summary",
+        "3.1"
+      ],
+      "source_pages": [
+        11,
+        35
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "Rs. 12,328.40 crore which is total compliance issues"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC002",
+    "question": "What percentage of Co-operative Societies and Co-operative Banks were outside the tax net of ITD during the period 2014-15 to 2016-17?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "72.32 per cent of the identified Co-operative Societies/Co-operative Banks registered with the registering authorities were found to be outside the database of DGIT(Systems) and thus out of tax net during 2014-15 to 2016-17.",
+      "key_facts": [
+        "72.32 per cent were outside the tax net",
+        "This was during the period 2014-15 to 2016-17",
+        "These were societies registered with registering authorities but not in ITD database"
+      ],
+      "key_amounts": [
+        {
+          "value": 72.32,
+          "unit": "per cent",
+          "context": "Percentage of Co-operative Societies/Banks outside tax net",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "DGIT(Systems)",
+        "Registering authorities",
+        "ITD"
+      ],
+      "source_sections": [
+        "2.1.1"
+      ],
+      "source_pages": [
+        28,
+        29
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "100 per cent"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC003",
+    "question": "How many sample case records were called for audit scrutiny in this performance audit and from how many Assessment Charges?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Audit called for 9,282 sample case records (including 81 cases of MSCS) pertaining to Co-operative Societies and Co-operative Banks from 1,726 Assessment Charges for audit scrutiny.",
+      "key_facts": [
+        "9,282 sample case records were called",
+        "This included 81 cases of Multi State Co-operative Societies (MSCS)",
+        "Cases were from 1,726 Assessment Charges"
+      ],
+      "key_amounts": [
+        {
+          "value": 9282,
+          "unit": "cases",
+          "context": "Sample case records called for audit scrutiny",
+          "required": true
+        },
+        {
+          "value": 81,
+          "unit": "cases",
+          "context": "MSCS cases included in sample",
+          "required": false
+        },
+        {
+          "value": 1726,
+          "unit": "assessment charges",
+          "context": "Number of Assessment Charges",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "MSCS",
+        "Assessment Charges"
+      ],
+      "source_sections": [
+        "Executive Summary",
+        "1.8",
+        "1.9"
+      ],
+      "source_pages": [
+        9,
+        24,
+        25
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "8,470 which is the number actually covered"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC004",
+    "question": "What was the growth percentage of Co-operative Societies registered during 2009-10 to 2016-17?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "During 2009-10 to 2016-17, Co-operative Societies registered a growth of 39.84 per cent.",
+      "key_facts": [
+        "Growth was 39.84 per cent",
+        "Period was from 2009-10 to 2016-17"
+      ],
+      "key_amounts": [
+        {
+          "value": 39.84,
+          "unit": "per cent",
+          "context": "Growth percentage of Co-operative Societies",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Co-operative Societies"
+      ],
+      "source_sections": [
+        "Executive Summary",
+        "1.5"
+      ],
+      "source_pages": [
+        9,
+        21,
+        22
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "growth of banks"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC005",
+    "question": "What was the total tax effect of non-compliance to general provisions of the Act in assessment of Co-operative Societies and Co-operative Banks?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Audit observed 730 cases wherein the general provisions of the Act were not complied with involving tax effect of Rs. 12,198.18 crore. Along with 128 observations from regular compliance audits involving Rs. 130.22 crore, the total tax effect was Rs. 12,328.40 crore in 858 cases.",
+      "key_facts": [
+        "730 cases from performance audit with tax effect of Rs. 12,198.18 crore",
+        "128 audit observations from regular compliance audit with tax effect of Rs. 130.22 crore",
+        "Total of 858 cases with tax effect of Rs. 12,328.40 crore"
+      ],
+      "key_amounts": [
+        {
+          "value": 12198.18,
+          "unit": "crore",
+          "context": "Tax effect from 730 cases in performance audit",
+          "required": true
+        },
+        {
+          "value": 130.22,
+          "unit": "crore",
+          "context": "Tax effect from 128 regular compliance audit observations",
+          "required": false
+        },
+        {
+          "value": 12328.4,
+          "unit": "crore",
+          "context": "Total tax effect from compliance issues",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Income Tax Department",
+        "CBDT"
+      ],
+      "source_sections": [
+        "Chapter 4",
+        "4.14",
+        "4.15"
+      ],
+      "source_pages": [
+        89,
+        90,
+        107
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "Rs. 694.50 crore which is specific deductions issue"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC006",
+    "question": "What were the main types of mistakes noticed in assessment of Co-operative Societies and Co-operative Banks?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "The main types of mistakes noticed were: (1) Mistakes in levy of interest/penalty - 277 cases with Rs. 40.49 crore tax effect; (2) Irregular allowance of expenditure, deductions - 184 cases with Rs. 376.07 crore; (3) Mistakes in computation of income, tax, surcharge - 104 cases with Rs. 1,315.93 crore; (4) Income not assessed/under assessed - 43 cases with Rs. 22.24 crore; (5) Mistakes related to TDS provisions - 38 cases with Rs. 45.63 crore; (6) Irregular set-off of loss - 36 cases with Rs. 147.89 crore; (7) Incorrect allowance of depreciation - 22 cases with Rs. 54.64 crore; (8) Other mistakes - 12 cases with Rs. 1.12 crore; (9) Overassessment of income/Overcharge - 11 cases with Rs. 577.95 crore; (10) Unexplained investment/expenditure - 4 cases with Rs. 9,616.23 crore.",
+      "key_facts": [
+        "277 cases of mistakes in levy of interest/penalty",
+        "184 cases of irregular allowance of expenditure and deductions",
+        "104 cases of mistakes in computation of income, tax, surcharge",
+        "Unexplained investment/expenditure had highest tax effect of Rs. 9,616.23 crore despite only 4 cases"
+      ],
+      "key_amounts": [
+        {
+          "value": 277,
+          "unit": "cases",
+          "context": "Mistakes in levy of interest/penalty",
+          "required": true
+        },
+        {
+          "value": 40.49,
+          "unit": "crore",
+          "context": "Tax effect of interest/penalty mistakes",
+          "required": false
+        },
+        {
+          "value": 9616.23,
+          "unit": "crore",
+          "context": "Tax effect of unexplained investment/expenditure",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Income Tax Department",
+        "Assessing Officers"
+      ],
+      "source_sections": [
+        "Table 4.1",
+        "Chapter 4"
+      ],
+      "source_pages": [
+        89
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "section 80P deductions which is covered in Chapter 3"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC007",
+    "question": "What were the section-wise details of irregularities in allowance of deductions specific to Co-operative Societies and Co-operative Banks?",
+    "category": {
+      "difficulty": "medium",
+      "type": "list",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "The section-wise irregularities were: Section 36(1)(viia) - 118 cases with Rs. 375.20 crore tax effect; Section 36(1)(viii) - 8 cases with Rs. 14.01 crore; Section 36(1)(xvii) - 19 cases with Rs. 107.75 crore; Section 80P(2)(a)(i) - 115 cases with Rs. 49.82 crore; Section 80P(2)(a)(ii) - 1 case with Rs. 0.08 crore; Section 80P(2)(a)(iv) - 11 cases with Rs. 1.16 crore; Section 80P(2)(a)(vi) - 2 cases with Rs. 0.13 crore; Section 80P(2)(a)(vii) - 3 cases with Rs. 0.58 crore; Section 80P(2)(d) - 367 cases with Rs. 145.64 crore; Section 80P(2)(e) - 5 cases with Rs. 0.12 crore. Total 649 cases with Rs. 694.50 crore tax effect.",
+      "key_facts": [
+        "Section 80P(2)(d) had highest number of irregularities - 367 cases",
+        "Section 36(1)(viia) had highest tax effect - Rs. 375.20 crore",
+        "Section 80P(2)(a)(i) had 115 cases - second highest count"
+      ],
+      "key_amounts": [
+        {
+          "value": 367,
+          "unit": "cases",
+          "context": "Irregularities under Section 80P(2)(d)",
+          "required": true
+        },
+        {
+          "value": 145.64,
+          "unit": "crore",
+          "context": "Tax effect under Section 80P(2)(d)",
+          "required": true
+        },
+        {
+          "value": 375.2,
+          "unit": "crore",
+          "context": "Tax effect under Section 36(1)(viia)",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Section 80P",
+        "Section 36(1)(viia)",
+        "Co-operative Societies"
+      ],
+      "source_sections": [
+        "Table 3.1",
+        "3.1"
+      ],
+      "source_pages": [
+        53
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "section 40(a)(ia)"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC008",
+    "question": "What percentage of the audit sample was from Maharashtra and which were the other major states represented?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "The sample selected consisted of around 24.7 per cent of cases selected from Maharashtra. Other major states/regions represented were Gujarat (9.8 per cent), Kerala (9.0 per cent), Karnataka (7.9 per cent) and Uttar Pradesh & Uttarakhand (7.6 per cent).",
+      "key_facts": [
+        "Maharashtra had 24.7 per cent of sample",
+        "Gujarat had 9.8 per cent",
+        "Kerala had 9.0 per cent",
+        "Karnataka had 7.9 per cent",
+        "Uttar Pradesh & Uttarakhand had 7.6 per cent"
+      ],
+      "key_amounts": [
+        {
+          "value": 24.7,
+          "unit": "per cent",
+          "context": "Maharashtra's share of audit sample",
+          "required": true
+        },
+        {
+          "value": 9.8,
+          "unit": "per cent",
+          "context": "Gujarat's share",
+          "required": false
+        },
+        {
+          "value": 9.0,
+          "unit": "per cent",
+          "context": "Kerala's share",
+          "required": false
+        }
+      ],
+      "key_entities": [
+        "Maharashtra",
+        "Gujarat",
+        "Kerala",
+        "Karnataka",
+        "Uttar Pradesh"
+      ],
+      "source_sections": [
+        "1.10"
+      ],
+      "source_pages": [
+        25,
+        26
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "Bihar",
+        "Delhi as major states"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC009",
+    "question": "What was the risk profile of irregular claims by activity type of Co-operative Societies?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "There was relatively higher propensity of irregular claims of deduction in respect of assessees engaged in banking, credit and financial services, accounting for 68.7 per cent of the total number of irregularities identified. This was followed by trading (6.0 per cent), housing (5.4 per cent), manufacture of sugar (5.4 per cent) and dairy business (4.0 per cent).",
+      "key_facts": [
+        "Banking, credit and financial services accounted for 68.7 per cent of irregularities",
+        "Trading accounted for 6.0 per cent",
+        "Housing accounted for 5.4 per cent",
+        "Sugar manufacturing accounted for 5.4 per cent",
+        "Dairy business accounted for 4.0 per cent"
+      ],
+      "key_amounts": [
+        {
+          "value": 68.7,
+          "unit": "per cent",
+          "context": "Irregularities in banking, credit and financial services",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Banking",
+        "Credit",
+        "Financial services",
+        "Co-operative Societies"
+      ],
+      "source_sections": [
+        "3.1",
+        "Executive Summary"
+      ],
+      "source_pages": [
+        11,
+        53
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "agriculture as top category"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC010",
+    "question": "How many cases were assessed with incorrect PAN registration status (other than AOP) despite being Co-operative Societies?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Out of 8,470 assessment cases, in 1,826 cases (21.6 per cent) although the assessees were Co-operative Societies and Co-operative Banks, PANs allotted to them had fourth letter other than 'A'. The breakdown was: AOP(Trust) - 618, AJP - 494, Company - 34, Firm - 242, Local Authority - 214, and BOI - 224 cases.",
+      "key_facts": [
+        "1,826 cases had incorrect PAN registration status",
+        "This represented 21.6 per cent of total cases",
+        "Co-operative Societies should be classified as AOP with fourth letter 'A'",
+        "618 cases were registered as AOP(Trust)"
+      ],
+      "key_amounts": [
+        {
+          "value": 1826,
+          "unit": "cases",
+          "context": "Cases with PAN fourth letter other than A",
+          "required": true
+        },
+        {
+          "value": 21.6,
+          "unit": "per cent",
+          "context": "Percentage of incorrect PAN registrations",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "PAN",
+        "AOP",
+        "ITD"
+      ],
+      "source_sections": [
+        "2.3",
+        "Table 2.6"
+      ],
+      "source_pages": [
+        34,
+        35
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "78.4 per cent which is the correct AOP percentage"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC011",
+    "question": "What was the total deduction claimed under section 36(1)(xvii) of the Act for purchase of sugarcane and how much was allowed?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "In 111 cases from Gujarat and Maharashtra, total deduction of Rs. 24,664.78 crore was claimed under section 36(1)(xvii) of the Act. Assessing Officers made disallowance of Rs. 6,668.43 crore (27 per cent) while allowing deduction of Rs. 17,996.35 crore. State-wise: Gujarat had 38 cases claiming Rs. 8,291 crore (Rs. 5,392.35 crore allowed), Maharashtra had 73 cases claiming Rs. 16,373.78 crore (Rs. 12,604 crore allowed).",
+      "key_facts": [
+        "111 cases claimed deduction under section 36(1)(xvii)",
+        "Total claim was Rs. 24,664.78 crore",
+        "Rs. 17,996.35 crore was allowed",
+        "27 per cent was disallowed",
+        "Gujarat had 38 cases, Maharashtra had 73 cases"
+      ],
+      "key_amounts": [
+        {
+          "value": 24664.78,
+          "unit": "crore",
+          "context": "Total deduction claimed under section 36(1)(xvii)",
+          "required": true
+        },
+        {
+          "value": 17996.35,
+          "unit": "crore",
+          "context": "Deduction allowed",
+          "required": true
+        },
+        {
+          "value": 6668.43,
+          "unit": "crore",
+          "context": "Amount disallowed",
+          "required": false
+        }
+      ],
+      "key_entities": [
+        "Section 36(1)(xvii)",
+        "Gujarat",
+        "Maharashtra",
+        "Sugar Co-operatives"
+      ],
+      "source_sections": [
+        "3.13",
+        "Table 3.6",
+        "Table 3.7"
+      ],
+      "source_pages": [
+        80,
+        81
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "section 80P"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC012",
+    "question": "What were the objectives of the performance audit on Assessment of Co-operative Societies and Co-operative Banks?",
+    "category": {
+      "difficulty": "easy",
+      "type": "list",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "The objectives of the performance audit were to examine: (i) whether all entities in the Co-operative Sector are in the tax net and filing income tax returns and are being assessed for levy of due amount of tax; (ii) the nature and extent of compliance to provisions specific to the assessees of Co-operative Sector under the Income Tax Act, 1961; and (iii) the nature and extent of compliance to the general provisions of the Act during assessment process.",
+      "key_facts": [
+        "Objective to examine coverage of Co-operative Societies in tax net",
+        "Objective to examine compliance to specific provisions under IT Act 1961",
+        "Objective to examine compliance to general provisions during assessment"
+      ],
+      "key_amounts": [],
+      "key_entities": [
+        "Income Tax Act 1961",
+        "Co-operative Sector",
+        "ITD"
+      ],
+      "source_sections": [
+        "1.6",
+        "Executive Summary"
+      ],
+      "source_pages": [
+        9,
+        23
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "revenue collection targets"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC013",
+    "question": "Why were Co-operative Banks denied deduction under section 80P of the Act from assessment year 2007-08?",
+    "category": {
+      "difficulty": "easy",
+      "type": "explanation",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "From assessment year 2007-08 onwards, deduction under Section 80P of the Act is not available to any Co-operative Bank as per section 80P(4) of the Act. However, a Primary Agricultural Credit Society (PACS) or a Primary Co-operative Agricultural and Rural Development Bank will continue to claim the benefit of deduction under Section 80P of the Act. CBDT also clarified through Circular No. 6/2010 dated September 20, 2010 that Regional Rural Banks are not eligible for deduction under Section 80P.",
+      "key_facts": [
+        "Section 80P(4) denies deduction to Co-operative Banks from AY 2007-08",
+        "PACS and Primary Co-operative Agricultural and Rural Development Banks are still eligible",
+        "CBDT Circular No. 6/2010 clarified Regional Rural Banks are ineligible"
+      ],
+      "key_amounts": [],
+      "key_entities": [
+        "Section 80P(4)",
+        "PACS",
+        "Regional Rural Banks",
+        "CBDT Circular No. 6/2010"
+      ],
+      "source_sections": [
+        "3.2"
+      ],
+      "source_pages": [
+        54
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "all Co-operative Societies denied"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC014",
+    "question": "What was the total number of surveys conducted on Co-operative Societies and Banks during 2014-15 to 2018-19 and how many new assessees were identified?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "During 2014-15 to 2018-19, out of 806 total surveys conducted, only 39 surveys were conducted on Co-operative Societies and 33 on Co-operative Banks. No new assessees were identified in Co-operative Societies through surveys. Only 2 new assessees of Co-operative Banks were identified (in 2016-17) and they filed returns. The mechanism of surveys was not effectively utilized by ITD.",
+      "key_facts": [
+        "806 total surveys were conducted during the period",
+        "39 surveys on Co-operative Societies, 33 on Co-operative Banks",
+        "No new Co-operative Society assessees identified",
+        "Only 2 new Co-operative Bank assessees identified in 2016-17"
+      ],
+      "key_amounts": [
+        {
+          "value": 806,
+          "unit": "surveys",
+          "context": "Total surveys conducted",
+          "required": true
+        },
+        {
+          "value": 39,
+          "unit": "surveys",
+          "context": "Surveys on Co-operative Societies",
+          "required": false
+        },
+        {
+          "value": 2,
+          "unit": "assessees",
+          "context": "New Co-operative Bank assessees identified",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "ITD",
+        "Surveys",
+        "Co-operative Societies"
+      ],
+      "source_sections": [
+        "2.2.1",
+        "Table 2.3"
+      ],
+      "source_pages": [
+        31,
+        32
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "search and seizure numbers"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC015",
+    "question": "What are the main audit recommendations regarding PAN registration and information sharing for Co-operative Societies?",
+    "category": {
+      "difficulty": "hard",
+      "type": "list",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Key audit recommendations included: (1) CBDT may request Central and State level registering bodies for instituting seeding of PAN in their databases and facilitate structured institutional sharing of information; (2) CBDT may ensure ITD checks actual status of applicant vis-a-vis name and activity while allotting PAN; (3) ITD may consider affixing fourth letter as 'A' to PAN of Co-operative Society for easy identification and monitoring; (4) Evidential proof of certificate of registration by Registrar and details of members is essential for completing assessments; (5) ITD may issue instructions to ensure accounts are audited by empanelled auditors only.",
+      "key_facts": [
+        "Recommendation for PAN seeding in databases of registering bodies",
+        "Recommendation for structured information sharing",
+        "Recommendation for fourth letter of PAN to be 'A' for Co-operative Societies",
+        "Recommendation for verification of registration certificates",
+        "Recommendation for audit by empanelled auditors"
+      ],
+      "key_amounts": [],
+      "key_entities": [
+        "CBDT",
+        "ROCS",
+        "PAN",
+        "ITD"
+      ],
+      "source_sections": [
+        "2.8",
+        "Summary of Recommendations"
+      ],
+      "source_pages": [
+        15,
+        16,
+        47,
+        48,
+        49
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "penalty recommendations"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC016",
+    "question": "What were the findings regarding unexplained cash credits and unexplained investments in Co-operative Societies?",
+    "category": {
+      "difficulty": "hard",
+      "type": "explanation",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Audit noticed 4 cases in 3 states (Madhya Pradesh, Maharashtra, and Uttar Pradesh) where ITD had not taken into account unexplained cash credit and unexplained investment while completing assessment, resulting in short levy of tax of Rs. 9,616.23 crore. In one notable case at PCIT-1 Lucknow, the AO applied only 25 per cent on deposits of Rs. 17,877.54 crore and shareholders fund of Rs. 327.75 crore, whereas the entire amount should have been treated as unexplained cash credit under section 68 of the Act, resulting in short charge of tax of Rs. 5,737.94 crore.",
+      "key_facts": [
+        "4 cases in 3 states with unexplained cash credits/investments",
+        "Tax effect of Rs. 9,616.23 crore",
+        "Major case involved deposits of Rs. 17,877.54 crore treated inadequately",
+        "Section 68 of Act applies to unexplained cash credits"
+      ],
+      "key_amounts": [
+        {
+          "value": 9616.23,
+          "unit": "crore",
+          "context": "Tax effect of unexplained investment/expenditure cases",
+          "required": true
+        },
+        {
+          "value": 17877.54,
+          "unit": "crore",
+          "context": "Deposits not properly treated as unexplained cash credit in one case",
+          "required": false
+        },
+        {
+          "value": 5737.94,
+          "unit": "crore",
+          "context": "Short charge of tax in Lucknow case",
+          "required": false
+        }
+      ],
+      "key_entities": [
+        "Section 68",
+        "PCIT-1 Lucknow",
+        "Unexplained cash credit"
+      ],
+      "source_sections": [
+        "4.9",
+        "Box 4.9"
+      ],
+      "source_pages": [
+        100,
+        101
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "section 80P"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC017",
+    "question": "What was the total deduction claimed and allowed under section 80P(2)(d) of the Act and what were the reasons for disallowance?",
+    "category": {
+      "difficulty": "hard",
+      "type": "aggregation",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "In 553 cases across 14 states/regions, deduction of Rs. 455.63 crore was allowed based on claims made on income of Rs. 655.48 crore under section 80P(2)(d) of the Act. Of these, in 126 cases the AOs disallowed entire claim of Rs. 150.31 crore, in 347 cases entire claim of Rs. 366.15 crore was allowed, and in 79 cases partial allowance of Rs. 86.93 crore was made against claims of Rs. 136.47 crore. Reasons for disallowance included: 80P(2)(d) not applicable to Co-operative Banks other than PACS, interest from surplus funds in Co-operative Societies not eligible, interest from Co-operative Banks not shown in P&L account.",
+      "key_facts": [
+        "553 cases examined for section 80P(2)(d) claims",
+        "Rs. 455.63 crore deduction was allowed out of Rs. 655.48 crore claimed",
+        "126 cases had entire claim of Rs. 150.31 crore disallowed",
+        "Section applies to interest and dividend from investments in other Co-operative Societies"
+      ],
+      "key_amounts": [
+        {
+          "value": 553,
+          "unit": "cases",
+          "context": "Cases examined for section 80P(2)(d)",
+          "required": true
+        },
+        {
+          "value": 455.63,
+          "unit": "crore",
+          "context": "Deduction allowed",
+          "required": true
+        },
+        {
+          "value": 655.48,
+          "unit": "crore",
+          "context": "Total income on which claim was made",
+          "required": false
+        }
+      ],
+      "key_entities": [
+        "Section 80P(2)(d)",
+        "Co-operative Banks",
+        "PACS"
+      ],
+      "source_sections": [
+        "3.6",
+        "3.6.1",
+        "3.6.2"
+      ],
+      "source_pages": [
+        63,
+        64
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "section 36(1)(viia)"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC018",
+    "question": "What was the period covered by this performance audit and how many assessment cases were actually covered?",
+    "category": {
+      "difficulty": "easy",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "The performance audit covered assessments of Co-operative Societies and Co-operative Banks completed during financial years 2014-15 to 2018-19. Out of 9,282 cases called for, 400 cases did not fall under the category of Co-operative Societies and Banks, and 412 cases were not produced. Therefore, 8,470 cases (95.36 per cent of remaining 8,882 cases) were covered in the performance audit.",
+      "key_facts": [
+        "Period covered: FY 2014-15 to 2018-19",
+        "8,470 cases were actually covered",
+        "400 cases did not fall under Co-operative Societies/Banks category",
+        "412 cases (4.44 per cent) were not produced",
+        "95.36 per cent of valid cases were produced"
+      ],
+      "key_amounts": [
+        {
+          "value": 8470,
+          "unit": "cases",
+          "context": "Cases covered in performance audit",
+          "required": true
+        },
+        {
+          "value": 412,
+          "unit": "cases",
+          "context": "Cases not produced to audit",
+          "required": false
+        }
+      ],
+      "key_entities": [
+        "Performance Audit",
+        "Co-operative Societies",
+        "Co-operative Banks"
+      ],
+      "source_sections": [
+        "1.8",
+        "Table 1.2",
+        "Executive Summary"
+      ],
+      "source_pages": [
+        9,
+        24,
+        25
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "9,282 as final coverage number"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC019",
+    "question": "What were the findings on differential treatment by Assessing Officers for similar Co-operative entities?",
+    "category": {
+      "difficulty": "hard",
+      "type": "comparison",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Audit found that Assessing Officers adopted differential approaches in assessments: (1) For section 80P(2)(d), in Karnataka 49 cases treated interest from Co-operative Banks as 'income from other sources' while 50 cases treated them as business income; (2) In Maharashtra, 6 cases (3 assessees) had differential treatment - interest from Co-operative Banks allowed in one AY but denied in another; (3) For Regional Rural Banks, Land Development Banks and Agriculture Rural Development Banks, deduction under section 80P was allowed in 106 cases (Rs. 751.5 crore) but entirely disallowed in 50 cases (Rs. 2,035.3 crore claim). This indicated lack of uniformity in applying the same law.",
+      "key_facts": [
+        "Assessing Officers taking differential stands on similar cases",
+        "Interest from Co-operative Banks treated differently across assessees",
+        "106 cases allowed deduction for rural/agriculture banks, 50 cases denied entirely",
+        "Recommendation to examine reasons for variations and issue directions for consistency"
+      ],
+      "key_amounts": [
+        {
+          "value": 106,
+          "unit": "cases",
+          "context": "Cases where section 80P deduction was allowed for rural banks",
+          "required": true
+        },
+        {
+          "value": 50,
+          "unit": "cases",
+          "context": "Cases where entire section 80P claim was disallowed",
+          "required": true
+        }
+      ],
+      "key_entities": [
+        "Section 80P",
+        "Regional Rural Banks",
+        "Land Development Banks",
+        "PACS"
+      ],
+      "source_sections": [
+        "3.6.2",
+        "3.9",
+        "Table 3.4"
+      ],
+      "source_pages": [
+        64,
+        69,
+        70
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "uniform treatment across all cases"
+      ],
+      "must_not_hallucinate": true
+    }
+  },
+  {
+    "id": "CAG_2020_16_TC020",
+    "question": "In how many cases was the registration certificate not available in assessment folders and what was the audit finding?",
+    "category": {
+      "difficulty": "medium",
+      "type": "factual",
+      "reports": [
+        "CAG_2020_16"
+      ]
+    },
+    "expected": {
+      "answer_summary": "Out of 8,470 assessment cases examined in audit, in 4,376 cases the registration certificate was not available in the assessment folders. This indicated that the system of keeping evidential proof of registration status in ITD is not foolproof. In absence of registration certificate, audit could not ascertain how Assessing Officers ensured genuineness of claims of deduction under section 80P. Additionally, in 842 cases status of registration was not examined, and in 5,343 cases it could not be ascertained whether verification was done.",
+      "key_facts": [
+        "4,376 cases had no registration certificate in assessment folders",
+        "842 cases where registration status was not examined",
+        "5,343 cases where verification status could not be ascertained",
+        "System for evidential proof not foolproof"
+      ],
+      "key_amounts": [
+        {
+          "value": 4376,
+          "unit": "cases",
+          "context": "Cases without registration certificate",
+          "required": true
+        },
+        {
+          "value": 842,
+          "unit": "cases",
+          "context": "Cases where registration status not examined",
+          "required": false
+        },
+        {
+          "value": 5343,
+          "unit": "cases",
+          "context": "Cases where verification status could not be ascertained",
+          "required": false
+        }
+      ],
+      "key_entities": [
+        "Registration Certificate",
+        "ROCS",
+        "Assessing Officers"
+      ],
+      "source_sections": [
+        "2.6.1",
+        "2.6.2"
+      ],
+      "source_pages": [
+        41,
+        42
+      ]
+    },
+    "negative_criteria": {
+      "must_not_contain": [
+        "all certificates verified"
+      ],
+      "must_not_hallucinate": true
+    }
+  }
+]
