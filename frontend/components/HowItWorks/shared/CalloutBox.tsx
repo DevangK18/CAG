@@ -6,7 +6,7 @@ interface CalloutBoxProps {
 }
 
 const calloutStyles: Record<string, { bg: string; border: string; icon: string }> = {
-    info: { bg: '#eff6ff', border: '#3b82f6', icon: 'ℹ️' },
+    info: { bg: '#eff6ff', border: '#1a365d', icon: 'ℹ️' },
     warning: { bg: '#fef3c7', border: '#f59e0b', icon: '⚠️' },
     success: { bg: '#d1fae5', border: '#10b981', icon: '✓' },
     note: { bg: '#f3f4f6', border: '#6b7280', icon: '📝' },

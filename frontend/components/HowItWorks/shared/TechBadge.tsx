@@ -7,7 +7,7 @@ interface TechBadgeProps {
 
 const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
     language: { bg: '#fef3c7', text: '#92400e', border: '#fbbf24' },
-    backend: { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
+    backend: { bg: '#dbeafe', text: '#1e40af', border: '#1a365d' },
     frontend: { bg: '#e0e7ff', text: '#3730a3', border: '#6366f1' },
     ai: { bg: '#fae8ff', text: '#701a75', border: '#d946ef' },
     database: { bg: '#dcfce7', text: '#166534', border: '#22c55e' },

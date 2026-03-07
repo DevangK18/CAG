@@ -19,9 +19,11 @@ interface PDFViewerProps {
   initialPage?: number;
   /** Callback when page changes (for series page memory) */
   onPageChange?: (page: number) => void;
+  /** External key to trigger reload on container size changes */
+  containerKey?: string | number;
 }
 
-export function PDFViewer({ url, initialPage, onPageChange }: PDFViewerProps) {
+export function PDFViewer({ url, initialPage, onPageChange, containerKey }: PDFViewerProps) {
   const { pdfPage: storePdfPage, pdfHighlight } = useAppStore();
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -61,27 +63,12 @@ export function PDFViewer({ url, initialPage, onPageChange }: PDFViewerProps) {
     }
   }, [url, initialPage]);
 
-  // Observe container resize
+  // Trigger on container key change (for panel expand/collapse)
   useEffect(() => {
-    if (!containerRef.current) return;
-    
-    let resizeTimeout: NodeJS.Timeout;
-    
-    const resizeObserver = new ResizeObserver(() => {
-      // Debounced refresh on resize
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        setKey(prev => prev + 1);
-      }, 200);
-    });
-    
-    resizeObserver.observe(containerRef.current);
-    
-    return () => {
-      resizeObserver.disconnect();
-      clearTimeout(resizeTimeout);
-    };
-  }, []);
+    if (url && containerKey !== undefined) {
+      setKey(prev => prev + 1);
+    }
+  }, [containerKey, url]);
 
   const handleIframeLoad = () => {
     setIsLoading(false);
@@ -110,7 +97,7 @@ export function PDFViewer({ url, initialPage, onPageChange }: PDFViewerProps) {
   }
 
   // Build URL with page parameter
-  const pdfUrlWithPage = `${url}#page=${currentPage}&toolbar=1&navpanes=0&scrollbar=1&view=FitH`;
+  const pdfUrlWithPage = `${url}#page=${currentPage}&toolbar=1&navpanes=0&scrollbar=1&view=FitBV`;
 
   return (
     <div className="pdf-viewer-container" ref={containerRef}>

@@ -8,7 +8,7 @@ env/
 venv/
 .venv/
 .env
-.env.production 
+.env.production
 
 # Testing
 .pytest_cache/
@@ -54,6 +54,7 @@ src/batch_pipeline/
 
 # Logs
 *.log
+logs/
 logs/.env.production
 tests/parsing_pipeline/
 tests/batch_pipeline/

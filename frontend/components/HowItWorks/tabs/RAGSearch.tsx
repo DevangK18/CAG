@@ -10,7 +10,7 @@ import { MermaidDiagram } from '../shared/MermaidDiagram';
 const Stat: React.FC<{ value: string; label: string; accent?: string }> = ({
     value,
     label,
-    accent = '#2563eb',
+    accent = '#1a365d',
 }) => (
     <div className="stat-card">
         <div className="stat-value" style={{ color: accent }}>{value}</div>
@@ -21,7 +21,7 @@ const Stat: React.FC<{ value: string; label: string; accent?: string }> = ({
 const StageLabel: React.FC<{ number: string; title: string; color?: string }> = ({
     number,
     title,
-    color = '#2563eb',
+    color = '#1a365d',
 }) => (
     <div style={{
         display: 'inline-flex',
@@ -59,7 +59,7 @@ const InlineStat: React.FC<{ value: string; label?: string }> = ({ value, label 
         color: '#1d4ed8',
         whiteSpace: 'nowrap',
     }}>
-        {value}{label && <span style={{ fontWeight: 400, color: '#3b82f6' }}> {label}</span>}
+        {value}{label && <span style={{ fontWeight: 400, color: '#1a365d' }}> {label}</span>}
     </span>
 );
 
@@ -309,7 +309,7 @@ graph TB
             >
                 {/* Dense Embeddings */}
                 <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="1" title="Dense Embeddings" color="#3b82f6" />
+                    <StageLabel number="1" title="Dense Embeddings" color="#1a365d" />
                     <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
                         Every child chunk is embedded using OpenAI's <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>text-embedding-3-large</code> at <InlineStat value="1536" label="dimensions" />,
                         batched in groups of 100 to stay within rate limits. Before embedding, each chunk's text is
@@ -650,7 +650,7 @@ Example:
                         {' '}<code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>REPORT</code>) are available programmatically.
                     </p>
                     <div style={{ display: 'grid', gap: '8px' }}>
-                        <ResponseStyleCard name="Concise" audience="Quick answers, mobile" wordRange="50–100 words" color="#3b82f6" />
+                        <ResponseStyleCard name="Concise" audience="Quick answers, mobile" wordRange="50–100 words" color="#1a365d" />
                         <ResponseStyleCard name="Executive" audience="Decision-makers, bottom-line first" wordRange="150–250 words" color="#059669" />
                         <ResponseStyleCard name="Detailed" audience="Comprehensive analysis" wordRange="300–500 words" color="#7c3aed" />
                         <ResponseStyleCard name="Technical" audience="Deep-dive for analysts" wordRange="400–600 words" color="#0891b2" />
@@ -690,7 +690,7 @@ Example:
                             <div style={{ padding: '10px 14px' }}>Adjustments</div>
                         </div>
                         {[
-                            { type: 'LIST', patterns: '"what are", "list all", "enumerate"', adjustments: 'top_k → 15, bullet format', color: '#3b82f6' },
+                            { type: 'LIST', patterns: '"what are", "list all", "enumerate"', adjustments: 'top_k → 15, bullet format', color: '#1a365d' },
                             { type: 'AGGREGATION', patterns: '"total", "sum", "overall"', adjustments: 'Context limit 1.5×, warn against calculation', color: '#059669' },
                             { type: 'COMPARISON', patterns: '"compare", "trend", "over years"', adjustments: 'Auto-select COMPARATIVE style', color: '#f59e0b' },
                             { type: 'EXPLANATION', patterns: '"why", "explain", "cause"', adjustments: 'Auto-select EXPLANATORY style', color: '#7c3aed' },
@@ -867,7 +867,7 @@ Example:
                         borderRadius: '12px',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                     }}>
-                        <LatencyBar label="Query embedding" time="~100ms" widthPercent={5} color="#3b82f6" />
+                        <LatencyBar label="Query embedding" time="~100ms" widthPercent={5} color="#1a365d" />
                         <LatencyBar label="Hybrid search + RRF" time="~50ms" widthPercent={2.5} color="#f59e0b" />
                         <LatencyBar label="Cohere reranking" time="~200ms" widthPercent={10} color="#d946ef" />
                         <LatencyBar label="Neighbor expansion" time="~20ms" widthPercent={1} color="#059669" />
@@ -875,7 +875,7 @@ Example:
                         <LatencyBar label="LLM generation" time="~1.5–2s" widthPercent={80} color="#ef4444" />
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '2px solid #e2e8f0' }}>
                             <div style={{ width: '200px', fontSize: '14px', fontWeight: 700, color: '#1e293b', textAlign: 'right' }}>Total end-to-end</div>
-                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#2563eb' }}>~2–3 seconds</div>
+                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1a365d' }}>~2–3 seconds</div>
                         </div>
                     </div>
                     <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '10px', lineHeight: 1.5 }}>
@@ -907,7 +907,7 @@ Example:
                             ))}
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #e2e8f0', marginTop: '4px' }}>
                                 <span style={{ fontWeight: 700, color: '#1e293b' }}>Total per query</span>
-                                <span style={{ fontWeight: 700, color: '#2563eb' }}>~$0.003–0.007</span>
+                                <span style={{ fontWeight: 700, color: '#1a365d' }}>~$0.003–0.007</span>
                             </div>
                         </div>
                     </div>
@@ -929,7 +929,7 @@ Example:
                             ))}
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #e2e8f0', marginTop: '4px' }}>
                                 <span style={{ fontWeight: 700, color: '#1e293b' }}>Total indexing</span>
-                                <span style={{ fontWeight: 700, color: '#2563eb' }}>$0.3922</span>
+                                <span style={{ fontWeight: 700, color: '#1a365d' }}>$0.3922</span>
                             </div>
                         </div>
                         <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>

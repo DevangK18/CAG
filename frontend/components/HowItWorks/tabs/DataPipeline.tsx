@@ -10,7 +10,7 @@ import { MermaidDiagram } from '../shared/MermaidDiagram';
 const Stat: React.FC<{ value: string; label: string; accent?: string }> = ({
     value,
     label,
-    accent = '#2563eb',
+    accent = '#1a365d',
 }) => (
     <div className="stat-card">
         <div className="stat-value" style={{ color: accent }}>{value}</div>
@@ -21,7 +21,7 @@ const Stat: React.FC<{ value: string; label: string; accent?: string }> = ({
 const PhaseLabel: React.FC<{ number: string; title: string; color?: string }> = ({
     number,
     title,
-    color = '#2563eb',
+    color = '#1a365d',
 }) => (
     <div style={{
         display: 'inline-flex',
@@ -112,7 +112,7 @@ const InlineStat: React.FC<{ value: string; label?: string }> = ({ value, label 
         color: '#1d4ed8',
         whiteSpace: 'nowrap',
     }}>
-        {value}{label && <span style={{ fontWeight: 400, color: '#3b82f6' }}> {label}</span>}
+        {value}{label && <span style={{ fontWeight: 400, color: '#1a365d' }}> {label}</span>}
     </span>
 );
 
@@ -184,7 +184,7 @@ graph LR
     Check -->|No ~85%| Done[Final TOC]
     P57 -->|~97% accuracy| Done
 
-    style P4 fill:#dbeafe,stroke:#3b82f6
+    style P4 fill:#dbeafe,stroke:#1a365d
     style P55 fill:#e0e7ff,stroke:#6366f1
     style P57 fill:#fae8ff,stroke:#d946ef
     style Done fill:#dcfce7,stroke:#22c55e
@@ -258,7 +258,7 @@ graph TB
             >
                 {/* Phase 1–3: Ingestion */}
                 <div style={{ marginBottom: '32px' }}>
-                    <PhaseLabel number="1–3" title="Ingestion, Triage & OCR" color="#3b82f6" />
+                    <PhaseLabel number="1–3" title="Ingestion, Triage & OCR" color="#1a365d" />
                     <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
                         The pipeline starts with an Excel manifest listing every audit report — title, ministry, sector, report number, and PDF download URL.
                         Each row becomes a <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>DocumentTask</code> object
@@ -635,7 +635,7 @@ graph TB
                                 audience="C-suite, policymakers"
                                 description="High-level strategic overview with key metrics and action items. Gets to the point in under 2,500 words."
                                 wordRange="2,200–2,500 words"
-                                color="#2563eb"
+                                color="#1a365d"
                             />
                             <SummaryVariantCard
                                 name="Journalist's Take"
@@ -896,7 +896,7 @@ graph TB
                             ))}
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #e2e8f0', marginTop: '4px' }}>
                                 <span style={{ fontWeight: 700, color: '#1e293b' }}>Total per report</span>
-                                <span style={{ fontWeight: 700, color: '#2563eb' }}>~$1.10–1.80</span>
+                                <span style={{ fontWeight: 700, color: '#1a365d' }}>~$1.10–1.80</span>
                             </div>
                         </div>
                         <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>

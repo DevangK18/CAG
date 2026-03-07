@@ -5,7 +5,14 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+
+# Configure npm for better timeout handling and install dependencies
+RUN npm config set fetch-timeout 300000 && \
+    npm config set fetch-retries 3 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm ci
+
 COPY frontend/ ./
 
 # Build-time environment variables for Vite

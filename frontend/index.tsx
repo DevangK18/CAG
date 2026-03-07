@@ -159,6 +159,13 @@ const RESPONSE_STYLES: { value: ResponseStyle; label: string; description: strin
     { value: 'adaptive', label: 'Auto', description: 'AI chooses best style' },
 ];
 
+// Audit type pill definitions for filtering
+const AUDIT_TYPES = [
+    { value: 'Financial Audit', label: 'Financial Audit' },
+    { value: 'Compliance Audit', label: 'Compliance Audit' },
+    { value: 'Performance Audit', label: 'Performance Audit' },
+];
+
 const CHART_TYPE_LABELS: Record<string, string> = {
     bar: 'BAR', line: 'LINE', pie: 'PIE', area: 'AREA', table_chart: 'TABLE', unknown: 'CHART'
 };
@@ -278,12 +285,18 @@ function App() {
     const [activeTab, setActiveTab] = useState<TabState>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterSector, setFilterSector] = useState('All');
+    const [filterMinistry, setFilterMinistry] = useState('All');
+    const [filterYear, setFilterYear] = useState('All');
+    const [filterAuditType, setFilterAuditType] = useState<Set<string>>(new Set());
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [inputValue, setInputValue] = useState('');
     const [chatOpen, setChatOpen] = useState(false);
     const [citationFeedback, setCitationFeedback] = useState<{show: boolean; section: string; page: number; auditYear?: string; switched?: boolean} | null>(null);
     const [splitRatio, setSplitRatio] = useState(45);
     const [isSwapped, setIsSwapped] = useState(false);
+    const [pdfCollapsed, setPdfCollapsed] = useState(false);
+    const [preCollapseRatio, setPreCollapseRatio] = useState(45);
+    const [resizeKey, setResizeKey] = useState(0);
     const splitContainerRef = useRef<HTMLDivElement>(null);
     const isDragging = useRef(false);
     const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -385,6 +398,26 @@ function App() {
         setBannerMinimized(false);
     }, [currentReportId, selectedSeries]);
 
+    // Panel visibility functions
+    const showPdfPanel = useCallback(() => {
+        if (pdfCollapsed) {
+            setPdfCollapsed(false);
+            setSplitRatio(preCollapseRatio);
+        }
+    }, [pdfCollapsed, preCollapseRatio]);
+
+    const hidePdfPanel = useCallback(() => {
+        if (!pdfCollapsed) {
+            setPreCollapseRatio(splitRatio);
+            setPdfCollapsed(true);
+        }
+    }, [pdfCollapsed, splitRatio]);
+
+    const togglePdfPanel = useCallback(() => {
+        if (pdfCollapsed) showPdfPanel();
+        else hidePdfPanel();
+    }, [pdfCollapsed, showPdfPanel, hidePdfPanel]);
+
     // Handlers
     const handleReportClick = (report: AuditReport) => {
         // Track report viewed
@@ -459,6 +492,7 @@ function App() {
     };
 
     const handleNavigateToPage = (page: number, section: string, type: 'chart' | 'table' = 'chart', bbox?: number[] | null) => {
+        showPdfPanel();
         setPdfPage(page);
         setCitationFeedback({ show: true, section, page });
 
@@ -491,10 +525,11 @@ function App() {
     };
 
     const handleCitationClick = (citationText: string) => {
+        showPdfPanel();
         const citation = lookupCitation(citationText, normalizedCitationMap);
         if (!citation) return;
         const targetPage = citation.page_physical + 1;
-        
+
         if (view === 'series-chat' && selectedSeries) {
             const citationReportId = citation.report_id;
             const citationReport = selectedSeries.reports.find(r => r.report_id === citationReportId);
@@ -526,6 +561,7 @@ function App() {
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
         document.body.style.userSelect = 'none';
+        document.body.classList.add('is-dragging');
     };
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -542,15 +578,123 @@ function App() {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
         document.body.style.userSelect = 'auto';
+        document.body.classList.remove('is-dragging');
+        // Trigger PDF reload after resize completes
+        setResizeKey(prev => prev + 1);
     };
 
-    // Computed
-    const filteredReports = reports.filter(r => {
-        const matchesSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase()) || r.ministry.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesSector = filterSector === 'All' || r.sector === filterSector;
-        return matchesSearch && matchesSector;
-    });
-    const sectors = ['All', ...Array.from(new Set(reports.map(r => r.sector)))];
+    // Toggle handler for audit type pills
+    const toggleAuditType = (type: string) => {
+        setFilterAuditType(prev => {
+            const next = new Set(prev);
+            if (next.has(type)) next.delete(type);
+            else next.add(type);
+            return next;
+        });
+    };
+
+    // Memoized dropdown options (derive from full reports array, NOT filtered results)
+    const sectors = useMemo(() => ['All', ...Array.from(new Set(reports.map(r => r.sector)))], [reports]);
+    const ministries = useMemo(() => ['All', ...Array.from(new Set(reports.map(r => r.ministry))).sort()], [reports]);
+    const years = useMemo(() => ['All', ...Array.from(new Set(reports.map(r => r.year))).sort((a, b) => b - a).map(String)], [reports]);
+
+    // Computed filtered reports
+    const filteredReports = useMemo(() => {
+        return reports.filter(r => {
+            // Search: substring match on title or ministry
+            if (searchTerm !== '' &&
+                !r.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                !r.ministry.toLowerCase().includes(searchTerm.toLowerCase())) {
+                return false;
+            }
+            // Sector: exact match
+            if (filterSector !== 'All' && r.sector !== filterSector) return false;
+            // Ministry: exact match
+            if (filterMinistry !== 'All' && r.ministry !== filterMinistry) return false;
+            // Year: numeric comparison
+            if (filterYear !== 'All' && r.year !== parseInt(filterYear)) return false;
+            // Audit type: OR within selected types, reports with no type are excluded when pills active
+            if (filterAuditType.size > 0 && (!r.reportType || !filterAuditType.has(r.reportType))) return false;
+            return true;
+        });
+    }, [reports, searchTerm, filterSector, filterMinistry, filterYear, filterAuditType]);
+
+    // Computed: has active filters (for showing clear button and empty state)
+    const hasActiveFilters = searchTerm !== '' || filterSector !== 'All' ||
+        filterMinistry !== 'All' || filterYear !== 'All' || filterAuditType.size > 0;
+
+    // Count of active filters (excluding "All" defaults)
+    const activeFilterCount = useMemo(() => {
+        let count = 0;
+        if (searchTerm !== '') count++;
+        if (filterSector !== 'All') count++;
+        if (filterMinistry !== 'All') count++;
+        if (filterYear !== 'All') count++;
+        if (filterAuditType.size > 0) count += filterAuditType.size;
+        return count;
+    }, [searchTerm, filterSector, filterMinistry, filterYear, filterAuditType]);
+
+    // Enhanced stats computation (6 stats for stats bar)
+    const enhancedStats = useMemo(() => {
+        if (reports.length === 0) return null;
+
+        const totalReports = reports.length;
+        const totalFindings = reports.reduce((sum, r) => sum + (r.findingsCount || 0), 0);
+
+        // Parse monetary impact from strings like "₹1,234.56 crore" or "₹12.34 crore"
+        let totalMonetaryCrore = 0;
+        let reportsWithMonetary = 0;
+        reports.forEach(r => {
+            if (r.impact && r.impact !== 'N/A') {
+                // Remove ₹, commas, and " crore" then parse
+                const cleaned = r.impact.replace(/[₹,]/g, '').replace(/\s*crore\s*/i, '').trim();
+                const value = parseFloat(cleaned);
+                if (!isNaN(value) && value > 0) {
+                    totalMonetaryCrore += value;
+                    reportsWithMonetary++;
+                }
+            }
+        });
+
+        const ministryCount = new Set(reports.map(r => r.ministry)).size;
+        const sectorCount = new Set(reports.map(r => r.sector)).size;
+
+        const yearsSet = new Set(reports.map(r => r.year));
+        const yearsArray = Array.from(yearsSet).sort((a, b) => a - b);
+        const yearSpan = yearsArray.length > 1
+            ? `${yearsArray[0]}–${yearsArray[yearsArray.length - 1]}`
+            : yearsArray.length === 1 ? `${yearsArray[0]}` : 'N/A';
+
+        // Format monetary impact
+        let monetaryDisplay: string;
+        if (totalMonetaryCrore === 0) {
+            monetaryDisplay = 'N/A';
+        } else if (totalMonetaryCrore >= 10000) {
+            monetaryDisplay = `₹${(totalMonetaryCrore / 10000).toFixed(1)}L Cr`;
+        } else if (totalMonetaryCrore >= 1000) {
+            monetaryDisplay = `₹${(totalMonetaryCrore / 1000).toFixed(1)}K Cr`;
+        } else {
+            monetaryDisplay = `₹${totalMonetaryCrore.toFixed(0)} Cr`;
+        }
+
+        return {
+            totalReports,
+            totalFindings,
+            monetaryDisplay,
+            reportsWithMonetary,
+            ministryCount,
+            sectorCount,
+            yearSpan,
+        };
+    }, [reports]);
+
+    const clearAllFilters = () => {
+        setSearchTerm('');
+        setFilterSector('All');
+        setFilterMinistry('All');
+        setFilterYear('All');
+        setFilterAuditType(new Set());
+    };
     const getSeriesReportDetails = (series: TimeSeriesInfo) => series.reports.sort((a, b) => a.audit_year.localeCompare(b.audit_year));
     const truncateReportName = (name: string, maxLength: number = 60) => name.length <= maxLength ? name : name.substring(0, maxLength) + '...';
     const getShortSection = (section: string): string => section.split(' > ')[0] || section;
@@ -665,7 +809,7 @@ function App() {
                                     style={{
                                         marginTop: '16px',
                                         fontSize: '13px',
-                                        color: '#2563eb',
+                                        color: '#1a365d',
                                         fontWeight: 500,
                                         background: 'none',
                                         border: 'none',
@@ -1150,7 +1294,12 @@ function App() {
                                 <a href={currentSeriesPdfUrl || '#'} target="_blank" rel="noopener noreferrer" className="open-external" title="Open in new tab"><ExternalLinkIcon /></a>
                             </div>
                         )}
-                        <PDFViewer url={currentSeriesPdfUrl} initialPage={currentSeriesPage} onPageChange={handleSeriesPageChange} />
+                        <PDFViewer
+                            url={currentSeriesPdfUrl}
+                            initialPage={currentSeriesPage}
+                            onPageChange={handleSeriesPageChange}
+                            containerKey={`${pdfCollapsed ? 'collapsed' : 'expanded'}-${resizeKey}`}
+                        />
                     </div>
                     {citationFeedback?.show && (
                         <div className={`citation-toast ${citationFeedback.switched ? 'year-switched' : ''}`}>
@@ -1166,7 +1315,10 @@ function App() {
                     <div className="panel-header"><span>Document Viewer — {selectedReport.reportNumber}</span>
                         <div className="viewer-tools">{pdfUrl && <a href={pdfUrl} target="_blank" rel="noopener noreferrer" title="Open in new tab"><ExternalLinkIcon /></a>}</div>
                     </div>
-                    <PDFViewer url={pdfUrl} />
+                    <PDFViewer
+                        url={pdfUrl}
+                        containerKey={`${pdfCollapsed ? 'collapsed' : 'expanded'}-${resizeKey}`}
+                    />
                     {citationFeedback?.show && (
                         <div className="citation-toast"><LocationIcon /><span>Navigated to <strong>{citationFeedback.section}</strong> — Page {citationFeedback.page}{citationFeedback.auditYear && <span className="toast-year"> ({citationFeedback.auditYear})</span>}</span></div>
                     )}
@@ -1180,6 +1332,18 @@ function App() {
         if (view === 'series-chat' && selectedSeries) {
             return (
                 <div className="interactive-panel-inner series-interactive-panel">
+                    {pdfCollapsed && (
+                        <div className="pdf-hidden-banner">
+                            <div className="banner-icon">📄</div>
+                            <div className="banner-text">
+                                <strong>PDF Viewer Hidden</strong>
+                                <span>Click the show button on the left to view the document</span>
+                            </div>
+                            <button className="banner-show-btn" onClick={showPdfPanel}>
+                                Show PDF
+                            </button>
+                        </div>
+                    )}
                     <div className="report-metadata-header series-chat-header">
                         <button className="back-link" onClick={handleBackToTimeSeries}><ChevronLeftIcon /> Back to Series List</button>
                         <div className="header-badge-row">
@@ -1208,6 +1372,18 @@ function App() {
         } else if (view === 'report' && selectedReport) {
             return (
                 <div className="interactive-panel-inner">
+                    {pdfCollapsed && (
+                        <div className="pdf-hidden-banner">
+                            <div className="banner-icon">📄</div>
+                            <div className="banner-text">
+                                <strong>PDF Viewer Hidden</strong>
+                                <span>Click the show button on the left to view the document</span>
+                            </div>
+                            <button className="banner-show-btn" onClick={showPdfPanel}>
+                                Show PDF
+                            </button>
+                        </div>
+                    )}
                     <div className="report-metadata-header">
                         <button className="back-link" onClick={handleBackToLanding}><ChevronLeftIcon /> Return to Directory</button>
                         <div className="header-badge-row"><span className="sector-pill">{selectedReport.sector}</span><span className="sector-pill">{selectedReport.reportNumber}</span></div>
@@ -1263,47 +1439,135 @@ function App() {
                     <button onClick={() => setView('time-series')} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
                     <button onClick={() => setView('how-it-works')} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
                 </nav>
-                <div className="cag-header-right"><div className="user-profile"><span className="user-role">Senior Auditor</span><div className="user-avatar">SA</div></div></div>
+                <div className="cag-header-right"></div>
             </header>
 
             {view === 'landing' && (
                 <main className="landing-view">
                     <div className="hero-section">
-                        <h1>Comptroller and Auditor General of India</h1>
-                        <p className="hero-subtitle">Established by Article 148 of the Constitution, the CAG is the Supreme Audit Institution of India.</p>
-                        <div className="hero-mission-container">
-                            <p className="hero-mission"><strong>Project Mission:</strong> Transform static audit reports into interactive data experiences.</p>
-                            <p className="hero-disclaimer"><strong>Disclaimer:</strong> Independent initiative, not affiliated with CAG of India.</p>
+                        <h1>CAG Gateway</h1>
+                        <p className="hero-subtitle">An intelligent audit report analysis platform</p>
+                        <div className="hero-body">
+                            <p>
+                                India's Comptroller and Auditor General ({' '}
+                                <a href="https://cag.gov.in" target="_blank" rel="noopener noreferrer" className="hero-link">
+                                    CAG
+                                </a>
+                                ) is the supreme audit institution for Union and State government accounts, established under Article 148 of the Constitution.
+                                Each year, the CAG publishes hundreds of audit reports covering everything from defence procurement and railway safety to
+                                tax administration and public sector enterprise performance. These reports contain critical findings on government
+                                accountability — but they're published as dense, lengthy PDFs that are difficult to search, compare, or extract insights from at scale.
+                            </p>
+                            <p>
+                                CAG Gateway addresses this by transforming these static documents into an interactive research platform.
+                                Reports are parsed and semantically chunked through a custom multi-tier extraction pipeline, then indexed into a hybrid
+                                search system combining dense vector embeddings with BM25 retrieval and Cohere reranking. Users can explore any report
+                                through AI-powered chat with streaming source citations, navigate extracted charts and tables with PDF cross-referencing,
+                                read AI-generated summaries in multiple formats, and perform cross-report time series analysis to track how audit findings
+                                evolve across financial years. To learn how this system works under the hood, visit the{' '}
+                                <button className="hero-link-btn" onClick={() => setView('how-it-works')}>How It Works</button> section.
+                            </p>
+                        </div>
+                        <div className="hero-disclaimer">
+                            <p>
+                                <strong>Disclaimer:</strong> This is an independent research project and is not affiliated with or endorsed by the CAG of India.
+                                All audit reports used are public documents published by the CAG. Their non-commercial use is protected under
+                                Section 52(1)(q) of the Indian Copyright Act, 1957, which permits the reproduction of public documents for informational purposes.
+                            </p>
                         </div>
                     </div>
                     <div className="stats-bar">
-                        <div className="stat-item"><span className="stat-value">{reportsLoading ? '...' : stats.totalReports}</span><span className="stat-label">Active Reports</span></div>
-                        <div className="stat-item"><span className="stat-value">{reportsLoading ? '...' : `${stats.totalFindings}+`}</span><span className="stat-label">Total Findings</span></div>
-                        <div className="stat-item"><span className="stat-value">{reportsLoading ? '...' : stats.totalImpact}</span><span className="stat-label">Monetary Impact</span></div>
-                        <div className="stat-item"><span className="stat-value">{reportsLoading ? '...' : stats.ministryCount}</span><span className="stat-label">Ministries</span></div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.totalReports ?? '...'}</span>
+                            <span className="stat-label">Active Reports</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats ? `${enhancedStats.totalFindings}+` : '...'}</span>
+                            <span className="stat-label">Total Findings</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
+                            <span className="stat-label">Monetary Impact</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.ministryCount ?? '...'}</span>
+                            <span className="stat-label">Ministries</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.sectorCount ?? '...'}</span>
+                            <span className="stat-label">Sectors</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.yearSpan ?? '...'}</span>
+                            <span className="stat-label">Year Span</span>
+                        </div>
                     </div>
-                    <div className="filter-controls">
-                        <div className="search-box"><SearchIcon /><input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                        <div className="dropdown-group"><label><FilterIcon /> Sector:</label><select value={filterSector} onChange={(e) => setFilterSector(e.target.value)}>{sectors.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                        <div className="view-toggle">
-                            <button
-                                className={viewMode === 'grid' ? 'active' : ''}
-                                onClick={() => setViewMode('grid')}
-                                title="Grid view"
-                            >
-                                <LayoutGridIcon />
-                            </button>
-                            <button
-                                className={viewMode === 'list' ? 'active' : ''}
-                                onClick={() => setViewMode('list')}
-                                title="List view"
-                            >
-                                <ListIcon />
-                            </button>
+                    <div className="filter-block">
+                        <div className="filter-row-primary">
+                            <div className="search-box"><SearchIcon /><input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                            <div className="dropdown-group"><label><FilterIcon /> Sector:</label><select value={filterSector} onChange={(e) => setFilterSector(e.target.value)}>{sectors.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                            <div className="view-toggle">
+                                <button
+                                    className={viewMode === 'grid' ? 'active' : ''}
+                                    onClick={() => setViewMode('grid')}
+                                    title="Grid view"
+                                >
+                                    <LayoutGridIcon />
+                                </button>
+                                <button
+                                    className={viewMode === 'list' ? 'active' : ''}
+                                    onClick={() => setViewMode('list')}
+                                    title="List view"
+                                >
+                                    <ListIcon />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="filter-row-secondary">
+                            <div className="secondary-filters-left">
+                                <div className="dropdown-group">
+                                    <label>Ministry:</label>
+                                    <select value={filterMinistry} onChange={(e) => setFilterMinistry(e.target.value)}>
+                                        {ministries.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                </div>
+                                <div className="dropdown-group">
+                                    <label>Year:</label>
+                                    <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
+                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                </div>
+                                <div className="filter-divider" />
+                                <div className="audit-type-pills">
+                                    {AUDIT_TYPES.map(type => (
+                                        <button
+                                            key={type.value}
+                                            className={`audit-type-pill ${filterAuditType.has(type.value) ? 'active' : ''}`}
+                                            onClick={() => toggleAuditType(type.value)}
+                                        >
+                                            {type.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {activeFilterCount > 0 && (
+                                <div className="filter-status">
+                                    <span className="filter-count">{filteredReports.length} of {reports.length} reports</span>
+                                    <button className="clear-filters-btn" onClick={clearAllFilters}>Clear all</button>
+                                </div>
+                            )}
                         </div>
                     </div>
                     {reportsLoading && <div className="loading-spinner">Loading reports...</div>}
-                    {!reportsLoading && (
+                    {!reportsLoading && filteredReports.length === 0 && (
+                        <div className="no-results">
+                            <p>No reports match your current filters.</p>
+                            {hasActiveFilters && (
+                                <button className="clear-filters-link" onClick={clearAllFilters}>Clear all filters</button>
+                            )}
+                        </div>
+                    )}
+                    {!reportsLoading && filteredReports.length > 0 && (
                         <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
                             {filteredReports.map(report => (
                                 <ReportCard
@@ -1342,9 +1606,61 @@ function App() {
 
             {(view === 'report' || view === 'series-chat') && (
                 <div className="report-view-container" ref={splitContainerRef}>
-                    <div className="panel-container" style={{width:`${splitRatio}%`}}><div className="left-panel-content">{isSwapped ? renderInteractivePanel() : renderDocPanel()}</div></div>
-                    <div className="resizer" onMouseDown={startDrag}><button className="swap-btn" onClick={() => setIsSwapped(!isSwapped)} title="Swap Panes"><SwapIcon /></button></div>
-                    <div className="panel-container" style={{width:`${100-splitRatio}%`}}><div className="right-panel-content">{isSwapped ? renderDocPanel() : renderInteractivePanel()}</div></div>
+                    <div
+                        className={`panel-container ${!isSwapped && pdfCollapsed ? 'collapsed' : ''}`}
+                        style={{ width: !isSwapped && pdfCollapsed ? '0%' : `${splitRatio}%` }}
+                    >
+                        <div className="left-panel-content">
+                            {isSwapped ? renderInteractivePanel() : renderDocPanel()}
+                        </div>
+                    </div>
+                    <div className="resizer-rail">
+                        <div className="resizer-buttons">
+                            <button
+                                className="panel-toggle-btn"
+                                onClick={togglePdfPanel}
+                                title={pdfCollapsed ? "Show PDF panel" : "Hide PDF panel"}
+                            >
+                                {pdfCollapsed ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <line x1="9" y1="3" x2="9" y2="21"/>
+                                        <polyline points="14 9 18 12 14 15"/>
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <line x1="9" y1="3" x2="9" y2="21"/>
+                                        <polyline points="17 9 13 12 17 15"/>
+                                    </svg>
+                                )}
+                            </button>
+                            <button
+                                className="swap-btn"
+                                onClick={() => setIsSwapped(!isSwapped)}
+                                title="Swap Panes"
+                                disabled={pdfCollapsed}
+                            >
+                                <SwapIcon />
+                            </button>
+                        </div>
+                        <div
+                            className="resizer-drag-area"
+                            onMouseDown={pdfCollapsed ? undefined : startDrag}
+                        ></div>
+                    </div>
+                    <div
+                        className={`panel-container ${isSwapped && pdfCollapsed ? 'collapsed' : ''}`}
+                        style={{
+                            width: pdfCollapsed
+                                ? (isSwapped ? '0%' : '100%')
+                                : `${100 - splitRatio}%`
+                        }}
+                    >
+                        <div className="right-panel-content">
+                            {isSwapped ? renderDocPanel() : renderInteractivePanel()}
+                        </div>
+                    </div>
                 </div>
             )}
 

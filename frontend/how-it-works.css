@@ -89,8 +89,8 @@
 }
 
 .tab-button.active {
-    color: #2563eb;
-    border-bottom-color: #2563eb;
+    color: #1a365d;
+    border-bottom-color: #1a365d;
     font-weight: 700;
     background: linear-gradient(180deg, rgba(37, 99, 235, 0.03) 0%, rgba(37, 99, 235, 0) 100%);
 }
@@ -256,7 +256,7 @@
     width: 24px;
     height: 24px;
     border: 3px solid #e2e8f0;
-    border-top-color: #3b82f6;
+    border-top-color: #1a365d;
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
 }
@@ -355,7 +355,7 @@
 .stat-value {
     font-size: 36px;
     font-weight: 700;
-    color: #2563eb;
+    color: #1a365d;
     display: block;
     margin-bottom: 10px;
     letter-spacing: -0.02em;
