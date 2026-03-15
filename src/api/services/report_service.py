@@ -80,11 +80,11 @@ def _load_reports():
         _initialized = True
         return
     
-    # Load each report's detailed JSON
-    json_files = list(settings.PROCESSED_DIR.glob("*_chunks.json"))
-    
+    # Load each report's detailed JSON (recursively search subdirectories)
+    json_files = list(settings.PROCESSED_DIR.glob("**/*_chunks.json"))
+
     if not json_files:
-        logger.warning(f"No *_chunks.json files found in {settings.PROCESSED_DIR}")
+        logger.warning(f"No *_chunks.json files found in {settings.PROCESSED_DIR} or subdirectories")
         _initialized = True
         return
     
@@ -92,12 +92,12 @@ def _load_reports():
         try:
             with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             metadata = data.get("report_metadata", {})
             semantic = data.get("semantic_enrichment", {})
-            
+
             report_id = metadata.get("report_id", json_file.stem.replace("_chunks", ""))
-            
+
             # Extract key findings (first 10)
             findings_raw = semantic.get("findings", [])
             key_findings = []
@@ -105,7 +105,7 @@ def _load_reports():
                 desc = f.get("description", f.get("text", ""))
                 if desc:
                     key_findings.append(desc[:500])
-            
+
             # Extract recommendations (first 10)
             recs_raw = semantic.get("recommendations", [])
             recommendations = []
@@ -113,7 +113,7 @@ def _load_reports():
                 text = r.get("text", r.get("description", ""))
                 if text:
                     recommendations.append(text[:500])
-            
+
             # Calculate monetary impact
             monetary_stats = semantic.get("monetary_statistics", {})
             total_amount = monetary_stats.get("total_amount_crore", 0)
@@ -121,11 +121,19 @@ def _load_reports():
                 monetary_impact = f"₹{total_amount:,.2f} crore"
             else:
                 monetary_impact = None
-            
-            # Build filename
-            filename = metadata.get("source_filename", f"{report_id}.pdf")
-            if not filename.endswith(".pdf"):
-                filename = filename.rsplit(".", 1)[0] + ".pdf"
+
+            # Build filename with subfolder prefix for nested directory structure
+            # e.g., if file is in data/processed/union/, PDF will be in data/raw/union/
+            base_filename = metadata.get("source_filename", f"{report_id}.pdf")
+            if not base_filename.endswith(".pdf"):
+                base_filename = base_filename.rsplit(".", 1)[0] + ".pdf"
+
+            # Get relative path from PROCESSED_DIR to include subfolder
+            relative_dir = json_file.parent.relative_to(settings.PROCESSED_DIR)
+            if str(relative_dir) != ".":
+                filename = f"{relative_dir}/{base_filename}"
+            else:
+                filename = base_filename
             
             # Get page count
             pages = metadata.get("page_count", 0)

@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
       # Build args for Vite (baked into JS at build time)
       args:
+        - VITE_API_BASE_URL=
         - VITE_PUBLIC_POSTHOG_KEY=${VITE_PUBLIC_POSTHOG_KEY}
         - VITE_PUBLIC_POSTHOG_HOST=${VITE_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
         - VITE_ACCESS_CODE=${VITE_ACCESS_CODE:-cag-test-2025}

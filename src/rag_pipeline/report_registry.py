@@ -135,10 +135,10 @@ class ReportRegistry:
 
         count = 0
 
-        # Find all chunk JSON files
-        json_files = list(processed_dir.glob("*_chunks.json"))
+        # Find all chunk JSON files (recursively search subdirectories)
+        json_files = list(processed_dir.glob("**/*_chunks.json"))
         if not json_files:
-            json_files = list(processed_dir.glob("*_enriched.json"))
+            json_files = list(processed_dir.glob("**/*_enriched.json"))
 
         logger.info(f"Loading metadata from {len(json_files)} JSON files")
 
@@ -163,7 +163,14 @@ class ReportRegistry:
                     json_file.stem.replace("_chunks", "").replace("_enriched", ""),
                 )
                 report_title = meta.get("report_title", "")
-                filename = meta.get("source_filename", f"{report_id}.pdf")
+                base_filename = meta.get("source_filename", f"{report_id}.pdf")
+
+                # Build filename with subfolder prefix for nested directory structure
+                relative_dir = json_file.parent.relative_to(processed_dir)
+                if str(relative_dir) != ".":
+                    filename = f"{relative_dir}/{base_filename}"
+                else:
+                    filename = base_filename
 
                 # Extract audit year from title first, then try filename
                 audit_year = self._extract_audit_year(report_title)

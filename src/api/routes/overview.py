@@ -25,16 +25,25 @@ DATA_DIR = Path("data/processed")
 SUMMARIES_DIR = Path("data/batch_jobs/summaries")
 
 
-def get_overview_path(report_id: str) -> Path:
-    """Get path to overview JSON file."""
-    return DATA_DIR / f"{report_id}_overview.json"
+def get_overview_path(report_id: str) -> Optional[Path]:
+    """Get path to overview JSON file, searching in subdirectories if needed."""
+    # Try direct path first
+    direct_path = DATA_DIR / f"{report_id}_overview.json"
+    if direct_path.exists():
+        return direct_path
+
+    # Search in subdirectories
+    for overview_file in DATA_DIR.glob(f"**/{report_id}_overview.json"):
+        return overview_file
+
+    return None
 
 
 def load_overview(report_id: str) -> dict:
     """Load overview data for a report."""
     overview_path = get_overview_path(report_id)
 
-    if not overview_path.exists():
+    if not overview_path or not overview_path.exists():
         raise HTTPException(
             status_code=404,
             detail=f"Overview not found for report: {report_id}. Run Phase 10 processing first."

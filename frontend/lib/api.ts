@@ -13,6 +13,9 @@
 // In production, VITE_API_BASE_URL="" (empty string) should be used, not fallback to localhost
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+// Backend routes are mounted at /api/* prefix (except /health which is at root)
+const API_URL = `${API_BASE_URL}/api`;
+
 // ============================================================================
 // Types matching backend responses
 // ============================================================================
@@ -320,7 +323,7 @@ export async function fetchReports(params?: {
   if (params?.year) searchParams.set('year', params.year.toString());
 
   const queryString = searchParams.toString();
-  const url = `${API_BASE_URL}/reports${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_URL}/reports${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch reports');
@@ -328,13 +331,13 @@ export async function fetchReports(params?: {
 }
 
 export async function fetchReport(reportId: string): Promise<APIReportDetail> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}`);
+  const response = await fetch(`${API_URL}/reports/${reportId}`);
   if (!response.ok) throw new Error(`Failed to fetch report: ${reportId}`);
   return response.json();
 }
 
 export function getPdfUrl(filename: string): string {
-  return `${API_BASE_URL}/files/${filename}`;
+  return `${API_URL}/files/${filename}`;
 }
 
 // ============================================================================
@@ -358,7 +361,7 @@ export async function fetchReportCharts(
   if (options?.offset) params.append('offset', options.offset.toString());
   
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/reports/${reportId}/charts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_URL}/reports/${reportId}/charts${queryString ? `?${queryString}` : ''}`;
   
   const response = await fetch(url);
   
@@ -388,7 +391,7 @@ export async function fetchReportTables(
   if (options?.offset) params.append('offset', options.offset.toString());
   
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/reports/${reportId}/tables${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_URL}/reports/${reportId}/tables${queryString ? `?${queryString}` : ''}`;
   
   const response = await fetch(url);
   
@@ -404,7 +407,7 @@ export async function fetchReportTables(
 // ============================================================================
 
 export async function fetchSeries(): Promise<SeriesListResponse> {
-  const response = await fetch(`${API_BASE_URL}/series`);
+  const response = await fetch(`${API_URL}/series`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch series: ${response.statusText}`);
@@ -414,7 +417,7 @@ export async function fetchSeries(): Promise<SeriesListResponse> {
 }
 
 export async function fetchSeriesById(seriesId: string): Promise<TimeSeriesInfo> {
-  const response = await fetch(`${API_BASE_URL}/series/${seriesId}`);
+  const response = await fetch(`${API_URL}/series/${seriesId}`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch series ${seriesId}: ${response.statusText}`);
@@ -427,7 +430,7 @@ export async function querySeriesData(
   seriesId: string,
   request: SeriesQueryRequest
 ): Promise<SeriesQueryResponse> {
-  const response = await fetch(`${API_BASE_URL}/series/${seriesId}/query`, {
+  const response = await fetch(`${API_URL}/series/${seriesId}/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -453,7 +456,7 @@ export async function querySeriesData(
  * Fetch complete overview for a report
  */
 export async function fetchReportOverview(reportId: string): Promise<OverviewResponse> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/overview`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/overview`);
   
   if (!response.ok) {
     if (response.status === 404) {
@@ -474,7 +477,7 @@ export async function fetchReportTOC(reportId: string): Promise<{
   entry_count: number;
   entries: TOCEntry[];
 }> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/toc`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/toc`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch TOC: ${response.statusText}`);
@@ -491,7 +494,7 @@ export async function fetchReportTopics(reportId: string): Promise<{
   topic_count: number;
   topics: TopicCovered[];
 }> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/topics`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/topics`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch topics: ${response.statusText}`);
@@ -512,7 +515,7 @@ export async function fetchReportGlossary(
   terms: GlossaryTerm[];
 }> {
   const params = search ? `?search=${encodeURIComponent(search)}` : '';
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/glossary${params}`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/glossary${params}`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch glossary: ${response.statusText}`);
@@ -528,7 +531,7 @@ export async function fetchReportAuditScope(reportId: string): Promise<{
   report_id: string;
   scope: AuditScope | null;
 }> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/audit-scope`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/audit-scope`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch audit scope: ${response.statusText}`);
@@ -545,7 +548,7 @@ export async function fetchReportObjectives(reportId: string): Promise<{
   objective_count: number;
   objectives: string[];
 }> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/objectives`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/objectives`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch objectives: ${response.statusText}`);
@@ -562,7 +565,7 @@ export async function fetchReportObjectives(reportId: string): Promise<{
  * Fetch list of available summary variants for a report
  */
 export async function fetchSummariesList(reportId: string): Promise<SummariesListResponse> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/summaries`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/summaries`);
   
   if (!response.ok) {
     if (response.status === 404) {
@@ -581,7 +584,7 @@ export async function fetchSummary(
   reportId: string,
   variant: SummaryVariant
 ): Promise<SummaryContentResponse> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/summaries/${variant}`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/summaries/${variant}`);
   
   if (!response.ok) {
     if (response.status === 404) {
@@ -601,7 +604,7 @@ export async function fetchSummary(
  * Fetch a random summary variant (Surprise Me)
  */
 export async function fetchRandomSummary(reportId: string): Promise<SummaryContentResponse> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/summaries/random`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/summaries/random`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch random summary: ${response.statusText}`);
@@ -630,7 +633,7 @@ export async function fetchSummaryMetadata(
   error: string | null;
   generated_at: string;
 }> {
-  const response = await fetch(`${API_BASE_URL}/reports/${reportId}/summaries/${variant}/metadata`);
+  const response = await fetch(`${API_URL}/reports/${reportId}/summaries/${variant}/metadata`);
   
   if (!response.ok) {
     throw new Error(`Failed to fetch summary metadata: ${response.statusText}`);
@@ -667,7 +670,7 @@ export async function* streamChat(params: {
   report_ids?: string[];
   top_k?: number;
 }): AsyncGenerator<StreamEvent> {
-  const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+  const response = await fetch(`${API_URL}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -720,7 +723,7 @@ export async function* streamSeriesChat(
     top_k_per_report?: number;
   }
 ): AsyncGenerator<StreamEvent> {
-  const response = await fetch(`${API_BASE_URL}/series/${seriesId}/query/stream`, {
+  const response = await fetch(`${API_URL}/series/${seriesId}/query/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

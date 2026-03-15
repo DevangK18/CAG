@@ -284,13 +284,21 @@ def _load_report_json(report_id: str) -> Optional[Dict]:
         logger.warning(f"Processed directory not found: {settings.PROCESSED_DIR}")
         return None
 
+    # Try direct path first (both top-level and in subdirectories)
     for suffix in ["_chunks.json", "_enriched.json"]:
+        # Check top-level
         json_path = settings.PROCESSED_DIR / f"{report_id}{suffix}"
         if json_path.exists():
             with open(json_path, encoding="utf-8") as f:
                 return json.load(f)
 
-    for json_file in settings.PROCESSED_DIR.glob("*_chunks.json"):
+        # Check subdirectories
+        for json_file in settings.PROCESSED_DIR.glob(f"**/{report_id}{suffix}"):
+            with open(json_file, encoding="utf-8") as f:
+                return json.load(f)
+
+    # Fallback: search recursively for files containing the report_id
+    for json_file in settings.PROCESSED_DIR.glob("**/*_chunks.json"):
         if report_id in json_file.stem:
             with open(json_file, encoding="utf-8") as f:
                 return json.load(f)
