@@ -293,6 +293,154 @@ body.is-dragging {
 }
 
 /* ============================================
+   TIER SELECTOR
+   ============================================ */
+.tier-selector {
+    margin: 32px 0 32px 0;
+    width: 100%;
+}
+
+.tier-tabs {
+    display: flex;
+    gap: 0;
+    background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 6px;
+    width: 100%;
+}
+
+.tier-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 18px 24px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #64748b;
+    transition: all 0.25s ease;
+    position: relative;
+}
+
+.tier-tab:hover:not(.active) {
+    background: #ffffff;
+    color: #334155;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tier-tab.active {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 16px rgba(30, 41, 59, 0.3);
+}
+
+.tier-label {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.tier-count {
+    font-size: 0.9rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+.tier-tab:not(.active) .tier-count {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.tier-tab.active .tier-count {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+/* Responsive tier selector */
+@media (max-width: 768px) {
+    .tier-tab {
+        padding: 14px 16px;
+        font-size: 0.95rem;
+    }
+
+    .tier-count {
+        padding: 3px 10px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .tier-tab {
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px 10px;
+        font-size: 0.9rem;
+    }
+
+    .tier-count {
+        font-size: 0.8rem;
+    }
+}
+
+/* ============================================
+   DEMO REPORT CARDS
+   ============================================ */
+.demo-card {
+    cursor: default !important;
+}
+
+.demo-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    border-color: #e2e8f0 !important;
+}
+
+.demo-location-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.state-badge {
+    background: #e0e7ff;
+    color: #4338ca;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.tier-badge {
+    background: #1e293b;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.body-type-badge {
+    background: #f1f5f9;
+    color: #475569;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+
+/* ============================================
    UNIFIED FILTER BLOCK
    ============================================ */
 .filter-block {

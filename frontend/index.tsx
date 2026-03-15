@@ -47,7 +47,10 @@ import {
     ListIcon
 } from './components/Icons';
 import { ReportCard } from './components/ReportCard';
+import { TierSelector } from './components/TierSelector';
+import { DemoReportCard } from './components/DemoReportCard';
 import { HowItWorks } from './components/HowItWorks/HowItWorks';
+import { GovernmentTier, STATE_REPORTS, LOCAL_BODY_REPORTS, STATE_STATS, LOCAL_STATS } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
 import './index.css';
@@ -289,6 +292,7 @@ function App() {
     const [filterYear, setFilterYear] = useState('All');
     const [filterAuditType, setFilterAuditType] = useState<Set<string>>(new Set());
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [activeTier, setActiveTier] = useState<GovernmentTier>('union');
     const [inputValue, setInputValue] = useState('');
     const [chatOpen, setChatOpen] = useState(false);
     const [citationFeedback, setCitationFeedback] = useState<{show: boolean; section: string; page: number; auditYear?: string; switched?: boolean} | null>(null);
@@ -687,6 +691,20 @@ function App() {
             yearSpan,
         };
     }, [reports]);
+
+    // Stats based on active tier
+    const currentStats = useMemo(() => {
+        if (activeTier === 'union') return enhancedStats;
+        if (activeTier === 'state') return STATE_STATS;
+        return LOCAL_STATS;
+    }, [activeTier, enhancedStats]);
+
+    // Reports to display based on active tier
+    const currentReports = useMemo(() => {
+        if (activeTier === 'union') return { type: 'union' as const, data: filteredReports };
+        if (activeTier === 'state') return { type: 'demo' as const, data: STATE_REPORTS };
+        return { type: 'demo' as const, data: LOCAL_BODY_REPORTS };
+    }, [activeTier, filteredReports]);
 
     const clearAllFilters = () => {
         setSearchTerm('');
@@ -1476,32 +1494,39 @@ function App() {
                             </p>
                         </div>
                     </div>
-                    <div className="stats-bar">
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.totalReports ?? '...'}</span>
-                            <span className="stat-label">Active Reports</span>
+                    {activeTier === 'union' && (
+                        <div className="stats-bar">
+                            <div className="stat-item">
+                                <span className="stat-value">{reportsLoading ? '...' : 34}</span>
+                                <span className="stat-label">Active Reports</span>
+                            </div>
+                            <div className="stat-item">
+                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats ? `${enhancedStats.totalFindings}+` : '...'}</span>
+                                <span className="stat-label">Total Findings</span>
+                            </div>
+                            <div className="stat-item">
+                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
+                                <span className="stat-label">Monetary Impact</span>
+                            </div>
+                            <div className="stat-item">
+                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.ministryCount ?? '...'}</span>
+                                <span className="stat-label">Ministries</span>
+                            </div>
+                            <div className="stat-item">
+                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.sectorCount ?? '...'}</span>
+                                <span className="stat-label">Sectors</span>
+                            </div>
+                            <div className="stat-item">
+                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.yearSpan ?? '...'}</span>
+                                <span className="stat-label">Year Span</span>
+                            </div>
                         </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats ? `${enhancedStats.totalFindings}+` : '...'}</span>
-                            <span className="stat-label">Total Findings</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
-                            <span className="stat-label">Monetary Impact</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.ministryCount ?? '...'}</span>
-                            <span className="stat-label">Ministries</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.sectorCount ?? '...'}</span>
-                            <span className="stat-label">Sectors</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.yearSpan ?? '...'}</span>
-                            <span className="stat-label">Year Span</span>
-                        </div>
-                    </div>
+                    )}
+                    <TierSelector
+                        activeTier={activeTier}
+                        onTierChange={setActiveTier}
+                        counts={{ union: reports.length, state: 10, local: 4 }}
+                    />
                     <div className="filter-block">
                         <div className="filter-row-primary">
                             <div className="search-box"><SearchIcon /><input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
@@ -1558,8 +1583,8 @@ function App() {
                             )}
                         </div>
                     </div>
-                    {reportsLoading && <div className="loading-spinner">Loading reports...</div>}
-                    {!reportsLoading && filteredReports.length === 0 && (
+                    {reportsLoading && activeTier === 'union' && <div className="loading-spinner">Loading reports...</div>}
+                    {!reportsLoading && activeTier === 'union' && filteredReports.length === 0 && (
                         <div className="no-results">
                             <p>No reports match your current filters.</p>
                             {hasActiveFilters && (
@@ -1567,14 +1592,26 @@ function App() {
                             )}
                         </div>
                     )}
-                    {!reportsLoading && filteredReports.length > 0 && (
+                    {currentReports.type === 'union' && !reportsLoading && currentReports.data.length > 0 && (
                         <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
-                            {filteredReports.map(report => (
+                            {currentReports.data.map(report => (
                                 <ReportCard
                                     key={report.id}
                                     report={report}
                                     viewMode={viewMode}
                                     onClick={() => handleReportClick(report)}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    {currentReports.type === 'demo' && (
+                        <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
+                            {currentReports.data.map(report => (
+                                <DemoReportCard
+                                    key={report.id}
+                                    report={report}
+                                    viewMode={viewMode}
+                                    tier={activeTier as 'state' | 'local'}
                                 />
                             ))}
                         </div>

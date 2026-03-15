@@ -90,3 +90,205 @@ export function getReportType(reportType: string | undefined): string {
   if (!reportType) return REPORT_TYPES['default'];
   return REPORT_TYPES[reportType] || reportType;
 }
+
+/**
+ * Government tier type for tier selector
+ */
+export type GovernmentTier = 'union' | 'state' | 'local';
+
+/**
+ * Demo report interface for State/Local tiers
+ */
+export interface DemoReport {
+  id: string;
+  title: string;
+  state: string;
+  year: number;
+  reportNumber: string;
+  auditType: string;
+  sectors: string[];
+  findings: number | null;
+  bodyType?: string; // For Local Bodies only
+}
+
+/**
+ * Hardcoded State Government reports
+ */
+export const STATE_REPORTS: DemoReport[] = [
+  {
+    id: 'state-uttarakhand-mgnregs-2025',
+    title: "Mahatma Gandhi National Rural Employment Guarantee Scheme, Uttarakhand",
+    state: "Uttarakhand",
+    year: 2025,
+    reportNumber: "Report 06 of 2025",
+    auditType: "Performance Audit",
+    sectors: ["Social Welfare"],
+    findings: null,
+  },
+  {
+    id: 'state-mh-workers-2025',
+    title: "Welfare of Building and Other Construction Workers, Government of Maharashtra",
+    state: "Maharashtra",
+    year: 2025,
+    reportNumber: "Report 04 of 2025",
+    auditType: "Performance Audit",
+    sectors: ["Social Welfare"],
+    findings: null,
+  },
+  {
+    id: 'state-assam-2024',
+    title: "Audit Report on Social, Economic and General Sectors, Government of Assam",
+    state: "Assam",
+    year: 2024,
+    reportNumber: "Report 02 of 2024",
+    auditType: "Compliance Audit",
+    sectors: ["Social Welfare"],
+    findings: null,
+  },
+  {
+    id: 'state-uttarakhand-finance-2025',
+    title: "Audit Report on State Finances for Uttarakhand 2023-24",
+    state: "Uttarakhand",
+    year: 2025,
+    reportNumber: "Report 01 of 2025",
+    auditType: "Financial Audit",
+    sectors: ["Finance"],
+    findings: null,
+  },
+  {
+    id: 'state-kerala-2025',
+    title: "Combined Report of the Comptroller and Auditor General of India on Kerala for the period ended March 2023",
+    state: "Kerala",
+    year: 2025,
+    reportNumber: "Report 06 of 2025",
+    auditType: "Compliance Audit",
+    sectors: ["Finance"],
+    findings: null,
+  },
+  {
+    id: 'state-odisha-2025',
+    title: "School Education in Odisha, School and Mass Education Department",
+    state: "Odisha",
+    year: 2025,
+    reportNumber: "Report 05 of 2025",
+    auditType: "Performance Audit",
+    sectors: ["Education, Health & Family Welfare"],
+    findings: null,
+  },
+  {
+    id: 'state-up-pmay-2025',
+    title: "Performance Audit of Implementation of Pradhan Mantri Awaas Yojana - Gramin in Uttar Pradesh",
+    state: "Uttar Pradesh",
+    year: 2025,
+    reportNumber: "Report 08 of 2025",
+    auditType: "Performance Audit",
+    sectors: ["Social Welfare"],
+    findings: null,
+  },
+  {
+    id: 'state-gujarat-nsap-2024',
+    title: "Implementation of National Social Assistance Programme through Direct Benefit Transfer Scheme in Gujarat",
+    state: "Gujarat",
+    year: 2024,
+    reportNumber: "Report 03 of 2024",
+    auditType: "Performance Audit",
+    sectors: ["Social Welfare"],
+    findings: null,
+  },
+  {
+    id: 'state-jharkhand-2025',
+    title: "State Finances Audit Report of the Government of Jharkhand for the year 2023-24",
+    state: "Jharkhand",
+    year: 2025,
+    reportNumber: "Report 02 of 2025",
+    auditType: "Financial Audit",
+    sectors: ["Finance"],
+    findings: null,
+  },
+  {
+    id: 'state-rajasthan-health-2025',
+    title: "Audit of Public Health Infrastructure and Management of Health Services in Rajasthan",
+    state: "Rajasthan",
+    year: 2025,
+    reportNumber: "Report 04 of 2025",
+    auditType: "Performance Audit",
+    sectors: ["Social Welfare", "Education, Health & Family Welfare"],
+    findings: null,
+  },
+];
+
+/**
+ * Hardcoded Local Bodies reports
+ */
+export const LOCAL_BODY_REPORTS: DemoReport[] = [
+  {
+    id: 'local-bihar-2024',
+    title: "Report on Local Government Institutions in Bihar",
+    state: "Bihar",
+    year: 2024,
+    reportNumber: "Report of 2024",
+    auditType: "Compliance Audit",
+    bodyType: "PRIs & ULBs",
+    sectors: ["Local Governance"],
+    findings: null,
+  },
+  {
+    id: 'local-chhattisgarh-2025',
+    title: "Report on Local Bodies in Chhattisgarh",
+    state: "Chhattisgarh",
+    year: 2025,
+    reportNumber: "Report of 2025",
+    auditType: "Compliance Audit",
+    bodyType: "PRIs & ULBs",
+    sectors: ["Local Governance"],
+    findings: null,
+  },
+  {
+    id: 'local-hp-2024',
+    title: "ATIR on Panchayati Raj Institutions and Urban Local Bodies",
+    state: "Himachal Pradesh",
+    year: 2024,
+    reportNumber: "ATIR 2024",
+    auditType: "ATIR",
+    bodyType: "PRIs & ULBs",
+    sectors: ["Local Governance"],
+    findings: null,
+  },
+  {
+    id: 'local-mh-2024',
+    title: "ATIR on Local Bodies of Maharashtra",
+    state: "Maharashtra",
+    year: 2024,
+    reportNumber: "ATIR 2024",
+    auditType: "ATIR",
+    bodyType: "ULBs",
+    sectors: ["Local Governance"],
+    findings: null,
+  },
+];
+
+/**
+ * Stats for State tier
+ */
+export const STATE_STATS = {
+  totalReports: 10,
+  totalFindings: '—',
+  monetaryDisplay: '—',
+  ministryCount: 9,
+  sectorCount: 3,
+  yearSpan: '2024–2025',
+  ministryLabel: 'States',
+};
+
+/**
+ * Stats for Local Bodies tier
+ */
+export const LOCAL_STATS = {
+  totalReports: 4,
+  totalFindings: '—',
+  monetaryDisplay: '—',
+  ministryCount: 4,
+  sectorCount: 1,
+  yearSpan: '2024–2025',
+  ministryLabel: 'States',
+};

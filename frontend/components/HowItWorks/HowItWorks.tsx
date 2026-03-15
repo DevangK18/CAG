@@ -23,7 +23,7 @@ const tabs: Tab[] = [
 ];
 
 // Tabs that are under development
-const underDevelopmentTabs: TabId[] = ['overview', 'frontend', 'infrastructure'];
+const underDevelopmentTabs: TabId[] = ['frontend', 'infrastructure'];
 
 const UnderDevelopmentOverlay: React.FC = () => (
     <div className="under-development-overlay">
