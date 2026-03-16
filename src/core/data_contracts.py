@@ -98,6 +98,28 @@ class ParentChunk(BaseModel):
         description="Y-coordinate of section heading on first page (for multi-section pages)"
     )
 
+    # Multi-tier expansion fields
+    government_body_type: Literal["union", "state", "local_body"] = Field(
+        default="union",
+        description="Type of government body: union, state, or local_body"
+    )
+    state_name: Optional[str] = Field(
+        default=None,
+        description="State name for State/Local Body reports (e.g., 'Odisha', 'Maharashtra'); null for Union"
+    )
+    department: Optional[str] = Field(
+        default=None,
+        description="State/Local Body department (equivalent to Union ministry); null for Union"
+    )
+    audit_category: Literal["compliance", "performance", "financial", "revenue", "commercial", "atir"] = Field(
+        default="compliance",
+        description="Audit category type"
+    )
+    report_subtype: Optional[Literal["PSE", "Revenue", "PRI_ULB"]] = Field(
+        default=None,
+        description="Report subtype: PSE (Public Sector Enterprises), Revenue, PRI_ULB (Panchayati Raj/Urban Local Bodies)"
+    )
+
 
 class ChildChunk(BaseModel):
     """Child chunk with full extraction metadata and parent linking."""
@@ -164,6 +186,28 @@ class ChildChunk(BaseModel):
     visual_subtype: Optional[str] = Field(
         default=None,
         description="P4-6: Subtype for image_caption chunks: 'chart', 'map', 'flowchart', 'diagram', 'photo', 'data_visualization', 'unknown'"
+    )
+
+    # Multi-tier expansion fields
+    government_body_type: Literal["union", "state", "local_body"] = Field(
+        default="union",
+        description="Type of government body: union, state, or local_body"
+    )
+    state_name: Optional[str] = Field(
+        default=None,
+        description="State name for State/Local Body reports (e.g., 'Odisha', 'Maharashtra'); null for Union"
+    )
+    department: Optional[str] = Field(
+        default=None,
+        description="State/Local Body department (equivalent to Union ministry); null for Union"
+    )
+    audit_category: Literal["compliance", "performance", "financial", "revenue", "commercial", "atir"] = Field(
+        default="compliance",
+        description="Audit category type"
+    )
+    report_subtype: Optional[Literal["PSE", "Revenue", "PRI_ULB"]] = Field(
+        default=None,
+        description="Report subtype: PSE (Public Sector Enterprises), Revenue, PRI_ULB (Panchayati Raj/Urban Local Bodies)"
     )
 
 

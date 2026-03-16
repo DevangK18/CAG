@@ -1,0 +1,200 @@
+"""
+Prompt for extracting missing overview fields from CAG report JSON.
+
+Extracts:
+- audit_scope: Period, coverage, sample size, entities
+- audit_objectives: List of objectives from report
+- topics_covered: NEUTRAL topic names (not findings-focused)
+- glossary_terms: Abbreviations and definitions
+"""
+
+
+def build_overview_prompt(json_data: dict) -> str:
+    """
+    Build the overview extraction prompt.
+    
+    Uses:
+    - TOC from parent_chunks (for structure)
+    - Intro/Scope content from child_chunks (for details)
+    """
+    
+    # Extract TOC
+    toc_lines = []
+    for chunk in json_data.get("parent_chunks", [])[:60]:
+        indent = "  " * (chunk.get("toc_level", 1) - 1)
+        page = chunk.get("page_range_physical", [0])[0]
+        toc_lines.append(f"{indent}{chunk.get('toc_entry', 'N/A')} (p.{page})")
+    toc_text = "\n".join(toc_lines)
+    
+    # Extract intro/scope/objectives content
+    intro_content = _get_section_content(
+        json_data,
+        ["Introduction", "Scope", "Objective", "Methodology", "Chapter 1", "Audit Scope"]
+    )
+    
+    # Extract glossary if present
+    glossary_content = _get_section_content(
+        json_data,
+        ["Glossary", "Abbreviation", "Acronym", "Definition", "List of Abbreviations"]
+    )
+    
+    # Extract preface/executive summary for additional context
+    exec_content = _get_section_content(
+        json_data,
+        ["Executive Summary", "Preface", "Overview"]
+    )
+    
+    meta = json_data.get("report_metadata", {})
+    
+    return f'''You are extracting specific metadata from a CAG (Comptroller and Auditor General of India) audit report.
+
+## CONTEXT
+Report: {meta.get("report_title", "N/A")}
+Type: {meta.get("report_type", "N/A")}
+Ministry: {meta.get("ministry", "N/A")}
+Year: {meta.get("report_year", "N/A")}
+
+## ALREADY EXTRACTED (do NOT repeat these - they exist in the JSON):
+- Report metadata (title, ministry, year, type) ✓
+- Table of Contents structure ✓
+- Findings with severity and monetary amounts ✓
+- Recommendations ✓
+- Section classifications ✓
+- Statistics (totals, breakdowns) ✓
+
+## YOUR TASK: Extract ONLY these 4 fields
+
+### 1. audit_scope
+From the Scope of Audit / Introduction sections, extract:
+```json
+{{
+  "period": {{
+    "start": "YYYY-YY format (e.g., '2020-21')",
+    "end": "YYYY-YY format (e.g., '2022-23')",
+    "description": "e.g., '3 Financial Years' or 'April 2020 to March 2023'"
+  }},
+  "geographic_coverage": ["list of states/regions/units if mentioned, or ['All India'] if national scope"],
+  "sample_size": {{
+    "total": number or null if not specified,
+    "description": "e.g., '8,470 cases from 15 Commissionerates' or null"
+  }},
+  "entities_covered": ["list of organizations/departments/units examined"]
+}}
+```
+If any sub-field is not found in the content, use null.
+
+### 2. audit_objectives
+From the Audit Objectives section (usually in Chapter 1 or Introduction), extract as array:
+```json
+["objective 1 as stated in report", "objective 2", "objective 3", ...]
+```
+Rules:
+- Copy the EXACT wording from the report where possible
+- Usually 3-7 objectives
+- If no explicit "objectives" section, extract the main audit questions or examination areas
+- Keep each objective concise (1-2 sentences max)
+
+### 3. topics_covered
+Create NEUTRAL topic names from the Table of Contents structure:
+```json
+[
+  {{
+    "name": "neutral descriptive topic name",
+    "sections": ["2.1", "2.2", "2.3"],
+    "page_start": 18,
+    "page_end": 35,
+    "description": "brief one-line description of what this topic covers"
+  }}
+]
+```
+
+CRITICAL RULES for topics:
+- Use NEUTRAL names - describe WHAT was examined, not WHAT was found wrong
+- Topics should help a reader navigate to areas of interest
+- ✅ GOOD: "Tax Assessment Procedures", "Revenue Collection Mechanisms", "Storage and Warehousing Operations", "Procurement Processes", "Financial Management"
+- ❌ BAD: "Assessment Errors", "Revenue Loss", "Storage Deficiencies", "Non-compliance Issues", "Irregularities"
+- Create 8-15 topics covering the main themes of the report
+- Group related sub-sections under single topics
+- Include page ranges for navigation
+
+### 4. glossary_terms
+Extract abbreviations and technical terms used in the report:
+```json
+[
+  {{
+    "term": "full term name",
+    "abbreviation": "ABC",
+    "definition": "brief definition if provided in report, else null",
+    "category": "organizational|technical|financial|legal|procedural"
+  }}
+]
+```
+Common CAG/Government terms to look for:
+- AO (Assessing Officer), AY (Assessment Year), FY (Financial Year)
+- CBDT, CIT, PCIT, TDS, GST, CGST, SGST, IGST
+- CAG, PAC, FRBM, BE, RE, Actuals
+- Ministry/Department-specific abbreviations
+- Any abbreviation that appears multiple times in the report
+
+## INPUT DATA
+
+### Table of Contents:
+{toc_text[:8000]}
+
+### Introduction / Scope / Objectives Content:
+{intro_content[:12000]}
+
+### Executive Summary / Preface (additional context):
+{exec_content[:4000]}
+
+### Glossary Section (if available):
+{glossary_content[:4000]}
+
+## OUTPUT FORMAT
+Return ONLY a valid JSON object with these exact keys:
+```json
+{{
+  "audit_scope": {{ ... }},
+  "audit_objectives": [ ... ],
+  "topics_covered": [ ... ],
+  "glossary_terms": [ ... ]
+}}
+```
+
+IMPORTANT:
+- No markdown code blocks around the JSON
+- No explanatory text before or after
+- Just the raw JSON object
+- Ensure all JSON is properly formatted and valid
+'''
+
+
+def _get_section_content(json_data: dict, keywords: list[str], max_chunks: int = 50) -> str:
+    """Extract paragraph content from sections matching keywords."""
+    matching = []
+    
+    for chunk in json_data.get("child_chunks", []):
+        # Include paragraphs, text, and headers
+        content_type = chunk.get("content_type", "")
+        if content_type not in ["paragraph", "text", "header"]:
+            continue
+        
+        # Check hierarchy for keyword matches
+        hierarchy = chunk.get("hierarchy", {})
+        hierarchy_str = " ".join(str(v) for v in hierarchy.values()).lower()
+        
+        # Also check toc_entry if available
+        toc_entry = str(chunk.get("toc_entry", "")).lower()
+        
+        combined_text = hierarchy_str + " " + toc_entry
+        
+        if any(kw.lower() in combined_text for kw in keywords):
+            content = chunk.get("content", "")
+            if content and len(content) > 30:  # Skip tiny fragments
+                page = chunk.get("source_page_physical", "?")
+                matching.append(f"[Page {page}] {content}")
+        
+        if len(matching) >= max_chunks:
+            break
+    
+    return "\n\n".join(matching)

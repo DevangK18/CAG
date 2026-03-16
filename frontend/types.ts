@@ -27,6 +27,13 @@ export interface AuditReport {
   findings?: string[];
   recommendations?: string[];
   pdfFilename?: string;
+
+  // Multi-tier expansion fields
+  government_body_type?: 'union' | 'state' | 'local_body';
+  state_name?: string | null;
+  department?: string | null;
+  audit_category?: 'compliance' | 'performance' | 'financial' | 'revenue' | 'commercial' | 'atir';
+  report_subtype?: string | null;
 }
 
 // Time series (now from API, not hardcoded)
@@ -170,6 +177,13 @@ export interface OverviewData {
     publication_date: string;
     source_url: string;
     source_filename: string;
+
+    // Multi-tier expansion fields
+    government_body_type?: 'union' | 'state' | 'local_body';
+    state_name?: string | null;
+    department?: string | null;
+    audit_category?: 'compliance' | 'performance' | 'financial' | 'revenue' | 'commercial' | 'atir';
+    report_subtype?: string | null;
   };
   table_of_contents: TOCEntry[];
   findings_summary: FindingSummaryData;

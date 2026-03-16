@@ -1,10 +1,33 @@
 """
 Pipeline Quality Diagnostic v4
-Standalone — no external dependencies beyond stdlib.
+Standalone — no external dependencies beyond stdlib (pandas optional for manifest filtering).
 Runs against *_chunks.json files and optionally raw PDFs.
 
 Usage:
-    python run_pipeline_diagnostics.py [data_dir] [--pdf-dir PDF_DIR]
+    python scripts/run_baseline_diagnostics_v2.py [data_dir] [--manifest EXCEL_FILE] [--no-pdf]
+
+Arguments:
+    data_dir            Directory containing *_chunks.json files (default: data/processed)
+    --pdf-dir           Directory containing PDFs for ground truth validation (default: data/raw)
+    --no-pdf            Disable PDF ground truth validation
+    --manifest          Filter to reports in this Excel manifest file (can be used multiple times)
+
+Examples:
+    # Run on all reports (with PDF validation from data/raw)
+    python scripts/run_baseline_diagnostics_v2.py
+
+    # Run only on reports from a manifest
+    python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx
+
+    # Run on multiple manifests
+    python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx --manifest Union_Examples.xlsx
+
+    # Disable PDF validation
+    python scripts/run_baseline_diagnostics_v2.py --no-pdf
+
+Output:
+    - Saves to logs/diagnostics_{manifest_name}_{date}.md when using --manifest
+    - Saves to logs/all_report_diagnostics_{date}.md otherwise
 
 Changes from v3:
   - Weighted rubric scoring (not just issue-deduction)
@@ -1365,25 +1388,201 @@ def get_pdf_page_count(pdf_path: Path) -> Optional[int]:
     return None
 
 
-def main():
-    data_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/processed")
-    pdf_dir = None
-    if "--pdf-dir" in sys.argv:
-        idx = sys.argv.index("--pdf-dir")
-        if idx + 1 < len(sys.argv):
-            pdf_dir = Path(sys.argv[idx + 1])
+def extract_report_ids_from_manifest(manifest_path: Path) -> list:
+    """
+    Extract report IDs from an Excel manifest file.
+    Mirrors the logic from manifest_ingestion_service._build_report_id().
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        print("❌ pandas required for manifest parsing. Install with: pip install pandas")
+        return []
 
-    json_files = sorted(data_dir.glob("*_chunks.json"))
-    if not json_files:
+    try:
+        # Try header=1 first (original CAG format), fall back to header=0
+        df = pd.read_excel(manifest_path, header=1)
+        known_headers = {"SL NO", "Report PDF", "Title", "Original Title", "Date", "Report_No"}
+        found_headers = set(str(c).strip() for c in df.columns) & known_headers
+        if not found_headers:
+            df = pd.read_excel(manifest_path, header=0)
+
+        # Strip whitespace from column names
+        df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+
+        # Column mapping
+        column_mapping = {
+            "SL NO": "SL NO",
+            "Report PDF": "Report PDF",
+            "Original Title": "Title",
+            "Recommended Title": "Recommended Title",
+            "Report_No": "Report No",
+            "Report No": "Report No",
+        }
+        rename_map = {k: v for k, v in column_mapping.items() if k in df.columns}
+        df.rename(columns=rename_map, inplace=True)
+
+        # Drop empty rows
+        df = df.dropna(how="all")
+        if "SL NO" in df.columns:
+            df = df.dropna(subset=["SL NO"])
+
+        report_ids = []
+        for _, row in df.iterrows():
+            # Get Report_No (with same logic as manifest_ingestion_service._build_report_id)
+            report_no_raw = row.get("Report No", "")
+            if pd.isna(report_no_raw) or report_no_raw == "" or report_no_raw == "Unknown":
+                # Fallback to report_XXX for NA Report_No
+                sl_no = int(row.get("SL NO", 0))
+                report_no_raw = f"report_{sl_no:03d}"
+            else:
+                report_no_str = str(report_no_raw).strip()
+
+                # Handle "X of YYYY" format → "YYYY_X"
+                of_match = re.match(r"(\d+)\s+of\s+(\d{4})", report_no_str)
+                if of_match:
+                    num, year = of_match.groups()
+                    report_no_raw = f"{year}_{num}"
+                # Handle "XX_YYYY" format → "YYYY_XX"
+                elif re.match(r"^(\d{1,2})_(\d{4})$", report_no_str):
+                    num, year = report_no_str.split("_")
+                    report_no_raw = f"{year}_{num}"
+                else:
+                    # Replace / with _ for filename safety
+                    report_no_raw = report_no_str.replace("/", "_").replace(" ", "_")
+
+            # Get Recommended Title (or fallback to Title)
+            rec_title = row.get("Recommended Title", "")
+            if pd.isna(rec_title) or not rec_title:
+                rec_title = row.get("Title", "")
+            if pd.isna(rec_title):
+                rec_title = ""
+            rec_title = str(rec_title).strip()
+
+            # Sanitize title for filename
+            sanitized_title = re.sub(r'[^\w\s-]', '', rec_title)
+            sanitized_title = re.sub(r'\s+', '_', sanitized_title)
+            sanitized_title = sanitized_title[:80]  # Truncate
+
+            # Build report_id
+            report_id = f"{report_no_raw}_{sanitized_title}"
+            report_ids.append(report_id)
+
+        return report_ids
+
+    except Exception as e:
+        print(f"❌ Error parsing manifest {manifest_path}: {e}")
+        return []
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Pipeline Quality Diagnostic v4 - Analyze *_chunks.json files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run on all reports (PDF validation enabled by default from data/raw)
+  python scripts/run_baseline_diagnostics_v2.py
+
+  # Run only on reports from a manifest file
+  python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx
+
+  # Run on reports from multiple manifests
+  python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx --manifest Union_Examples.xlsx
+
+  # Use custom PDF directory
+  python scripts/run_baseline_diagnostics_v2.py --pdf-dir /path/to/pdfs
+
+  # Disable PDF validation
+  python scripts/run_baseline_diagnostics_v2.py --no-pdf
+        """
+    )
+    parser.add_argument(
+        "data_dir",
+        nargs="?",
+        default="data/processed",
+        help="Directory containing *_chunks.json files (default: data/processed)"
+    )
+    parser.add_argument(
+        "--pdf-dir",
+        type=str,
+        default="data/raw",
+        help="Directory containing PDFs for ground truth validation (default: data/raw)"
+    )
+    parser.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="Disable PDF ground truth validation"
+    )
+    parser.add_argument(
+        "--manifest",
+        action="append",
+        dest="manifests",
+        metavar="EXCEL_FILE",
+        help="Filter to reports in this manifest file (can be used multiple times)"
+    )
+
+    args = parser.parse_args()
+
+    data_dir = Path(args.data_dir)
+    pdf_dir = None if args.no_pdf else Path(args.pdf_dir)
+
+    # Get all json files first
+    all_json_files = sorted(data_dir.glob("*_chunks.json"))
+    if not all_json_files:
         print(f"❌ No *_chunks.json files found in {data_dir}")
         sys.exit(1)
+
+    # Filter by manifest if provided
+    json_files = all_json_files
+    manifest_names = []
+
+    if args.manifests:
+        all_report_ids = set()
+        for manifest_path in args.manifests:
+            manifest_file = Path(manifest_path)
+            if not manifest_file.exists():
+                print(f"⚠️  Manifest not found: {manifest_path}")
+                continue
+
+            report_ids = extract_report_ids_from_manifest(manifest_file)
+            if report_ids:
+                print(f"📋 Loaded {len(report_ids)} report IDs from {manifest_file.name}")
+                all_report_ids.update(report_ids)
+                manifest_names.append(manifest_file.stem)
+
+        if all_report_ids:
+            # Filter json_files to only include matching reports
+            filtered_files = []
+            for jf in all_json_files:
+                # Extract report_id from filename (remove _chunks.json suffix)
+                report_id = jf.stem.replace("_chunks", "")
+                if report_id in all_report_ids:
+                    filtered_files.append(jf)
+
+            if not filtered_files:
+                print(f"❌ No matching *_chunks.json files found for manifest report IDs")
+                print(f"   Looking for: {list(all_report_ids)[:5]}...")
+                sys.exit(1)
+
+            json_files = filtered_files
+            print(f"✓ Filtered to {len(json_files)}/{len(all_json_files)} reports from manifest(s)")
 
     # Set up output file in logs directory
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%d_%m_%y")
-    output_file = logs_dir / f"all_report_diagnostics_{timestamp}.md"
+
+    # Build output filename
+    if manifest_names:
+        # Use manifest name(s) in filename
+        manifest_suffix = "_".join(manifest_names)
+        output_file = logs_dir / f"diagnostics_{manifest_suffix}_{timestamp}.md"
+    else:
+        output_file = logs_dir / f"all_report_diagnostics_{timestamp}.md"
 
     # Create TeeOutput to write to both stdout and file
     tee = TeeOutput(output_file)
@@ -1392,6 +1591,8 @@ def main():
 
     try:
         print(f"🔍 Pipeline Diagnostic v4 — {len(json_files)} reports in {data_dir}")
+        if manifest_names:
+            print(f"📋 Manifest filter: {', '.join(manifest_names)}")
         print(f"📝 Saving results to: {output_file}")
         print(f"{'━' * 70}")
 
