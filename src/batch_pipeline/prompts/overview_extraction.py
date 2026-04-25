@@ -9,6 +9,27 @@ Extracts:
 """
 
 
+def _get_government_level_label(government_body_type: str) -> str:
+    """Convert government_body_type to human-readable label."""
+    labels = {
+        "union": "Union (Central Government)",
+        "state": "State Government",
+        "local_body": "Local Body (PRIs and ULBs)",
+    }
+    return labels.get(government_body_type, "Union (Central Government)")
+
+
+def _get_department_display(meta: dict) -> str:
+    """Get department/entity display value with fallbacks."""
+    department = meta.get("department")
+    if department:
+        return department
+    ministry = meta.get("ministry")
+    if ministry:
+        return ministry
+    return "Multiple"
+
+
 def build_overview_prompt(json_data: dict) -> str:
     """
     Build the overview extraction prompt.
@@ -45,15 +66,36 @@ def build_overview_prompt(json_data: dict) -> str:
     )
     
     meta = json_data.get("report_metadata", {})
-    
+
+    # Extract tier-aware fields with safe defaults
+    government_body_type = meta.get("government_body_type", "union")
+    state_name = meta.get("state_name")
+    audit_category = meta.get("audit_category", "")
+
+    # Build tier-aware context
+    govt_level = _get_government_level_label(government_body_type)
+    state_display = state_name if state_name else "Union (Central Government)"
+    dept_display = _get_department_display(meta)
+
+    # ATIR note for local body reports
+    atir_note = ""
+    if audit_category == "atir":
+        atir_note = """
+Note: ATIR reports cover Panchayati Raj Institutions (village-level governance)
+and Urban Local Bodies (municipal governance). They assess institutional functioning,
+financial management, and scheme implementation at the grassroots level.
+"""
+
     return f'''You are extracting specific metadata from a CAG (Comptroller and Auditor General of India) audit report.
 
 ## CONTEXT
 Report: {meta.get("report_title", "N/A")}
 Type: {meta.get("report_type", "N/A")}
-Ministry: {meta.get("ministry", "N/A")}
+Government Level: {govt_level}
+State: {state_display}
+Department/Entity: {dept_display}
 Year: {meta.get("report_year", "N/A")}
-
+{atir_note}
 ## ALREADY EXTRACTED (do NOT repeat these - they exist in the JSON):
 - Report metadata (title, ministry, year, type) ✓
 - Table of Contents structure ✓
@@ -134,6 +176,9 @@ Common CAG/Government terms to look for:
 - CBDT, CIT, PCIT, TDS, GST, CGST, SGST, IGST
 - CAG, PAC, FRBM, BE, RE, Actuals
 - Ministry/Department-specific abbreviations
+- State Government abbreviations: GoAP, GoHP, GoSK, GoUK, GoOD, GoMH, GoKL, GoAS, GoBR, GoCG, SPSE
+- Local Body terms: PRI (Panchayati Raj Institutions), ULB (Urban Local Bodies), ZP (Zilla Parishad), GP (Gram Panchayat), PS (Panchayat Samiti), MC (Municipal Corporation), NP (Nagar Palika)
+- Local audit terms: DLFA (Director Local Fund Audit), SFC (State Finance Commission), CFC (Central Finance Commission), PRIASoft, PFMS
 - Any abbreviation that appears multiple times in the report
 
 ## INPUT DATA

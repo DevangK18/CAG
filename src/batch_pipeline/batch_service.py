@@ -585,6 +585,64 @@ class BatchService:
         """Get the path for storing generated summaries."""
         return self.summaries_dir / f"{report_id}_summaries.json"
 
-    def get_final_overview_path(self, report_id: str) -> Path:
-        """Get the path for final merged overview (in processed dir)."""
+    def find_chunks_path(self, report_id: str) -> Path | None:
+        """
+        Find the chunks.json file for a report, searching tier subdirectories.
+
+        Searches in order: state/, local_body/, union/, then flat processed_dir.
+        """
+        tiers = ["state", "local_body", "union"]
+
+        # Try tier subdirectories first
+        for tier in tiers:
+            tier_path = self.processed_dir / tier / f"{report_id}_chunks.json"
+            if tier_path.exists():
+                return tier_path
+
+        # Fall back to flat structure (legacy)
+        flat_path = self.processed_dir / f"{report_id}_chunks.json"
+        if flat_path.exists():
+            return flat_path
+
+        return None
+
+    def get_tier_from_chunks(self, chunks_path: Path) -> str | None:
+        """Extract tier from chunks file path or metadata."""
+        # Check if path contains tier directory
+        path_str = str(chunks_path)
+        if "/state/" in path_str:
+            return "state"
+        elif "/local_body/" in path_str:
+            return "local_body"
+        elif "/union/" in path_str:
+            return "union"
+
+        # Fall back to reading metadata from file
+        try:
+            with open(chunks_path) as f:
+                data = json.load(f)
+            return data.get("report_metadata", {}).get("government_body_type", "union")
+        except:
+            return None
+
+    def get_final_overview_path(self, report_id: str, tier: str = None) -> Path:
+        """
+        Get the path for final merged overview (in processed dir).
+
+        Args:
+            report_id: The report identifier
+            tier: Optional tier (state/local_body/union). If not provided,
+                  will search for existing chunks file to determine tier.
+        """
+        if tier:
+            return self.processed_dir / tier / f"{report_id}_overview.json"
+
+        # Try to find the chunks file to determine tier
+        chunks_path = self.find_chunks_path(report_id)
+        if chunks_path:
+            detected_tier = self.get_tier_from_chunks(chunks_path)
+            if detected_tier:
+                return self.processed_dir / detected_tier / f"{report_id}_overview.json"
+
+        # Fall back to flat structure
         return self.processed_dir / f"{report_id}_overview.json"

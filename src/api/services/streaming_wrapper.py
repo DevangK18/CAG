@@ -257,11 +257,37 @@ async def generate_stream(
                 # Pass list directly - qdrant_service._build_filter handles it as MatchAny
                 filters["report_id"] = report_ids
 
+        # Tier context lookup for query enhancement
+        tier_context_for_enhancer = None
+        if filters and "report_id" in filters:
+            try:
+                from report_registry import get_registry
+                registry = get_registry()
+                report_id = filters["report_id"]
+                # Handle both single report_id and list of report_ids
+                if isinstance(report_id, list):
+                    report_id = report_id[0]  # Use first report for context
+                report_info = registry.get_report(report_id)
+                if report_info:
+                    govt_type = getattr(report_info, "government_body_type", None) or "union"
+                    if govt_type != "union":
+                        tier_label = "State" if govt_type == "state" else "Local Body"
+                        tier_context_for_enhancer = f"{tier_label} audit report"
+                        state_name = getattr(report_info, "state_name", None)
+                        if state_name:
+                            tier_context_for_enhancer += f" from {state_name}"
+                        department = getattr(report_info, "department", None)
+                        if department and department.lower() not in ("unknown", "n/a", ""):
+                            tier_context_for_enhancer += f", department: {department}"
+            except Exception as e:
+                logger.warning(f"Failed to lookup tier context: {e}")
+
         # NEW: Run query enhancement first (in thread pool)
         enhancement = None
         if hasattr(rag, "query_enhancer") and rag.config.query_enhancement.enabled:
             enhancement = await loop.run_in_executor(
-                _executor, lambda: rag.query_enhancer.enhance(query, style=style)
+                _executor,
+                lambda: rag.query_enhancer.enhance(query, style=style, tier_context=tier_context_for_enhancer)
             )
 
             # Apply recommended style

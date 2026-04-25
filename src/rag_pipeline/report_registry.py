@@ -32,6 +32,59 @@ from typing import Dict, List, Optional, Any
 logger = logging.getLogger(__name__)
 
 
+def normalize_report_no(report_no: Optional[str]) -> str:
+    """
+    Normalize report_no to clean 'X of YYYY' format.
+
+    Handles:
+    - Already clean: "16 of 2020" → "16 of 2020"
+    - Underscore num_year: "02_2024" → "2 of 2024"
+    - Underscore year_num: "2017_10" → "10 of 2017"
+    - "Unknown" or empty → ""
+    - None → ""
+
+    Returns:
+        Normalized report number string, or empty string if not available
+    """
+    if report_no is None:
+        return ""
+
+    val = str(report_no).strip()
+
+    # Handle "Unknown" or empty
+    if not val or val.lower() == "unknown" or val == "N/A":
+        return ""
+
+    # Already in clean format "X of YYYY"
+    if re.match(r"^\d+\s+of\s+\d{4}$", val, re.IGNORECASE):
+        return val
+
+    # Handle underscore formats
+    if "_" in val:
+        parts = val.split("_")
+        if len(parts) == 2:
+            first, second = parts
+            # year_num format: "2017_10"
+            if first.isdigit() and len(first) == 4:
+                return f"{int(second)} of {first}"
+            # num_year format: "02_2024"
+            elif second.isdigit() and len(second) == 4:
+                return f"{int(first)} of {second}"
+
+    # Handle slash formats: "2025/15" or "15/2025"
+    if "/" in val:
+        parts = val.split("/")
+        if len(parts) == 2:
+            first, second = parts
+            if first.isdigit() and len(first) == 4:
+                return f"{int(second)} of {first}"
+            elif second.isdigit() and len(second) == 4:
+                return f"{int(first)} of {second}"
+
+    # Return as-is if we can't parse it
+    return val
+
+
 @dataclass
 class ReportInfo:
     """Complete information about a report."""
@@ -46,6 +99,10 @@ class ReportInfo:
     sector: str
     report_type: str
     series_id: Optional[str] = None  # Which time series this belongs to
+    government_body_type: str = "union"  # "union", "state", "local_body"
+    state_name: Optional[str] = None  # e.g., "Odisha", null for Union
+    department: Optional[str] = None  # State/Local dept
+    audit_category: str = "compliance"  # "compliance", "performance", etc.
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -60,6 +117,10 @@ class ReportInfo:
             "sector": self.sector,
             "report_type": self.report_type,
             "series_id": self.series_id,
+            "government_body_type": self.government_body_type,
+            "state_name": self.state_name,
+            "department": self.department,
+            "audit_category": self.audit_category,
         }
 
 
@@ -185,7 +246,7 @@ class ReportRegistry:
                 self._reports[report_id] = ReportInfo(
                     report_id=report_id,
                     report_title=report_title,
-                    report_no=meta.get("report_no", ""),
+                    report_no=normalize_report_no(meta.get("report_no")),
                     filename=filename,
                     report_year=meta.get("report_year", 0),
                     audit_year=audit_year,
@@ -193,6 +254,10 @@ class ReportRegistry:
                     sector=meta.get("sector", ""),
                     report_type=meta.get("report_type", ""),
                     series_id=series_id,
+                    government_body_type=meta.get("government_body_type", "union"),
+                    state_name=meta.get("state_name"),
+                    department=meta.get("department"),
+                    audit_category=meta.get("audit_category", "compliance"),
                 )
                 count += 1
 

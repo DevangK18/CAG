@@ -15,7 +15,7 @@ export type TabState = 'overview' | 'findings' | 'recommendations' | 'charts' | 
 // Audit report from API
 export interface AuditReport {
   id: string;
-  reportNumber: string;
+  reportNumber: string | null;
   title: string;
   ministry: string;
   sector: string;

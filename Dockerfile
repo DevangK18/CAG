@@ -20,13 +20,15 @@ COPY frontend/ ./
 ARG VITE_PUBLIC_POSTHOG_KEY
 ARG VITE_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 ARG VITE_ACCESS_CODE=cag-test-2025
+ARG VITE_DISABLE_ACCESS_GATE=false
 
 # Create .env.production with all VITE_ vars needed at build time
 # VITE_API_BASE_URL is empty so api.ts adds /api prefix for relative URLs
 RUN echo "VITE_API_BASE_URL=" > .env.production && \
     echo "VITE_PUBLIC_POSTHOG_KEY=${VITE_PUBLIC_POSTHOG_KEY}" >> .env.production && \
     echo "VITE_PUBLIC_POSTHOG_HOST=${VITE_PUBLIC_POSTHOG_HOST}" >> .env.production && \
-    echo "VITE_ACCESS_CODE=${VITE_ACCESS_CODE}" >> .env.production
+    echo "VITE_ACCESS_CODE=${VITE_ACCESS_CODE}" >> .env.production && \
+    echo "VITE_DISABLE_ACCESS_GATE=${VITE_DISABLE_ACCESS_GATE}" >> .env.production
 
 RUN npm run build
 

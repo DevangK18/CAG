@@ -25,6 +25,7 @@ import { useChatStream } from './hooks/useChatStream';
 import { useSeriesChat } from './hooks/useSeriesChat';
 import { useOverview } from './hooks/useOverview';
 import { useSummaries } from './hooks/useSummaries';
+import { useFetchFilters } from './hooks/useFetchFilters';
 import { useAppStore } from './stores/appStore';
 import { PDFViewer } from './components/PDFViewer';
 import { TablePreview } from './components/TablePreview';
@@ -48,9 +49,10 @@ import {
 } from './components/Icons';
 import { ReportCard } from './components/ReportCard';
 import { TierSelector } from './components/TierSelector';
-import { DemoReportCard } from './components/DemoReportCard';
+// DemoReportCard is no longer used - all tiers use real API data
+// import { DemoReportCard } from './components/DemoReportCard';
 import { HowItWorks } from './components/HowItWorks/HowItWorks';
-import { GovernmentTier, STATE_REPORTS, LOCAL_BODY_REPORTS, STATE_STATS, LOCAL_STATS } from './constants';
+import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
 import './index.css';
@@ -293,6 +295,7 @@ function App() {
     const [filterAuditType, setFilterAuditType] = useState<Set<string>>(new Set());
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [activeTier, setActiveTier] = useState<GovernmentTier>('union');
+    const [selectedState, setSelectedState] = useState<string | null>(null);
     const [inputValue, setInputValue] = useState('');
     const [chatOpen, setChatOpen] = useState(false);
     const [citationFeedback, setCitationFeedback] = useState<{show: boolean; section: string; page: number; auditYear?: string; switched?: boolean} | null>(null);
@@ -329,8 +332,21 @@ function App() {
         normalizedCitationMap, citationMap, clearMessages, setPdfPage, pdfPage,
         showLowRelevanceCaveat,
     } = useAppStore();
-    
-    const { reports, stats, isLoading: reportsLoading } = useReports();
+
+    // Fetch filter options
+    const { filters, isLoading: filtersLoading } = useFetchFilters();
+
+    // Determine government_body_type based on activeTier
+    const tierMap: Record<GovernmentTier, string> = {
+        union: 'union',
+        state: 'state',
+        local: 'local_body',
+    };
+
+    const { reports, stats, isLoading: reportsLoading } = useReports({
+        government_body_type: tierMap[activeTier],
+        state_name: selectedState || undefined,
+    });
     const { report: selectedReport, pdfUrl, isLoading: reportLoading } = useReport(currentReportId);
     const { sendMessage, isStreaming } = useChatStream();
     const { sendSeriesMessage, isStreaming: isSeriesStreaming } = useSeriesChat();
@@ -662,6 +678,7 @@ function App() {
 
         const ministryCount = new Set(reports.map(r => r.ministry)).size;
         const sectorCount = new Set(reports.map(r => r.sector)).size;
+        const stateCount = new Set(reports.filter(r => r.state_name).map(r => r.state_name)).size;
 
         const yearsSet = new Set(reports.map(r => r.year));
         const yearsArray = Array.from(yearsSet).sort((a, b) => a - b);
@@ -688,23 +705,31 @@ function App() {
             reportsWithMonetary,
             ministryCount,
             sectorCount,
+            stateCount,
             yearSpan,
         };
     }, [reports]);
 
-    // Stats based on active tier
-    const currentStats = useMemo(() => {
-        if (activeTier === 'union') return enhancedStats;
-        if (activeTier === 'state') return STATE_STATS;
-        return LOCAL_STATS;
-    }, [activeTier, enhancedStats]);
+    // Stats - use computed stats from all tiers
+    const currentStats = enhancedStats;
 
-    // Reports to display based on active tier
-    const currentReports = useMemo(() => {
-        if (activeTier === 'union') return { type: 'union' as const, data: filteredReports };
-        if (activeTier === 'state') return { type: 'demo' as const, data: STATE_REPORTS };
-        return { type: 'demo' as const, data: LOCAL_BODY_REPORTS };
-    }, [activeTier, filteredReports]);
+    // All tiers now use real reports from API
+    const currentReports = { type: 'union' as const, data: filteredReports };
+
+    // Tier counts from filters API
+    const tierCounts = useMemo(() => {
+        if (!filters) return { union: 0, state: 0, local: 0 };
+        const unionCount = filters.government_body_types.find(t => t.value === 'union')?.count || 0;
+        const stateCount = filters.government_body_types.find(t => t.value === 'state')?.count || 0;
+        const localCount = filters.government_body_types.find(t => t.value === 'local_body')?.count || 0;
+        return { union: unionCount, state: stateCount, local: localCount };
+    }, [filters]);
+
+    // Available states for dropdown
+    const availableStates = useMemo(() => {
+        if (!filters) return [];
+        return filters.states.map(s => s.value);
+    }, [filters]);
 
     const clearAllFilters = () => {
         setSearchTerm('');
@@ -1494,39 +1519,65 @@ function App() {
                             </p>
                         </div>
                     </div>
-                    {activeTier === 'union' && (
-                        <div className="stats-bar">
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : 34}</span>
-                                <span className="stat-label">Active Reports</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats ? `${enhancedStats.totalFindings}+` : '...'}</span>
-                                <span className="stat-label">Total Findings</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
-                                <span className="stat-label">Monetary Impact</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.ministryCount ?? '...'}</span>
-                                <span className="stat-label">Ministries</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.sectorCount ?? '...'}</span>
-                                <span className="stat-label">Sectors</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.yearSpan ?? '...'}</span>
-                                <span className="stat-label">Year Span</span>
+                    <TierSelector
+                        activeTier={activeTier}
+                        onTierChange={(tier) => {
+                            setActiveTier(tier);
+                            setSelectedState(null); // Clear state filter when changing tier
+                        }}
+                        counts={tierCounts}
+                    />
+                    {/* Tier-aware stats bar - shows dynamic data based on selected tier */}
+                    <div className="stats-bar">
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.totalReports ?? '–'}</span>
+                            <span className="stat-label">Active Reports</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats ? `${enhancedStats.totalFindings}+` : '–'}</span>
+                            <span className="stat-label">Total Findings</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
+                            <span className="stat-label">Monetary Impact</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">
+                                {reportsLoading ? '–' : (
+                                    activeTier === 'union'
+                                        ? (enhancedStats?.ministryCount ?? '–')
+                                        : (enhancedStats?.stateCount ?? '–')
+                                )}
+                            </span>
+                            <span className="stat-label">{activeTier === 'union' ? 'Ministries' : 'States'}</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.sectorCount ?? '–'}</span>
+                            <span className="stat-label">Sectors</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.yearSpan ?? '–'}</span>
+                            <span className="stat-label">Year Span</span>
+                        </div>
+                    </div>
+                    {/* State filter dropdown for State and Local Body tiers */}
+                    {(activeTier === 'state' || activeTier === 'local') && availableStates.length > 0 && (
+                        <div className="state-filter-row" style={{ padding: '12px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                            <div className="dropdown-group">
+                                <label style={{ fontWeight: 500, color: '#475569', marginRight: '8px' }}>State:</label>
+                                <select
+                                    value={selectedState || 'all'}
+                                    onChange={(e) => setSelectedState(e.target.value === 'all' ? null : e.target.value)}
+                                    style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white' }}
+                                >
+                                    <option value="all">All States</option>
+                                    {availableStates.map(state => (
+                                        <option key={state} value={state}>{state}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     )}
-                    <TierSelector
-                        activeTier={activeTier}
-                        onTierChange={setActiveTier}
-                        counts={{ union: reports.length, state: 10, local: 4 }}
-                    />
                     <div className="filter-block">
                         <div className="filter-row-primary">
                             <div className="search-box"><SearchIcon /><input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
@@ -1583,8 +1634,8 @@ function App() {
                             )}
                         </div>
                     </div>
-                    {reportsLoading && activeTier === 'union' && <div className="loading-spinner">Loading reports...</div>}
-                    {!reportsLoading && activeTier === 'union' && filteredReports.length === 0 && (
+                    {reportsLoading && <div className="loading-spinner">Loading reports...</div>}
+                    {!reportsLoading && filteredReports.length === 0 && (
                         <div className="no-results">
                             <p>No reports match your current filters.</p>
                             {hasActiveFilters && (
@@ -1592,7 +1643,7 @@ function App() {
                             )}
                         </div>
                     )}
-                    {currentReports.type === 'union' && !reportsLoading && currentReports.data.length > 0 && (
+                    {!reportsLoading && currentReports.data.length > 0 && (
                         <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
                             {currentReports.data.map(report => (
                                 <ReportCard
@@ -1600,18 +1651,6 @@ function App() {
                                     report={report}
                                     viewMode={viewMode}
                                     onClick={() => handleReportClick(report)}
-                                />
-                            ))}
-                        </div>
-                    )}
-                    {currentReports.type === 'demo' && (
-                        <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
-                            {currentReports.data.map(report => (
-                                <DemoReportCard
-                                    key={report.id}
-                                    report={report}
-                                    viewMode={viewMode}
-                                    tier={activeTier as 'state' | 'local'}
                                 />
                             ))}
                         </div>
@@ -1719,8 +1758,11 @@ initPostHog();
 
 // Wrapper component for access gate
 function AppWithGate() {
+    // TEMPORARY: Access gate disabled for competition review. Re-enable after review period.
+    const isGateDisabled = import.meta.env.VITE_DISABLE_ACCESS_GATE === 'true';
+
     const [granted, setGranted] = useState(
-        () => sessionStorage.getItem('cag_access_granted') === 'true'
+        () => isGateDisabled || sessionStorage.getItem('cag_access_granted') === 'true'
     );
 
     const handleGranted = (accessCode: string) => {

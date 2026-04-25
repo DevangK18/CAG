@@ -182,6 +182,41 @@ class SemanticEnrichmentService:
             r"short\s+(levy|collection|realization)",
             r"non-?recovery\s+of",
             r"tax\s+evasion",
+            # State/Local: GST/tax assessment mismatches
+            r"mismatch\s+(?:amounting\s+to|of)\s+.{0,20}(?:crore|lakh)",
+            r"(?:short|non|under)[\s-]?(?:determination|assessment|levy|collection)\s+of\s+(?:tax|duty|cess|revenue)",
+            r"excess\s+(?:ITC|Input\s+Tax\s+Credit|credit)\s+(?:availed|claimed|utili[sz]ed)",
+            r"(?:ineligible|inadmissible|incorrect)\s+(?:ITC|Input\s+Tax\s+Credit|claim|deduction)",
+            r"tax\s+.{0,30}not\s+(?:levied|collected|imposed)\s+at\s+(?:the\s+)?prescribed\s+rate",
+            r"loss\s+(?:of|to)\s+.{0,20}(?:exchequer|revenue|government)",
+            # State/Local: Penalty/interest not collected
+            r"(?:penalty|interest)\s+.{0,30}not\s+(?:imposed|levied|collected|charged)",
+            r"non[\s-]?collection\s+of\s+(?:service\s+charge|user\s+charge|fee|cess|tax|penalty)",
+            r"under[\s-]?recovery\s+of\s+(?:user\s+charges?|fees?|revenue|tax)",
+            # State/Local: Arrears and tax liability
+            r"arrears\s+.{0,30}not\s+(?:collected|recovered|reali[sz]ed)",
+            r"tax\s+liability\s+.{0,30}(?:not\s+discharged|not\s+paid|outstanding)",
+            r"prescribed\s+service\s+charge\s+was\s+not\s+collected",
+            # GST/ITC-specific patterns (Kerala revenue reports)
+            r"irregular\s+claim(?:ing)?\s+of\s+(?:ITC|Input\s+Tax\s+Credit)",
+            r"mismatch\s+(?:of|in)\s+ITC\s+(?:availed|available)",
+            r"mismatch\s+(?:of|in)\s+(?:ITC|tax\s+liability)\s+amounting\s+to",
+            r"unreconciled\s+(?:ITC|payment\s+of\s+tax)",
+            r"turnover\s+(?:escape|mismatch|difference)",
+            r"(?:compliance\s+)?(?:discrepanc|deficienc)(?:y|ies)\s+.{0,30}(?:tax|ITC|GST|GSTR|liability)",
+            r"tax\s+effect\s+of\s+₹",
+            r"short\s+(?:determination|payment)\s+of\s+(?:tax|interest)",
+            r"(?:not\s+adhering|non-?adherence)\s+to\s+(?:provisions?\s+(?:of|on))?\s*(?:interest|tax|time\s+of\s+supply)",
+            r"(?:house|trade|show)\s+tax\s+.{0,30}(?:outstanding|pending|not\s+recovered|not\s+imposed)",
+            r"rental\s+charges?\s+.{0,20}(?:pending|outstanding|not\s+recovered)",
+            r"(?:electricity|mobile\s+tower)\s+.{0,30}(?:cess|charges?|fees?)\s+.{0,20}not\s+(?:recovered|collected)",
+            r"installation\s+and\s+renewal\s+(?:charges?|fees?)\s+.{0,20}not\s+(?:recovered|collected)",
+            # More flexible patterns for outstanding fees/charges
+            r"(?:fees?|charges?)\s+.{0,20}(?:had\s+)?not\s+been\s+(?:recovered|collected)",
+            r"(?:fees?|charges?)\s+.{0,20}(?:amounting|of)\s+.{0,20}not\s+(?:recovered|collected)",
+            # Mobile tower fees
+            r"mobile\s+towers?\s+.{0,60}(?:fees?|charges?)\s+.{0,30}(?:had\s+)?not\s+been\s+(?:recovered|collected)",
+            r"(?:installation|renewal)\s+.{0,20}(?:fees?|charges?)\s+.{0,30}(?:had\s+)?not\s+been\s+(?:recovered|collected)",
         ],
         FindingType.WASTEFUL_EXPENDITURE: [
             r"wasteful\s+expenditure",
@@ -189,6 +224,29 @@ class SemanticEnrichmentService:
             r"unfruitful\s+expenditure",
             r"idle\s+(investment|expenditure|machinery|equipment)",
             r"blocking\s+of\s+funds",
+            # State/Local: Avoidable/excess payment patterns
+            r"avoidable\s+(?:payment|expenditure|cost|interest|penalty)\s+.{0,20}(?:of|amounting)",
+            r"excess\s+(?:payment|expenditure)\s+.{0,20}(?:of|amounting|to\s+the\s+tune)",
+            r"overpayment\s+.{0,20}(?:of|amounting|to)",
+            r"(?:unfruitful|infructuous|unproductive)\s+expenditure",
+            r"expenditure\s+.{0,30}without\s+(?:any|adequate)\s+(?:result|outcome|benefit|purpose)",
+            r"payment\s+.{0,30}(?:made|released)\s+.{0,30}without\s+(?:any|proper|adequate)\s+(?:justification|verification|utili[sz]ation)",
+            # State/Local: Delayed payment penalties
+            r"avoidable\s+(?:payment\s+of\s+)?(?:penal\s+interest|penalty|interest\s+charges?)",
+            r"(?:penal\s+interest|penalty|damages?)\s+.{0,20}(?:of|amounting\s+to)\s+.{0,10}(?:₹|Rs|crore|lakh)",
+            r"(?:delayed|late)\s+(?:payment|remittance)\s+.{0,30}(?:penalty|interest|damages?)",
+            r"failure\s+.{0,30}(?:timely\s+)?(?:repayment|remittance)\s+.{0,30}(?:penal|interest|penalty)",
+            r"defaulted\s+in\s+(?:repaying|paying)",
+            r"avoidable\s+expenditure\s+towards?\s+(?:penalty|interest|damages?)",
+            r"resulted\s+in\s+.{0,20}avoidable\s+expenditure",
+            r"failure\s+.{0,50}resulted\s+in\s+.{0,20}(?:avoidable|penalty|interest)",
+            # State/Local: Excess wages/payments
+            r"excess\s+wages?\s+.{0,20}(?:paid|amounting)",
+            r"(?:wages?|payment)\s+.{0,20}(?:paid|made)\s+.{0,20}(?:after\s+)?delay",
+            r"irregular\s+payment\s+.{0,20}without",
+            # State/Local: Uneconomical purchases
+            r"uneconomical\s+(?:purchases?|procurement)",
+            r"might\s+have\s+led\s+to\s+uneconomical",
         ],
         FindingType.NON_COMPLIANCE: [
             r"non-?compliance",
@@ -196,12 +254,38 @@ class SemanticEnrichmentService:
             r"contrary\s+to\s+(rules|guidelines|provisions)",
             r"in\s+contravention\s+of",
             r"failed\s+to\s+comply",
+            # State/Local: Broader compliance violation patterns
+            r"(?:not\s+in\s+conformity|in\s+violation|in\s+contravention|contrary\s+to)\s+.{0,30}(?:with|of)\s+.{0,30}(?:rules?|guidelines?|norms?|provisions?|orders?|instructions?|standards?)",
+            r"in\s+(?:violation|breach|contravention)\s+of\s+.{0,30}(?:Section|Rule|Clause|Order|Circular|Notification)",
+            r"(?:violat|breach|contravent)(?:ed|ing|ion)\s+.{0,30}(?:provisions?|rules?|guidelines?|norms?|conditions?)",
+            r"despite\s+(?:instructions?|directions?|guidelines?|provisions?|orders?)",
+            r"without\s+(?:approval|sanction|permission|authori[sz]ation)\s+of",
+            r"in\s+(?:excess|disregard)\s+of\s+.{0,30}(?:sanction|limit|authority|provision)",
         ],
         FindingType.SYSTEM_DEFICIENCY: [
             r"system(ic)?\s+deficien",
             r"internal\s+control\s+(weakness|deficiency)",
             r"lack\s+of\s+(monitoring|oversight|control)",
             r"absence\s+of\s+(mechanism|system|procedure)",
+            # State/Local: Monitoring/oversight gaps
+            r"no\s+.{0,20}(?:meetings?|committee)\s+.{0,20}(?:were|was)\s+held",
+            r"(?:meetings?|committee)\s+.{0,20}(?:were|was)\s+not\s+held",
+            r"internal\s+audit\s+.{0,20}not\s+(?:planned|conducted|carried\s+out)",
+            r"internal\s+audit\s+.{0,30}(?:had|was)\s+not\s+(?:planned|conducted)",
+            r"(?:had|has)\s+not\s+planned\s+internal\s+audit",
+            r"(?:Proper\s+Officers?|officials?)\s+.{0,20}(?:had|have)\s+not\s+initiated\s+(?:any\s+)?action",
+            r"(?:no|not\s+any)\s+(?:effective\s+)?(?:action|steps?)\s+.{0,20}(?:taken|initiated)",
+            r"(?:MC|municipal|ULB|PRI)\s+.{0,20}had\s+not\s+(?:conducted|imposed|initiated)",
+            r"(?:survey|inspection|verification)\s+.{0,20}not\s+(?:conducted|carried\s+out|done)",
+            r"(?:inspection|verification)\s+.{0,20}(?:were|was)\s+not\s+(?:done|conducted)",
+            # State/Local: Inadequate mechanisms
+            r"(?:no|not\s+any)\s+(?:penal\s+)?mechanism\s+.{0,20}(?:built|established|in\s+place)",
+            r"(?:oversight|supervision|monitoring)\s+.{0,20}(?:was|were)\s+(?:deficient|inadequate|absent|lacking)",
+            r"(?:capacity\s+building|training)\s+.{0,20}(?:was|were)\s+(?:deficient|not\s+(?:done|organized))",
+            # State/Local: Compliance/follow-up gaps
+            r"(?:compliance|follow[\\s-]?up)\s+.{0,20}(?:was|were)\s+not\s+(?:ensured|done|pursued)",
+            r"audit\s+(?:paragraphs?|observations?)\s+.{0,20}(?:remained|pending)\s+.{0,20}(?:unsettled|outstanding)",
+            r"IRs?\s+.{0,20}(?:outstanding|pending)\s+.{0,20}(?:for|since)",
         ],
         FindingType.PERFORMANCE_SHORTFALL: [
             r"performance\s+(shortfall|gap|deficiency)",
@@ -209,6 +293,49 @@ class SemanticEnrichmentService:
             r"underperformance",
             r"below\s+(target|benchmark|standard)",
             r"delay\s+in\s+(completion|implementation|execution)",
+            # State/Local: Audit observation openers + negative outcomes
+            r"audit\s+(?:observed|noticed)\s+that\s+.{0,60}(?:had\s+not|did\s+not|was\s+not|were\s+not)",
+            r"scrutiny\s+revealed\s+that\s+.{0,60}(?:had\s+not|did\s+not|was\s+not|were\s+not|failed)",
+            r"it\s+was\s+(?:observed|noticed|found)\s+that\s+.{0,60}(?:had\s+not|did\s+not|was\s+not|were\s+not)",
+            # State/Local: Direct deficiency statements
+            r"(?:was|were)\s+(?:deficient|inadequate|insufficient|absent)",
+            r"did\s+not\s+(?:provide|ensure|organize|carry\s+out|initiate|follow|adhere|prepare|comply)",
+            r"had\s+not\s+(?:taken|carried|organized|initiated|conducted|prepared|submitted|adhered)",
+            r"failure\s+to\s+(?:provide|ensure|carry\s+out|adhere|comply|maintain|submit)",
+            r"(?:not\s+adhered\s+to|non-?adherence\s+to)",
+            # State/Local: Shortfall/target patterns
+            r"short(?:fall|age)\s+(?:in|of)\s+(?:achievement|target|performance|delivery)",
+            r"target\s+.{0,30}(?:not\s+achieved|not\s+met|shortfall)",
+            # State/Local: Percentage-based shortfalls
+            r"only\s+\d+[\.\d]*\s*per\s*cent\s+.{0,40}(?:achieved|completed|covered|functional)",
+            r"ranged\s+from\s+(?:zero|nil|\d+)\s+to\s+\d+\s*per\s*cent",
+            r"\d+\s*per\s*cent\s+.{0,30}(?:less\s+than|below|short\s+of|against)",
+            # State/Local: Scheme/benefit patterns
+            r"scheme\s+.{0,40}(?:not\s+implemented|not\s+operationali[sz]ed|not\s+functional)",
+            r"benefits?\s+.{0,30}not\s+(?:provided|extended|released|disbursed)",
+            r"beneficiar(?:y|ies)\s+.{0,30}not\s+(?:identified|selected|covered|provided)",
+            # State/Local: Benefit deprivation patterns
+            r"(?:were|was)\s+deprived\s+of\s+(?:this\s+)?(?:benefit|allowance|stipend|entitlement)",
+            r"eligible\s+.{0,30}(?:were|was)\s+(?:not\s+provided|deprived|denied)",
+            r"(?:CwSN|children|students?|beneficiar(?:y|ies))\s+.{0,30}(?:deprived|not\s+provided|denied)",
+            r"failed\s+transactions?\s+.{0,30}(?:bank\s+accounts?|beneficiar)",
+            r"transferred\s+.{0,30}(?:dormant|wrong|incorrect)\s+.{0,15}(?:bank\s+)?accounts?",
+            # State/Local: Objective non-achievement
+            r"objective(?:s)?\s+.{0,30}(?:was\s+not|were\s+not|had\s+not\s+been)\s+achieved",
+            r"(?:had|has)\s+not\s+(?:reached|achieved|met)\s+(?:the\s+)?target",
+            r"(?:enrolment|enrollment|retention)\s+.{0,30}(?:declined|decreased|dropped|fell)",
+            r"(?:decline|decrease|drop)\s+.{0,20}(?:in|of)\s+.{0,30}(?:enrolment|enrollment|retention|attendance)",
+            r"dropout\s+.{0,30}(?:increased|rose|was\s+higher)",
+            # State/Local: Utilization shortfall
+            r"utili[sz]ation\s+.{0,30}(?:ranged|was\s+only|was\s+merely)\s+.{0,20}(?:between|\d+)",
+            r"only\s+\d+\s*(?:per\s*cent|%)\s+.{0,30}(?:utili[sz]ed|spent|expended)",
+            # State/Local: Survey/planning failures
+            r"(?:survey|assessment|study)\s+.{0,30}not\s+(?:conducted|carried\s+out|done|undertaken)",
+            r"(?:plan|planning)\s+.{0,30}not\s+(?:prepared|undertaken|done)",
+            r"bottom[\\s-]?up\s+approach\s+.{0,20}not\s+(?:followed|adopted)",
+            # State/Local: Adverse ratios/conditions
+            r"adverse\s+(?:PTR|Pupil[\\s-]?Teacher\s+Ratio|ratio)",
+            r"(?:PTR|ratio)\s+.{0,30}(?:adverse|worse|unfavourable)",
         ],
         FindingType.FRAUD_MISAPPROPRIATION: [
             r"fraud",
@@ -216,11 +343,41 @@ class SemanticEnrichmentService:
             r"embezzlement",
             r"fictitious",
             r"bogus\s+(claim|bill|payment)",
+            # State/Local: Suspected/doubtful cases
+            r"doubtful\s+(?:payment|deployment|expenditure|transaction)",
+            r"suspected\s+misappropriation",
+            r"possibility\s+of\s+(?:misuse|pilferage|loss|embezzlement)",
+            r"indicat(?:ed|ive|ing)\s+.{0,20}(?:misuse|pilferage|embezzlement|fraud)",
+            r"double\s+payment\s+of\s+wages",
+            r"same\s+labourers?\s+.{0,30}(?:deployed|shown)\s+on\s+different\s+works?\s+.{0,20}same\s+period",
+            r"(?:works?|execution)\s+.{0,20}not\s+(?:executed|done|carried\s+out)\s+.{0,30}(?:payment|paid)",
+            r"payment\s+.{0,20}made\s+.{0,30}(?:work|execution)\s+.{0,20}not\s+(?:done|executed)",
+            r"advances?\s+.{0,30}(?:pending|not\s+(?:adjusted|settled))\s+.{0,20}(?:for|since)\s+.{0,15}(?:\d+\s+)?(?:years?|months?)",
+            r"(?:temporary\s+)?advances?\s+.{0,20}(?:misuse|pending\s+for\s+adjustment)",
         ],
         FindingType.PROCEDURAL_LAPSE: [
             r"procedural\s+(lapse|irregularity|deviation)",
             r"without\s+(approval|sanction|authorization)",
             r"non-?adherence\s+to\s+(procedure|norm|guideline)",
+            # State/Local: Procurement irregularities
+            r"purchased\s+.{0,30}without\s+(?:inviting\s+)?(?:quotations?|tenders?)",
+            r"without\s+inviting\s+(?:quotations?|tenders?)",
+            r"(?:quotations?|tenders?)\s+.{0,20}not\s+(?:invited|obtained|called)",
+            r"(?:stores?|materials?|items?)\s+.{0,30}purchased\s+.{0,20}without",
+            # State/Local: Payment irregularities
+            r"payment\s+.{0,30}without\s+(?:deducting|recovering)\s+(?:TDS|tax)",
+            r"TDS\s+.{0,20}not\s+(?:deducted|recovered)",
+            r"(?:was\s+)?(?:made|paid)\s+.{0,20}(?:to\s+)?(?:contractors?|firms?)\s+.{0,30}without\s+deducting\s+TDS",
+            r"(?:made\s+)?(?:payment|paid)\s+.{0,30}contractors?\s+.{0,20}without\s+(?:deducting\s+)?TDS",
+            r"payment\s+.{0,30}without\s+(?:obtaining\s+)?(?:receipt|acknowledgement|voucher)",
+            r"vouchers?\s+.{0,20}not\s+(?:obtained|verified|attached)",
+            r"irregular\s+(?:manner|payment|practice)",
+            # State/Local: Administrative lapses
+            r"administrative\s+approval\s+.{0,20}not\s+(?:obtained|taken)",
+            r"technical\s+sanction\s+.{0,20}not\s+(?:obtained|taken)",
+            r"estimates?\s+.{0,20}not\s+(?:prepared|obtained)",
+            r"codal\s+formalities?\s+.{0,20}not\s+(?:completed|followed)",
+            r"resolution\s+.{0,20}not\s+(?:passed|obtained)",
         ],
         FindingType.IDLE_ASSETS: [
             r"lying\s+idle\s+for\s+\d+\s+(?:months?|years?)",
@@ -236,6 +393,12 @@ class SemanticEnrichmentService:
             r"remained\s+idle",
             r"remained\s+unutili[sz]ed",
             r"lying\s+unused",
+            # State/Local: Equipment/facility not in use patterns
+            r"(?:equipment|machinery|vehicle|building|facility|plant)\s+.{0,30}not\s+(?:in\s+use|functional|operational|working)",
+            r"(?:not\s+been\s+put\s+to\s+use|not\s+being\s+used|not\s+put\s+to\s+any\s+use)",
+            r"(?:purchased|procured|constructed|installed)\s+.{0,30}but\s+.{0,30}(?:not|never)\s+(?:used|operational|functional|commissioned)",
+            r"houses?\s+.{0,30}(?:not\s+in\s+use|not\s+.{0,20}habitation)",
+            r"(?:vacant|unoccupied)\s+.{0,30}(?:building|premise|ward|bed|seat)",
         ],
         FindingType.NON_REALIZATION_OF_DUES: [
             r"non-?reali[sz]ation\s+of\s+dues",
@@ -264,6 +427,14 @@ class SemanticEnrichmentService:
             r"inordinate\s+delay\s+in\s+completion",
             r"time\s+overrun",
             r"cost\s+overrun",
+            # State/Local: Facility/infrastructure deficiency patterns
+            r"without\s+(?:dedicated\s+space|proper|adequate|basic)\s+.{0,30}(?:facility|facilities|infrastructure)",
+            r"not\s+(?:equipped|functional|operational|commissioned)\s+.{0,30}(?:as\s+required|as\s+envisaged|as\s+prescribed)",
+            r"(?:toilets?|bathrooms?|kitchens?|drainage|water\s+supply)\s+.{0,30}not\s+(?:constructed|provided|available)",
+            r"(?:building|facility|centre|hospital|school)\s+.{0,30}not\s+(?:constructed|completed|functional)",
+            r"infrastructure\s+.{0,30}(?:deficien|inadequa|not\s+available|not\s+provided|lacking)",
+            r"quality\s+(?:of\s+construction|of\s+work|of\s+material)\s+.{0,30}(?:deficient|sub[\s-]?standard|poor|below)",
+            r"physical\s+verification\s+.{0,30}(?:revealed|disclosed|showed)\s+.{0,30}not\s+(?:completed|constructed|functional)",
         ],
         FindingType.ACCOUNTING_IRREGULARITY: [
             r"accounts?\s+not\s+(?:maintained|prepared|finali[sz]ed)",
@@ -278,6 +449,35 @@ class SemanticEnrichmentService:
             r"non-?preparation\s+of\s+(?:accounts?|annual\s+accounts?|balance\s+sheet)",
             r"cash\s+book\s+not\s+maintained",
             r"stock\s+register\s+not\s+maintained",
+            # State/Local: Broader record-keeping failures
+            r"(?:records?|registers?|accounts?|books?|cash\s+book)\s+.{0,30}not\s+(?:maintained|updated|kept|prepared)",
+            r"not\s+(?:maintained|kept|available)\s+.{0,30}(?:records?|registers?|log\s+book|stock\s+register)",
+            r"data\s+.{0,30}not\s+(?:recorded|captured|available|maintained|entered)",
+            r"no\s+(?:record|evidence|documentation)\s+.{0,30}(?:maintained|kept|available)",
+            r"(?:discrepan|differen)(?:cy|ce|cies)\s+.{0,30}(?:between|in)\s+.{0,30}(?:records?|figures?|data|accounts?|statements?)",
+            r"information\s+.{0,30}not\s+(?:made\s+available|furnished|provided|recorded)",
+            r"(?:reconciliation|verification)\s+.{0,30}not\s+(?:carried\s+out|done|conducted)",
+            r"separate\s+.{0,30}(?:cash\s+book|accounts?|register)\s+.{0,30}not\s+maintained",
+            # State/Local: Stock/material accounting
+            r"items?\s+.{0,30}not\s+accounted\s+for\s+in\s+(?:the\s+)?(?:stock\s+)?register",
+            r"stores?\s+.{0,30}not\s+accounted\s+for\s+in\s+(?:stock\s+)?registers?",
+            r"items?\s+of\s+stores?\s+.{0,60}not\s+accounted\s+for",
+            r"(?:were|was)\s+not\s+accounted\s+for\s+in\s+(?:the\s+)?(?:stock\s+)?registers?",
+            r"figures?\s+.{0,30}did\s+not\s+match",
+            r"figures?\s+.{0,30}(?:were|was)\s+not\s+in\s+agreement",
+            r"difference\s+.{0,20}(?:of|ranging)",
+            # State/Local: Budget/estimates not prepared
+            r"budget\s+estimates?\s+.{0,20}(?:not\s+prepared|not\s+passed)",
+            r"(?:not\s+prepar|non-?prepar)(?:ed|ing|ation)\s+.{0,30}(?:budget|estimates?|accounts?)",
+            r"important\s+registers?\s+.{0,30}not\s+maintained",
+            # State/Local: UC submission gaps
+            r"UCs?\s+.{0,20}(?:for\s+)?(?:an\s+)?amount\s+.{0,30}(?:only|pending)",
+            r"submitted\s+UCs?\s+for\s+.{0,30}only",
+            r"(?:\d+\s*per\s*cent|\d+%)\s+.{0,20}(?:UCs?|utili[sz]ation\s+certificates?)",
+            # State/Local: Data upload/reporting failures
+            r"(?:uploaded|reported)\s+.{0,30}(?:incorrect|wrong|erroneous|inflated|excess)",
+            r"NAD\s+application\s+.{0,20}not\s+(?:being\s+)?(?:updated|uploaded)",
+            r"claimed\s+.{0,30}(?:higher|excess|inflated)\s+.{0,20}(?:efficiency|percentage|per\s*cent)",
         ],
         FindingType.FUND_UTILIZATION_FAILURE: [
             r"funds?\s+remained\s+(?:unspent|unutili[sz]ed)",
@@ -291,6 +491,15 @@ class SemanticEnrichmentService:
             r"funds?\s+could\s+not\s+be\s+utili[sz]ed",
             r"short\s+release\s+of\s+(?:funds?|grants?)",
             r"delayed\s+release\s+of\s+(?:funds?|grants?)",
+            # State/Local: Additional fund utilization patterns
+            r"expenditure\s+.{0,30}(?:confined|limited)\s+(?:mainly|only)\s+to",
+            r"had\s+not\s+utili[sz]ed\s+any\s+amount\s+on",
+            r"amount\s+.{0,30}(?:made\s+available|released)\s+.{0,30}not\s+(?:utili[sz]ed|spent)",
+            r"(?:grant|grants|funds|amount)\s+.{0,30}not\s+(?:released|disbursed|transferred)",
+            r"under[\s-]?utili[sz]ation\s+of\s+.{0,30}(?:funds?|grants?|resources?|allocation)",
+            r"diversion\s+of\s+.{0,30}(?:funds?|grants?)\s+.{0,20}(?:from|to)",
+            r"parking\s+of\s+.{0,30}(?:funds?|amount)\s+.{0,20}(?:in|with)",
+            r"(?:savings?|surrender)\s+of\s+.{0,20}(?:crore|lakh)\s+.{0,20}(?:due\s+to|on\s+account\s+of)",
         ],
     }
 

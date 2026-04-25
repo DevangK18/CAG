@@ -97,7 +97,8 @@ export function getReportType(reportType: string | undefined): string {
 export type GovernmentTier = 'union' | 'state' | 'local';
 
 /**
- * Demo report interface for State/Local tiers
+ * DEPRECATED: Demo report interface for State/Local tiers
+ * All tiers now use real API data from /api/reports
  */
 export interface DemoReport {
   id: string;
@@ -112,7 +113,8 @@ export interface DemoReport {
 }
 
 /**
- * Hardcoded State Government reports
+ * DEPRECATED: Hardcoded State Government reports
+ * These are no longer used - all tiers fetch from /api/reports
  */
 export const STATE_REPORTS: DemoReport[] = [
   {
@@ -218,7 +220,8 @@ export const STATE_REPORTS: DemoReport[] = [
 ];
 
 /**
- * Hardcoded Local Bodies reports
+ * DEPRECATED: Hardcoded Local Bodies reports
+ * These are no longer used - all tiers fetch from /api/reports
  */
 export const LOCAL_BODY_REPORTS: DemoReport[] = [
   {
@@ -268,7 +271,8 @@ export const LOCAL_BODY_REPORTS: DemoReport[] = [
 ];
 
 /**
- * Stats for State tier
+ * DEPRECATED: Stats for State tier
+ * Stats are now computed from real API data
  */
 export const STATE_STATS = {
   totalReports: 10,
@@ -281,7 +285,8 @@ export const STATE_STATS = {
 };
 
 /**
- * Stats for Local Bodies tier
+ * DEPRECATED: Stats for Local Bodies tier
+ * Stats are now computed from real API data
  */
 export const LOCAL_STATS = {
   totalReports: 4,

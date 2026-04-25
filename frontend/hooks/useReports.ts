@@ -13,7 +13,7 @@ import { AuditReport } from '../types';
 function transformReport(apiReport: APIReportSummary): AuditReport {
   // Parse monetary impact from string like "₹847.00 crore"
   const impact = apiReport.monetary_impact || 'N/A';
-  
+
   // Map API status to expected status type
   const statusMap: Record<string, AuditReport['status']> = {
     'Action Pending': 'Action Pending',
@@ -21,11 +21,17 @@ function transformReport(apiReport: APIReportSummary): AuditReport {
     'Compliant': 'Compliant',
     'Partial Compliance': 'Partial Compliance',
   };
-  
+
+  // Handle report_no: only prepend "Report" if we have a valid, non-N/A value
+  // Backend now returns normalized format like "16 of 2020" or "N/A" for missing
+  const reportNo = apiReport.report_no;
+  const hasValidReportNo = reportNo && reportNo !== 'N/A' && reportNo.toLowerCase() !== 'unknown';
+  const reportNumber = hasValidReportNo ? `Report ${reportNo}` : null;
+
   return {
     id: apiReport.id,
     title: apiReport.title,
-    reportNumber: `Report ${apiReport.report_no}`,
+    reportNumber,
     ministry: apiReport.ministry,
     sector: apiReport.sector,
     year: apiReport.year,
@@ -36,7 +42,11 @@ function transformReport(apiReport: APIReportSummary): AuditReport {
     summary: '', // Not in summary
     findings: [],
     recommendations: [],
-    reportType: apiReport.report_type || undefined
+    reportType: apiReport.report_type || undefined,
+    government_body_type: (apiReport.government_body_type as any) || 'union',
+    state_name: apiReport.state_name,
+    department: apiReport.department,
+    audit_category: (apiReport.audit_category as any) || 'compliance',
   };
 }
 
@@ -58,15 +68,18 @@ export interface UseReportsResult {
 export function useReports(params?: {
   sector?: string;
   year?: number;
+  government_body_type?: string;
+  state_name?: string;
+  audit_category?: string;
 }): UseReportsResult {
   const [reports, setReports] = useState<AuditReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const data = await fetchReports(params);
       const transformed = data.reports.map(transformReport);
@@ -76,7 +89,7 @@ export function useReports(params?: {
     } finally {
       setIsLoading(false);
     }
-  }, [params?.sector, params?.year]);
+  }, [params?.sector, params?.year, params?.government_body_type, params?.state_name, params?.audit_category]);
   
   useEffect(() => {
     fetchData();

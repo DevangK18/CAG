@@ -47,6 +47,10 @@ export interface APIReportSummary {
   status: string;
   filename: string;
   report_type?: string | null;
+  government_body_type: string;
+  state_name?: string | null;
+  department?: string | null;
+  audit_category: string;
 }
 
 export interface APIReportDetail {
@@ -65,6 +69,10 @@ export interface APIReportDetail {
   monetary_impact: string | null;
   findings_count: number;
   report_type?: string | null;
+  government_body_type: string;
+  state_name?: string | null;
+  department?: string | null;
+  audit_category: string;
 }
 
 export interface APIChatResponse {
@@ -317,10 +325,16 @@ export async function fetchHealth(): Promise<APIHealthResponse> {
 export async function fetchReports(params?: {
   sector?: string;
   year?: number;
+  government_body_type?: string;
+  state_name?: string;
+  audit_category?: string;
 }): Promise<{ reports: APIReportSummary[]; total: number }> {
   const searchParams = new URLSearchParams();
   if (params?.sector) searchParams.set('sector', params.sector);
   if (params?.year) searchParams.set('year', params.year.toString());
+  if (params?.government_body_type) searchParams.set('government_body_type', params.government_body_type);
+  if (params?.state_name) searchParams.set('state_name', params.state_name);
+  if (params?.audit_category) searchParams.set('audit_category', params.audit_category);
 
   const queryString = searchParams.toString();
   const url = `${API_URL}/reports${queryString ? `?${queryString}` : ''}`;
@@ -333,6 +347,24 @@ export async function fetchReports(params?: {
 export async function fetchReport(reportId: string): Promise<APIReportDetail> {
   const response = await fetch(`${API_URL}/reports/${reportId}`);
   if (!response.ok) throw new Error(`Failed to fetch report: ${reportId}`);
+  return response.json();
+}
+
+export interface FilterOption {
+  value: string;
+  label?: string;
+  count: number;
+}
+
+export interface ReportFiltersResponse {
+  government_body_types: FilterOption[];
+  states: FilterOption[];
+  audit_categories: FilterOption[];
+}
+
+export async function fetchReportFilters(): Promise<ReportFiltersResponse> {
+  const response = await fetch(`${API_URL}/reports/filters`);
+  if (!response.ok) throw new Error('Failed to fetch report filters');
   return response.json();
 }
 

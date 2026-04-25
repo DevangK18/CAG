@@ -7,11 +7,46 @@ Variants:
 - deep_dive: Academic analysis, methodology, research
 - simple: Plain language for general public
 - policy: Government action plan, compliance focus
+
+Supports tier-aware context for Union, State, and Local Body reports.
 """
 
 import json
 
 VARIANTS = ["executive", "journalist", "deep_dive", "simple", "policy"]
+
+
+def _build_government_context(meta: dict) -> str:
+    """Build tier-aware Government Context block for summary prompts."""
+    government_body_type = meta.get("government_body_type", "union")
+    state_name = meta.get("state_name")
+    department = meta.get("department")
+
+    if government_body_type == "union":
+        # Minimal addition for backward compatibility
+        return ""
+
+    elif government_body_type == "state":
+        dept_display = department or "Multiple departments"
+        return f"""## Government Context
+Government Level: State Government
+State: {state_name}
+Submitted To: Governor of {state_name}
+Legal Basis: Article 151 of the Constitution
+Department: {dept_display}
+"""
+
+    elif government_body_type == "local_body":
+        dept_display = department or "Panchayati Raj / Urban Development"
+        return f"""## Government Context
+Government Level: Local Body (PRIs and ULBs)
+State: {state_name}
+Submitted To: Government of {state_name}
+Legal Basis: Section 20(1) of CAG DPC Act 1971
+Department: {dept_display}
+"""
+
+    return ""
 
 VARIANT_INFO = {
     "executive": {
@@ -64,12 +99,15 @@ def build_summary_input(json_data: dict) -> str:
     # SECTION 1: REPORT CONTEXT
     # ═══════════════════════════════════════════════════════════════════════
 
+    # Build tier-aware government context
+    govt_context = _build_government_context(meta)
+
     parts.append(f"""# REPORT: {meta.get("report_title", "N/A")}
 
-## Basic Information
+{govt_context}## Basic Information
 - Report Number: {meta.get("report_no", "N/A")}
 - Type: {meta.get("report_type", "N/A")}
-- Ministry: {meta.get("ministry", "N/A")}
+- Ministry/Department: {meta.get("department") or meta.get("ministry", "N/A")}
 - Sector: {meta.get("sector", "N/A")}
 - Publication Date: {meta.get("publication_date", "N/A")}
 
@@ -202,12 +240,13 @@ def get_summary_prompt(variant: str, summary_input: str, json_data: dict) -> str
     """Get the prompt for a specific summary variant."""
 
     meta = json_data.get("report_metadata", {})
+    audit_category = meta.get("audit_category", "")
 
     prompts = {
         "executive": _get_executive_prompt(),
-        "journalist": _get_journalist_prompt(),
+        "journalist": _get_journalist_prompt(audit_category),
         "deep_dive": _get_deep_dive_prompt(),
-        "simple": _get_simple_prompt(),
+        "simple": _get_simple_prompt(audit_category),
         "policy": _get_policy_prompt(),
     }
 
@@ -215,7 +254,7 @@ def get_summary_prompt(variant: str, summary_input: str, json_data: dict) -> str
         input=summary_input,
         report_title=meta.get("report_title", "N/A"),
         report_type=meta.get("report_type", "N/A"),
-        ministry=meta.get("ministry", "N/A"),
+        ministry=meta.get("department") or meta.get("ministry", "N/A"),
     )
 
 
@@ -281,8 +320,17 @@ Start directly with "# Executive Brief" followed by the content.
 """
 
 
-def _get_journalist_prompt() -> str:
-    return """You are a senior investigative journalist at a major national newspaper (like The Hindu, Indian Express, or Times of India) writing about this CAG audit report.
+def _get_journalist_prompt(audit_category: str = "") -> str:
+    # ATIR-specific mission addition
+    atir_mission = ""
+    if audit_category == "atir":
+        atir_mission = """
+This report audits the smallest units of government that directly serve citizens—
+village panchayats and city municipalities. Findings here directly affect voters at
+the grassroots.
+"""
+
+    return f"""You are a senior investigative journalist at a major national newspaper (like The Hindu, Indian Express, or Times of India) writing about this CAG audit report.
 
 ## Your Mission
 Transform this government audit into a compelling news story that:
@@ -290,6 +338,7 @@ Transform this government audit into a compelling news story that:
 - Makes complex government issues accessible to the general public
 - Serves the public interest by highlighting accountability gaps
 - Could actually run in tomorrow's paper
+{atir_mission}
 
 ## Required Sections
 
@@ -353,7 +402,7 @@ Extract 5-7 findings suitable for pulling out as quotes:
 - NO meta-commentary - write as if filing an actual story
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write as if you're filing for tomorrow's front page. ~2000-2200 words total.
@@ -456,8 +505,20 @@ Start directly with "# Deep Dive Analysis" followed by the content.
 """
 
 
-def _get_simple_prompt() -> str:
-    return """You are explaining this government audit report to regular citizens who have no background in finance, accounting, or government procedures.
+def _get_simple_prompt(audit_category: str = "") -> str:
+    # ATIR-specific context for the "What Is This Report About?" section
+    atir_context = ""
+    if audit_category == "atir":
+        atir_context = """
+**IMPORTANT CONTEXT FOR THIS REPORT:**
+This is an Annual Technical Inspection Report covering local self-governance bodies—
+village-level Gram Panchayats (like village councils) and city-level Municipal
+Corporations (like city governments). These are the closest government bodies to
+ordinary citizens, handling local roads, water supply, sanitation, streetlights, and
+welfare schemes.
+"""
+
+    return f"""You are explaining this government audit report to regular citizens who have no background in finance, accounting, or government procedures.
 
 ## Your Goal
 Make this completely understandable to:
@@ -470,7 +531,7 @@ Make this completely understandable to:
 ## Required Sections (Use Q&A Format with Simple Headers)
 
 ### What Is This Report About?
-- Explain like you're telling a neighbor over tea
+{atir_context}- Explain like you're telling a neighbor over tea
 - NO jargon whatsoever (or explain it immediately in simple terms)
 - What government department or program was checked?
 - What were the auditors (think of them as government accountants/inspectors) looking for?
@@ -521,7 +582,7 @@ Make this completely understandable to:
 - Treat readers as smart people who just need translation
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write in a friendly, clear, conversational tone. Use headers as questions people would ask.

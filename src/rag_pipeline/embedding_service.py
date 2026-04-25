@@ -650,6 +650,11 @@ class EmbeddingService:
                 "page_logical": str(chunk.get("source_page_logical", "")),
                 "hierarchy": hierarchy,
                 "report_title": chunk.get("report_title", ""),
+                # Multi-tier metadata fields
+                "government_body_type": chunk.get("government_body_type", "union"),
+                "state_name": chunk.get("state_name"),
+                "department": chunk.get("department"),
+                "audit_category": chunk.get("audit_category", "compliance"),
             }
 
             # Add semantic enrichment

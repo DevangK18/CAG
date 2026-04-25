@@ -26,10 +26,16 @@ export function sanitizeReportTitle(title: string): string {
   // =============================================
 
   // 1. "Audit Report No. X of YYYY-" prefix
-  cleaned = cleaned.replace(/^Audit\s+Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,]?\s*/i, '');
+  cleaned = cleaned.replace(/^Audit\s+Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,:]?\s*/i, '');
 
-  // 2. "Report No. X of YYYY" prefix (all variations)
-  cleaned = cleaned.replace(/^Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,]?\s*/i, '');
+  // 2. "Report No. X of YYYY" prefix (all variations, including colon)
+  cleaned = cleaned.replace(/^Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,:]?\s*/i, '');
+
+  // 2a. "Performance/Compliance/Financial Audit Report No. X of YYYY:" prefix (State pattern)
+  cleaned = cleaned.replace(/^(Performance|Compliance|Financial)\s+Audit\s+Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,:]?\s*/i, '');
+
+  // 2b. "Report No. X -" (without year, seen in State reports)
+  cleaned = cleaned.replace(/^Report\s*(No\.?\s*)?\d+\s*[-–:]\s*/i, '');
 
   // 3. Leading "of the" left over after prefix strip
   cleaned = cleaned.replace(/^of\s+the\s+/i, '');
@@ -61,6 +67,9 @@ export function sanitizeReportTitle(title: string): string {
 
   // 8. Trailing "(Performance Audit-Commercial)", "(Compliance Audit-Railways)", "(Financial Audit)" etc.
   cleaned = cleaned.replace(/\s*\((Performance|Compliance|Financial)\s+Audit[-–]?[^)]*\)\s*$/i, '');
+
+  // 8a. Trailing "(Report No. X of YYYY)" parenthetical (common in State/Local titles)
+  cleaned = cleaned.replace(/\s*\(Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\)\s*$/i, '');
 
   // 9. Trailing "- Report No.26 of 2025" or "Report No. 3 of 2025 (Type)"
   cleaned = cleaned.replace(/[-–]?\s*Report\s*No\.?\s*\d+\s*of\s*\d{4}\s*(\([^)]+\))?\s*$/i, '');

@@ -69,10 +69,10 @@ class Indexer:
         """
         input_path = Path(input_dir)
 
-        # Find JSON files
-        json_files = list(input_path.glob("*_enriched.json"))
+        # Find JSON files (recursively search subdirectories for multi-tier support)
+        json_files = list(input_path.glob("**/*_enriched.json"))
         if not json_files:
-            json_files = list(input_path.glob("*_chunks.json"))
+            json_files = list(input_path.glob("**/*_chunks.json"))
 
         if not json_files:
             raise ValueError(f"No JSON files found in {input_dir}")

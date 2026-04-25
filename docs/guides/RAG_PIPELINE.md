@@ -4,13 +4,23 @@
 
 The RAG (Retrieval-Augmented Generation) pipeline is a production-ready question-answering system for CAG (Comptroller and Auditor General of India) audit reports. It indexes processed audit reports into a vector database and provides natural language queries with cited, style-adaptive responses.
 
+### Multi-Tier Government Support
+
+The pipeline supports three tiers of government audit reports:
+- **Union**: Central government ministries and departments, audited through the office of the CAG
+- **State**: State government departments, audited by the State Accountant General (AG) under CAG's mandate
+- **Local Bodies**: Panchayati Raj Institutions (PRIs) and Urban Local Bodies (ULBs), audited through Annual Technical Inspection Reports (ATIRs) and Local Fund Audits
+
+Tier-specific terminology (e.g., "State Exchequer", "Zila Parishad", "PRIASoft") is handled throughout the pipeline—from BM25 sparse vector boosts to LLM context injection.
+
 ### What It Does
 
-1. **Indexes** processed audit reports (JSON format) into a vector database
-2. **Retrieves** relevant document chunks using hybrid search (dense + sparse vectors)
-3. **Reranks** results using cross-encoder models for relevance
-4. **Generates** natural language answers using LLM (Claude or GPT-4)
-5. **Cites** all claims with precise section and page references
+1. **Indexes** processed audit reports (JSON format) into a vector database, organized by tier
+2. **Enhances** user queries with LLM-powered expansion and filter suggestions
+3. **Retrieves** relevant document chunks using hybrid search (dense + sparse vectors) with tier-aware vocabulary boosts
+4. **Reranks** results using cross-encoder models for relevance
+5. **Generates** natural language answers using LLM (Claude, GPT-4, or Gemini) with tier-aware context injection
+6. **Cites** all claims with precise section and page references
 
 ### Programmatic Interface
 
@@ -58,28 +68,34 @@ This separation allows expensive indexing operations to run offline while keepin
 ```mermaid
 graph TB
     subgraph "Indexing Pipeline"
-        A[JSON Files] --> B[EmbeddingService]
-        B --> C[Dense + Sparse + Payloads]
+        A[JSON Files<br/>union/state/local_body] --> B[EmbeddingService]
+        B --> C[Dense + Sparse + Tier Payloads]
         C --> D[(Qdrant Vector DB)]
     end
 
     subgraph "Query Pipeline"
         E[User Question] --> F[RAGService]
-        F --> G[RetrievalService]
+        F --> QE[QueryEnhancer]
+        QE --> |Query Expansion<br/>+ Tier Context| G[RetrievalService]
         G --> H[Query Embedding]
-        H --> I[Hybrid Search + RRF]
+        H --> I[Hybrid Search + RRF<br/>State/Local Boosts]
         D --> I
         I --> J[Reranking]
         J --> K[Neighbor Expansion]
         K --> L[Parent Grouping]
-        L --> M[Context Assembly]
+        L --> SC[Sufficiency Check]
+        SC --> PR[Passage Reordering]
+        PR --> M[Context Assembly]
         N[ReportRegistry] --> M
-        M --> O[LLM Generation]
+        M --> TC[Tier Context Injection]
+        TC --> O[LLM Generation]
         O --> P[RAGResponse]
     end
 
     style D fill:#e1f5ff
     style P fill:#d4edda
+    style QE fill:#fff3cd
+    style TC fill:#fff3cd
 ```
 
 ---
@@ -90,17 +106,19 @@ graph TB
 
 | Library | Purpose |
 |---------|---------|
-| **OpenAI** | Dense embeddings (`text-embedding-3-large`), LLM generation (`gpt-4o-mini`) |
+| **OpenAI** | Dense embeddings (`text-embedding-3-large`), LLM generation (`gpt-4o-mini`), Query enhancement |
 | **Anthropic** | LLM generation (`claude-sonnet-4-20250514`) |
+| **Google GenAI** | LLM generation (`gemini-2.5-flash`) |
 | **Qdrant Client** | Vector database operations (hybrid search, indexing) |
 | **Cohere** | Cross-encoder reranking (`rerank-english-v3.0`) |
 | **sentence-transformers** | BGE cross-encoder reranker (local fallback) |
 
 ### Built-in Components
 
-- **BM25 Sparse Vector Engine:** Custom implementation optimized for CAG documents—avoids `huggingface_hub` dependency conflicts with Docling and enables CAG-specific pattern boosting
+- **BM25 Sparse Vector Engine:** Custom implementation optimized for CAG documents—avoids `huggingface_hub` dependency conflicts with Docling, enables CAG-specific pattern boosting, and includes State/Local Body vocabulary boosts
+- **Query Enhancer:** Single-call LLM-powered query expansion and classification with tier-aware vocabulary
 - **Neighbor Predictor:** O(1) chunk ID prediction for context expansion
-- **Report Registry:** Time series management for multi-year analysis
+- **Report Registry:** Multi-tier report metadata and time series management
 
 ### External Services
 
@@ -152,15 +170,37 @@ class RAGResponse:
     model_used: str               # LLM identifier
 ```
 
+**`ReportInfo`** (in `report_registry.py`):
+```python
+@dataclass
+class ReportInfo:
+    report_id: str
+    report_title: str
+    report_no: str
+    filename: str
+    report_year: int                    # Publication year (e.g., 2025)
+    audit_year: str                     # Audit period (e.g., "2023-24")
+    ministry: str
+    sector: str
+    report_type: str
+    series_id: Optional[str]            # Time series membership
+    government_body_type: str           # "union", "state", "local_body"
+    state_name: Optional[str]           # e.g., "Odisha" (null for Union)
+    department: Optional[str]           # State/Local department
+    audit_category: str                 # "compliance", "performance", etc.
+```
+
 #### Environment Variables
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `OPENAI_API_KEY` | Yes | Embeddings and GPT-4 |
+| `OPENAI_API_KEY` | Yes | Embeddings, GPT-4, Query enhancement |
 | `ANTHROPIC_API_KEY` | Optional | Claude generation |
+| `GOOGLE_API_KEY` | Optional | Gemini generation |
 | `COHERE_API_KEY` | Optional | Cohere reranking |
 | `QDRANT_URL` | Yes | Qdrant connection (default: `http://localhost:6333`) |
 | `QDRANT_API_KEY` | Optional | Qdrant Cloud authentication |
+| `LLM_PROVIDER` | Optional | Provider selection: `openai`, `claude`, or `gemini` (default: `openai`) |
 
 ---
 
@@ -231,8 +271,21 @@ The main `EmbeddingService` class orchestrates all sub-services via `process_chu
    - Get hierarchy breadcrumbs from parent
    - Prepare text with hierarchy prefix + table summary (if applicable)
    - Extract semantic payload from enrichment data
+   - Include multi-tier metadata fields
 3. Generate dense embeddings (batched)
 4. Generate sparse vectors (batched)
+
+**Multi-Tier Payload Fields:**
+Each chunk payload includes tier-specific metadata from the parsing pipeline:
+```python
+payload = {
+    # ... existing fields ...
+    "government_body_type": "state",     # "union", "state", "local_body"
+    "state_name": "Odisha",               # null for Union reports
+    "department": "Rural Development",    # State/Local department
+    "audit_category": "compliance",       # "compliance", "performance", etc.
+}
+```
 
 **Text Preparation Example:**
 ```
@@ -267,6 +320,7 @@ The hierarchy prefix improves retrieval by embedding section context directly in
 - **Sparse vectors:** BM25 with IDF modifier
 - **Payload indexes:**
   - Standard: `report_id`, `report_year`, `parent_chunk_id`, `content_type`, `page_physical`
+  - Multi-tier: `government_body_type`, `state_name`, `audit_category`
   - Semantic: `finding_type`, `severity`, `section_type`, `total_amount_crore`, `is_recommendation`
 
 **Parent Collection** (`cag_parent_chunks`):
@@ -321,7 +375,7 @@ Payload indexing makes filtered searches fast (<50ms vs 5000ms unindexed).
 
 ### Stage 4: Metadata Management
 
-**Purpose:** Manage report metadata and organize time series for multi-year analysis.
+**Purpose:** Manage report metadata for all three government tiers and organize time series for multi-year analysis.
 
 **File:** `report_registry.py`
 
@@ -335,11 +389,16 @@ class ReportInfo:
     report_title: str
     report_no: str
     filename: str
-    report_year: int       # 2025
-    audit_year: str        # "2023-24"
+    report_year: int                    # 2025
+    audit_year: str                     # "2023-24"
     ministry: str
     sector: str
-    series_id: Optional[str]  # "frbm_compliance"
+    series_id: Optional[str]            # "frbm_compliance"
+    # Multi-tier fields:
+    government_body_type: str           # "union", "state", "local_body"
+    state_name: Optional[str]           # e.g., "Odisha" (null for Union)
+    department: Optional[str]           # State/Local department
+    audit_category: str                 # "compliance", "performance", etc.
 ```
 
 **`TimeSeries`:**
@@ -370,13 +429,32 @@ SERIES_DEFINITIONS = {
 }
 ```
 
+#### Multi-Tier Directory Structure
+
+The registry recursively scans all tier subdirectories:
+```
+data/processed/
+├── union/                  # Central government reports
+│   ├── 2025_16_FRBM_chunks.json
+│   └── 2025_17_Direct_Taxes_chunks.json
+├── state/                  # State government reports
+│   ├── OD_2024_01_Revenue_chunks.json
+│   └── GJ_2024_02_Education_chunks.json
+└── local_body/            # PRI/ULB reports
+    ├── MH_ATIR_2024_chunks.json
+    └── RJ_ATIR_2024_chunks.json
+```
+
+Filenames are prefixed with the tier subdirectory (e.g., `state/OD_2024_01_Revenue.pdf`) for correct PDF viewer path resolution.
+
 #### Registry Loading
 
-`load_from_json_dir()` scans processed JSON files and:
+`load_from_json_dir()` recursively scans `**/*_chunks.json` files and:
 1. Extracts `report_metadata` from each JSON
 2. Parses audit year from title using multiple format patterns
-3. Matches series using title regex patterns
-4. Groups reports by series, ordered by audit year
+3. Extracts multi-tier fields (`government_body_type`, `state_name`, `department`, `audit_category`)
+4. Matches series using title regex patterns
+5. Groups reports by series, ordered by audit year
 
 #### Singleton Pattern
 
@@ -437,7 +515,32 @@ fetch_by_id(prev_id), fetch_by_id(next_id)  # Direct lookup, no search
 
 #### SparseQueryEncoder
 
-Encodes user queries to sparse vectors using the same BM25 logic as indexing, with query-specific boosting for monetary patterns (when queries mention "crore", "lakh", "₹").
+Encodes user queries to sparse vectors using the same BM25 logic as indexing.
+
+**CAG-Specific Pattern Boosting:**
+| Pattern Type | Boost | Examples |
+|--------------|-------|----------|
+| Legal references | 3.0x | `section_143`, `rule_86b`, `form_26as`, `article_311` |
+| Entity acronyms | 2.5x | `acronym_NHAI`, `acronym_PMJAY`, `acronym_PRI`, `acronym_ULB` |
+| **State/Local terms** | 2.0x | `state_audit_state_exchequer`, `local_body_gram_panchayat`, `local_body_zila_parishad` |
+| Monetary/temporal | 1.5x | `money_crore`, `year_2023-24` |
+
+**State/Local Body Vocabulary Patterns:**
+```python
+# Patterns extracted from queries (2.0x boost):
+panchayat_patterns = [
+    "panchayat", "panchayati", "gram panchayat", "zila parishad",
+    "block development", "municipal corporation", "urban local",
+    "local body", "local fund", "pri audit", "ulb audit"
+]
+state_patterns = [
+    "state exchequer", "state consolidated", "state pse",
+    "district collector", "state ag", "principal accountant",
+    "accountant general", "state finance", "state revenue"
+]
+```
+
+**Design Decision:** State and Local Body reports use distinct administrative vocabulary that wouldn't match Union report terminology. The 2.0x boost (below acronym but above monetary) ensures queries about "Zila Parishad" or "State Exchequer" retrieve the right chunks without overwhelming general terms.
 
 #### RetrievalService Orchestration
 
@@ -491,6 +594,64 @@ Each chunk is numbered for citation reference, with semantic metadata displayed 
 
 ---
 
+### Stage 5.5: Query Enhancement
+
+**Purpose:** Enhance user queries with LLM-powered expansion, classification, and tier-aware vocabulary.
+
+**File:** `query_enhancer.py`
+
+#### Component: QueryEnhancer
+
+Single-call LLM service that provides query intelligence before retrieval.
+
+**Inputs:**
+- User question
+- Response style preference
+- Tier context (optional, e.g., "State audit report from Gujarat")
+
+**Outputs (`QueryEnhancement`):**
+```python
+@dataclass
+class QueryEnhancement:
+    question_type: str              # factual, list, aggregation, comparison, explanation
+    expanded_queries: List[str]     # Original + 2 alternative phrasings
+    suggested_filters: Dict         # e.g., {"finding_type": "loss_of_revenue"}
+    top_k: int                      # Recommended retrieval count
+    initial_candidates: int         # Candidates before reranking
+    max_context_chars: int          # Context truncation limit
+    recommended_style: Optional[str] # Style recommendation for "adaptive"
+```
+
+**Example Enhancement:**
+```
+Input: "What went wrong with toll collection?"
+Output:
+  question_type: "explanation"
+  expanded_queries: [
+    "What went wrong with toll collection?",
+    "toll revenue loss audit findings NHAI fee collection",
+    "electronic toll collection ETC compliance shortfall observations"
+  ]
+  suggested_filters: {"finding_type": "loss_of_revenue"}
+  top_k: 12
+  recommended_style: "explanatory"
+```
+
+**Tier-Aware Query Expansion:**
+When `tier_context` is provided (e.g., for a State report), the enhancer uses tier-appropriate vocabulary:
+- **State reports:** "State AG", "State Exchequer", "State PSE", "State Consolidated Fund"
+- **Local Body reports:** "Gram Panchayat", "Zila Parishad", "Urban Local Body", "PRI", "ULB", "ATIR", "PRIASoft"
+
+**Design Decision:** Query enhancement uses `gpt-4o-mini` (or `gemini-2.5-flash`) with a single LLM call (~$0.0002/query). This replaces the previous regex-based question type detection with LLM-powered classification that can also suggest filters and expand queries. The tradeoff is a small latency addition (~100ms), but the improved retrieval quality from multi-query search justifies this.
+
+**Integration with Retrieval:**
+1. `RAGService.ask()` calls `QueryEnhancer.enhance()` with tier context
+2. Enhancement's `expanded_queries` enables multi-query retrieval with RRF fusion
+3. Enhancement's `suggested_filters` are merged with user-provided filters
+4. Enhancement's `top_k` and `max_context_chars` override defaults for question type
+
+---
+
 ### Stage 6: Answer Generation
 
 **Purpose:** Generate natural language answers with citations using LLM.
@@ -514,7 +675,12 @@ Two additional styles (`EXPLANATORY`, `REPORT`) are available programmatically b
 
 The prompt system has several layered components:
 
-**Base Expertise:** CAG domain knowledge, critical rules (ONLY state facts in context, NEVER invent amounts)
+**Base Expertise:** CAG domain knowledge covering all three government tiers:
+- Union: Central ministries, Consolidated Fund of India, Parliamentary committees
+- State: State AG, State Exchequer, State Consolidated Fund, State PSEs
+- Local Bodies: PRIs, ULBs, Gram Panchayat, Zila Parishad, ATIR, PRIASoft
+
+Critical rules: ONLY state facts in context, NEVER invent amounts
 
 **Anti-Pattern Rules:** Forbidden phrases ("The question is asking...", "Based on the context..."), required behaviors (start directly with answer, use proper markdown)
 
@@ -530,7 +696,7 @@ The prompt system has several layered components:
 
 #### Question Type Detection
 
-`_detect_question_type()` analyzes queries to optimize retrieval and response:
+When Query Enhancement is enabled (default), question type classification is handled by `QueryEnhancer` (see Stage 5.5). As a fallback, `_detect_question_type()` uses regex-based detection:
 
 | Type | Trigger Patterns | Adjustments |
 |------|------------------|-------------|
@@ -544,23 +710,77 @@ The prompt system has several layered components:
 
 `ask(question, filters, top_k, style)`:
 
-1. Detect question type
-2. Adjust parameters (increase top_k for list/aggregation questions)
-3. Retrieve via `RetrievalService`
-4. Build context (markdown with hierarchy headers, semantic tags)
-5. Truncate to `max_context_chars` (default: 15,000)
-6. Generate answer via LLM
-7. Build citations with report metadata from `ReportRegistry`
-8. Return `RAGResponse`
+1. **Query Enhancement** (if enabled): Call `QueryEnhancer.enhance()` with tier context
+2. **Retrieval:** Call `RetrievalService.retrieve()` with expanded queries and merged filters
+3. **Passage Reordering:** Reorder parents to mitigate "lost in the middle" attention effect
+4. **Sufficiency Check:** Evaluate if top reranker score meets threshold (tier-adjusted)
+5. **Context Assembly:** Build markdown with hierarchy headers, semantic tags
+6. **Tier Context Injection:** Prepend tier-aware context header for State/Local reports
+7. **Truncation:** Limit to `max_context_chars` (default: 15,000)
+8. **Generation:** Call LLM (Claude, GPT-4, or Gemini)
+9. **Caveat Injection:** If context insufficient, prepend warning to answer
+10. **Citation Building:** Enrich citations with report metadata from `ReportRegistry`
+11. **Return:** `RAGResponse` with answer, citations, and metadata
 
 **Design Decision:** We truncate context to 15,000 characters (~3,750 tokens) because our experiments showed answer quality plateaus after ~4,000 tokens of context. More context increases LLM cost linearly but provides diminishing quality returns. For list/aggregation questions, we increase to 22,500 characters since these questions benefit from more sources.
+
+#### Tier Context Injection
+
+`_build_tier_context()` generates a contextual header for State and Local Body reports:
+
+**Example (State report):**
+```
+📋 REPORT CONTEXT: This is a State audit report from Odisha.
+Department/Sector: Rural Development
+Audit type: Compliance Audit
+Note: State audit terminology may include 'State AG', 'State Exchequer',
+'State Consolidated Fund', 'SPSE' (State Public Sector Enterprise).
+```
+
+**Example (Local Body report):**
+```
+📋 REPORT CONTEXT: This is a Local Body (Panchayati Raj Institutions / Urban Local Bodies) audit report from Maharashtra.
+Note: Local Body terminology may include 'PRI' (Panchayati Raj Institution),
+'ULB' (Urban Local Body), 'GP' (Gram Panchayat), 'ZP' (Zila Parishad),
+'ATIR' (Annual Technical Inspection Report), 'PRIASoft', 'Local Fund Audit'.
+```
+
+This context is prepended to the user prompt, helping the LLM understand tier-specific vocabulary and generate appropriately styled responses.
+
+#### Context Sufficiency Check
+
+`_check_context_sufficiency()` evaluates whether retrieved chunks are relevant enough to answer the question:
+
+- Checks if the top reranker score exceeds `min_rerank_score` (default: 0.25)
+- **Tier-adjusted threshold:** For State/Local Body reports, the threshold is lowered by 30% (to 0.175) because the Cohere reranker was calibrated for Union report vocabulary
+
+If context is insufficient, a caveat is prepended:
+```
+⚠️ **Note**: The available reports may not contain specific information
+to fully answer this question. Based on the closest matches found:
+```
+
+**Design Decision:** The 30% threshold reduction for State/Local reports accounts for vocabulary differences—terms like "Zila Parishad" score lower with Cohere's general English model, but answers are still good. This prevents false-positive insufficiency warnings for valid State/Local queries.
+
+#### Passage Reordering
+
+`_reorder_for_attention()` reorders parent contexts to mitigate the "lost in the middle" attention effect (ICLR 2025 research shows LLMs attend most to content at the beginning and end of context).
+
+**Strategy:** Interleave by relevance score:
+- Position 1: highest-scored parent (best content first)
+- Position 2: lowest-scored parent (to end of attention window)
+- Position 3: second-highest
+- Position 4: second-lowest
+- etc.
+
+This ensures the most and least relevant parents are at attention-optimal positions.
 
 #### Answer Generation
 
 `_generate_answer(question, context, style, question_type)`:
 
 - Constructs prompt from style-specific system prompt + context + question + type hints
-- Calls Claude or OpenAI depending on configuration
+- Calls Claude, OpenAI, or Gemini depending on `LLM_PROVIDER` configuration
 - Max tokens: 2000, Temperature: 0.1
 
 #### Time Series / Comparative Analysis
@@ -629,16 +849,27 @@ Citation(
 
 The `Indexer` class orchestrates the offline indexing pipeline:
 
+**Multi-Tier Directory Scanning:**
+The indexer recursively scans all tier subdirectories:
+```bash
+python -m src.rag_pipeline.indexer --input-dir data/processed --recreate
+
+# Scans:
+# data/processed/union/**/*_chunks.json
+# data/processed/state/**/*_chunks.json
+# data/processed/local_body/**/*_chunks.json
+```
+
 **`index_all(input_dir, recreate)`:**
-1. Find all `*_enriched.json` or `*_chunks.json` files
+1. Recursively find all `**/*_enriched.json` or `**/*_chunks.json` files across tier subdirectories
 2. Create Qdrant collections (recreate if flag set)
 3. Process each file via `index_file()`
 4. Return statistics (files processed, chunks indexed, errors)
 
 **`index_file(json_path)`:**
 1. Load JSON data
-2. Call `EmbeddingService.process_chunks()` to generate embeddings + payloads
-3. Upsert children and parents to Qdrant
+2. Call `EmbeddingService.process_chunks()` to generate embeddings + tier-aware payloads
+3. Upsert children (with `government_body_type`, `state_name`, etc.) and parents to Qdrant
 4. Return per-file stats
 
 **Output Statistics:**
@@ -679,12 +910,27 @@ The `Indexer` class orchestrates the offline indexing pipeline:
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
-| `provider` | `OPENAI` | LLM provider (OPENAI, CLAUDE) |
+| `provider` | `OPENAI` | LLM provider (OPENAI, CLAUDE, GEMINI) |
 | `openai_model` | `gpt-4o-mini` | OpenAI model for generation |
 | `claude_model` | `claude-sonnet-4-20250514` | Claude model for generation |
+| `gemini_model` | `gemini-2.5-flash` | Gemini model for generation |
 | `max_tokens` | 2000 | Max response tokens |
 | `temperature` | 0.1 | Near-deterministic for factual Q&A |
 | `max_context_chars` | 15000 | Context truncation limit |
+
+### Query Enhancement Configuration
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `enabled` | true | Enable LLM-powered query enhancement |
+| `enable_query_expansion` | true | Expand query with alternative phrasings |
+| `enable_passage_reordering` | true | Reorder for attention optimization |
+| `enable_sufficiency_check` | true | Check context relevance before generation |
+| `provider` | `OPENAI` | Provider for enhancement (OPENAI or GEMINI) |
+| `model` | `gpt-4o-mini` | OpenAI model for enhancement |
+| `gemini_model` | `gemini-2.5-flash` | Gemini model for enhancement |
+| `num_expansions` | 3 | Total queries (original + expansions) |
+| `min_rerank_score` | 0.25 | Minimum top-1 score for sufficiency (30% lower for State/Local) |
 
 ---
 
@@ -694,21 +940,25 @@ The `Indexer` class orchestrates the offline indexing pipeline:
 
 | Stage | Time |
 |-------|------|
+| Query enhancement (LLM) | ~100ms |
 | Query embedding (dense + sparse) | ~100ms |
 | Hybrid search + RRF | ~50ms |
 | Reranking (Cohere) | ~200ms |
 | Neighbor expansion | ~20ms |
 | Context assembly | ~10ms |
+| Sufficiency check + Passage reordering | ~5ms |
+| Tier context injection | ~5ms |
 | LLM generation | ~1500-2000ms |
 | **Total end-to-end** | **~2-3s** |
 
 ### Cost Breakdown
 
 **Per-Query Cost:**
+- Query enhancement (gpt-4o-mini): ~$0.0002
 - Query embedding: ~$0.0001
 - Cohere reranking: ~$0.001
 - LLM generation (gpt-4o-mini): ~$0.002-0.005
-- **Total:** ~$0.003-0.007 per query
+- **Total:** ~$0.003-0.008 per query
 
 **Per-Report Indexing Cost:**
 - Dense embeddings: ~$0.01 (varies with report length)
@@ -732,3 +982,9 @@ Limiting context to 15,000 chars prevents quality plateau while keeping LLM cost
 
 **Table Summary Caching:**
 LLM table summaries are generated during indexing and stored in payloads—never regenerated at query time. For 10,000 tables, this is $1 one-time vs $1 per query.
+
+**Tier-Aware Sufficiency Thresholds:**
+State and Local Body reports use different administrative vocabulary than Union reports, causing lower Cohere reranker scores for valid matches. Reducing the sufficiency threshold by 30% for these tiers prevents false-positive "low relevance" warnings while maintaining answer quality.
+
+**Passage Reordering for Attention:**
+Research shows LLMs attend most to the beginning and end of context. Interleaving parents by relevance (best→worst→second-best→second-worst) places the most relevant content at attention-optimal positions, improving answer quality at zero additional cost.

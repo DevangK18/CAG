@@ -92,11 +92,19 @@ class ResponseStyle(Enum):
 
 BASE_EXPERTISE = """You are an expert analyst for the Comptroller and Auditor General (CAG) of India.
 
+CAG audits cover three tiers of government:
+- **Union**: Central government ministries and departments, audited through the office of the CAG
+- **State**: State government departments, audited by the State Accountant General (AG) under CAG's mandate
+- **Local Bodies**: Panchayati Raj Institutions (PRIs) and Urban Local Bodies (ULBs), audited through Annual Technical Inspection Reports (ATIRs) and Local Fund Audits
+
 Your expertise includes:
 - Analyzing audit findings, observations, and their monetary implications
-- Understanding government accounting, budgeting, and financial procedures  
+- Understanding government accounting, budgeting, and financial procedures
 - Interpreting CAG terminology: "short levy", "excess expenditure", "revenue foregone", "infructuous expenditure"
 - Synthesizing information from multiple sections of audit reports
+- Union audit concepts: Consolidated Fund of India, Parliamentary committees, Central ministries
+- State audit concepts: State Exchequer, State Consolidated Fund, State PSEs (Public Sector Enterprises), State AG reports, District-level audits
+- Local Body concepts: Gram Panchayat (GP), Zila Parishad (ZP), Panchayat Samiti, Municipal Corporation, Town Council, PRIASoft accounting, Local Fund Audit, three-tier Panchayati Raj system, 73rd/74th Constitutional Amendments
 
 ## CRITICAL RULES (NEVER violate):
 1. ONLY state facts explicitly present in the provided context
@@ -886,12 +894,16 @@ class RAGService:
             if Anthropic is None:
                 raise ImportError("Install anthropic: pip install anthropic")
             self.anthropic = Anthropic(api_key=self.config.anthropic_api_key)
-            self.openai = OpenAI(api_key=self.config.openai_api_key)  # Still need OpenAI for QueryEnhancer
+            self.openai = OpenAI(
+                api_key=self.config.openai_api_key
+            )  # Still need OpenAI for QueryEnhancer
             self.gemini = None
         elif self.config.llm.provider == LLMProvider.GEMINI:
             # Lazy-init Gemini client
             self.gemini = self._init_gemini_client()
-            self.openai = OpenAI(api_key=self.config.openai_api_key)  # Still need OpenAI for QueryEnhancer
+            self.openai = OpenAI(
+                api_key=self.config.openai_api_key
+            )  # Still need OpenAI for QueryEnhancer
             self.anthropic = None
         else:
             self.openai = OpenAI(api_key=self.config.openai_api_key)
@@ -934,6 +946,29 @@ class RAGService:
         if style is None:
             style = ResponseStyle.ADAPTIVE
 
+        # ===== Tier context lookup for query enhancement =====
+        tier_context_for_enhancer = None
+        if filters and "report_id" in filters:
+            registry = get_registry()
+            report_id = filters["report_id"]
+            # Handle both single report_id and list of report_ids
+            if isinstance(report_id, list):
+                report_id = report_id[0]  # Use first report for context
+            report_info = registry.get_report(report_id)
+            if report_info:
+                govt_type = (
+                    getattr(report_info, "government_body_type", None) or "union"
+                )
+                if govt_type != "union":
+                    tier_label = "State" if govt_type == "state" else "Local Body"
+                    tier_context_for_enhancer = f"{tier_label} audit report"
+                    state_name = getattr(report_info, "state_name", None)
+                    if state_name:
+                        tier_context_for_enhancer += f" from {state_name}"
+                    department = getattr(report_info, "department", None)
+                    if department and department.lower() not in ("unknown", "n/a", ""):
+                        tier_context_for_enhancer += f", department: {department}"
+
         # ===== NEW: Query Enhancement (Phase 1) =====
         enhancement = None
         question_type = None
@@ -941,8 +976,31 @@ class RAGService:
 
         if self.config.query_enhancement.enabled and self.query_enhancer:
             # Single LLM call for query enhancement
-            enhancement = self.query_enhancer.enhance(question, style=style.value)
+            enhancement = self.query_enhancer.enhance(
+                question,
+                style=style.value,
+                tier_context=tier_context_for_enhancer,
+            )
             question_type = enhancement.question_type
+
+        self.groundedness_service = None
+        if self.config.groundedness.enabled:
+            try:
+                try:
+                    from .groundedness_service import GroundednessService
+                except ImportError:
+                    from groundedness_service import GroundednessService
+
+                self.groundedness_service = GroundednessService(
+                    config=self.config.groundedness,
+                    openai_client=self.openai,
+                    anthropic_client=self.anthropic,
+                    gemini_client=self.gemini,
+                )
+                logger.info("Groundedness verification enabled (Phase 13)")
+            except ImportError as e:
+                logger.warning(f"Could not import GroundednessService: {e}")
+                self.config.groundedness.enabled = False
 
             # Apply recommended style if adaptive
             if style == ResponseStyle.ADAPTIVE and enhancement.recommended_style:
@@ -961,7 +1019,9 @@ class RAGService:
             # Increase context for complex questions
             if question_type in ["list", "aggregation", "comparison"]:
                 adjusted_top_k = max(top_k, 15)
-                logger.info(f"Detected {question_type} question, top_k → {adjusted_top_k}")
+                logger.info(
+                    f"Detected {question_type} question, top_k → {adjusted_top_k}"
+                )
 
             # Auto-select style for specific question types
             if style == ResponseStyle.ADAPTIVE:
@@ -1018,6 +1078,11 @@ class RAGService:
 
         if len(context) > max_context:
             context = context[:max_context] + "\n\n[Context truncated...]"
+
+        # Inject tier context for State/Local Body reports (non-streaming path)
+        tier_context = self._build_tier_context(retrieval_result)
+        if tier_context:
+            context = tier_context + "\n\n" + context
 
         # Generate
         answer = self._generate_answer(question, context, style, question_type)
@@ -1125,6 +1190,11 @@ class RAGService:
         }
         user_prompt += type_hints.get(question_type, "")
 
+        # Inject tier context for State/Local Body reports
+        tier_context = self._build_tier_context(retrieval_result)
+        if tier_context:
+            user_prompt = tier_context + "\n\n" + user_prompt
+
         return {
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
@@ -1193,12 +1263,36 @@ class RAGService:
         Uses the top reranker score as a proxy. If the best chunk scores
         below the threshold, the context is likely insufficient.
 
+        The threshold is lowered by 30% for State/Local Body reports because
+        their vocabulary may score slightly lower with the Cohere reranker
+        (trained on general English and Union audit language).
+
         Returns True if sufficient, False if insufficient.
         """
         if not self.config.query_enhancement.enable_sufficiency_check:
             return True  # Skip check if disabled
 
         threshold = self.config.query_enhancement.min_rerank_score
+
+        # Lower threshold for State/Local Body reports (vocabulary differences)
+        # The Cohere reranker was calibrated for Union reports; State/Local
+        # terminology may score slightly lower but answers are still good.
+        report_ids = set()
+        for parent in retrieval_result.parents:
+            for child in parent.children:
+                report_ids.add(child.report_id)
+
+        registry = get_registry()
+        for rid in report_ids:
+            info = registry.get_report(rid)
+            if info:
+                govt_type = getattr(info, "government_body_type", None) or "union"
+                if govt_type != "union":
+                    threshold *= 0.7  # 30% lower threshold for non-Union
+                    logger.debug(
+                        f"Lowered sufficiency threshold to {threshold:.3f} for {govt_type} report"
+                    )
+                    break
 
         # Find the best score across all children in all parents
         best_score = 0.0
@@ -1214,6 +1308,96 @@ class RAGService:
             )
 
         return sufficient
+
+    def _build_tier_context(self, retrieval_result: RetrievalResult) -> str:
+        """
+        Build tier-aware context header for State/Local Body reports.
+
+        This helps the LLM understand the government tier context and use
+        appropriate terminology when generating responses.
+
+        Returns empty string for Union reports (no extra context needed).
+        """
+        # Get unique report_ids from retrieval results
+        report_ids = set()
+        for parent in retrieval_result.parents:
+            for child in parent.children:
+                report_ids.add(child.report_id)
+
+        if not report_ids:
+            return ""
+
+        registry = get_registry()
+
+        # For single-report chat (most common case)
+        if len(report_ids) == 1:
+            report_info = registry.get_report(report_ids.pop())
+            if not report_info:
+                return ""
+
+            # Get government_body_type - default to "union" if not set
+            govt_type = getattr(report_info, "government_body_type", None) or "union"
+            if govt_type == "union":
+                return ""  # No extra context needed for Union
+
+            tier_label = (
+                "State"
+                if govt_type == "state"
+                else "Local Body (Panchayati Raj Institutions / Urban Local Bodies)"
+            )
+
+            parts = [f"📋 REPORT CONTEXT: This is a {tier_label} audit report"]
+
+            state_name = getattr(report_info, "state_name", None)
+            if state_name:
+                parts[0] += f" from {state_name}"
+            parts[0] += "."
+
+            department = getattr(report_info, "department", None)
+            if department and department.lower() not in ("unknown", "n/a", ""):
+                parts.append(f"Department/Sector: {department}")
+
+            audit_category = getattr(report_info, "audit_category", None)
+            if audit_category:
+                parts.append(f"Audit type: {audit_category.title()} Audit")
+
+            # Add tier-specific terminology hints
+            if govt_type == "state":
+                parts.append(
+                    "Note: State audit terminology may include 'State AG', 'State Exchequer', "
+                    "'State Consolidated Fund', 'SPSE' (State Public Sector Enterprise)."
+                )
+            elif govt_type == "local_body":
+                parts.append(
+                    "Note: Local Body terminology may include 'PRI' (Panchayati Raj Institution), "
+                    "'ULB' (Urban Local Body), 'GP' (Gram Panchayat), 'ZP' (Zila Parishad), "
+                    "'ATIR' (Annual Technical Inspection Report), 'PRIASoft', 'Local Fund Audit'."
+                )
+
+            return "\n".join(parts)
+
+        # For multi-report chat (cross-report analysis)
+        # Just note the tiers involved
+        tiers = set()
+        states = set()
+        for rid in report_ids:
+            info = registry.get_report(rid)
+            if info:
+                govt_type = getattr(info, "government_body_type", None) or "union"
+                tiers.add(govt_type)
+                state_name = getattr(info, "state_name", None)
+                if state_name:
+                    states.add(state_name)
+
+        if tiers == {"union"}:
+            return ""
+
+        tier_labels = [t.replace("_", " ").title() for t in tiers]
+        context = f"📋 REPORT CONTEXT: These reports span {', '.join(tier_labels)} government tiers"
+        if states:
+            context += f" covering {', '.join(sorted(states))}"
+        context += "."
+        return context
 
     # =========================================================================
     # Question Type Detection
@@ -1362,8 +1546,11 @@ class RAGService:
         if _gemini_client is None:
             try:
                 from google import genai
+
                 _gemini_client = genai.Client()
-                logger.info(f"Gemini client initialized with model: {self.config.llm.gemini_model}")
+                logger.info(
+                    f"Gemini client initialized with model: {self.config.llm.gemini_model}"
+                )
             except ImportError:
                 raise ImportError("Install google-genai: pip install google-genai")
         return _gemini_client

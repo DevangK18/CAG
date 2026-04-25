@@ -63,6 +63,33 @@ STATE_CODES = {
     "Lakshadweep": "LD",
 }
 
+# State name misspelling corrections
+STATE_NAME_CORRECTIONS = {
+    "Maharastra": "Maharashtra",
+    "Maharasthra": "Maharashtra",
+    "Gujrat": "Gujarat",
+    "Orrisa": "Odisha",
+    "Orissa": "Odisha",
+    "Chattisgarh": "Chhattisgarh",
+    "Chhatisgarh": "Chhattisgarh",
+    "Uttrakhand": "Uttarakhand",
+    "Uttarkhand": "Uttarakhand",
+    "Tamilnadu": "Tamil Nadu",
+    "Tamil nadu": "Tamil Nadu",
+    "Andhrapradesh": "Andhra Pradesh",
+    "Andhra pradesh": "Andhra Pradesh",
+    "Madhyapradesh": "Madhya Pradesh",
+    "Madhya pradesh": "Madhya Pradesh",
+    "Himachalpradesh": "Himachal Pradesh",
+    "Himachal pradesh": "Himachal Pradesh",
+    "Arunachalpradesh": "Arunachal Pradesh",
+    "Arunachal pradesh": "Arunachal Pradesh",
+    "Westbengal": "West Bengal",
+    "West bengal": "West Bengal",
+    "Uttarpradesh": "Uttar Pradesh",
+    "Uttar pradesh": "Uttar Pradesh",
+}
+
 # Government body type literals
 GovernmentBodyType = Literal["union", "state", "local_body"]
 
@@ -76,8 +103,8 @@ def detect_government_body_type(manifest_path: str) -> GovernmentBodyType:
 
     Patterns:
     - "CAG_Union_Reports" or legacy names → "union"
-    - "CAG_State_Reports" → "state"
-    - "CAG_Local_Body_Reports" → "local_body"
+    - "CAG_State_Reports" or "State_Examples" → "state"
+    - "CAG_Local_Body_Reports" or "Local_Examples" → "local_body"
 
     Args:
         manifest_path: Path to the manifest Excel file
@@ -87,7 +114,11 @@ def detect_government_body_type(manifest_path: str) -> GovernmentBodyType:
     """
     filename = Path(manifest_path).stem.lower()
 
+    # Check for local body patterns first (more specific)
     if "local_body" in filename or "local-body" in filename or "localbody" in filename:
+        return "local_body"
+    # "local" without "state" = local_body (catches "Local_Examples")
+    elif "local" in filename and "state" not in filename:
         return "local_body"
     elif "state" in filename and "union" not in filename:
         return "state"
@@ -218,6 +249,8 @@ class ManifestIngestionService:
                 # Multi-tier columns (State/Local)
                 "State Name": "State Name",
                 "State": "State Name",
+                "State_code": "State Code",  # 2-letter state code column
+                "State Code": "State Code",
                 "Department": "Department",  # State/Local department (different from Union Ministry)
                 "Audit Category": "Audit Category",
                 "Report Subtype": "Report Subtype",
@@ -297,34 +330,45 @@ class ManifestIngestionService:
         - State Name: Normalize capitalization
         - Audit Category: Normalize to lowercase
         """
-        # Clean Report No: "2025/15" → "15 of 2025"
+        # Clean Report No: normalize to "X of YYYY" format
+        # Handles: "2025/15", "15/2025", "2017_10", "02_2024", etc.
         if "Report No" in df.columns:
 
             def format_report_no(val):
                 if pd.isna(val):
-                    return "Unknown"
+                    return None  # Return None instead of "Unknown" for cleaner downstream handling
                 val = str(val).strip()
 
-                # Handle "2025/15" format
-                if "/" in val:
-                    parts = val.split("/")
-                    if len(parts) == 2:
-                        year, num = parts
-                        # Validate year looks like a year
-                        if year.isdigit() and len(year) == 4:
-                            return f"{num} of {year}"
-
-                # Handle "2017_10" format (underscore separator)
-                if "_" in val:
-                    parts = val.split("_")
-                    if len(parts) == 2:
-                        year, num = parts
-                        if year.isdigit() and len(year) == 4:
-                            return f"{num} of {year}"
+                if not val or val == "-":
+                    return None
 
                 # Handle "Report No. 15 of 2025" format (already correct)
                 if "of" in val.lower():
                     return val
+
+                # Handle slash formats: "2025/15" or "15/2025"
+                if "/" in val:
+                    parts = val.split("/")
+                    if len(parts) == 2:
+                        first, second = parts
+                        # year_num format: "2025/15"
+                        if first.isdigit() and len(first) == 4:
+                            return f"{int(second)} of {first}"
+                        # num_year format: "15/2025"
+                        elif second.isdigit() and len(second) == 4:
+                            return f"{int(first)} of {second}"
+
+                # Handle underscore formats: "2017_10" or "02_2024"
+                if "_" in val:
+                    parts = val.split("_")
+                    if len(parts) == 2:
+                        first, second = parts
+                        # year_num format: "2017_10"
+                        if first.isdigit() and len(first) == 4:
+                            return f"{int(second)} of {first}"
+                        # num_year format: "02_2024"
+                        elif second.isdigit() and len(second) == 4:
+                            return f"{int(first)} of {second}"
 
                 return val
 
@@ -404,7 +448,10 @@ class ManifestIngestionService:
                 if val_str == "-" or val_str == "":
                     return None
                 # Title case normalization
-                return val_str.title()
+                val_str = val_str.title()
+                # Apply misspelling corrections
+                val_str = STATE_NAME_CORRECTIONS.get(val_str, val_str)
+                return val_str
 
             df["State Name"] = df["State Name"].apply(clean_state_name)
 
@@ -470,7 +517,8 @@ class ManifestIngestionService:
             df["Date"] = df["Date"].apply(format_date)
 
         # Fill NaN values with "Unknown" for required metadata columns
-        required_metadata_cols = ["Report No", "Report Type", "Sector"]
+        # Note: "Report No" is NOT included - None/null is valid for reports without numbers
+        required_metadata_cols = ["Report Type", "Sector"]
         for col in required_metadata_cols:
             if col in df.columns:
                 df[col] = df[col].fillna("Unknown")
@@ -543,7 +591,8 @@ class ManifestIngestionService:
             "Title": title,
             "Recommended Title": safe_get("Recommended Title", ""),
             # Common metadata fields
-            "Report No": safe_get("Report No"),
+            # Report No can be None for reports without numbers (use safe_get_optional)
+            "Report No": safe_get_optional("Report No"),
             "Report Type": safe_get("Report Type"),
             "Sector": safe_get("Sector"),
             "Date": safe_get("Date"),
@@ -569,7 +618,15 @@ class ManifestIngestionService:
             state_name = safe_get_optional("State Name")
             metadata["state_name"] = state_name
             metadata["department"] = safe_get_optional("Department")
-            metadata["audit_category"] = safe_get("Audit Category", "compliance").lower()
+            # BUG FIX 2: Infer audit_category from Report Type if Audit Category column is missing
+            audit_category_val = safe_get_optional("Audit Category")
+            if audit_category_val:
+                metadata["audit_category"] = audit_category_val.lower()
+            else:
+                # Infer from Report Type (same as Union logic)
+                metadata["audit_category"] = infer_audit_category_from_report_type(
+                    metadata["Report Type"]
+                )
             metadata["report_subtype"] = safe_get_optional("Report Subtype")
             # Set Ministry to state name for compatibility
             metadata["Ministry"] = state_name or "Unknown"
@@ -600,12 +657,22 @@ class ManifestIngestionService:
         # Get state code for State/Local reports
         state_code = None
         if self.government_body_type in ("state", "local_body"):
-            state_name = row.get("State Name")
-            if pd.notna(state_name) and state_name:
-                state_code = STATE_CODES.get(str(state_name).strip().title())
-                if not state_code:
-                    # Fallback: first 2 chars uppercase
-                    state_code = str(state_name)[:2].upper()
+            # BUG FIX 1: First check for explicit State Code column
+            state_code_val = row.get("State Code")
+            if pd.notna(state_code_val) and str(state_code_val).strip():
+                state_code = str(state_code_val).strip().upper()
+            else:
+                # BUG FIX 3: Apply misspelling corrections before STATE_CODES lookup
+                state_name = row.get("State Name")
+                if pd.notna(state_name) and state_name:
+                    state_name_str = str(state_name).strip().title()
+                    # Apply corrections
+                    state_name_str = STATE_NAME_CORRECTIONS.get(state_name_str, state_name_str)
+                    # Lookup in STATE_CODES
+                    state_code = STATE_CODES.get(state_name_str)
+                    if not state_code:
+                        # Fallback: first 2 chars uppercase
+                        state_code = state_name_str[:2].upper()
 
         # Get audit category for ATIR detection
         audit_category = row.get("Audit Category", "")

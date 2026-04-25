@@ -89,11 +89,16 @@ def extract_overview_from_json(json_path: Path) -> dict:
             "report_year": meta.get("report_year"),
             "title": meta.get("report_title"),
             "ministry": meta.get("ministry"),
+            "department": meta.get("department"),
             "sector": meta.get("sector"),
             "report_type": meta.get("report_type"),
             "publication_date": meta.get("publication_date"),
             "source_url": meta.get("source_url"),
             "source_filename": meta.get("source_filename"),
+            # Tier-aware fields
+            "government_body_type": meta.get("government_body_type", "union"),
+            "state_name": meta.get("state_name"),
+            "audit_category": meta.get("audit_category"),
         },
         "table_of_contents": [
             {
@@ -525,22 +530,26 @@ def main():
     llm_fields_total = 0
 
     for report_id in tracker["reports"].keys():
-        # Find source chunks JSON
-        chunks_path = service.processed_dir / f"{report_id}_chunks.json"
+        # Find source chunks JSON (searches tier subdirectories)
+        chunks_path = service.find_chunks_path(report_id)
 
-        if not chunks_path.exists():
+        if not chunks_path or not chunks_path.exists():
             print(f"  ⚠️  {report_id[:40]}...: chunks.json not found")
             merge_failed += 1
             continue
 
+        # Detect tier for output path
+        tier = service.get_tier_from_chunks(chunks_path)
+
         # Extract from JSON (Phase 10A - free data)
         overview = extract_overview_from_json(chunks_path)
 
-        # Add base metadata
+        # Add base metadata (include tier info)
         overview["_metadata"] = {
             "generated_at": datetime.now().isoformat(),
             "source_json": str(chunks_path),
             "phase": "10",
+            "government_body_type": tier,
         }
 
         # Merge LLM-extracted fields using improved merge logic
@@ -557,8 +566,8 @@ def main():
             llm_merged_count += 1
             llm_fields_total += merge_stats["fields_merged"]
 
-        # Save final overview to processed directory
-        output_path = service.get_final_overview_path(report_id)
+        # Save final overview to processed directory (tier-aware)
+        output_path = service.get_final_overview_path(report_id, tier)
         with open(output_path, "w") as f:
             json.dump(overview, f, indent=2, ensure_ascii=False)
 

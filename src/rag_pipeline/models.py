@@ -274,6 +274,7 @@ class RAGResponse:
     context_length: int
     reranker_used: str
     search_type: str
+    groundedness: Optional[Dict[str, Any]] = None  # GroundednessReport.to_dict()
 
     # LLM metadata
     model_used: str
@@ -314,4 +315,5 @@ class RAGResponse:
                 "search_type": self.search_type,
                 "model_used": self.model_used,
             },
+            "groundedness": self.groundedness,
         }

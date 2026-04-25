@@ -135,7 +135,9 @@ class LLMConfig:
 
         # Load models from environment or use defaults
         if self.claude_model is None:
-            self.claude_model = os.getenv("LLM_CLAUDE_MODEL", "claude-sonnet-4-20250514")
+            self.claude_model = os.getenv(
+                "LLM_CLAUDE_MODEL", "claude-sonnet-4-20250514"
+            )
         if self.openai_model is None:
             self.openai_model = os.getenv("LLM_OPENAI_MODEL", "gpt-4o-mini")
         if self.gemini_model is None:
@@ -170,6 +172,28 @@ class QueryEnhancementConfig:
 
 
 @dataclass
+class GroundednessConfig:
+    """Configuration for groundedness verification (Phase 13)."""
+
+    # Feature flags
+    enabled: bool = False  # OFF by default; enable per-deployment
+    block_on_failure: bool = False  # If True, caveat the answer when verification fails
+    regenerate_on_failure: bool = (
+        False  # If True, retry generation with stricter prompt when score low
+    )
+
+    # Provider selection (independent of main LLM)
+    # Keep Haiku/mini default for speed + cost
+    provider: LLMProvider = LLMProvider.OPENAI
+    openai_model: str = "gpt-4o-mini"
+    claude_model: str = "claude-haiku-4-5-20251001"
+    gemini_model: str = "gemini-2.5-flash"
+
+    max_tokens: int = 1500
+    min_groundedness_score: float = 0.75  # Fraction of claims that must be grounded
+
+
+@dataclass
 class RAGConfig:
     """Complete RAG pipeline configuration."""
 
@@ -180,6 +204,7 @@ class RAGConfig:
     query_enhancement: QueryEnhancementConfig = field(
         default_factory=QueryEnhancementConfig
     )
+    groundedness: GroundednessConfig = field(default_factory=GroundednessConfig)
 
     # API Keys (loaded from environment)
     openai_api_key: Optional[str] = None

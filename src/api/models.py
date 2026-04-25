@@ -113,6 +113,10 @@ class ReportSummary(BaseModel):
     status: str
     filename: str
     report_type: Optional[str] = None
+    government_body_type: str = "union"
+    state_name: Optional[str] = None
+    department: Optional[str] = None
+    audit_category: str = "compliance"
 
 
 class ReportDetail(BaseModel):
@@ -133,6 +137,10 @@ class ReportDetail(BaseModel):
     monetary_impact: Optional[str] = None
     findings_count: int
     report_type: Optional[str] = None
+    government_body_type: str = "union"
+    state_name: Optional[str] = None
+    department: Optional[str] = None
+    audit_category: str = "compliance"
 
 
 class ReportsListResponse(BaseModel):

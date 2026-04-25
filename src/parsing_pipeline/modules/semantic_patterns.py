@@ -139,6 +139,58 @@ IMPLICIT_PATTERNS = {
         "confidence": 0.15,
         "description": "System and control deficiencies",
     },
+    # State/Local-specific implicit patterns
+    "benefit_deprivation": {
+        "patterns": [
+            r"(?:were|was)\s+deprived\s+of\s+(?:this\s+)?(?:benefit|allowance)",
+            r"eligible\s+.{0,20}(?:were|was)\s+(?:not\s+provided|deprived|denied)",
+            r"(?:CwSN|children|students?|beneficiar)\s+.{0,20}(?:deprived|not\s+provided)",
+            r"transferred\s+.{0,20}(?:dormant|wrong)\s+.{0,15}accounts?",
+        ],
+        "confidence": 0.25,
+        "description": "Beneficiaries denied entitled benefits",
+    },
+    "gst_tax_issue": {
+        "patterns": [
+            r"mismatch\s+(?:of|in)\s+(?:ITC|tax\s+liability)",
+            r"irregular\s+claim(?:ing)?\s+of\s+(?:ITC|Input\s+Tax\s+Credit)",
+            r"(?:compliance\s+)?(?:discrepanc|deficienc)(?:y|ies)\s+.{0,20}(?:tax|ITC|GST)",
+            r"turnover\s+(?:escape|mismatch|difference)",
+            r"unreconciled\s+(?:ITC|payment\s+of\s+tax)",
+        ],
+        "confidence": 0.25,
+        "description": "GST/ITC compliance issues",
+    },
+    "record_keeping_failure": {
+        "patterns": [
+            r"(?:registers?|records?|accounts?)\s+.{0,20}not\s+maintained",
+            r"items?\s+.{0,20}not\s+accounted\s+for",
+            r"figures?\s+.{0,20}did\s+not\s+match",
+            r"budget\s+estimates?\s+.{0,15}not\s+(?:prepared|passed)",
+            r"UCs?\s+.{0,15}(?:pending|not\s+submitted)",
+        ],
+        "confidence": 0.2,
+        "description": "Record-keeping and accounting failures",
+    },
+    "monitoring_failure": {
+        "patterns": [
+            r"(?:meetings?|committee)\s+.{0,15}(?:were|was)\s+not\s+held",
+            r"internal\s+audit\s+.{0,15}not\s+(?:planned|conducted)",
+            r"(?:survey|inspection)\s+.{0,15}not\s+(?:conducted|done)",
+            r"(?:no|not\s+any)\s+(?:effective\s+)?action\s+.{0,15}(?:taken|initiated)",
+        ],
+        "confidence": 0.2,
+        "description": "Monitoring and oversight failures",
+    },
+    "procurement_issue": {
+        "patterns": [
+            r"purchased\s+.{0,20}without\s+(?:inviting\s+)?(?:quotations?|tenders?)",
+            r"(?:quotations?|tenders?)\s+.{0,15}not\s+(?:invited|obtained)",
+            r"payment\s+.{0,15}without\s+(?:deducting|recovering)\s+TDS",
+        ],
+        "confidence": 0.2,
+        "description": "Procurement procedure violations",
+    },
 }
 
 

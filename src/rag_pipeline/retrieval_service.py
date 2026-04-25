@@ -315,6 +315,45 @@ class SparseQueryEncoder:
         for match in re.finditer(r"\b([A-Z]{2,6})\b", text):
             tokens.append(f"acronym_{match.group(1)}")
 
+        # State/Local Body specific patterns
+        # These terms are important for State/Local reports but don't match
+        # the acronym pattern (which already catches PRI, ULB, GP, ZP, ATIR, SPSE)
+
+        # Panchayat-related terms (boost for local body queries)
+        panchayat_patterns = [
+            r"panchayat",
+            r"panchayati",
+            r"gram\s*panchayat",
+            r"zila\s*parishad",
+            r"block\s*development",
+            r"municipal\s*corporation",
+            r"urban\s*local",
+            r"local\s*body",
+            r"local\s*bodies",
+            r"local\s*fund",
+            r"pri\s*audit",
+            r"ulb\s*audit",
+        ]
+        for pattern in panchayat_patterns:
+            for match in re.finditer(rf"\b({pattern})\b", text_lower):
+                tokens.append(f"local_body_{match.group(1).replace(' ', '_')}")
+
+        # State audit specific terms
+        state_patterns = [
+            r"state\s*exchequer",
+            r"state\s*consolidated",
+            r"state\s*pse",
+            r"district\s*collector",
+            r"state\s*ag",
+            r"principal\s*accountant",
+            r"accountant\s*general",
+            r"state\s*finance",
+            r"state\s*revenue",
+        ]
+        for pattern in state_patterns:
+            for match in re.finditer(rf"\b({pattern})\b", text_lower):
+                tokens.append(f"state_audit_{match.group(1).replace(' ', '_')}")
+
         # Regular words
         words = re.findall(r"\b[a-z]{2,}\b", text_lower)
         tokens.extend([w for w in words if w not in self._stopwords])
@@ -339,6 +378,8 @@ class SparseQueryEncoder:
                 boost = 3.0
             elif token.startswith("acronym_"):
                 boost = 2.5
+            elif token.startswith(("local_body_", "state_audit_")):
+                boost = 2.0  # Slightly below acronym boost, above default
             elif token.startswith(("money_", "year_")):
                 boost = 1.5
             else:

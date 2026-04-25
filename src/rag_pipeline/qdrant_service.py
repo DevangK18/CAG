@@ -161,6 +161,10 @@ class QdrantService:
             ("parent_chunk_id", PayloadSchemaType.KEYWORD),
             ("content_type", PayloadSchemaType.KEYWORD),
             ("page_physical", PayloadSchemaType.INTEGER),
+            # Multi-tier indexes
+            ("government_body_type", PayloadSchemaType.KEYWORD),
+            ("state_name", PayloadSchemaType.KEYWORD),
+            ("audit_category", PayloadSchemaType.KEYWORD),
             # Semantic enrichment indexes
             ("finding_type", PayloadSchemaType.KEYWORD),
             ("severity", PayloadSchemaType.KEYWORD),
@@ -351,14 +355,15 @@ class QdrantService:
         """
         query_filter = self._build_filter(filters)
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.child_collection,
-            query_vector=("dense", dense_vector),
+            query=dense_vector,
+            using="dense",
             query_filter=query_filter,
             limit=limit,
         )
 
-        return self._convert_results(results)
+        return self._convert_results(results.points)
 
     def _build_filter(self, filters: Optional[Dict[str, Any]]) -> Optional[Filter]:
         """Build Qdrant filter from semantic filters."""

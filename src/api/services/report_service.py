@@ -21,6 +21,87 @@ _reports_cache: Dict[str, ReportDetail] = {}
 _initialized: bool = False
 
 
+def normalize_report_no(report_no: Optional[str]) -> Optional[str]:
+    """
+    Normalize report_no to clean 'X of YYYY' format.
+
+    Handles:
+    - Already clean: "16 of 2020" → "16 of 2020"
+    - Underscore num_year: "02_2024" → "2 of 2024"
+    - Underscore year_num: "2017_10" → "10 of 2017"
+    - "Unknown" or empty → None
+    - None → None
+
+    Returns:
+        Normalized report number string, or None if not available
+    """
+    if report_no is None:
+        return None
+
+    val = str(report_no).strip()
+
+    # Handle "Unknown" or empty
+    if not val or val.lower() == "unknown" or val == "N/A":
+        return None
+
+    # Already in clean format "X of YYYY"
+    if re.match(r"^\d+\s+of\s+\d{4}$", val, re.IGNORECASE):
+        return val
+
+    # Handle underscore formats
+    if "_" in val:
+        parts = val.split("_")
+        if len(parts) == 2:
+            first, second = parts
+            # year_num format: "2017_10"
+            if first.isdigit() and len(first) == 4:
+                return f"{int(second)} of {first}"
+            # num_year format: "02_2024"
+            elif second.isdigit() and len(second) == 4:
+                return f"{int(first)} of {second}"
+
+    # Handle slash formats: "2025/15" or "15/2025"
+    if "/" in val:
+        parts = val.split("/")
+        if len(parts) == 2:
+            first, second = parts
+            if first.isdigit() and len(first) == 4:
+                return f"{int(second)} of {first}"
+            elif second.isdigit() and len(second) == 4:
+                return f"{int(first)} of {second}"
+
+    # Return as-is if we can't parse it
+    return val
+
+
+def normalize_organization(value: Optional[str]) -> Optional[str]:
+    """
+    Normalize ministry/department values.
+
+    Returns None for placeholder values like "Unknown", "Unknown Ministry", "N/A".
+
+    Args:
+        value: Raw ministry or department string
+
+    Returns:
+        Cleaned string, or None if placeholder/empty
+    """
+    if value is None:
+        return None
+
+    val = str(value).strip()
+
+    # Handle placeholder values
+    if not val:
+        return None
+
+    lower = val.lower()
+    if lower in ('unknown', 'unknown ministry', 'n/a', '-', 'none'):
+        return None
+
+    return val
+
+
 def _extract_year(report_no: str) -> int:
     """Extract year from report number like 'Report 7 of 2023'."""
     match = re.search(r'20\d{2}', str(report_no))
@@ -141,13 +222,21 @@ def _load_reports():
                 processing_stats = data.get("processing_stats", {})
                 pages = processing_stats.get("pages_processed", 0)
             
+            # Normalize report_no to clean format
+            raw_report_no = metadata.get("report_no")
+            normalized_report_no = normalize_report_no(raw_report_no)
+
+            # Normalize ministry and department (strip "Unknown" placeholders)
+            normalized_ministry = normalize_organization(metadata.get("ministry"))
+            normalized_department = normalize_organization(metadata.get("department"))
+
             report = ReportDetail(
                 id=report_id,
                 title=metadata.get("report_title", "Untitled Report"),
-                report_no=metadata.get("report_no", "N/A"),
-                ministry=metadata.get("ministry", "Unknown Ministry"),
+                report_no=normalized_report_no or "N/A",
+                ministry=normalized_ministry or "Unknown Ministry",
                 sector=metadata.get("sector", metadata.get("department", "General")),
-                year=_extract_year(metadata.get("report_no", "")),
+                year=_extract_year(normalized_report_no or metadata.get("report_no", "")),
                 pages=pages,
                 filename=filename,
                 status=_determine_status(semantic),
@@ -156,7 +245,11 @@ def _load_reports():
                 recommendations=recommendations,
                 monetary_impact=monetary_impact,
                 findings_count=len(findings_raw),
-                report_type=metadata.get("report_type")
+                report_type=metadata.get("report_type"),
+                government_body_type=metadata.get("government_body_type", "union"),
+                state_name=metadata.get("state_name"),
+                department=normalized_department,
+                audit_category=metadata.get("audit_category", "compliance")
             )
             
             _reports_cache[report_id] = report
@@ -195,7 +288,11 @@ def get_all_reports() -> List[ReportSummary]:
             monetary_impact=r.monetary_impact,
             status=r.status,
             filename=r.filename,
-            report_type=r.report_type
+            report_type=r.report_type,
+            government_body_type=r.government_body_type,
+            state_name=r.state_name,
+            department=r.department,
+            audit_category=r.audit_category
         )
         for r in _reports_cache.values()
     ]
@@ -215,7 +312,9 @@ def get_reports_by_sector(sector: str) -> List[ReportSummary]:
             id=r.id, title=r.title, report_no=r.report_no,
             ministry=r.ministry, sector=r.sector, year=r.year,
             findings_count=r.findings_count, monetary_impact=r.monetary_impact,
-            status=r.status, filename=r.filename, report_type=r.report_type
+            status=r.status, filename=r.filename, report_type=r.report_type,
+            government_body_type=r.government_body_type, state_name=r.state_name,
+            department=r.department, audit_category=r.audit_category
         )
         for r in _reports_cache.values()
         if r.sector.lower() == sector.lower()
@@ -230,7 +329,9 @@ def get_reports_by_year(year: int) -> List[ReportSummary]:
             id=r.id, title=r.title, report_no=r.report_no,
             ministry=r.ministry, sector=r.sector, year=r.year,
             findings_count=r.findings_count, monetary_impact=r.monetary_impact,
-            status=r.status, filename=r.filename, report_type=r.report_type
+            status=r.status, filename=r.filename, report_type=r.report_type,
+            government_body_type=r.government_body_type, state_name=r.state_name,
+            department=r.department, audit_category=r.audit_category
         )
         for r in _reports_cache.values()
         if r.year == year
