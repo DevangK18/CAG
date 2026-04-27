@@ -194,6 +194,26 @@ class GroundednessConfig:
 
 
 @dataclass
+class AgenticConfig:
+    """Configuration for agentic retrieval (Phase 11)."""
+
+    enabled: bool = False  # OFF by default; exposed via /chat/agentic endpoint
+
+    # Planner (query decomposer) uses a small fast model
+    planner_model: str = "gpt-4o-mini"  # OpenAI only for now
+
+    # Loop bounds
+    max_sub_queries: int = 4
+    max_iterations_per_subquery: int = 3
+    max_total_iterations: int = 10
+    max_wall_ms: int = 20_000  # 20 seconds
+    max_total_tokens: int = 30_000  # Soft budget (not strictly enforced yet)
+
+    # Retrieval per sub-query
+    top_k_per_subquery: int = 8
+
+
+@dataclass
 class RAGConfig:
     """Complete RAG pipeline configuration."""
 
@@ -205,6 +225,7 @@ class RAGConfig:
         default_factory=QueryEnhancementConfig
     )
     groundedness: GroundednessConfig = field(default_factory=GroundednessConfig)
+    agentic: AgenticConfig = field(default_factory=AgenticConfig)
 
     # API Keys (loaded from environment)
     openai_api_key: Optional[str] = None

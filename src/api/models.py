@@ -92,6 +92,8 @@ class ChatResponse(BaseModel):
     citations: List[Citation]
     sources_used: int
     model_used: str
+    groundedness: Optional[Dict[str, Any]] = None
+    agentic_trace: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================
@@ -203,7 +205,9 @@ class TableItem(BaseModel):
     data_preview: Optional[List[List[str]]] = None  # First few rows (future)
     bbox: Optional[List[float]] = None  # Bounding box
     source_chunk_id: Optional[str] = None  # Reference to source chunk
-    structured_data: Optional[Dict[str, Any]] = None  # Structured table data for preview
+    structured_data: Optional[Dict[str, Any]] = (
+        None  # Structured table data for preview
+    )
     preview: Optional[Dict[str, Any]] = None  # Mini-preview for card display
 
 

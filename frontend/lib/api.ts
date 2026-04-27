@@ -679,7 +679,21 @@ export async function fetchSummaryMetadata(
 // ============================================================================
 
 export interface StreamEvent {
-  type: 'citation_map' | 'caveat' | 'token' | 'done' | 'error';
+  type:
+    | 'citation_map'
+    | 'caveat'
+    | 'token'
+    | 'done'
+    | 'error'
+    // Phase 13
+    | 'groundedness'
+    // Phase 11
+    | 'planning'
+    | 'sub_query'
+    | 'iteration'
+    | 'reformulation'
+    | 'synthesizing'
+    | 'agentic_trace';
   data: any;
 }
 
@@ -703,6 +717,61 @@ export async function* streamChat(params: {
   top_k?: number;
 }): AsyncGenerator<StreamEvent> {
   const response = await fetch(`${API_URL}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: params.query,
+      style: params.style || 'adaptive',
+      report_ids: params.report_ids,
+      top_k: params.top_k || 10,
+    }),
+  });
+
+  if (!response.ok) {
+    yield { type: 'error', data: 'Stream request failed' };
+    return;
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          yield data as StreamEvent;
+        } catch (e) {
+          console.error('Failed to parse SSE event:', line);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Phase 11: Stream from the agentic endpoint.
+ * Same parameters as streamChat; the backend decides whether to short-circuit
+ * to the regular path (simple queries) or run the multi-hop loop.
+ */
+export async function* streamChatAgentic(params: {
+  query: string;
+  style?: string;
+  report_ids?: string[];
+  top_k?: number;
+}): AsyncGenerator<StreamEvent> {
+  const response = await fetch(`${API_URL}/chat/agentic/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

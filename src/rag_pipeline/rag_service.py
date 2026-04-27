@@ -928,6 +928,44 @@ class RAGService:
                 logger.warning(f"Could not import QueryEnhancer: {e}")
                 self.config.query_enhancement.enabled = False
 
+        # Phase 13: Initialize Groundedness Service
+        self.groundedness_service = None
+        if self.config.groundedness.enabled:
+            try:
+                try:
+                    from .groundedness_service import GroundednessService
+                except ImportError:
+                    from groundedness_service import GroundednessService
+
+                self.groundedness_service = GroundednessService(
+                    config=self.config.groundedness,
+                    openai_client=self.openai,
+                    anthropic_client=self.anthropic,
+                    gemini_client=self.gemini,
+                )
+                logger.info("Groundedness verification enabled (Phase 13)")
+            except ImportError as e:
+                logger.warning(f"Could not import GroundednessService: {e}")
+                self.config.groundedness.enabled = False
+
+        # Phase 11: Initialize Agentic Service
+        self.agentic_service = None
+        if self.config.agentic.enabled:
+            try:
+                try:
+                    from .agentic_service import AgenticRAGService
+                except ImportError:
+                    from agentic_service import AgenticRAGService
+
+                self.agentic_service = AgenticRAGService(
+                    rag_service=self,
+                    config=self.config.agentic,
+                )
+                logger.info("Agentic RAG enabled (Phase 11)")
+            except ImportError as e:
+                logger.warning(f"Could not import AgenticRAGService: {e}")
+                self.config.agentic.enabled = False
+
         logger.info(
             f"RAG Service v3.2 initialized with {self.config.llm.provider.value}"
         )
@@ -982,25 +1020,6 @@ class RAGService:
                 tier_context=tier_context_for_enhancer,
             )
             question_type = enhancement.question_type
-
-        self.groundedness_service = None
-        if self.config.groundedness.enabled:
-            try:
-                try:
-                    from .groundedness_service import GroundednessService
-                except ImportError:
-                    from groundedness_service import GroundednessService
-
-                self.groundedness_service = GroundednessService(
-                    config=self.config.groundedness,
-                    openai_client=self.openai,
-                    anthropic_client=self.anthropic,
-                    gemini_client=self.gemini,
-                )
-                logger.info("Groundedness verification enabled (Phase 13)")
-            except ImportError as e:
-                logger.warning(f"Could not import GroundednessService: {e}")
-                self.config.groundedness.enabled = False
 
             # Apply recommended style if adaptive
             if style == ResponseStyle.ADAPTIVE and enhancement.recommended_style:
@@ -1095,6 +1114,21 @@ class RAGService:
             )
             answer = caveat + answer
 
+        # Phase 13: Groundedness verification (runs for ALL queries, not just insufficient)
+        groundedness_dict = None
+        if self.groundedness_service:
+            report = self.groundedness_service.verify(answer, retrieval_result)
+            groundedness_dict = report.to_dict()
+
+            # Optional: prepend caveat if verification failed AND block_on_failure is on
+            if not report.verified and self.config.groundedness.block_on_failure:
+                gcaveat = (
+                    f"⚠️ **Groundedness check**: Only {report.num_grounded} of "
+                    f"{report.num_claims} factual claims in this answer could be "
+                    f"verified against the retrieved sources. Treat with caution.\n\n"
+                )
+                answer = gcaveat + answer
+
         # Build citations
         citations = self.build_citations(retrieval_result)
 
@@ -1107,6 +1141,7 @@ class RAGService:
             reranker_used=retrieval_result.reranker_used,
             search_type=retrieval_result.search_type,
             model_used=self._get_model_name(),
+            groundedness=groundedness_dict,
         )
 
     # =========================================================================
@@ -1714,6 +1749,15 @@ class RAGService:
         else:
             answer = self._generate_openai(user_prompt, system_prompt)
 
+        # Phase 13: Groundedness verification for comparative path
+        groundedness_dict = None
+        if self.groundedness_service:
+            # Build a minimal RetrievalResult for verification
+            # We don't have one here — comparative path builds context manually.
+            # Skip groundedness for comparative for now; can be wired up later
+            # if needed. Set to None so the response field is consistent.
+            pass
+
         return RAGResponse(
             query=question,
             answer=answer,
@@ -1723,6 +1767,7 @@ class RAGService:
             reranker_used="cohere",
             search_type="hybrid",
             model_used=self._get_model_name(),
+            groundedness=groundedness_dict,
         )
 
 

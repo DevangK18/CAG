@@ -274,10 +274,12 @@ class RAGResponse:
     context_length: int
     reranker_used: str
     search_type: str
-    groundedness: Optional[Dict[str, Any]] = None  # GroundednessReport.to_dict()
 
     # LLM metadata
     model_used: str
+
+    groundedness: Optional[Dict[str, Any]] = None  # GroundednessReport.to_dict()
+    agentic_trace: Optional[Dict[str, Any]] = None
 
     def format_with_citations(self) -> str:
         """Format answer with citations at the bottom."""
@@ -316,4 +318,5 @@ class RAGResponse:
                 "model_used": self.model_used,
             },
             "groundedness": self.groundedness,
+            "agentic_trace": self.agentic_trace,
         }

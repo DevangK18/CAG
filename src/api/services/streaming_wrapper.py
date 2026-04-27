@@ -178,6 +178,35 @@ def _build_citation_map(citations: List[APICitation]) -> Dict[str, Dict[str, Any
     return citation_map
 
 
+async def _maybe_verify_groundedness(
+    rag,
+    answer: str,
+    retrieval_result,
+    loop,
+) -> Optional[Dict[str, Any]]:
+    """
+    Run groundedness verification if enabled. Returns dict for emitting,
+    or None if disabled/failed.
+
+    Phase 13.
+    """
+    groundedness_service = getattr(rag, "groundedness_service", None)
+    if groundedness_service is None:
+        return None
+    if not answer.strip():
+        return None
+
+    try:
+        report = await loop.run_in_executor(
+            _executor,
+            lambda: groundedness_service.verify(answer, retrieval_result),
+        )
+        return report.to_dict()
+    except Exception as e:
+        logger.warning(f"Groundedness check failed: {e}", exc_info=True)
+        return None
+
+
 def generate_sync(
     query: str,
     style: str = "adaptive",
@@ -221,6 +250,7 @@ def generate_sync(
         citations=citations,
         sources_used=response.sources_used,
         model_used=response.model_used,
+        groundedness=response.groundedness,
     )
 
 
@@ -262,6 +292,7 @@ async def generate_stream(
         if filters and "report_id" in filters:
             try:
                 from report_registry import get_registry
+
                 registry = get_registry()
                 report_id = filters["report_id"]
                 # Handle both single report_id and list of report_ids
@@ -269,7 +300,9 @@ async def generate_stream(
                     report_id = report_id[0]  # Use first report for context
                 report_info = registry.get_report(report_id)
                 if report_info:
-                    govt_type = getattr(report_info, "government_body_type", None) or "union"
+                    govt_type = (
+                        getattr(report_info, "government_body_type", None) or "union"
+                    )
                     if govt_type != "union":
                         tier_label = "State" if govt_type == "state" else "Local Body"
                         tier_context_for_enhancer = f"{tier_label} audit report"
@@ -277,7 +310,11 @@ async def generate_stream(
                         if state_name:
                             tier_context_for_enhancer += f" from {state_name}"
                         department = getattr(report_info, "department", None)
-                        if department and department.lower() not in ("unknown", "n/a", ""):
+                        if department and department.lower() not in (
+                            "unknown",
+                            "n/a",
+                            "",
+                        ):
                             tier_context_for_enhancer += f", department: {department}"
             except Exception as e:
                 logger.warning(f"Failed to lookup tier context: {e}")
@@ -287,7 +324,9 @@ async def generate_stream(
         if hasattr(rag, "query_enhancer") and rag.config.query_enhancement.enabled:
             enhancement = await loop.run_in_executor(
                 _executor,
-                lambda: rag.query_enhancer.enhance(query, style=style, tier_context=tier_context_for_enhancer)
+                lambda: rag.query_enhancer.enhance(
+                    query, style=style, tier_context=tier_context_for_enhancer
+                ),
             )
 
             # Apply recommended style
@@ -355,23 +394,268 @@ async def generate_stream(
         system_prompt = generation_inputs["system_prompt"]
         user_prompt = generation_inputs["user_prompt"]
 
-        # Step 4: Stream from LLM
+        # Step 4: Stream from LLM (accumulate for Phase 13 groundedness)
         provider = rag.config.llm.provider.value
+        accumulated_answer_parts: List[str] = []
 
         if provider == "claude":
-            async for token in _stream_anthropic(rag, user_prompt, system_prompt):
-                yield {"type": "token", "data": token}
+            stream_iter = _stream_anthropic(rag, user_prompt, system_prompt)
         elif provider == "gemini":
-            async for token in _stream_gemini(rag, user_prompt, system_prompt):
-                yield {"type": "token", "data": token}
+            stream_iter = _stream_gemini(rag, user_prompt, system_prompt)
         else:
-            async for token in _stream_openai(rag, user_prompt, system_prompt):
-                yield {"type": "token", "data": token}
+            stream_iter = _stream_openai(rag, user_prompt, system_prompt)
+
+        async for token in stream_iter:
+            accumulated_answer_parts.append(token)
+            yield {"type": "token", "data": token}
+
+        # Phase 13: Groundedness verification (runs after token stream completes)
+        full_answer = "".join(accumulated_answer_parts)
+        groundedness_dict = await _maybe_verify_groundedness(
+            rag,
+            full_answer,
+            retrieval_result,
+            loop,
+        )
+        if groundedness_dict is not None:
+            yield {"type": "groundedness", "data": groundedness_dict}
 
         yield {"type": "done", "data": None}
 
     except Exception as e:
         logger.error(f"Stream generation error: {e}", exc_info=True)
+        yield {"type": "error", "data": str(e)}
+
+
+def generate_agentic_sync(
+    query: str,
+    style: str = "adaptive",
+    report_ids: Optional[List[str]] = None,
+    top_k: int = 10,
+) -> ChatResponse:
+    """
+    Synchronous agentic generation. Delegates to AgenticRAGService.ask().
+    Phase 11.
+    """
+    rag = get_rag_service()
+    if not rag:
+        raise RuntimeError("RAG service not initialized")
+    if not rag.agentic_service:
+        raise RuntimeError("Agentic service not enabled")
+
+    style_enum = RAGResponseStyle(style)
+
+    # Build filters (match generate_sync pattern)
+    filters = {}
+    if report_ids:
+        if len(report_ids) == 1:
+            filters["report_id"] = report_ids[0]
+        else:
+            filters["report_id"] = report_ids
+
+    response = rag.agentic_service.ask(
+        question=query,
+        filters=filters if filters else None,
+        top_k=top_k,
+        style=style_enum,
+    )
+
+    citations = _convert_citations(response.citations)
+
+    return ChatResponse(
+        answer=response.answer,
+        citations=citations,
+        sources_used=response.sources_used,
+        model_used=response.model_used,
+        groundedness=response.groundedness,
+        agentic_trace=response.agentic_trace,
+    )
+
+
+async def generate_agentic_stream(
+    query: str,
+    style: str = "adaptive",
+    report_ids: Optional[List[str]] = None,
+    top_k: int = 10,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Agentic streaming. Emits same event types as generate_stream() plus:
+    - "planning"       — decomposition result
+    - "sub_query"      — each sub-query starting
+    - "iteration"      — each retrieval iteration
+    - "reformulation"  — when a query is rewritten
+    - "synthesizing"   — final answer generation starting
+
+    Phase 11.
+    """
+    rag = get_rag_service()
+    if not rag:
+        yield {"type": "error", "data": "RAG service not initialized"}
+        return
+    if not rag.agentic_service:
+        yield {"type": "error", "data": "Agentic service not enabled"}
+        return
+
+    try:
+        loop = asyncio.get_event_loop()
+        style_enum = RAGResponseStyle(style)
+
+        # Build filters (match generate_stream pattern)
+        filters = {}
+        if report_ids:
+            if len(report_ids) == 1:
+                filters["report_id"] = report_ids[0]
+            else:
+                filters["report_id"] = report_ids
+        filters_or_none = filters if filters else None
+
+        # Step 1: Plan (in thread pool — single LLM call)
+        plan = await loop.run_in_executor(
+            _executor,
+            lambda: rag.agentic_service._decompose(query),
+        )
+        yield {
+            "type": "planning",
+            "data": {
+                "complexity": plan["complexity"],
+                "sub_queries": plan.get("sub_queries") or [],
+                "reason": plan.get("reason", ""),
+            },
+        }
+
+        # Simple path — delegate to regular streaming
+        if plan["complexity"] == "simple":
+            async for event in generate_stream(query, style, report_ids, top_k):
+                yield event
+            return
+
+        # Build a trace object — agentic_service expects a real AgenticTrace
+        from agentic_service import AgenticTrace
+
+        trace = AgenticTrace(
+            original_query=query,
+            complexity=plan["complexity"],
+            decomposition_reason=plan.get("reason", ""),
+            sub_queries=plan.get("sub_queries") or [],
+        )
+
+        # Step 2: Run loop per sub-query (each runs in thread pool)
+        sub_queries = trace.sub_queries[: rag.agentic_service.config.max_sub_queries]
+        all_retrievals = []
+
+        for i, sq in enumerate(sub_queries):
+            yield {
+                "type": "sub_query",
+                "data": {"index": i, "query": sq, "total": len(sub_queries)},
+            }
+
+            sub_result = await loop.run_in_executor(
+                _executor,
+                lambda sq=sq: rag.agentic_service._run_subquery_loop(
+                    sq, filters_or_none, trace
+                ),
+            )
+
+            for refo in sub_result.reformulations:
+                yield {
+                    "type": "reformulation",
+                    "data": {"sub_index": i, "new_query": refo},
+                }
+
+            yield {
+                "type": "iteration",
+                "data": {
+                    "sub_index": i,
+                    "iterations": sub_result.iterations,
+                    "sufficient": sub_result.sufficient,
+                    "num_chunks": sub_result.final_retrieval.total_after_rerank
+                    if sub_result.final_retrieval
+                    else 0,
+                },
+            }
+
+            if sub_result.final_retrieval:
+                all_retrievals.append(sub_result.final_retrieval)
+
+        # Step 3: If nothing retrieved, bail
+        if not all_retrievals:
+            yield {
+                "type": "token",
+                "data": "I couldn't find sufficient information across the requested aspects. "
+                "Try simpler questions or check that the topics are covered in the indexed reports.",
+            }
+            yield {"type": "done", "data": None}
+            return
+
+        # Step 4: Merge retrievals (in thread pool)
+        merged = await loop.run_in_executor(
+            _executor,
+            lambda: rag.agentic_service._merge_retrievals(all_retrievals),
+        )
+
+        # Step 5: Emit citation_map (match existing contract)
+        rag_citations = rag.build_citations(merged)
+        api_citations = _convert_citations(rag_citations)
+        citation_map = _build_citation_map(api_citations)
+        yield {"type": "citation_map", "data": citation_map}
+
+        yield {"type": "synthesizing", "data": None}
+
+        # Step 6: Build the synthesis prompt by calling existing rag_service helpers
+        # Mirrors what AgenticRAGService._synthesize_answer does, but for streaming.
+        generation_inputs = await loop.run_in_executor(
+            _executor,
+            lambda: rag.prepare_generation_inputs(
+                question=query,
+                retrieval_result=merged,
+                style=style_enum,
+            ),
+        )
+
+        sub_q_summary = "\n".join([f"- {sq}" for sq in sub_queries])
+        # Import the synthesis addendum prompt
+        from agentic_service import SYNTHESIS_SYSTEM_PROMPT_ADDITION
+
+        enhanced_user_prompt = (
+            generation_inputs["user_prompt"]
+            + f"\n\n---\n\nThis question was decomposed into these sub-queries:\n{sub_q_summary}\n\n"
+            + SYNTHESIS_SYSTEM_PROMPT_ADDITION
+        )
+        system_prompt = generation_inputs["system_prompt"]
+
+        # Step 7: Stream tokens (REUSE existing helpers from this module)
+        provider = rag.config.llm.provider.value
+        accumulated_answer_parts: List[str] = []
+
+        if provider == "claude":
+            stream_iter = _stream_anthropic(rag, enhanced_user_prompt, system_prompt)
+        elif provider == "gemini":
+            stream_iter = _stream_gemini(rag, enhanced_user_prompt, system_prompt)
+        else:
+            stream_iter = _stream_openai(rag, enhanced_user_prompt, system_prompt)
+
+        async for token in stream_iter:
+            accumulated_answer_parts.append(token)
+            yield {"type": "token", "data": token}
+
+        # Step 8: Phase 13 groundedness verification (reuse helper)
+        full_answer = "".join(accumulated_answer_parts)
+        groundedness_dict = await _maybe_verify_groundedness(
+            rag,
+            full_answer,
+            merged,
+            loop,
+        )
+        if groundedness_dict is not None:
+            yield {"type": "groundedness", "data": groundedness_dict}
+
+        # Step 9: Emit the agentic trace as a final metadata event
+        yield {"type": "agentic_trace", "data": trace.to_dict()}
+
+        yield {"type": "done", "data": None}
+
+    except Exception as e:
+        logger.error(f"Agentic stream error: {e}", exc_info=True)
         yield {"type": "error", "data": str(e)}
 
 

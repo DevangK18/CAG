@@ -6,12 +6,14 @@
  */
 
 import { useCallback } from 'react';
-import { streamChat } from '../lib/api';
+import { streamChat, streamChatAgentic } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { trackEvent } from '../lib/posthog';
 
+export type ChatMode = 'regular' | 'agentic';
+
 export interface UseChatStreamResult {
-  sendMessage: (query: string, reportIds?: string[]) => Promise<void>;
+  sendMessage: (query: string, reportIds?: string[], mode?: ChatMode) => Promise<void>;
   isStreaming: boolean;
   clearChat: () => void;
 }
@@ -30,7 +32,11 @@ export function useChatStream(): UseChatStreamResult {
     setShowLowRelevanceCaveat,
   } = useAppStore();
 
-  const sendMessage = useCallback(async (query: string, reportIds?: string[]) => {
+  const sendMessage = useCallback(async (
+    query: string,
+    reportIds?: string[],
+    mode: ChatMode = 'regular',
+  ) => {
     if (isStreaming) return;
 
     // Add user message
@@ -51,7 +57,8 @@ export function useChatStream(): UseChatStreamResult {
     setIsStreaming(true);
 
     try {
-      const stream = streamChat({
+      const streamFn = mode === 'agentic' ? streamChatAgentic : streamChat;
+      const stream = streamFn({
         query,
         style: responseStyle,
         report_ids: reportIds,
@@ -94,6 +101,21 @@ export function useChatStream(): UseChatStreamResult {
             setLastMessageWaiting(false);
             appendToLastMessage(`\n\n_Error: ${event.data}_`);
             setLastMessageStreaming(false);
+            break;
+
+          // Phase 11: agentic events. Log for now; UI can consume later.
+          case 'planning':
+          case 'sub_query':
+          case 'iteration':
+          case 'reformulation':
+          case 'synthesizing':
+          case 'agentic_trace':
+            console.log(`[agentic:${event.type}]`, event.data);
+            break;
+
+          // Phase 13: groundedness event. Log for now; UI can consume later.
+          case 'groundedness':
+            console.log('[groundedness]', event.data);
             break;
         }
       }
