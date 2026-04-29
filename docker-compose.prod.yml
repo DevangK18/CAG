@@ -22,6 +22,8 @@ services:
       - ./data:/app/data:ro
     expose:
       - "8000"
+    ports:
+      - "8000:8000"  # Publish for local testing
     networks:
       - cag-network
 

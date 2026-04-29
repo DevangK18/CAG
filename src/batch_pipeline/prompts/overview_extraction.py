@@ -104,7 +104,7 @@ Year: {meta.get("report_year", "N/A")}
 - Section classifications ✓
 - Statistics (totals, breakdowns) ✓
 
-## YOUR TASK: Extract ONLY these 4 fields
+## YOUR TASK: Extract these 5 fields
 
 ### 1. audit_scope
 From the Scope of Audit / Introduction sections, extract:
@@ -181,6 +181,35 @@ Common CAG/Government terms to look for:
 - Local audit terms: DLFA (Director Local Fund Audit), SFC (State Finance Commission), CFC (Central Finance Commission), PRIASoft, PFMS
 - Any abbreviation that appears multiple times in the report
 
+### 5. normalized_entities
+
+Extract every distinct organizational, scheme, geographic, and governance entity mentioned in this report. For each entity:
+
+```json
+{{
+  "canonical_form_in_report": "Full official name as it appears most authoritatively in this report",
+  "entity_type": "ministry | department | psu | autonomous_body | scheme | state_government | local_body | regulatory_authority | organization | place",
+  "aliases_seen": ["all variant spellings, abbreviations, and partial forms seen in this report"],
+  "first_seen_page": physical_page_number,
+  "tier_context": "union | state | local_body — which government tier this entity belongs to"
+}}
+```
+
+Rules for normalized_entities:
+- Extract 20-50 entities per report (this is a high-yield list, not exhaustive)
+- ONE entry per logical entity. If "Ministry of Railways", "MoR", and "Min. of Railways" all appear, produce ONE entry with all three in aliases_seen
+- Use the LONGEST/MOST OFFICIAL form as canonical_form_in_report (e.g., "National Highways Authority of India" not "NHAI")
+- Always include the acronym in aliases_seen if both forms appear
+- For state government entities, use "Government of [State]" as canonical (e.g., "Government of Mizoram")
+- For local bodies, be specific: "Aizawl Municipal Corporation" not "AMC" as canonical, but include "AMC" in aliases
+- entity_type uses the most specific applicable category
+- tier_context: based on the report tier and the entity's level
+  - Central ministries/PSUs/national schemes → "union"
+  - State departments/State PSEs/state schemes → "state"
+  - PRIs/ULBs/Village Councils/local schemes → "local_body"
+- DO NOT include: generic terms ("the Ministry", "the State"), single-letter abbreviations, or vague entities ("various departments")
+- DO include: specific named ministries, PSUs, schemes, autonomous bodies, named programmes, named regulators, geographic units (states, districts, specific project locations)
+
 ## INPUT DATA
 
 ### Table of Contents:
@@ -202,7 +231,8 @@ Return ONLY a valid JSON object with these exact keys:
   "audit_scope": {{ ... }},
   "audit_objectives": [ ... ],
   "topics_covered": [ ... ],
-  "glossary_terms": [ ... ]
+  "glossary_terms": [ ... ],
+  "normalized_entities": [ ... ]
 }}
 ```
 

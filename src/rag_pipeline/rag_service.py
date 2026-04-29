@@ -48,10 +48,14 @@ try:
     from ..core.config import RAGConfig, LLMProvider
     from .models import RAGResponse, Citation, RetrievalResult, ParentContext
     from .retrieval_service import RetrievalService
+    from .auto_filter import AutoFilterExtractor
+    from .retrieval_utils import merge_filters, has_explicit_report_filter
 except ImportError:
     from src.core.config import RAGConfig, LLMProvider
     from models import RAGResponse, Citation, RetrievalResult, ParentContext
     from retrieval_service import RetrievalService
+    from auto_filter import AutoFilterExtractor
+    from retrieval_utils import merge_filters, has_explicit_report_filter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -872,10 +876,14 @@ class RAGService:
     - Citation placement at END of sentences
     - Mandatory year in time series citations
     - Explicit handling of missing year data
+
+    Bridge C additions:
+    - Query observability logging via QueryLogger
     """
 
-    def __init__(self, config: RAGConfig = None):
+    def __init__(self, config: RAGConfig = None, query_logger=None):
         self.config = config or RAGConfig()
+        self.query_logger = query_logger
 
         # Validate
         errors = self.config.validate()
@@ -966,6 +974,12 @@ class RAGService:
                 logger.warning(f"Could not import AgenticRAGService: {e}")
                 self.config.agentic.enabled = False
 
+        # Initialize Auto-Filter Extractor
+        self.auto_filter_extractor = None
+        if self.config.auto_filter.enabled:
+            self.auto_filter_extractor = AutoFilterExtractor(self.config.auto_filter)
+            logger.info("Auto-Filter extraction enabled")
+
         logger.info(
             f"RAG Service v3.2 initialized with {self.config.llm.provider.value}"
         )
@@ -976,6 +990,8 @@ class RAGService:
         filters: Optional[Dict[str, Any]] = None,
         top_k: int = 10,
         style: Optional[ResponseStyle] = None,
+        client_session_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> RAGResponse:
         """
         Ask a question and get an answer based on CAG reports.
@@ -984,6 +1000,55 @@ class RAGService:
         if style is None:
             style = ResponseStyle.ADAPTIVE
 
+        # Determine interaction mode for logging
+        interaction_mode = "directory" if filters and "report_id" in filters else "home"
+
+        # Extract report_ids for logging
+        report_ids_filter = None
+        if filters and "report_id" in filters:
+            rid = filters["report_id"]
+            report_ids_filter = rid if isinstance(rid, list) else [rid]
+
+        # Start query logging context (if logger available)
+        log_ctx = None
+        if self.query_logger:
+            log_ctx = self.query_logger.start_query(
+                query_text=question,
+                interaction_mode=interaction_mode,
+                report_ids_filter=report_ids_filter,
+                explicit_filters=filters,
+                style=style.value if style else None,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
+
+        try:
+            return self._ask_impl(
+                question=question,
+                filters=filters,
+                top_k=top_k,
+                style=style,
+                log_ctx=log_ctx,
+            )
+        except Exception as e:
+            if log_ctx:
+                log_ctx.record_error(str(e))
+            raise
+        finally:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
+
+    def _ask_impl(
+        self,
+        question: str,
+        filters: Optional[Dict[str, Any]],
+        top_k: int,
+        style: ResponseStyle,
+        log_ctx=None,
+    ) -> RAGResponse:
+        """Internal implementation of ask() with logging support."""
         # ===== Tier context lookup for query enhancement =====
         tier_context_for_enhancer = None
         if filters and "report_id" in filters:
@@ -1051,6 +1116,24 @@ class RAGService:
                     style = ResponseStyle.EXPLANATORY
                     logger.info("Auto-selected EXPLANATORY style")
 
+        # Log query enhancement
+        if log_ctx:
+            log_ctx.record_query_enhancement(enhancement)
+            log_ctx.end_phase("enhancement")
+            log_ctx.start_phase("retrieval")
+
+        # ===== Auto-Filter Extraction =====
+        # Only apply when caller didn't specify report_id
+        auto_filters = None
+        if self.auto_filter_extractor and not has_explicit_report_filter(filters):
+            auto_filters = self.auto_filter_extractor.extract(question, enhancement)
+            filters = merge_filters(filters, auto_filters)
+
+        # Log filters
+        if log_ctx:
+            log_ctx.record_auto_filters(auto_filters)
+            log_ctx.record_merged_filters(filters)
+
         # ===== Retrieval (now with multi-query + auto-filters) =====
         retrieval_result = self.retrieval.retrieve(
             question,
@@ -1058,6 +1141,20 @@ class RAGService:
             filters=filters,
             enhancement=enhancement,  # NEW parameter
         )
+
+        # Log retrieval results
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                self.config.observability.dev_debug
+                if hasattr(self.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                retrieval_result,
+                reranker_used=retrieval_result.reranker_used,
+                include_full_content=include_full,
+            )
 
         if retrieval_result.total_after_rerank == 0:
             return RAGResponse(
@@ -1079,6 +1176,11 @@ class RAGService:
 
         # ===== NEW: Context Sufficiency Check =====
         context_sufficient = self._check_context_sufficiency(retrieval_result)
+
+        # Log context sufficiency
+        if log_ctx:
+            log_ctx.record_context_sufficient(context_sufficient)
+            log_ctx.start_phase("generation")
 
         # Build context
         context = retrieval_result.to_context_string(
@@ -1103,8 +1205,27 @@ class RAGService:
         if tier_context:
             context = tier_context + "\n\n" + context
 
+        # Get prepared prompts for logging (use style-specific prompts)
+        system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS[ResponseStyle.ADAPTIVE])
+        query_template = QUERY_TEMPLATES.get(style, QUERY_TEMPLATES[ResponseStyle.ADAPTIVE])
+        user_prompt = query_template.format(context=context, question=question)
+
         # Generate
         answer = self._generate_answer(question, context, style, question_type)
+
+        # Log generation
+        if log_ctx:
+            log_ctx.end_phase("generation")
+            log_ctx.record_generation(
+                answer=answer,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=answer,  # Same as answer for non-streaming
+                provider=self.config.llm.provider.value,
+                model=self._get_model_name(),
+                prompt_tokens=None,  # Would need tiktoken to estimate
+                completion_tokens=None,
+            )
 
         # Prepend caveat if context insufficient
         if not context_sufficient:
@@ -1117,8 +1238,13 @@ class RAGService:
         # Phase 13: Groundedness verification (runs for ALL queries, not just insufficient)
         groundedness_dict = None
         if self.groundedness_service:
+            if log_ctx:
+                log_ctx.start_phase("groundedness")
             report = self.groundedness_service.verify(answer, retrieval_result)
             groundedness_dict = report.to_dict()
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
 
             # Optional: prepend caveat if verification failed AND block_on_failure is on
             if not report.verified and self.config.groundedness.block_on_failure:
@@ -1435,6 +1561,108 @@ class RAGService:
         return context
 
     # =========================================================================
+    # Smart Report Selection for Comparative Queries
+    # =========================================================================
+
+    def _smart_select_reports(
+        self,
+        report_ids: List[str],
+        question: str,
+        matched_entities: Optional[List[Dict[str, Any]]],
+        cap: int,
+    ) -> List[str]:
+        """
+        Intelligently select top N reports when the set exceeds the cap.
+
+        Selection strategies (in priority order):
+        1. If matched_entities: rank by entity mention count in each report
+        2. Else if years in question: rank by proximity to mentioned years
+        3. Else: rank by report_year descending (most recent first)
+
+        Args:
+            report_ids: Full list of candidate report IDs
+            question: User's question (used for year extraction)
+            matched_entities: Entities matched from entity graph (may be None)
+            cap: Maximum number of reports to return
+
+        Returns:
+            List of top N report IDs
+        """
+        registry = get_registry()
+
+        # Strategy 1: Rank by entity mention count
+        if matched_entities:
+            try:
+                try:
+                    from src.entity_graph.entity_service import get_entity_service
+                except ImportError:
+                    from entity_graph.entity_service import get_entity_service
+
+                entity_service = get_entity_service()
+                if entity_service:
+                    # Score each report by sum of mention counts for matched entities
+                    report_scores: Dict[str, int] = {}
+                    for report_id in report_ids:
+                        score = 0
+                        for ent in matched_entities:
+                            mentions = entity_service.get_mentions(
+                                entity_id=ent["id"],
+                                report_id=report_id,
+                            )
+                            score += len(mentions) if mentions else 0
+                        report_scores[report_id] = score
+
+                    # Sort by score descending, take top N
+                    sorted_reports = sorted(
+                        report_ids,
+                        key=lambda r: report_scores.get(r, 0),
+                        reverse=True,
+                    )
+                    logger.info(
+                        f"Smart-select by entity mentions: top scores = "
+                        f"{[(r, report_scores.get(r, 0)) for r in sorted_reports[:5]]}"
+                    )
+                    return sorted_reports[:cap]
+            except Exception as e:
+                logger.warning(f"Entity-based smart select failed: {e}")
+                # Fall through to next strategy
+
+        # Strategy 2: Rank by year proximity
+        import re
+        year_pattern = re.compile(r'\b(20\d{2})\b')
+        year_matches = year_pattern.findall(question)
+
+        if year_matches:
+            target_years = [int(y) for y in year_matches]
+            avg_target_year = sum(target_years) / len(target_years)
+
+            def year_proximity(report_id: str) -> float:
+                """Lower is better (closer to target year)."""
+                info = registry.get_report(report_id)
+                if info and info.report_year:
+                    return abs(info.report_year - avg_target_year)
+                return float('inf')  # Unknown year goes last
+
+            sorted_reports = sorted(report_ids, key=year_proximity)
+            logger.info(
+                f"Smart-select by year proximity to {target_years}: "
+                f"selected {sorted_reports[:cap]}"
+            )
+            return sorted_reports[:cap]
+
+        # Strategy 3: Most recent first
+        def report_year_desc(report_id: str) -> int:
+            """Higher year is better (more recent)."""
+            info = registry.get_report(report_id)
+            if info and info.report_year:
+                return -info.report_year  # Negative for descending sort
+            return 0  # Unknown year goes last
+
+        sorted_reports = sorted(report_ids, key=report_year_desc)
+        logger.info(f"Smart-select by recency: selected {sorted_reports[:cap]}")
+        return sorted_reports[:cap]
+
+    # =========================================================================
     # Question Type Detection
     # =========================================================================
 
@@ -1657,65 +1885,153 @@ class RAGService:
         question: str,
         report_ids: List[str],
         top_k_per_report: int = 5,
+        client_session_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> RAGResponse:
         """
-        Compare findings across multiple reports.
+        Cross-report comparative query.
 
-        v3.2: Enhanced year context injection and explicit year labeling.
+        Phase 12 changes:
+        - Optionally narrows report_ids using entity graph (if entity_graph.enabled
+          and enable_comparative_filtering=True and query mentions a known entity)
+        - Builds per-report RetrievalResult objects, then merges via
+          retrieval_utils.merge_retrieval_results
+        - Runs groundedness verification on the merged result
         """
-        registry = get_registry()
-        all_contexts = []
-        all_citations = []
-        total_chunks = 0
-        citation_num = 1
-        years_covered = []
-
-        for report_id in report_ids:
-            report_info = registry.get_report(report_id)
-            year_label = report_info.audit_year if report_info else report_id
-
-            if year_label:
-                years_covered.append(year_label)
-
-            result = self.retrieval.retrieve(
-                question,
-                top_k=top_k_per_report,
-                filters={"report_id": report_id},
+        # Start query logging context
+        log_ctx = None
+        if self.query_logger:
+            log_ctx = self.query_logger.start_query(
+                query_text=question,
+                interaction_mode="comparative",
+                report_ids_filter=report_ids,
+                explicit_filters={"report_id": report_ids},
+                style="comparative",
+                client_session_id=client_session_id,
+                user_agent=user_agent,
             )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("retrieval")
 
-            if result.total_after_rerank > 0:
-                # v3.2 POLISHED: Stronger year context header
-                context = f"\n{'=' * 60}\n"
-                context += f"📅 YEAR: {year_label}\n"
-                context += f"📄 Report: {report_info.report_title if report_info else report_id}\n"
-                context += f"{'=' * 60}\n\n"
-                context += f"⚠️ All findings below are from {year_label}. Cite as: [{year_label} - Section X, p.XX]\n\n"
-                context += result.to_context_string()
-                all_contexts.append(context)
-                total_chunks += result.total_after_rerank
+        try:
+            return self._ask_comparative_impl(
+                question=question,
+                report_ids=report_ids,
+                top_k_per_report=top_k_per_report,
+                log_ctx=log_ctx,
+            )
+        except Exception as e:
+            if log_ctx:
+                log_ctx.record_error(str(e))
+            raise
+        finally:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
 
-                for parent in result.parents:
-                    for child in parent.children:
-                        all_citations.append(
-                            Citation(
-                                id=citation_num,
-                                report_id=child.report_id,
-                                section=parent.toc_entry,
-                                page=child.page_physical + 1,
-                                score=round(child.score, 3),
-                                finding_type=child.finding_type,
-                                severity=child.severity,
-                                amount_crore=child.total_amount_crore,
-                                report_title=report_info.report_title
-                                if report_info
-                                else "",
-                                filename=report_info.filename if report_info else "",
-                                audit_year=year_label,
-                            )
+    def _ask_comparative_impl(
+        self,
+        question: str,
+        report_ids: List[str],
+        top_k_per_report: int,
+        log_ctx=None,
+    ) -> RAGResponse:
+        """Internal implementation of ask_comparative() with logging support."""
+        try:
+            from .retrieval_utils import merge_retrieval_results
+        except ImportError:
+            from retrieval_utils import merge_retrieval_results
+
+        logger.info(f"Comparative query across {len(report_ids)} reports: '{question}'")
+
+        # ---- Auto-Filter Extraction for comparative queries ----
+        # Extract any auto-filters (year, tier, category) from the question
+        # These will be merged into per-report filters below
+        comparative_auto_filters: Dict[str, Any] = {}
+        if self.auto_filter_extractor:
+            comparative_auto_filters = self.auto_filter_extractor.extract(question, None)
+            if comparative_auto_filters:
+                logger.info(f"Comparative auto-filters: {comparative_auto_filters}")
+
+        # ---- Phase 12: optionally narrow report set via entity graph ----
+        narrowed_report_ids = list(report_ids)
+        entity_filter_applied = False
+        matched_entities: Optional[List[Dict[str, Any]]] = None
+
+        if (
+            hasattr(self.config, 'entity_graph')
+            and self.config.entity_graph.enabled
+            and self.config.entity_graph.enable_comparative_filtering
+        ):
+            try:
+                from src.entity_graph.entity_service import get_entity_service
+            except ImportError:
+                from entity_graph.entity_service import get_entity_service
+
+            entity_service = get_entity_service()
+            if entity_service:
+                matched_entities = entity_service.extract_entities_from_query(question)
+                if matched_entities:
+                    # Union of reports that mention ANY of the matched entities,
+                    # intersected with original report_ids
+                    candidate_reports: set = set()
+                    for ent in matched_entities:
+                        candidate_reports.update(
+                            entity_service.get_reports_for_entity(ent["id"])
                         )
-                        citation_num += 1
+                    intersected = [r for r in report_ids if r in candidate_reports]
+                    if intersected:
+                        narrowed_report_ids = intersected
+                        entity_filter_applied = True
+                        logger.info(
+                            f"Entity-graph narrowing: {len(report_ids)} → "
+                            f"{len(intersected)} reports (matched: "
+                            f"{[e['canonical_name'] for e in matched_entities]})"
+                        )
+                    else:
+                        logger.info(
+                            f"Entity match found ({[e['canonical_name'] for e in matched_entities]}) "
+                            f"but no reports in series mention them; "
+                            f"falling back to original report_ids"
+                        )
 
-        if not all_contexts:
+        # ---- Smart cap: limit reports when set is too large ----
+        cap = self.config.entity_graph.comparative_max_reports
+        if len(narrowed_report_ids) > cap:
+            original_count = len(narrowed_report_ids)
+            narrowed_report_ids = self._smart_select_reports(
+                narrowed_report_ids, question, matched_entities, cap
+            )
+            logger.info(f"Capped narrowed reports {original_count} → {cap}")
+
+        # ---- Per-report retrieval ----
+        per_report_retrievals: List[RetrievalResult] = []
+        years_covered: set = set()
+
+        for report_id in narrowed_report_ids:
+            try:
+                # Merge report_id with any auto-detected filters (year, tier, category)
+                report_filter = merge_filters(
+                    {"report_id": report_id},
+                    comparative_auto_filters,
+                )
+                result = self.retrieval.retrieve(
+                    question,
+                    top_k=top_k_per_report,
+                    filters=report_filter,
+                    enhancement=None,  # comparative doesn't need expansion
+                )
+                if result.total_after_rerank > 0:
+                    per_report_retrievals.append(result)
+                    # Track years for prompt context
+                    for parent in result.parents:
+                        for child in parent.children:
+                            if child.report_year:
+                                years_covered.add(str(child.report_year))
+            except Exception as e:
+                logger.warning(f"Comparative retrieval failed for {report_id}: {e}")
+                continue
+
+        if not per_report_retrievals:
             return RAGResponse(
                 query=question,
                 answer="No relevant information found in the specified reports.",
@@ -1723,24 +2039,52 @@ class RAGService:
                 sources_used=0,
                 context_length=0,
                 reranker_used="none",
-                search_type="hybrid",
+                search_type="comparative_empty",
                 model_used=self._get_model_name(),
+                groundedness=None,
+                agentic_trace=None,
             )
 
-        combined_context = "\n\n".join(all_contexts)
+        # ---- Merge into single RetrievalResult ----
+        merged = merge_retrieval_results(per_report_retrievals)
+
+        # Log retrieval results
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                self.config.observability.dev_debug
+                if hasattr(self.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                merged,
+                reranker_used=merged.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.record_auto_filters(comparative_auto_filters)
+            log_ctx.start_phase("generation")
+
+        # ---- Build context string ----
+        context = merged.to_context_string(
+            include_neighbors=False,  # Cross-report comparison: skip neighbors for clarity
+            include_semantic_tags=True,
+        )
+
         years_str = (
             ", ".join(sorted(years_covered)) if years_covered else "multiple years"
         )
 
+        # ---- Generate ----
         system_prompt = TIME_SERIES_SYSTEM_PROMPT
         user_prompt = TIME_SERIES_QUERY_TEMPLATE.format(
-            context=combined_context,
+            context=context,
             question=question,
             years=years_str,
         )
-
-        # v3.2: Add explicit reminder about years at end of prompt
-        user_prompt += f"\n\n📌 REMINDER: You have data from these years: {years_str}. Include year in every citation."
+        user_prompt += (
+            f"\n\n📌 REMINDER: You have data from these years: {years_str}. "
+            f"Include year in every citation."
+        )
 
         if self.config.llm.provider == LLMProvider.CLAUDE:
             answer = self._generate_claude(user_prompt, system_prompt)
@@ -1749,25 +2093,64 @@ class RAGService:
         else:
             answer = self._generate_openai(user_prompt, system_prompt)
 
-        # Phase 13: Groundedness verification for comparative path
+        # Log generation
+        if log_ctx:
+            log_ctx.end_phase("generation")
+            log_ctx.record_generation(
+                answer=answer,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=answer,
+                provider=self.config.llm.provider.value,
+                model=self._get_model_name(),
+            )
+
+        # ---- Phase 13: groundedness verification on merged result ----
         groundedness_dict = None
         if self.groundedness_service:
-            # Build a minimal RetrievalResult for verification
-            # We don't have one here — comparative path builds context manually.
-            # Skip groundedness for comparative for now; can be wired up later
-            # if needed. Set to None so the response field is consistent.
-            pass
+            if log_ctx:
+                log_ctx.start_phase("groundedness")
+            try:
+                report = self.groundedness_service.verify(answer, merged)
+                groundedness_dict = report.to_dict()
+                if log_ctx:
+                    log_ctx.end_phase("groundedness")
+                    log_ctx.record_groundedness(groundedness_dict)
+                if (
+                    not report.verified
+                    and self.config.groundedness.block_on_failure
+                ):
+                    gcaveat = (
+                        f"⚠️ **Groundedness check**: Only {report.num_grounded} of "
+                        f"{report.num_claims} factual claims could be verified "
+                        f"against the retrieved sources. Treat with caution.\n\n"
+                    )
+                    answer = gcaveat + answer
+            except Exception as e:
+                logger.warning(f"Comparative groundedness failed: {e}")
+                if log_ctx:
+                    log_ctx.end_phase("groundedness")
+
+        # ---- Build citations from merged result ----
+        citations = self.build_citations(merged)
 
         return RAGResponse(
             query=question,
             answer=answer,
-            citations=all_citations,
-            sources_used=total_chunks,
-            context_length=len(combined_context),
-            reranker_used="cohere",
-            search_type="hybrid",
+            citations=citations,
+            sources_used=merged.total_after_rerank,
+            context_length=len(context),
+            reranker_used=merged.reranker_used,
+            search_type="comparative",
             model_used=self._get_model_name(),
             groundedness=groundedness_dict,
+            agentic_trace=(
+                {"entity_filter_applied": entity_filter_applied,
+                 "narrowed_from": len(report_ids),
+                 "narrowed_to": len(narrowed_report_ids)}
+                if entity_filter_applied
+                else None
+            ),
         )
 
 

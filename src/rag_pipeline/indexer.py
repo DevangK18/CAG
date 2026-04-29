@@ -167,6 +167,23 @@ class Indexer:
         # Index parents
         parents_indexed = self.qdrant_service.upsert_parents(parent_chunks)
 
+        # Phase 12: Optionally index entity mentions
+        if (
+            self.config.entity_graph.enabled
+            and self.config.entity_graph.auto_index_on_ingest
+        ):
+            try:
+                try:
+                    from src.entity_graph.mention_indexer import index_report
+                except ImportError:
+                    from entity_graph.mention_indexer import index_report
+
+                mentions = index_report(json_path)
+                logger.info(f"  Entity mentions indexed: {mentions}")
+            except Exception as e:
+                # Non-fatal: chunk indexing succeeded; entity indexing failed
+                logger.warning(f"Entity mention indexing failed for {json_path.name}: {e}")
+
         return {
             "report_id": report_id,
             "children": children_indexed,

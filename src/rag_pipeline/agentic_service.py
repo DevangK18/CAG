@@ -20,12 +20,14 @@ try:
     from .rag_service import RAGService, ResponseStyle
     from .retrieval_service import RetrievalService
     from .query_enhancer import QueryEnhancer, QueryEnhancement
+    from .retrieval_utils import merge_filters, has_explicit_report_filter
 except ImportError:
     from src.core.config import RAGConfig, AgenticConfig, LLMProvider
     from models import RAGResponse, Citation, RetrievalResult
     from rag_service import RAGService, ResponseStyle
     from retrieval_service import RetrievalService
     from query_enhancer import QueryEnhancer, QueryEnhancement
+    from retrieval_utils import merge_filters, has_explicit_report_filter
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +162,10 @@ class AgenticRAGService:
     Orchestrator for multi-hop and cross-report queries.
 
     Composes RAGService — does not replace it.
+
+    Bridge C additions:
+    - Query observability logging via QueryLogger
+    - Sub-queries logged with parent_query_id linkage
     """
 
     def __init__(self, rag_service: RAGService, config: Optional[AgenticConfig] = None):
@@ -171,6 +177,9 @@ class AgenticRAGService:
         self.anthropic = rag_service.anthropic
         self.gemini = rag_service.gemini
 
+        # Query logger (shared with RAG service)
+        self.query_logger = getattr(rag_service, "query_logger", None)
+
     # -------------------------------------------------------------------------
     # Main entry points (sync)
     # -------------------------------------------------------------------------
@@ -181,12 +190,60 @@ class AgenticRAGService:
         filters: Optional[Dict[str, Any]] = None,
         top_k: int = 10,
         style: Optional[ResponseStyle] = None,
+        client_session_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> RAGResponse:
         """
         Agentic ask. Plans, decomposes, and synthesizes multi-hop queries.
 
         For simple queries, delegates to rag.ask() unchanged.
         """
+        # Extract report_ids for logging
+        report_ids_filter = None
+        if filters and "report_id" in filters:
+            rid = filters["report_id"]
+            report_ids_filter = rid if isinstance(rid, list) else [rid]
+
+        # Start query logging context
+        log_ctx = None
+        if self.query_logger:
+            log_ctx = self.query_logger.start_query(
+                query_text=question,
+                interaction_mode="home",  # Will be updated to agentic_* based on complexity
+                report_ids_filter=report_ids_filter,
+                explicit_filters=filters,
+                style=style.value if style else None,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
+
+        try:
+            return self._ask_impl(
+                question=question,
+                filters=filters,
+                top_k=top_k,
+                style=style,
+                log_ctx=log_ctx,
+            )
+        except Exception as e:
+            if log_ctx:
+                log_ctx.record_error(str(e))
+            raise
+        finally:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
+
+    def _ask_impl(
+        self,
+        question: str,
+        filters: Optional[Dict[str, Any]],
+        top_k: int,
+        style: Optional[ResponseStyle],
+        log_ctx=None,
+    ) -> RAGResponse:
+        """Internal implementation of agentic ask() with logging support."""
         t_start = time.time()
 
         # Step 1: Plan / decompose
@@ -198,18 +255,30 @@ class AgenticRAGService:
             sub_queries=plan.get("sub_queries") or [question],
         )
 
+        # Log enhancement phase completion
+        if log_ctx:
+            log_ctx.end_phase("enhancement")
+
         # Short-circuit: simple queries go through normal RAGService
         # TODO(Phase 12): Use plan.get("report_filter_hint") to narrow filters for cross_report queries
         if plan["complexity"] == "simple":
             logger.info(
                 "Agentic classified query as simple; delegating to RAGService.ask()"
             )
+            # Log the agentic trace even for simple queries
+            if log_ctx:
+                log_ctx.record_agentic_trace(trace)
             response = self.rag.ask(question, filters=filters, top_k=top_k, style=style)
             # Note: we attach trace via the new `agentic_trace` field, not groundedness
             response.agentic_trace = (
                 trace.to_dict()
             )  # requires the field on RAGResponse (see below)
             return response
+
+        # Log that we're doing multi-hop/cross-report
+        if log_ctx:
+            log_ctx.agentic_complexity = plan["complexity"]
+            log_ctx.start_phase("retrieval")
 
         # Step 2: Run loop per sub-query
         sub_queries = plan["sub_queries"]
@@ -241,8 +310,14 @@ class AgenticRAGService:
 
         trace.total_wall_ms = int((time.time() - t_start) * 1000)
 
+        # Log retrieval phase completion
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+
         # Step 3: Synthesize
         if not all_retrievals:
+            if log_ctx:
+                log_ctx.record_agentic_trace(trace)
             return RAGResponse(
                 query=question,
                 answer="I couldn't find sufficient information in the CAG reports to answer this multi-part question. "
@@ -259,9 +334,33 @@ class AgenticRAGService:
 
         # Merge retrievals and synthesize
         merged = self._merge_retrievals(all_retrievals)
+
+        # Log retrieval results
+        if log_ctx:
+            include_full = (
+                self.rag.config.observability.dev_debug
+                if hasattr(self.rag.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                merged,
+                reranker_used=merged.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.start_phase("generation")
+
         answer = self._synthesize_answer(
             question, sub_queries, merged, style or ResponseStyle.ADAPTIVE
         )
+
+        # Log generation
+        if log_ctx:
+            log_ctx.end_phase("generation")
+            log_ctx.record_generation(
+                answer=answer,
+                provider=self.rag.config.llm.provider.value,
+                model=self.rag._get_model_name(),
+            )
 
         # Build citations from merged result
         citations = self.rag.build_citations(merged)
@@ -269,8 +368,17 @@ class AgenticRAGService:
         # Optional: groundedness check
         groundedness_dict = None
         if self.rag.groundedness_service:
+            if log_ctx:
+                log_ctx.start_phase("groundedness")
             report = self.rag.groundedness_service.verify(answer, merged)
             groundedness_dict = report.to_dict()
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
+
+        # Log agentic trace
+        if log_ctx:
+            log_ctx.record_agentic_trace(trace)
 
         return RAGResponse(
             query=question,
@@ -328,6 +436,15 @@ class AgenticRAGService:
         last_retrieval: Optional[RetrievalResult] = None
         sufficient = False
 
+        # Auto-filter extraction for sub-query (only if parent didn't specify report_id)
+        merged_filters = filters
+        if (
+            self.rag.auto_filter_extractor
+            and not has_explicit_report_filter(filters)
+        ):
+            auto_filters = self.rag.auto_filter_extractor.extract(sub_query, None)
+            merged_filters = merge_filters(filters, auto_filters)
+
         for iteration in range(self.config.max_iterations_per_subquery):
             # Reuse existing multi-query retrieval infrastructure
             # We could reuse QueryEnhancer but for loop overhead reasons
@@ -335,7 +452,7 @@ class AgenticRAGService:
             result = self.rag.retrieval.retrieve(
                 current_query,
                 top_k=self.config.top_k_per_subquery,
-                filters=filters,
+                filters=merged_filters,
                 enhancement=None,  # Don't double-enhance
             )
             last_retrieval = result
@@ -409,46 +526,12 @@ Generate a reformulation."""
     # -------------------------------------------------------------------------
 
     def _merge_retrievals(self, retrievals: List[RetrievalResult]) -> RetrievalResult:
-        """
-        Merge multiple RetrievalResults into one.
-
-        Deduplicates by chunk_id. Keeps highest score per chunk.
-        """
-        seen: Dict[str, Any] = {}  # chunk_id -> (chunk, parent_id)
-        parent_map: Dict[str, Any] = {}  # parent_id -> ParentContext
-
-        for result in retrievals:
-            for parent in result.parents:
-                if parent.chunk_id not in parent_map:
-                    # Create a copy so we don't mutate the original
-                    from copy import copy
-
-                    parent_map[parent.chunk_id] = copy(parent)
-                    parent_map[parent.chunk_id].children = []
-
-                for child in parent.children:
-                    if child.chunk_id not in seen:
-                        seen[child.chunk_id] = (child, parent.chunk_id)
-                        parent_map[parent.chunk_id].children.append(child)
-                    else:
-                        existing, _ = seen[child.chunk_id]
-                        if child.score > existing.score:
-                            existing.score = child.score
-
-        parents_list = [p for p in parent_map.values() if p.children]
-        parents_list.sort(key=lambda p: -max(c.score for c in p.children))
-
-        from .models import RetrievalResult as RR
-
-        return RR(
-            query=retrievals[0].query if retrievals else "",
-            total_candidates=sum(r.total_candidates for r in retrievals),
-            total_after_rerank=len(seen),
-            parents=parents_list,
-            filters_applied=retrievals[0].filters_applied if retrievals else {},
-            reranker_used=retrievals[0].reranker_used if retrievals else "none",
-            search_type="agentic_merged",
-        )
+        """Merge multiple RetrievalResults. Phase 12: uses shared helper."""
+        try:
+            from .retrieval_utils import merge_retrieval_results
+        except ImportError:
+            from retrieval_utils import merge_retrieval_results
+        return merge_retrieval_results(retrievals)
 
     def _synthesize_answer(
         self,

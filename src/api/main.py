@@ -25,8 +25,8 @@ from pathlib import Path
 from slowapi.errors import RateLimitExceeded
 
 from .config import settings
-from .routes import health, reports, chat, assets, series, overview, summaries
-from .services.streaming_wrapper import initialize_rag_service
+from .routes import health, reports, chat, assets, series, overview, summaries, entities
+from .services.streaming_wrapper import initialize_rag_service, get_rag_service
 from .services.report_service import initialize as initialize_reports
 from .rate_limit import limiter, get_real_ip
 
@@ -96,6 +96,38 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing RAG service...")
     initialize_rag_service()
 
+    # Initialize query observability (Bridge C)
+    logger.info("Initializing query observability...")
+    try:
+        from src.observability.query_logger import init_query_logger
+        from src.observability.models import Base as ObsBase
+        from src.entity_graph.db import get_engine
+
+        # Create query_logs table
+        engine = get_engine()
+        ObsBase.metadata.create_all(engine)
+
+        # Get config from RAG service
+        rag = get_rag_service()
+        if rag:
+            from src.observability.query_logger import ObservabilityConfig
+            obs_config = rag.config.observability
+            query_logger = init_query_logger(obs_config)
+            app.state.query_logger = query_logger
+
+            # Plumb the query logger to RAG service so streaming wrapper sees it
+            rag.query_logger = query_logger
+
+            # Also propagate to agentic service which captured rag.query_logger=None at construction
+            if hasattr(rag, "agentic_service") and rag.agentic_service is not None:
+                rag.agentic_service.query_logger = query_logger
+
+            logger.info(f"Query observability enabled (env={obs_config.environment}, dev_debug={obs_config.dev_debug})")
+        else:
+            logger.warning("RAG service not available; query observability disabled")
+    except Exception as e:
+        logger.warning(f"Query observability init failed: {e}")
+
     # Log environment configuration
     logger.info("-" * 60)
     logger.info("[CONFIG] Environment: %s", os.environ.get("ENVIRONMENT", "development"))
@@ -104,7 +136,6 @@ async def lifespan(app: FastAPI):
     logger.info("-" * 60)
 
     # Log active configuration
-    from .services.streaming_wrapper import get_rag_service
     rag = get_rag_service()
     if rag:
         provider = rag.config.llm.provider.value
@@ -138,6 +169,8 @@ async def lifespan(app: FastAPI):
     logger.info("  - POST /api/chat                    - Synchronous chat")
     logger.info("  - POST /api/chat/stream             - Streaming chat (SSE)")
     logger.info("  - GET  /api/files/{name}            - Serve PDF files")
+    logger.info("  - GET  /api/entities/search?q=...   - Search entities (Phase 12)")
+    logger.info("  - GET  /api/entities/{id}/mentions  - Entity mentions (Phase 12)")
     logger.info("=" * 60)
 
     yield
@@ -240,6 +273,9 @@ app.include_router(series.router, prefix="/api/series", tags=["Time Series"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(overview.router, prefix="/api")
 app.include_router(summaries.router, prefix="/api")
+
+# Phase 12: Entity graph (only registers routes; service is lazy)
+app.include_router(entities.router, prefix="/api/entities", tags=["Entities"])
 
 
 # Root endpoint - only in non-production (so "/" falls through to static mount in production)

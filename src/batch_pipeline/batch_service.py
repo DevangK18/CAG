@@ -115,7 +115,7 @@ class BatchService:
 
         # Max output tokens - MUST be greater than thinking.budget_tokens
         self.max_tokens = {
-            "overview": 16000,
+            "overview": 18000,  # Phase 12: increased for normalized_entities field
             "executive": 16000,
             "journalist": 20000,
             "deep_dive": 24000,  # Fixed: must be > thinking_budget (16000)

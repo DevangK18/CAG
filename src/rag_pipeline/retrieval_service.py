@@ -602,12 +602,22 @@ class RetrievalService:
         Main retrieval method (backward compatible).
         Now delegates to retrieve_multi_query.
 
+        Note: Auto-filter extraction (state names, years, tiers, audit categories)
+        is handled by the calling service (RAGService, AgenticRAGService) before
+        filters are passed here. The filters dict may contain auto-detected values
+        merged with explicit user filters. This method accepts the final merged
+        filters and applies them to Qdrant queries.
+
         Args:
             query: User's question
             top_k: Number of final results
-            filters: Semantic filters like:
+            filters: Semantic filters (explicit or auto-detected) like:
                 - report_id: str
                 - report_year: int or {"gte": 2022}
+                - audit_year: str (e.g., "2023-24")
+                - state_name: str (e.g., "Kerala")
+                - government_body_type: str ("union", "state", "local_body")
+                - audit_category: str ("performance", "compliance", etc.)
                 - finding_type: str
                 - severity: str
                 - total_amount_crore: {"gte": 10.0}

@@ -114,7 +114,13 @@ def merge_llm_overview_data(
         return main_overview, merge_stats
 
     # Fields to merge from LLM extraction
-    llm_fields = ["audit_scope", "audit_objectives", "topics_covered", "glossary_terms"]
+    llm_fields = [
+        "audit_scope",
+        "audit_objectives",
+        "topics_covered",
+        "glossary_terms",
+        "normalized_entities",  # Phase 12: per-report entity normalization
+    ]
 
     # Merge LLM fields
     for field in llm_fields:

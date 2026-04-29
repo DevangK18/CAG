@@ -259,6 +259,8 @@ async def generate_stream(
     style: str = "adaptive",
     report_ids: Optional[List[str]] = None,
     top_k: int = 10,
+    client_session_id: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Async streaming generation using SSE.
@@ -273,9 +275,30 @@ async def generate_stream(
         yield {"type": "error", "data": "RAG service not initialized"}
         return
 
+    # Initialize logging context
+    log_ctx = None
+    query_logger = getattr(rag, "query_logger", None)
+
     try:
         loop = asyncio.get_event_loop()
         style_enum = RAGResponseStyle(style)
+
+        # Determine interaction mode for logging
+        interaction_mode = "directory" if report_ids else "home"
+
+        # Start query logging
+        if query_logger:
+            log_ctx = query_logger.start_query(
+                query_text=query,
+                interaction_mode=interaction_mode,
+                report_ids_filter=report_ids,
+                explicit_filters={"report_id": report_ids} if report_ids else None,
+                style=style,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
 
         # Build filters
         # Note: Qdrant handles lists as MatchAny, single values as MatchValue
@@ -340,6 +363,12 @@ async def generate_stream(
             if enhancement:
                 top_k = enhancement.top_k
 
+        # Log enhancement
+        if log_ctx:
+            log_ctx.record_query_enhancement(enhancement)
+            log_ctx.end_phase("enhancement")
+            log_ctx.start_phase("retrieval")
+
         # Step 1: Run retrieval (sync, in thread pool)
         retrieval_result = await loop.run_in_executor(
             _executor,
@@ -351,7 +380,24 @@ async def generate_stream(
             ),
         )
 
+        # Log retrieval
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                rag.config.observability.dev_debug
+                if hasattr(rag.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                retrieval_result,
+                reranker_used=retrieval_result.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.record_merged_filters(filters)
+
         if retrieval_result.total_after_rerank == 0:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
             yield {
                 "type": "token",
                 "data": "I couldn't find any relevant information in the CAG reports to answer this question.",
@@ -367,6 +413,9 @@ async def generate_stream(
 
         # NEW: Context sufficiency check + emit caveat event
         context_sufficient = rag._check_context_sufficiency(retrieval_result)
+        if log_ctx:
+            log_ctx.record_context_sufficient(context_sufficient)
+            log_ctx.start_phase("generation")
         if not context_sufficient:
             yield {"type": "caveat", "data": "low_relevance"}
 
@@ -409,8 +458,25 @@ async def generate_stream(
             accumulated_answer_parts.append(token)
             yield {"type": "token", "data": token}
 
+        # Log generation completion
+        if log_ctx:
+            log_ctx.end_phase("generation")
+
         # Phase 13: Groundedness verification (runs after token stream completes)
         full_answer = "".join(accumulated_answer_parts)
+
+        # Log generation details
+        if log_ctx:
+            log_ctx.record_generation(
+                answer=full_answer,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=full_answer,
+                provider=provider,
+                model=rag._get_model_name(),
+            )
+            log_ctx.start_phase("groundedness")
+
         groundedness_dict = await _maybe_verify_groundedness(
             rag,
             full_answer,
@@ -418,12 +484,24 @@ async def generate_stream(
             loop,
         )
         if groundedness_dict is not None:
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
             yield {"type": "groundedness", "data": groundedness_dict}
+        elif log_ctx:
+            log_ctx.end_phase("groundedness")
+
+        # Complete logging
+        if log_ctx:
+            log_ctx.__exit__(None, None, None)
 
         yield {"type": "done", "data": None}
 
     except Exception as e:
         logger.error(f"Stream generation error: {e}", exc_info=True)
+        if log_ctx:
+            log_ctx.record_error(str(e))
+            log_ctx.__exit__(None, None, None)
         yield {"type": "error", "data": str(e)}
 
 
@@ -477,6 +555,8 @@ async def generate_agentic_stream(
     style: str = "adaptive",
     report_ids: Optional[List[str]] = None,
     top_k: int = 10,
+    client_session_id: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Agentic streaming. Emits same event types as generate_stream() plus:
@@ -496,6 +576,10 @@ async def generate_agentic_stream(
         yield {"type": "error", "data": "Agentic service not enabled"}
         return
 
+    # Initialize logging context
+    log_ctx = None
+    query_logger = getattr(rag, "query_logger", None)
+
     try:
         loop = asyncio.get_event_loop()
         style_enum = RAGResponseStyle(style)
@@ -509,11 +593,31 @@ async def generate_agentic_stream(
                 filters["report_id"] = report_ids
         filters_or_none = filters if filters else None
 
+        # Start query logging
+        if query_logger:
+            log_ctx = query_logger.start_query(
+                query_text=query,
+                interaction_mode="home",  # Will be agentic
+                report_ids_filter=report_ids,
+                explicit_filters=filters_or_none,
+                style=style,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
+
         # Step 1: Plan (in thread pool — single LLM call)
         plan = await loop.run_in_executor(
             _executor,
             lambda: rag.agentic_service._decompose(query),
         )
+
+        # Log enhancement phase
+        if log_ctx:
+            log_ctx.end_phase("enhancement")
+            log_ctx.agentic_complexity = plan["complexity"]
+
         yield {
             "type": "planning",
             "data": {
@@ -525,9 +629,19 @@ async def generate_agentic_stream(
 
         # Simple path — delegate to regular streaming
         if plan["complexity"] == "simple":
-            async for event in generate_stream(query, style, report_ids, top_k):
+            # Close agentic log context before delegating
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
+                log_ctx = None
+            async for event in generate_stream(
+                query, style, report_ids, top_k, client_session_id, user_agent
+            ):
                 yield event
             return
+
+        # Start retrieval phase for complex queries
+        if log_ctx:
+            log_ctx.start_phase("retrieval")
 
         # Build a trace object — agentic_service expects a real AgenticTrace
         from agentic_service import AgenticTrace
@@ -579,6 +693,9 @@ async def generate_agentic_stream(
 
         # Step 3: If nothing retrieved, bail
         if not all_retrievals:
+            if log_ctx:
+                log_ctx.record_agentic_trace(trace)
+                log_ctx.__exit__(None, None, None)
             yield {
                 "type": "token",
                 "data": "I couldn't find sufficient information across the requested aspects. "
@@ -592,6 +709,21 @@ async def generate_agentic_stream(
             _executor,
             lambda: rag.agentic_service._merge_retrievals(all_retrievals),
         )
+
+        # Log retrieval results
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                rag.config.observability.dev_debug
+                if hasattr(rag.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                merged,
+                reranker_used=merged.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.start_phase("generation")
 
         # Step 5: Emit citation_map (match existing contract)
         rag_citations = rag.build_citations(merged)
@@ -638,8 +770,25 @@ async def generate_agentic_stream(
             accumulated_answer_parts.append(token)
             yield {"type": "token", "data": token}
 
+        # Log generation completion
+        if log_ctx:
+            log_ctx.end_phase("generation")
+
         # Step 8: Phase 13 groundedness verification (reuse helper)
         full_answer = "".join(accumulated_answer_parts)
+
+        # Log generation
+        if log_ctx:
+            log_ctx.record_generation(
+                answer=full_answer,
+                system_prompt=system_prompt,
+                user_prompt=enhanced_user_prompt,
+                raw_response=full_answer,
+                provider=provider,
+                model=rag._get_model_name(),
+            )
+            log_ctx.start_phase("groundedness")
+
         groundedness_dict = await _maybe_verify_groundedness(
             rag,
             full_answer,
@@ -647,7 +796,17 @@ async def generate_agentic_stream(
             loop,
         )
         if groundedness_dict is not None:
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
             yield {"type": "groundedness", "data": groundedness_dict}
+        elif log_ctx:
+            log_ctx.end_phase("groundedness")
+
+        # Log agentic trace
+        if log_ctx:
+            log_ctx.record_agentic_trace(trace)
+            log_ctx.__exit__(None, None, None)
 
         # Step 9: Emit the agentic trace as a final metadata event
         yield {"type": "agentic_trace", "data": trace.to_dict()}
@@ -656,6 +815,9 @@ async def generate_agentic_stream(
 
     except Exception as e:
         logger.error(f"Agentic stream error: {e}", exc_info=True)
+        if log_ctx:
+            log_ctx.record_error(str(e))
+            log_ctx.__exit__(None, None, None)
         yield {"type": "error", "data": str(e)}
 
 

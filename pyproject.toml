@@ -34,6 +34,12 @@ tenacity = "^8.2.3"
 tqdm = "^4.66.4"
 slowapi = "^0.1.9"
 
+# Database (Phase 12: Entity Graph)
+sqlalchemy = "^2.0.36"
+psycopg = {version = "^3.2.0", extras = ["binary"]}
+alembic = "^1.14.0"
+pyahocorasick = "^2.1.1"  # Efficient multi-pattern string matching for entity alias scanning
+
 # =============================================================================
 # PARSING PIPELINE — Heavy offline deps, run locally, NOT in Docker
 # Install with: poetry install --with parsing
@@ -89,3 +95,4 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 anyio_backend = "asyncio"
+pythonpath = "."

@@ -54,6 +54,8 @@ RUN pip install --no-cache-dir -r requirements.docker.txt
 COPY src/api/ ./src/api/
 COPY src/rag_pipeline/ ./src/rag_pipeline/
 COPY src/core/ ./src/core/
+COPY src/entity_graph/ ./src/entity_graph/
+COPY src/observability/ ./src/observability/
 
 # Copy built frontend from stage 1
 COPY --from=frontend-build /app/frontend/dist ./static/

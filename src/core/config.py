@@ -176,7 +176,7 @@ class GroundednessConfig:
     """Configuration for groundedness verification (Phase 13)."""
 
     # Feature flags
-    enabled: bool = False  # OFF by default; enable per-deployment
+    enabled: bool = True  # OFF by default; enable per-deployment
     block_on_failure: bool = False  # If True, caveat the answer when verification fails
     regenerate_on_failure: bool = (
         False  # If True, retry generation with stricter prompt when score low
@@ -197,7 +197,7 @@ class GroundednessConfig:
 class AgenticConfig:
     """Configuration for agentic retrieval (Phase 11)."""
 
-    enabled: bool = False  # OFF by default; exposed via /chat/agentic endpoint
+    enabled: bool = True  # OFF by default; exposed via /chat/agentic endpoint
 
     # Planner (query decomposer) uses a small fast model
     planner_model: str = "gpt-4o-mini"  # OpenAI only for now
@@ -214,6 +214,100 @@ class AgenticConfig:
 
 
 @dataclass
+class AutoFilterConfig:
+    """Configuration for auto-filter extraction from queries."""
+
+    # Master switch
+    enabled: bool = True
+
+    # State detection: require ≥N occurrences OR context cue
+    # 1 = match always; 2 = require ≥2 occurrences or context cue
+    state_confidence_min_occurrences: int = 1
+
+    # Year inference: detect years and convert to audit_year/report_year filters
+    allow_year_inference: bool = True
+
+    # Tier inference: detect union/state/local_body keywords
+    allow_tier_inference: bool = True
+
+
+@dataclass
+class EntityGraphConfig:
+    """Configuration for the entity graph (Phase 12)."""
+
+    enabled: bool = True  # OFF by default; turn on after canonicalization runs
+
+    # Postgres DSN — required when enabled
+    # Example: postgresql+psycopg://cag_user:pass@localhost:5432/cag_entity_graph
+    dsn: Optional[str] = None
+
+    # Canonicalization model (cross-corpus dedup)
+    canonicalization_model: str = "gpt-4o-mini"
+    canonicalization_batch_size: int = 80  # entities per LLM call
+
+    # Auto-index on chunk indexing? If True, indexer.py also writes to entity graph
+    auto_index_on_ingest: bool = True
+
+    # Comparative integration: use entity graph to narrow report selection?
+    enable_comparative_filtering: bool = True
+
+    # Max reports to retrieve from in ask_comparative() after narrowing
+    comparative_max_reports: int = 20
+
+    # Two-pass canonicalization (Phase 12+)
+    # Only triggers pass 2 if raw record count exceeds this threshold
+    two_pass_threshold: int = 1000
+    pass2_batch_size: int = 250
+    pass2_model: str = "gpt-4o-mini"
+
+    def __post_init__(self):
+        self.dsn = os.getenv("ENTITY_GRAPH_DSN", self.dsn)
+        # Allow env override for two_pass_threshold
+        env_threshold = os.getenv("ENTITY_GRAPH_TWO_PASS_THRESHOLD")
+        if env_threshold:
+            self.two_pass_threshold = int(env_threshold)
+
+
+@dataclass
+class ObservabilityConfig:
+    """Configuration for query observability (Bridge C).
+
+    Captures every query with full context for debugging, regression detection,
+    and cost tracking. Stored in Postgres alongside entity graph.
+    """
+
+    # Master switch
+    enabled: bool = True
+
+    # Environment: 'dev' or 'prod' — affects what gets logged
+    # Read from APP_ENV env var if set
+    environment: str = "dev"
+
+    # Dev debug mode: captures full LLM prompts and chunk content
+    # Only effective when environment='dev'
+    dev_debug: bool = True
+
+    # Sampling rate: 1.0 = log everything, 0.1 = log 10%
+    # Errors and low-groundedness queries are always logged regardless
+    sampling_rate: float = 1.0
+
+    # Privacy: disable to redact query_text in logs
+    log_query_text: bool = True
+
+    # Async writes: fire-and-forget to avoid adding latency
+    async_writes: bool = True
+
+    def __post_init__(self):
+        # Read environment from APP_ENV if set
+        env_value = os.getenv("APP_ENV")
+        if env_value:
+            self.environment = env_value.lower()
+        # In prod, dev_debug should default to False unless explicitly set
+        if self.environment == "prod" and os.getenv("OBSERVABILITY_DEV_DEBUG") is None:
+            self.dev_debug = False
+
+
+@dataclass
 class RAGConfig:
     """Complete RAG pipeline configuration."""
 
@@ -226,6 +320,9 @@ class RAGConfig:
     )
     groundedness: GroundednessConfig = field(default_factory=GroundednessConfig)
     agentic: AgenticConfig = field(default_factory=AgenticConfig)
+    entity_graph: EntityGraphConfig = field(default_factory=EntityGraphConfig)
+    auto_filter: AutoFilterConfig = field(default_factory=AutoFilterConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
     # API Keys (loaded from environment)
     openai_api_key: Optional[str] = None
@@ -261,6 +358,11 @@ class RAGConfig:
             and not self.cohere_api_key
         ):
             errors.append("COHERE_API_KEY not set (required for Cohere reranking)")
+
+        if self.entity_graph.enabled and not self.entity_graph.dsn:
+            errors.append(
+                "ENTITY_GRAPH_DSN not set (required when entity_graph.enabled)"
+            )
 
         return errors
 

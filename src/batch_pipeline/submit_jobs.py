@@ -88,7 +88,8 @@ def main():
         if not json_dir.exists():
             print(f"❌ Directory not found: {json_dir}")
             sys.exit(1)
-        json_files = sorted(json_dir.glob("*_chunks.json"))
+        # Use rglob to search subdirectories (union/, state/, local_body/)
+        json_files = sorted(json_dir.rglob("*_chunks.json"))
 
     if not json_files:
         print("❌ No *_chunks.json files found!")
