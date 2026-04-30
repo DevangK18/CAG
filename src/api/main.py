@@ -25,7 +25,7 @@ from pathlib import Path
 from slowapi.errors import RateLimitExceeded
 
 from .config import settings
-from .routes import health, reports, chat, assets, series, overview, summaries, entities
+from .routes import health, reports, chat, assets, series, overview, summaries, entities, home, search
 from .services.streaming_wrapper import initialize_rag_service, get_rag_service
 from .services.report_service import initialize as initialize_reports
 from .rate_limit import limiter, get_real_ip
@@ -171,6 +171,12 @@ async def lifespan(app: FastAPI):
     logger.info("  - GET  /api/files/{name}            - Serve PDF files")
     logger.info("  - GET  /api/entities/search?q=...   - Search entities (Phase 12)")
     logger.info("  - GET  /api/entities/{id}/mentions  - Entity mentions (Phase 12)")
+    logger.info("  - GET  /api/home/stats              - Home page stats (Phase A)")
+    logger.info("  - GET  /api/home/facets             - Home page facets (Phase A)")
+    logger.info("  - GET  /api/home/featured           - Home page featured rails (Phase A)")
+    logger.info("  - GET  /api/home/surprise/report    - Random report (Phase A)")
+    logger.info("  - GET  /api/home/surprise/entity    - Random entity (Phase A)")
+    logger.info("  - GET  /api/search                  - Smart search (Phase A)")
     logger.info("=" * 60)
 
     yield
@@ -276,6 +282,10 @@ app.include_router(summaries.router, prefix="/api")
 
 # Phase 12: Entity graph (only registers routes; service is lazy)
 app.include_router(entities.router, prefix="/api/entities", tags=["Entities"])
+
+# Home page redesign (Phase A+)
+app.include_router(home.router, prefix="/api/home", tags=["Home"])
+app.include_router(search.router, prefix="/api/search", tags=["Search"])
 
 
 # Root endpoint - only in non-production (so "/" falls through to static mount in production)

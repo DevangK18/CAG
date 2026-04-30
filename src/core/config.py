@@ -308,6 +308,28 @@ class ObservabilityConfig:
 
 
 @dataclass
+class HomeConfig:
+    """Configuration for home page functionality."""
+
+    enabled: bool = True
+    cache_ttl_seconds: int = 3600  # how long stats/featured are cached
+    surprise_min_mentions: int = 10
+    trending_min_count: int = 3
+    trending_window_days: int = 7
+
+
+@dataclass
+class SearchConfig:
+    """Configuration for search functionality."""
+
+    enabled: bool = True
+    limit_per_channel: int = 5
+    findings_min_query_length: int = 3
+    findings_debounce_ms: int = 300  # advisory; frontend enforces
+    fuzzy_match_threshold: int = 60  # rapidfuzz cutoff (0-100)
+
+
+@dataclass
 class RAGConfig:
     """Complete RAG pipeline configuration."""
 
@@ -323,6 +345,8 @@ class RAGConfig:
     entity_graph: EntityGraphConfig = field(default_factory=EntityGraphConfig)
     auto_filter: AutoFilterConfig = field(default_factory=AutoFilterConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
+    home: HomeConfig = field(default_factory=HomeConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
 
     # API Keys (loaded from environment)
     openai_api_key: Optional[str] = None

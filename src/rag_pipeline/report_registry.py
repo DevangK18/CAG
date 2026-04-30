@@ -26,6 +26,7 @@ import json
 import re
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -103,6 +104,7 @@ class ReportInfo:
     state_name: Optional[str] = None  # e.g., "Odisha", null for Union
     department: Optional[str] = None  # State/Local dept
     audit_category: str = "compliance"  # "compliance", "performance", etc.
+    ingested_at: Optional[str] = None  # ISO timestamp of when report was ingested
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -121,6 +123,7 @@ class ReportInfo:
             "state_name": self.state_name,
             "department": self.department,
             "audit_category": self.audit_category,
+            "ingested_at": self.ingested_at,
         }
 
 
@@ -243,6 +246,9 @@ class ReportRegistry:
                 # Determine series membership
                 series_id = self._match_series(report_title)
 
+                # Populate ingested_at from three sources (priority order)
+                ingested_at = self._extract_ingested_at(json_file, meta)
+
                 self._reports[report_id] = ReportInfo(
                     report_id=report_id,
                     report_title=report_title,
@@ -258,6 +264,7 @@ class ReportRegistry:
                     state_name=meta.get("state_name"),
                     department=meta.get("department"),
                     audit_category=meta.get("audit_category", "compliance"),
+                    ingested_at=ingested_at,
                 )
                 count += 1
 
@@ -353,6 +360,36 @@ class ReportRegistry:
             if re.search(config["pattern"], title, re.IGNORECASE):
                 return series_id
         return None
+
+    def _extract_ingested_at(self, json_file: Path, meta: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract ingested_at timestamp from three sources (priority order):
+        1. metadata.processing_completed_at from *_chunks.json
+        2. generated_at from *_overview_llm.json
+        3. File mtime fallback
+        """
+        # Priority 1: Check for processing_completed_at in metadata
+        if "processing_completed_at" in meta:
+            return meta.get("processing_completed_at")
+
+        # Priority 2: Try to load *_overview_llm.json for generated_at
+        overview_file = json_file.parent / json_file.name.replace("_chunks.json", "_overview_llm.json")
+        if overview_file.exists():
+            try:
+                with open(overview_file, "r", encoding="utf-8") as f:
+                    overview_data = json.load(f)
+                    if "generated_at" in overview_data:
+                        return overview_data.get("generated_at")
+            except Exception as e:
+                logger.debug(f"Could not load overview file {overview_file.name}: {e}")
+
+        # Priority 3: Fallback to file mtime
+        try:
+            mtime = json_file.stat().st_mtime
+            return datetime.fromtimestamp(mtime).isoformat()
+        except Exception as e:
+            logger.warning(f"Could not get mtime for {json_file.name}: {e}")
+            return None
 
     def _build_series(self):
         """Build TimeSeries objects from loaded reports."""

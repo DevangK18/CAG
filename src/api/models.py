@@ -119,6 +119,7 @@ class ReportSummary(BaseModel):
     state_name: Optional[str] = None
     department: Optional[str] = None
     audit_category: str = "compliance"
+    ingested_at: Optional[str] = None
 
 
 class ReportDetail(BaseModel):
@@ -143,6 +144,7 @@ class ReportDetail(BaseModel):
     state_name: Optional[str] = None
     department: Optional[str] = None
     audit_category: str = "compliance"
+    ingested_at: Optional[str] = None
 
 
 class ReportsListResponse(BaseModel):

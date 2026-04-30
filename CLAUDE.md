@@ -150,4 +150,5 @@ Fully operational multi-tier system: 97% TOC accuracy, 95% citation match rate, 
 Files : "01_frontend_implementation_plan.md" and "02_frontend_implementation_plan.md"
 
 1. Phase BE Types (Pydantic Response Models) and FE Types (Typescript types) Completed
-2. Phase BE-0 (Foundational Changes) and BE-A (Stub Routes) : To be completed next session
+2. Phase BE-0 (Foundational Changes) and BE-A (Stub Routes) : Completed
+3. Phase BE-A5 (Ministry Canocalization Bridge) and BE-B (Home Endpoints) : To be completed next session

@@ -40,6 +40,9 @@ psycopg = {version = "^3.2.0", extras = ["binary"]}
 alembic = "^1.14.0"
 pyahocorasick = "^2.1.1"  # Efficient multi-pattern string matching for entity alias scanning
 
+# Search & Fuzzy Matching
+rapidfuzz = "^3.0"  # Fast fuzzy string matching for home page search
+
 # =============================================================================
 # PARSING PIPELINE — Heavy offline deps, run locally, NOT in Docker
 # Install with: poetry install --with parsing

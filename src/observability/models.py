@@ -7,7 +7,7 @@ Uses SQLAlchemy 2.0 declarative mapping.
 
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from sqlalchemy import (
     BigInteger,
@@ -22,6 +22,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# Valid interaction modes for query logging
+InteractionMode = Literal["chat", "agentic", "directory", "home", "home_search", "agentic_sub"]
 
 
 class Base(DeclarativeBase):
