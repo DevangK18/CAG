@@ -37,6 +37,9 @@ cd frontend && npm run dev
 
 # Testing
 pytest --cov=src
+
+# Code Quality Analysis
+npx truecourse dashboard  # AI-powered codebase analysis (architecture, security, bugs, performance)
 ```
 
 ## Multi-Tier Architecture
@@ -141,3 +144,10 @@ python -m src.module.name
 ## Status
 
 Fully operational multi-tier system: 97% TOC accuracy, 95% citation match rate, <5% "other" findings for State/Local reports, 188+ tests passing.
+
+## Current TODO (Completed) for Home UI Full stack implementation
+
+Files : "01_frontend_implementation_plan.md" and "02_frontend_implementation_plan.md"
+
+1. Phase BE Types (Pydantic Response Models) and FE Types (Typescript types) Completed
+2. Phase BE-0 (Foundational Changes) and BE-A (Stub Routes) : To be completed next session

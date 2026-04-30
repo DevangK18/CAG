@@ -10,7 +10,7 @@ v3.2: Fixed ResponseStyle enum to match frontend exactly
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Literal, Tuple
 from enum import Enum
 
 
@@ -280,3 +280,168 @@ class HealthResponse(BaseModel):
     rag_service: str
     reports_loaded: int
     version: str = "2.0.0"
+
+
+# ============================================================================
+# RESPONSE MODELS - Home Page (NEW)
+# ============================================================================
+
+
+class HomeStats(BaseModel):
+    """Aggregate statistics for home page hero."""
+
+    total_reports: int
+    total_entities: int
+    total_ministries: int
+    total_mentions: int
+    total_findings: int
+    total_charts: int
+    total_tables: int
+    latest_ingest: Optional[str] = None
+    year_range: Tuple[int, int]
+
+
+class FacetValue(BaseModel):
+    """A single facet value with count."""
+
+    value: str
+    label: Optional[str] = None
+    count: int
+
+
+class HomeFacets(BaseModel):
+    """All available facet values for filtering."""
+
+    tiers: List[FacetValue]
+    states: List[FacetValue]
+    years: List[FacetValue]
+    ministries: List[FacetValue]
+    entities: List[FacetValue]
+    audit_categories: List[FacetValue]
+
+
+class FeaturedMinistry(BaseModel):
+    """A featured ministry for the home page rails."""
+
+    entity_id: int
+    canonical_name: str
+    report_count: int
+    finding_count: int
+    mention_count: int
+    primary_tier: str
+
+
+class FeaturedEntity(BaseModel):
+    """A featured entity (PSU, scheme, etc.) for the home page rails."""
+
+    entity_id: int
+    canonical_name: str
+    entity_type: str
+    mention_count: int
+    finding_count: int
+    primary_tier: str
+
+
+class HomeFeatured(BaseModel):
+    """Featured content for home page rails."""
+
+    top_ministries: List[FeaturedMinistry]
+    top_entities: List[FeaturedEntity]
+    recent_reports: List[ReportSummary]
+    deep_dives: List[TimeSeriesInfo]
+    popular_starts: List[Union[FeaturedMinistry, FeaturedEntity]]
+
+
+# ============================================================================
+# RESPONSE MODELS - Smart Search (NEW)
+# ============================================================================
+
+
+class SearchResultReport(BaseModel):
+    """A report in search results."""
+
+    kind: Literal["report"] = "report"
+    report_id: str
+    title: str
+    ministry: Optional[str] = None
+    audit_year: Optional[str] = None
+    findings_count: int
+    snippet: Optional[str] = None
+
+
+class SearchResultMinistry(BaseModel):
+    """A ministry in search results."""
+
+    kind: Literal["ministry"] = "ministry"
+    entity_id: int
+    canonical_name: str
+    report_count: int
+    finding_count: int
+
+
+class SearchResultEntity(BaseModel):
+    """An entity (PSU, scheme, etc.) in search results."""
+
+    kind: Literal["entity"] = "entity"
+    entity_id: int
+    canonical_name: str
+    entity_type: str
+    mention_count: int
+    primary_tier: str
+
+
+class SearchResultFinding(BaseModel):
+    """A finding in search results."""
+
+    kind: Literal["finding"] = "finding"
+    chunk_id: str
+    report_id: str
+    section: str
+    page: int
+    finding_type: Optional[str] = None
+    severity: Optional[str] = None
+    amount_crore: Optional[float] = None
+    snippet: str
+    score: float
+
+
+class SearchResultGlossary(BaseModel):
+    """A glossary term in search results."""
+
+    kind: Literal["glossary"] = "glossary"
+    term: str
+    abbreviation: Optional[str] = None
+    definition: Optional[str] = None
+    report_id: str
+
+
+class GroupedSearchResults(BaseModel):
+    """Search results grouped by channel."""
+
+    reports: List[SearchResultReport]
+    ministries: List[SearchResultMinistry]
+    entities: List[SearchResultEntity]
+    findings: List[SearchResultFinding]
+    glossary: List[SearchResultGlossary]
+    top_hit_channel: Optional[str] = None
+    top_hit_score: Optional[float] = None
+
+
+# ============================================================================
+# RESPONSE MODELS - Entity Summary (NEW)
+# ============================================================================
+
+
+class EntitySummary(BaseModel):
+    """Complete summary of an entity."""
+
+    id: int
+    canonical_name: str
+    entity_type: str
+    primary_tier: str
+    aliases: List[str]
+    first_seen_year: Optional[int] = None
+    last_seen_year: Optional[int] = None
+    mention_count: int
+    finding_count: int
+    report_count: int
