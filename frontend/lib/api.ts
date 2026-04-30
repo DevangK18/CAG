@@ -867,3 +867,161 @@ export async function* streamSeriesChat(
     reader.releaseLock();
   }
 }
+// ============================================================================
+// Home Page API Functions (Phase A - Stubs)
+// ============================================================================
+
+import type {
+  HomeStats,
+  HomeFacets,
+  HomeFeatured,
+  TrendingSearch,
+  EntitySummary,
+  EntityDetail,
+  GroupedSearchResults,
+  SearchChannel,
+} from '../types';
+
+/**
+ * Get home page stats
+ * Phase A: Stub implementation
+ */
+export async function getHomeStats(): Promise<HomeStats> {
+  return Promise.resolve({
+    total_reports: 37,
+    total_entities: 390,
+    total_ministries: 50,
+    total_mentions: 25000,
+    total_findings: 5000,
+    total_charts: 150,
+    total_tables: 200,
+    latest_ingest: '2024-12-01',
+    year_range: [2020, 2024],
+  });
+}
+
+/**
+ * Get home page facets
+ * Phase A: Stub implementation
+ */
+export async function getHomeFacets(): Promise<HomeFacets> {
+  return Promise.resolve({
+    tiers: [
+      { value: 'union', label: 'Union', count: 20 },
+      { value: 'state', label: 'State', count: 15 },
+      { value: 'local_body', label: 'Local Body', count: 2 },
+    ],
+    states: [
+      { value: 'MH', label: 'Maharashtra', count: 5 },
+      { value: 'KA', label: 'Karnataka', count: 4 },
+    ],
+    years: [
+      { value: '2024', label: '2024', count: 10 },
+      { value: '2023', label: '2023', count: 15 },
+    ],
+    ministries: [],
+    entities: [],
+    audit_categories: [],
+  });
+}
+
+/**
+ * Get home page featured content
+ * Phase A: Stub implementation
+ */
+export async function getHomeFeatured(): Promise<HomeFeatured> {
+  return Promise.resolve({
+    top_ministries: [],
+    top_entities: [],
+    recent_reports: [],
+    deep_dives: [],
+    popular_starts: [],
+  });
+}
+
+/**
+ * Get trending searches
+ * Phase A: Stub implementation
+ */
+export async function getHomeTrending(): Promise<TrendingSearch[]> {
+  return Promise.resolve([]);
+}
+
+/**
+ * Get random surprise report
+ * Phase A: Stub implementation
+ */
+export async function getSurpriseReport(): Promise<APIReportSummary> {
+  return Promise.resolve({
+    id: '2023_01_sample',
+    title: 'Sample Report',
+    report_no: '2023/01',
+    ministry: 'Ministry of Sample',
+    sector: 'Sample Sector',
+    year: 2023,
+    findings_count: 10,
+    monetary_impact: '₹100 crore',
+    status: 'published',
+    filename: 'sample.pdf',
+    government_body_type: 'union',
+    audit_category: 'performance',
+  });
+}
+
+/**
+ * Get random surprise entity
+ * Phase A: Stub implementation
+ */
+export async function getSurpriseEntity(): Promise<EntitySummary> {
+  return Promise.resolve({
+    id: 1,
+    canonical_name: 'Sample Entity',
+    entity_type: 'PSU',
+    primary_tier: 'union',
+    aliases: [],
+    first_seen_year: 2020,
+    last_seen_year: 2024,
+    mention_count: 100,
+    finding_count: 20,
+    report_count: 5,
+  });
+}
+
+/**
+ * Smart search across all channels
+ * Phase A: Stub implementation
+ */
+export async function smartSearch(params: {
+  q: string;
+  type?: SearchChannel;
+  limit?: number;
+}): Promise<GroupedSearchResults> {
+  return Promise.resolve({
+    reports: [],
+    ministries: [],
+    entities: [],
+    findings: [],
+    glossary: [],
+    top_hit_channel: null,
+    top_hit_score: null,
+  });
+}
+
+/**
+ * Get entity full details
+ * Phase A: Stub implementation
+ */
+export async function getEntityFull(id: number): Promise<EntityDetail> {
+  return Promise.resolve({
+    id,
+    canonical_name: 'Sample Entity',
+    entity_type: 'PSU',
+    primary_tier: 'union',
+    aliases: [],
+    first_seen_year: 2020,
+    last_seen_year: 2024,
+    mention_count: 100,
+    finding_count: 20,
+    report_count: 5,
+  });
+}

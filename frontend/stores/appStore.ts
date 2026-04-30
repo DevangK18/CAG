@@ -46,6 +46,19 @@ export interface AppState {
   citationMap: CitationMap;
   normalizedCitationMap: Map<string, CitationMap[string]>;
 
+  // Home page state (Phase A)
+  previousView: string | null;
+  searchFilters: {
+    tier?: 'union' | 'state' | 'local_body';
+    states?: string[];
+    years?: string[];
+    ministry_entity_ids?: number[];
+    entity_ids?: number[];
+    audit_categories?: string[];
+  };
+  currentEntityId: number | null;
+  chatMode: 'regular' | 'agentic';
+
   // Actions
   setCurrentReportId: (id: string | null) => void;
   setPdfPage: (page: number) => void;
@@ -66,6 +79,14 @@ export interface AppState {
   // Citation actions
   setCitationMap: (map: CitationMap) => void;
 
+  // Home page actions (Phase A)
+  setPreviousView: (view: string | null) => void;
+  setSearchFilters: (filters: AppState['searchFilters']) => void;
+  clearSearchFilters: () => void;
+  setCurrentEntityId: (id: number | null) => void;
+  setChatMode: (mode: 'regular' | 'agentic') => void;
+  goBack: () => string | null;
+
   // Navigation helper
   navigateToCitation: (citation: CitationMap[string]) => void;
 }
@@ -82,6 +103,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   showLowRelevanceCaveat: false,
   citationMap: {},
   normalizedCitationMap: new Map(),
+
+  // Home page state (Phase A)
+  previousView: null,
+  searchFilters: {},
+  currentEntityId: null,
+  chatMode: 'agentic',
   
   // View actions
   setCurrentReportId: (id) => set({ 
@@ -177,7 +204,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       normalizedCitationMap: normalizedMap,
     });
   },
-  
+
+  // Home page actions (Phase A)
+  setPreviousView: (view) => set({ previousView: view }),
+
+  setSearchFilters: (filters) => set({ searchFilters: filters }),
+
+  clearSearchFilters: () => set({ searchFilters: {} }),
+
+  setCurrentEntityId: (id) => set({ currentEntityId: id }),
+
+  setChatMode: (mode) => set({ chatMode: mode }),
+
+  goBack: () => {
+    const { previousView } = get();
+    set({ previousView: null });
+    return previousView;
+  },
+
   // Navigate to citation
   navigateToCitation: (citation) => {
     const targetPage = citation.page_physical + 1;

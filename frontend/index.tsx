@@ -54,6 +54,7 @@ import { TierSelector } from './components/TierSelector';
 import { HowItWorks } from './components/HowItWorks/HowItWorks';
 import { DirectoryPage } from './components/Directory/DirectoryPage';
 import { TimeSeriesPage } from './components/TimeSeries/TimeSeriesPage';
+import { HomePage } from './components/Home/HomePage';
 import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
@@ -287,7 +288,7 @@ const renderMarkdown = (content: string): React.ReactNode => {
 };
 
 function App() {
-    const [view, setView] = useState<ViewState>('directory');
+    const [view, setView] = useState<ViewState>('home');
     const [selectedSeries, setSelectedSeries] = useState<TimeSeriesInfo | null>(null);
     const [activeTab, setActiveTab] = useState<TabState>('overview');
     const [searchTerm, setSearchTerm] = useState('');
@@ -333,6 +334,7 @@ function App() {
         currentReportId, setCurrentReportId, messages, responseStyle, setResponseStyle,
         normalizedCitationMap, citationMap, clearMessages, setPdfPage, pdfPage,
         showLowRelevanceCaveat,
+        setPreviousView, chatMode, setChatMode,
     } = useAppStore();
 
     // Fetch filter options
@@ -461,7 +463,15 @@ function App() {
         setSeriesPagePositions({});
     };
 
+    const handleBackToHome = () => {
+        setPreviousView(view);
+        setCurrentReportId(null);
+        setChatOpen(false);
+        setView('home');
+    };
+
     const handleBackToLanding = () => {
+        setPreviousView(view);
         setCurrentReportId(null);
         setChatOpen(false);
         setView('directory');
@@ -1478,14 +1488,29 @@ function App() {
     return (
         <div className="cag-app">
             <header className="cag-header">
-                <div className="cag-header-left"><div className="cag-logo" onClick={handleBackToLanding}><FileTextIcon /><span>CAG GATEWAY</span></div></div>
+                <div className="cag-header-left"><div className="cag-logo" onClick={handleBackToHome}><FileTextIcon /><span>CAG GATEWAY</span></div></div>
                 <nav className="cag-nav">
+                    <button onClick={handleBackToHome} className={view === 'home' ? 'active' : ''}>Home</button>
                     <button onClick={handleBackToLanding} className={view === 'directory' ? 'active' : ''}>Report Directory</button>
-                    <button onClick={() => setView('time-series')} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
-                    <button onClick={() => setView('how-it-works')} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
+                    <button onClick={() => { setPreviousView(view); setView('time-series'); }} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
+                    <button onClick={() => { setPreviousView(view); setView('how-it-works'); }} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
                 </nav>
                 <div className="cag-header-right"></div>
             </header>
+
+            {view === 'home' && (
+                <HomePage
+                    setView={(newView: ViewState) => {
+                        setPreviousView(view);
+                        setView(newView);
+                    }}
+                    setChatMode={setChatMode}
+                    openChatDrawer={() => {
+                        setChatMode('agentic');
+                        setChatOpen(true);
+                    }}
+                />
+            )}
 
             {view === 'directory' && (
                 <DirectoryPage
@@ -1599,6 +1624,7 @@ function App() {
                 </main>
             )}
 
+            {/* Footer is rendered inside HomePage for home view */}
             {(view === 'directory' || view === 'time-series' || view === 'how-it-works') && (
                 <footer className="cag-footer"><div className="footer-content"><p>© 2025 CAG Gateway</p><div className="footer-links"><button>Privacy</button><button>Terms</button></div></div></footer>
             )}

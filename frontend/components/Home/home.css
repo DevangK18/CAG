@@ -1,0 +1,472 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Home Page Styles (Phase A)
+ * All classes prefixed with .home- to prevent bleed
+ * Reuses color tokens from index.css
+ */
+
+/* ============================================
+   HOME PAGE CONTAINER
+   ============================================ */
+
+.home-page {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    padding-bottom: 80px;
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+
+.home-hero {
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--border);
+    padding: 60px 40px;
+    text-align: center;
+}
+
+.home-hero-title {
+    font-family: 'Courier New', 'Courier', monospace;
+    font-size: 72px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin: 0 0 32px 0;
+    text-transform: uppercase;
+}
+
+.home-hero-explainer {
+    font-size: 16px;
+    color: var(--text-muted);
+    margin: 24px auto 40px;
+    max-width: 800px;
+    line-height: 1.6;
+}
+
+/* ============================================
+   ENTITY CHANNEL TABS
+   ============================================ */
+
+.home-channel-tabs {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.home-channel-tab {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 8px 20px;
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.home-channel-tab:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.home-channel-tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* ============================================
+   SMART SEARCH BAR
+   ============================================ */
+
+.home-search-container {
+    max-width: 720px;
+    margin: 0 auto 16px;
+    position: relative;
+}
+
+.home-search-bar {
+    width: 100%;
+    padding: 16px 50px 16px 48px;
+    font-size: 16px;
+    font-family: var(--font-sans);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    outline: none;
+    transition: all 0.2s;
+    background: var(--bg-white);
+}
+
+.home-search-bar:focus {
+    border-color: var(--accent);
+    box-shadow: 0 4px 12px rgba(26, 54, 93, 0.1);
+}
+
+.home-search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.home-search-shortcut {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    pointer-events: none;
+    font-family: 'Courier New', monospace;
+}
+
+/* ============================================
+   SURPRISE ME BUTTON
+   ============================================ */
+
+.home-surprise-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.home-surprise-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
+/* ============================================
+   STATS TILES
+   ============================================ */
+
+.home-stats-tiles {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-top: 40px;
+    flex-wrap: wrap;
+}
+
+.home-stat-tile {
+    text-align: center;
+    min-width: 120px;
+}
+
+.home-stat-number {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.home-stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   FACET CHIPS
+   ============================================ */
+
+.home-facet-chips {
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 40px;
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.home-facet-chip {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.home-facet-chip:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+}
+
+.home-facet-chip-count {
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* ============================================
+   SECTION WRAPPER
+   ============================================ */
+
+.home-section {
+    padding: 48px 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.home-section-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 24px;
+}
+
+/* ============================================
+   CTA CARDS
+   ============================================ */
+
+.home-cta-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 48px;
+}
+
+.home-cta-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.home-cta-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    border-color: var(--accent);
+}
+
+.home-cta-card-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.home-cta-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 8px;
+}
+
+.home-cta-card-desc {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ============================================
+   DISCOVERY RAILS
+   ============================================ */
+
+.home-rail {
+    margin-bottom: 48px;
+}
+
+.home-rail-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 20px;
+}
+
+.home-rail-scroll {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.home-rail-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.home-rail-scroll::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+    border-radius: 3px;
+}
+
+.home-rail-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.home-rail-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+.home-rail-item {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    min-width: 280px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.home-rail-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    border-color: var(--accent);
+}
+
+/* ============================================
+   TOOLS GRID
+   ============================================ */
+
+.home-tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 48px;
+}
+
+.home-tool-tile {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.home-tool-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    border-color: var(--accent);
+}
+
+.home-tool-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+}
+
+.home-tool-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+
+.home-footer {
+    background: var(--bg-white);
+    border-top: 1px solid var(--border);
+    padding: 32px 40px;
+    text-align: center;
+    margin-top: auto;
+}
+
+.home-footer-links {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.home-footer-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.2s;
+}
+
+.home-footer-link:hover {
+    color: var(--accent);
+}
+
+.home-footer-copyright {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   LOADING PLACEHOLDER
+   ============================================ */
+
+.home-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+    .home-hero-title {
+        font-size: 48px;
+    }
+
+    .home-cta-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .home-search-container {
+        max-width: 100%;
+    }
+
+    .home-section {
+        padding: 32px 20px;
+    }
+
+    .home-facet-chips {
+        padding: 16px 20px;
+    }
+}

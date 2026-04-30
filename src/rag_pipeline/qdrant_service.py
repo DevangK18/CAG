@@ -33,6 +33,7 @@ try:
         Prefetch,
         FusionQuery,
         PayloadSchemaType,
+        IsNull,
     )
 except ImportError:
     raise ImportError("Install qdrant-client: pip install qdrant-client")
@@ -377,18 +378,42 @@ class QdrantService:
                 continue
 
             if isinstance(value, dict):
-                # Range filter (e.g., {"gte": 10.0})
-                conditions.append(
-                    FieldCondition(
-                        key=key,
-                        range=Range(
-                            gte=value.get("gte"),
-                            lte=value.get("lte"),
-                            gt=value.get("gt"),
-                            lt=value.get("lt"),
-                        ),
+                # Check for special operators
+                if "$ne" in value:
+                    # Not equal operator: use IsNull if checking against None
+                    if value["$ne"] is None:
+                        # Field exists (is not null)
+                        conditions.append(
+                            FieldCondition(
+                                key=key,
+                                is_null=IsNull(is_null=False),
+                            )
+                        )
+                    else:
+                        # For other values, we'd need to use must_not, skip for now
+                        logger.warning(f"$ne operator with non-None value not supported: {key}={value}")
+                elif "$exists" in value:
+                    # Exists operator
+                    is_null = not value["$exists"]
+                    conditions.append(
+                        FieldCondition(
+                            key=key,
+                            is_null=IsNull(is_null=is_null),
+                        )
                     )
-                )
+                else:
+                    # Range filter (e.g., {"gte": 10.0})
+                    conditions.append(
+                        FieldCondition(
+                            key=key,
+                            range=Range(
+                                gte=value.get("gte"),
+                                lte=value.get("lte"),
+                                gt=value.get("gt"),
+                                lt=value.get("lt"),
+                            ),
+                        )
+                    )
             elif isinstance(value, list):
                 # Array match any
                 conditions.append(
@@ -476,6 +501,28 @@ class QdrantService:
             pass
 
         return None
+
+    def count_filtered(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Count points matching a filter in the child collection.
+
+        Args:
+            filters: Semantic filters (same format as hybrid_search)
+
+        Returns:
+            Number of matching points
+        """
+        query_filter = self._build_filter(filters)
+
+        try:
+            result = self.client.count(
+                collection_name=self.child_collection,
+                count_filter=query_filter,
+            )
+            return result.count
+        except Exception as e:
+            logger.error(f"Count failed: {e}")
+            return 0
 
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get collection statistics."""

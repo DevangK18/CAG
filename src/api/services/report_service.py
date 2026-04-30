@@ -25,6 +25,19 @@ _initialized: bool = False
 _ministry_bridge: Dict[str, int] = {}
 _ministry_bridge_loaded: bool = False
 
+# Phase B: Pre-computed indexes for home page (§5.1)
+_ministry_index: Dict[str, List[str]] = {}  # ministry → [report_ids]
+_year_index: Dict[int, List[str]] = {}  # report_year → [report_ids]
+_audit_year_index: Dict[str, List[str]] = {}  # audit_year → [report_ids]
+_state_index: Dict[str, List[str]] = {}  # state_name → [report_ids]
+_audit_category_index: Dict[str, List[str]] = {}  # audit_category → [report_ids]
+_tier_index: Dict[str, List[str]] = {}  # government_body_type → [report_ids]
+_recent_reports: List[ReportSummary] = []  # top 20 by year DESC
+
+# Phase B: Glossary index (§5.2)
+_glossary_index: Dict[str, List[Dict[str, str]]] = {}  # term_lower → [entries]
+_glossary_loaded: bool = False
+
 
 def normalize_report_no(report_no: Optional[str]) -> Optional[str]:
     """
@@ -259,10 +272,13 @@ def _load_reports():
             
             _reports_cache[report_id] = report
             logger.info(f"Loaded report: {report_id} - {report.title[:50]}...")
-            
+
         except Exception as e:
             logger.error(f"Error loading {json_file}: {e}", exc_info=True)
-    
+
+    # Build pre-computed indexes (Phase B)
+    _build_indexes()
+
     _initialized = True
     logger.info(f"Loaded {len(_reports_cache)} reports total")
 
@@ -271,6 +287,7 @@ def initialize():
     """Initialize the report service (load all reports)."""
     _load_reports()
     load_ministry_bridge()  # Phase A.5: load ministry canonicalization bridge
+    build_glossary_index()  # Phase B: build glossary index
 
 
 def get_reports_count() -> int:
@@ -351,6 +368,100 @@ def get_report_filename(report_id: str) -> Optional[str]:
     return report.filename if report else None
 
 
+def _build_indexes():
+    """
+    Build pre-computed indexes from loaded reports (Phase B).
+
+    Called once at the end of _load_reports().
+    """
+    global _ministry_index, _year_index, _audit_year_index, _state_index
+    global _audit_category_index, _tier_index, _recent_reports
+
+    _ministry_index = {}
+    _year_index = {}
+    _audit_year_index = {}
+    _state_index = {}
+    _audit_category_index = {}
+    _tier_index = {}
+
+    for report_id, report in _reports_cache.items():
+        # Ministry index (skip "Unknown Ministry")
+        if report.ministry and report.ministry != "Unknown Ministry":
+            _ministry_index.setdefault(report.ministry, []).append(report_id)
+
+        # Year index
+        _year_index.setdefault(report.year, []).append(report_id)
+
+        # Audit year index (extract from report_no if available)
+        audit_year = _extract_audit_year(report.report_no)
+        if audit_year:
+            _audit_year_index.setdefault(audit_year, []).append(report_id)
+
+        # State index
+        if report.state_name:
+            _state_index.setdefault(report.state_name, []).append(report_id)
+
+        # Audit category index
+        _audit_category_index.setdefault(report.audit_category, []).append(report_id)
+
+        # Tier index
+        _tier_index.setdefault(report.government_body_type, []).append(report_id)
+
+    # Build recent reports list (top 20 by year DESC, then by ingested_at if available)
+    all_summaries = [
+        ReportSummary(
+            id=r.id,
+            title=r.title,
+            report_no=r.report_no,
+            ministry=r.ministry,
+            sector=r.sector,
+            year=r.year,
+            findings_count=r.findings_count,
+            monetary_impact=r.monetary_impact,
+            status=r.status,
+            filename=r.filename,
+            report_type=r.report_type,
+            government_body_type=r.government_body_type,
+            state_name=r.state_name,
+            department=r.department,
+            audit_category=r.audit_category,
+            ingested_at=r.ingested_at,
+        )
+        for r in _reports_cache.values()
+    ]
+
+    # Sort by year DESC (recent first), then by ingested_at if available
+    _recent_reports = sorted(
+        all_summaries,
+        key=lambda r: (r.year, r.ingested_at or ""),
+        reverse=True,
+    )[:20]
+
+    logger.info(
+        f"Built indexes: {len(_ministry_index)} ministries, "
+        f"{len(_year_index)} years, {len(_state_index)} states, "
+        f"{len(_audit_category_index)} categories"
+    )
+
+
+def _extract_audit_year(report_no: str) -> Optional[str]:
+    """
+    Extract audit year from report_no like '16 of 2020' → '2020'.
+
+    Returns:
+        Year string or None
+    """
+    if not report_no:
+        return None
+
+    # Extract 4-digit year
+    match = re.search(r"20\d{2}", report_no)
+    if match:
+        return match.group()
+
+    return None
+
+
 def load_ministry_bridge():
     """
     Load ministry canonicalization bridge from data/canonical/ministry_bridge.json.
@@ -423,3 +534,437 @@ def get_ministry_entity_id(ministry: str) -> Optional[int]:
 
     # Direct lookup (case-sensitive for now - the bridge should have exact strings)
     return _ministry_bridge.get(ministry)
+
+
+# ============================================================================
+# Phase B: Index Getters (§5.1)
+# ============================================================================
+
+
+def get_ministry_index() -> Dict[str, List[str]]:
+    """Get ministry → [report_ids] index."""
+    _load_reports()
+    return _ministry_index
+
+
+def get_year_index() -> Dict[int, List[str]]:
+    """Get report_year → [report_ids] index."""
+    _load_reports()
+    return _year_index
+
+
+def get_audit_year_index() -> Dict[str, List[str]]:
+    """Get audit_year → [report_ids] index."""
+    _load_reports()
+    return _audit_year_index
+
+
+def get_state_index() -> Dict[str, List[str]]:
+    """Get state_name → [report_ids] index."""
+    _load_reports()
+    return _state_index
+
+
+def get_audit_category_index() -> Dict[str, List[str]]:
+    """Get audit_category → [report_ids] index."""
+    _load_reports()
+    return _audit_category_index
+
+
+def get_tier_index() -> Dict[str, List[str]]:
+    """Get government_body_type → [report_ids] index."""
+    _load_reports()
+    return _tier_index
+
+
+def get_recent_reports() -> List[ReportSummary]:
+    """Get top 20 recent reports (by year DESC)."""
+    _load_reports()
+    return _recent_reports
+
+
+# ============================================================================
+# Phase B: Glossary Index (§5.2)
+# ============================================================================
+
+
+def build_glossary_index():
+    """
+    Build glossary index from *_overview_llm.json files.
+
+    Extracts term/abbreviation/definition tuples and builds a searchable index.
+    Called once at startup.
+    """
+    global _glossary_index, _glossary_loaded
+
+    if _glossary_loaded:
+        return
+
+    _glossary_index = {}
+
+    if not settings.PROCESSED_DIR.exists():
+        logger.warning("Processed directory not found for glossary indexing")
+        _glossary_loaded = True
+        return
+
+    # Find all overview files
+    overview_files = list(settings.PROCESSED_DIR.glob("**/*_overview_llm.json"))
+
+    for overview_file in overview_files:
+        try:
+            with open(overview_file, encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Extract report_id from filename
+            report_id = overview_file.stem.replace("_overview_llm", "")
+
+            # Get glossary entries
+            glossary_entries = data.get("glossary", [])
+            if not glossary_entries:
+                continue
+
+            for entry in glossary_entries:
+                # Handle both dict and list-of-list formats
+                if isinstance(entry, dict):
+                    term = entry.get("term", "")
+                    abbrev = entry.get("abbreviation") or entry.get("abbr")
+                    definition = entry.get("definition", "")
+                elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    term = entry[0] if len(entry) > 0 else ""
+                    abbrev = entry[1] if len(entry) > 1 else None
+                    definition = entry[2] if len(entry) > 2 else ""
+                else:
+                    continue
+
+                if not term:
+                    continue
+
+                glossary_entry = {
+                    "term": term,
+                    "abbreviation": abbrev,
+                    "definition": definition,
+                    "report_id": report_id,
+                }
+
+                # Index by term (lowercase)
+                term_lower = term.lower().strip()
+                _glossary_index.setdefault(term_lower, []).append(glossary_entry)
+
+                # Also index by abbreviation if present
+                if abbrev:
+                    abbrev_lower = abbrev.lower().strip()
+                    _glossary_index.setdefault(abbrev_lower, []).append(glossary_entry)
+
+        except Exception as e:
+            logger.warning(f"Error loading glossary from {overview_file}: {e}")
+
+    _glossary_loaded = True
+    logger.info(f"Built glossary index with {len(_glossary_index)} terms")
+
+
+def get_glossary_index() -> Dict[str, List[Dict[str, str]]]:
+    """Get glossary index (term_lower → entries)."""
+    if not _glossary_loaded:
+        build_glossary_index()
+    return _glossary_index
+
+
+# ============================================================================
+# Phase B: Home Page Functions (§5.3, §15)
+# ============================================================================
+
+
+def get_home_stats():
+    """
+    Get aggregate statistics for home page hero (§5.3).
+
+    Returns:
+        HomeStats model with counts from registry, entity_service, and qdrant
+    """
+    from ..models import HomeStats
+
+    _load_reports()
+
+    # Registry aggregates
+    total_reports = len(_reports_cache)
+    years = [r.year for r in _reports_cache.values() if r.year > 0]
+    year_range = (min(years), max(years)) if years else (0, 0)
+
+    # Latest ingest (from ingested_at field)
+    latest_ingest = None
+    ingested_dates = [
+        r.ingested_at for r in _reports_cache.values() if r.ingested_at
+    ]
+    if ingested_dates:
+        latest_ingest = max(ingested_dates)
+
+    # Entity service aggregates (with graceful fallback)
+    from src.entity_graph.entity_service import get_entity_service
+
+    entity_service = get_entity_service()
+    if entity_service:
+        total_entities = entity_service.count_all()
+        total_ministries = entity_service.count_by_type("ministry")
+        total_mentions = entity_service.count_mentions()
+    else:
+        total_entities = 0
+        total_ministries = 0
+        total_mentions = 0
+
+    # Qdrant aggregates (with graceful fallback)
+    total_findings = 0
+    total_charts = 0
+    total_tables = 0
+
+    try:
+        from src.rag_pipeline.qdrant_service import QdrantService
+
+        qdrant = QdrantService()
+
+        total_findings = qdrant.count_filtered({"finding_type": {"$ne": None}})
+        total_charts = qdrant.count_filtered({"content_type": "chart"})
+        total_tables = qdrant.count_filtered({"content_type": "table_markdown"})
+    except Exception as e:
+        logger.warning(f"Qdrant stats unavailable: {e}")
+
+    return HomeStats(
+        total_reports=total_reports,
+        total_entities=total_entities,
+        total_ministries=total_ministries,
+        total_mentions=total_mentions,
+        total_findings=total_findings,
+        total_charts=total_charts,
+        total_tables=total_tables,
+        latest_ingest=latest_ingest,
+        year_range=year_range,
+    )
+
+
+def get_home_facets():
+    """
+    Get all facet values for home page filtering.
+
+    Returns:
+        HomeFacets model with counts for each facet
+    """
+    from ..models import HomeFacets, FacetValue
+
+    _load_reports()
+
+    # Tiers
+    tier_facets = [
+        FacetValue(value=tier, label=tier.title(), count=len(report_ids))
+        for tier, report_ids in _tier_index.items()
+    ]
+    tier_facets.sort(key=lambda f: -f.count)
+
+    # States
+    state_facets = [
+        FacetValue(value=state, label=state, count=len(report_ids))
+        for state, report_ids in _state_index.items()
+    ]
+    state_facets.sort(key=lambda f: f.label)
+
+    # Years
+    year_facets = [
+        FacetValue(value=str(year), label=str(year), count=len(report_ids))
+        for year, report_ids in _year_index.items()
+    ]
+    year_facets.sort(key=lambda f: -int(f.value))
+
+    # Ministries (with entity bridge)
+    ministry_facets = []
+    for ministry, report_ids in _ministry_index.items():
+        # Skip Unknown
+        if ministry == "Unknown Ministry":
+            continue
+
+        entity_id = get_ministry_entity_id(ministry)
+        if entity_id:
+            ministry_facets.append(
+                FacetValue(
+                    value=str(entity_id), label=ministry, count=len(report_ids)
+                )
+            )
+        else:
+            # Fallback: use ministry string as value
+            ministry_facets.append(
+                FacetValue(value=ministry, label=ministry, count=len(report_ids))
+            )
+
+    ministry_facets.sort(key=lambda f: -f.count)
+
+    # Entities (top 50 by mention_count, non-ministry)
+    entity_facets = []
+    from src.entity_graph.entity_service import get_entity_service
+    from src.entity_graph.db import session_scope
+
+    entity_service = get_entity_service()
+    if entity_service:
+        # Get top entities (excluding ministries)
+        with session_scope() as session:
+            from src.entity_graph.models import Entity
+
+            top_entities = (
+                session.query(Entity)
+                .filter(Entity.entity_type != "ministry")
+                .order_by(Entity.mention_count.desc())
+                .limit(50)
+                .all()
+            )
+
+            for ent in top_entities:
+                entity_facets.append(
+                    FacetValue(
+                        value=str(ent.id),
+                        label=ent.canonical_name,
+                        count=ent.mention_count,
+                    )
+                )
+
+    # Audit categories
+    category_facets = [
+        FacetValue(value=cat, label=cat.title(), count=len(report_ids))
+        for cat, report_ids in _audit_category_index.items()
+    ]
+    category_facets.sort(key=lambda f: -f.count)
+
+    return HomeFacets(
+        tiers=tier_facets,
+        states=state_facets,
+        years=year_facets,
+        ministries=ministry_facets,
+        entities=entity_facets,
+        audit_categories=category_facets,
+    )
+
+
+def get_home_featured():
+    """
+    Get featured content for home page rails.
+
+    Returns:
+        HomeFeatured model with top ministries, entities, recent reports, etc.
+    """
+    from ..models import (
+        HomeFeatured,
+        FeaturedMinistry,
+        FeaturedEntity,
+        TimeSeriesInfo,
+    )
+    from src.entity_graph.entity_service import get_entity_service
+    import random
+    from datetime import datetime
+
+    _load_reports()
+
+    entity_service = get_entity_service()
+
+    # Top ministries (top 8 by report_count, using entity bridge)
+    top_ministries = []
+    if entity_service:
+        # Build ministry entity_id → report_count map
+        ministry_counts: Dict[int, Dict[str, any]] = {}
+
+        for ministry, report_ids in _ministry_index.items():
+            if ministry == "Unknown Ministry":
+                continue
+
+            entity_id = get_ministry_entity_id(ministry)
+            if entity_id:
+                if entity_id not in ministry_counts:
+                    ministry_counts[entity_id] = {
+                        "report_count": 0,
+                        "canonical_name": ministry,
+                    }
+                ministry_counts[entity_id]["report_count"] += len(report_ids)
+
+        # Get full entity details for top ministries
+        top_ministry_ids = sorted(
+            ministry_counts.keys(),
+            key=lambda eid: ministry_counts[eid]["report_count"],
+            reverse=True,
+        )[:8]
+
+        for entity_id in top_ministry_ids:
+            entity = entity_service.get_entity(entity_id)
+            if entity:
+                top_ministries.append(
+                    FeaturedMinistry(
+                        entity_id=entity["id"],
+                        canonical_name=entity["canonical_name"],
+                        report_count=ministry_counts[entity_id]["report_count"],
+                        finding_count=entity["finding_count"],
+                        mention_count=entity["mention_count"],
+                        primary_tier=entity["primary_tier"],
+                    )
+                )
+
+    # Top entities (top 8 by mention_count, non-ministry)
+    top_entities = []
+    if entity_service:
+        from src.entity_graph.db import session_scope
+        from src.entity_graph.models import Entity
+
+        with session_scope() as session:
+            entities = (
+                session.query(Entity)
+                .filter(Entity.entity_type != "ministry")
+                .order_by(Entity.mention_count.desc())
+                .limit(8)
+                .all()
+            )
+
+            for ent in entities:
+                top_entities.append(
+                    FeaturedEntity(
+                        entity_id=ent.id,
+                        canonical_name=ent.canonical_name,
+                        entity_type=ent.entity_type,
+                        mention_count=ent.mention_count,
+                        finding_count=ent.finding_count,
+                        primary_tier=ent.primary_tier,
+                    )
+                )
+
+    # Recent reports (top 20 from pre-computed list)
+    recent_reports = _recent_reports[:20]
+
+    # Deep dives (from series registry)
+    deep_dives = []
+    try:
+        from ..routes.series import _get_all_series_data
+
+        series_data = _get_all_series_data()
+        for s in series_data[:5]:  # Top 5 series
+            from ..models import SeriesReportSummary
+
+            deep_dives.append(
+                TimeSeriesInfo(
+                    series_id=s["series_id"],
+                    name=s["name"],
+                    description=s["description"],
+                    reports=[SeriesReportSummary(**r) for r in s["reports"]],
+                    years_covered=[
+                        r["audit_year"] for r in s["reports"] if r.get("audit_year")
+                    ],
+                )
+            )
+    except Exception as e:
+        logger.warning(f"Could not load deep dives: {e}")
+
+    # Popular starts (deterministic 10 items, seeded by today's UTC date)
+    # Mix of ministries and entities
+    today_seed = datetime.utcnow().date().toordinal()
+    random.seed(today_seed)
+
+    popular_pool = top_ministries[:5] + top_entities[:5]
+    popular_starts = random.sample(popular_pool, min(10, len(popular_pool)))
+
+    return HomeFeatured(
+        top_ministries=top_ministries,
+        top_entities=top_entities,
+        recent_reports=recent_reports,
+        deep_dives=deep_dives,
+        popular_starts=popular_starts,
+    )

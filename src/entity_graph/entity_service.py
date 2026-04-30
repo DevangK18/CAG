@@ -169,6 +169,63 @@ class EntityService:
             return results
 
     # -------------------------------------------------------------------------
+    # Count aggregates for home page stats
+    # -------------------------------------------------------------------------
+
+    def count_all(self) -> int:
+        """Get total count of all entities."""
+        with session_scope() as session:
+            return session.query(func.count(Entity.id)).scalar() or 0
+
+    def count_by_type(self, entity_type: str) -> int:
+        """Get count of entities of a specific type."""
+        with session_scope() as session:
+            return (
+                session.query(func.count(Entity.id))
+                .filter(Entity.entity_type == entity_type)
+                .scalar()
+                or 0
+            )
+
+    def count_mentions(self) -> int:
+        """Get total count of all entity mentions."""
+        with session_scope() as session:
+            return session.query(func.count(EntityMention.id)).scalar() or 0
+
+    def random_weighted_entity(
+        self, min_mentions: int = 10
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a random entity weighted by mention count.
+
+        Args:
+            min_mentions: Minimum mention_count threshold
+
+        Returns:
+            Random entity dict, or None if no entities match
+        """
+        import random
+
+        with session_scope() as session:
+            # Fetch top 100 entities by mention_count
+            entities = (
+                session.query(Entity)
+                .filter(Entity.mention_count >= min_mentions)
+                .order_by(Entity.mention_count.desc())
+                .limit(100)
+                .all()
+            )
+
+            if not entities:
+                return None
+
+            # Weighted random choice by mention_count
+            weights = [e.mention_count for e in entities]
+            chosen = random.choices(entities, weights=weights, k=1)[0]
+
+            return self._entity_to_dict(chosen)
+
+    # -------------------------------------------------------------------------
     # Used by ask_comparative for entity-aware filtering
     # -------------------------------------------------------------------------
 

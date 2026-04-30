@@ -152,5 +152,6 @@ Files : "01_frontend_implementation_plan.md" and "02_frontend_implementation_pla
 1. Phase BE Types (Pydantic Response Models) and FE Types (Typescript types) Completed
 2. Phase BE-0 (Foundational Changes) and BE-A (Stub Routes) : Completed
 3. Phase BE-A5 (Ministry Canocalization Bridge) and FE-0 (Index.tsx refactor) : Completed
-4. Phase BE-B (Home Endpoints) and FE-A (HomePage scaffold) : To be completed next session
-5. 
+4. Phase BE-B (Home Endpoints) and FE-A (HomePage scaffold) : Completed
+5. Phase BE-C (Smart Search Service) and BE-D (Trending Searches) : To do in the next session
+6. Phase FE-B (HomePage scaffold) :
