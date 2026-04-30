@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _reports_cache: Dict[str, ReportDetail] = {}
 _initialized: bool = False
 
+# Ministry canonicalization bridge (Phase A.5)
+# Maps ReportInfo.ministry string → entity_id from entity graph
+_ministry_bridge: Dict[str, int] = {}
+_ministry_bridge_loaded: bool = False
+
 
 def normalize_report_no(report_no: Optional[str]) -> Optional[str]:
     """
@@ -265,6 +270,7 @@ def _load_reports():
 def initialize():
     """Initialize the report service (load all reports)."""
     _load_reports()
+    load_ministry_bridge()  # Phase A.5: load ministry canonicalization bridge
 
 
 def get_reports_count() -> int:
@@ -343,3 +349,77 @@ def get_report_filename(report_id: str) -> Optional[str]:
     _load_reports()
     report = _reports_cache.get(report_id)
     return report.filename if report else None
+
+
+def load_ministry_bridge():
+    """
+    Load ministry canonicalization bridge from data/canonical/ministry_bridge.json.
+
+    This bridge maps ReportInfo.ministry strings to entity_id values from the
+    Phase 12 entity graph. Called once at startup.
+
+    Returns gracefully (with warning) if bridge file doesn't exist yet.
+    """
+    global _ministry_bridge, _ministry_bridge_loaded
+
+    if _ministry_bridge_loaded:
+        return
+
+    bridge_path = Path("data/canonical/ministry_bridge.json")
+
+    if not bridge_path.exists():
+        logger.warning(
+            f"Ministry bridge not found at {bridge_path}. "
+            "Run scripts/generate_ministry_bridge.py to create it. "
+            "Ministry-related features will work with degraded functionality."
+        )
+        _ministry_bridge_loaded = True
+        return
+
+    try:
+        with open(bridge_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Extract mappings from the JSON structure
+        mappings = data.get("mappings", {})
+
+        # Convert to simple ministry_string -> entity_id dict
+        _ministry_bridge = {
+            ministry: mapping["entity_id"]
+            for ministry, mapping in mappings.items()
+            if isinstance(mapping, dict) and "entity_id" in mapping
+        }
+
+        logger.info(f"Loaded ministry bridge with {len(_ministry_bridge)} mappings")
+        _ministry_bridge_loaded = True
+
+    except Exception as e:
+        logger.error(f"Error loading ministry bridge: {e}", exc_info=True)
+        _ministry_bridge_loaded = True  # Mark as loaded to avoid repeated failures
+
+
+def get_ministry_entity_id(ministry: str) -> Optional[int]:
+    """
+    Get entity_id for a ministry string.
+
+    Args:
+        ministry: Ministry name from ReportInfo.ministry
+
+    Returns:
+        entity_id from entity graph, or None if no mapping exists
+
+    Example:
+        >>> get_ministry_entity_id("Ministry of Railways")
+        123
+        >>> get_ministry_entity_id("Unknown Ministry")
+        None
+    """
+    # Ensure bridge is loaded
+    if not _ministry_bridge_loaded:
+        load_ministry_bridge()
+
+    if not ministry:
+        return None
+
+    # Direct lookup (case-sensitive for now - the bridge should have exact strings)
+    return _ministry_bridge.get(ministry)

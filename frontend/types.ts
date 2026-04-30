@@ -7,7 +7,7 @@
  */
 
 // View states
-export type ViewState = 'landing' | 'report' | 'time-series' | 'series-chat' | 'how-it-works';
+export type ViewState = 'home' | 'directory' | 'report' | 'time-series' | 'series-chat' | 'entity' | 'how-it-works';
 
 // Tab states for report view - Added 'summaries' tab
 export type TabState = 'overview' | 'findings' | 'recommendations' | 'charts' | 'tables' | 'summaries';

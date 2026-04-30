@@ -52,6 +52,8 @@ import { TierSelector } from './components/TierSelector';
 // DemoReportCard is no longer used - all tiers use real API data
 // import { DemoReportCard } from './components/DemoReportCard';
 import { HowItWorks } from './components/HowItWorks/HowItWorks';
+import { DirectoryPage } from './components/Directory/DirectoryPage';
+import { TimeSeriesPage } from './components/TimeSeries/TimeSeriesPage';
 import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
@@ -285,7 +287,7 @@ const renderMarkdown = (content: string): React.ReactNode => {
 };
 
 function App() {
-    const [view, setView] = useState<ViewState>('landing');
+    const [view, setView] = useState<ViewState>('directory');
     const [selectedSeries, setSelectedSeries] = useState<TimeSeriesInfo | null>(null);
     const [activeTab, setActiveTab] = useState<TabState>('overview');
     const [searchTerm, setSearchTerm] = useState('');
@@ -462,7 +464,7 @@ function App() {
     const handleBackToLanding = () => {
         setCurrentReportId(null);
         setChatOpen(false);
-        setView('landing');
+        setView('directory');
     };
 
     const handleBackToTimeSeries = () => {
@@ -1478,206 +1480,57 @@ function App() {
             <header className="cag-header">
                 <div className="cag-header-left"><div className="cag-logo" onClick={handleBackToLanding}><FileTextIcon /><span>CAG GATEWAY</span></div></div>
                 <nav className="cag-nav">
-                    <button onClick={handleBackToLanding} className={view === 'landing' ? 'active' : ''}>Report Directory</button>
+                    <button onClick={handleBackToLanding} className={view === 'directory' ? 'active' : ''}>Report Directory</button>
                     <button onClick={() => setView('time-series')} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
                     <button onClick={() => setView('how-it-works')} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
                 </nav>
                 <div className="cag-header-right"></div>
             </header>
 
-            {view === 'landing' && (
-                <main className="landing-view">
-                    <div className="hero-section">
-                        <h1>CAG Gateway</h1>
-                        <p className="hero-subtitle">An intelligent audit report analysis platform</p>
-                        <div className="hero-body">
-                            <p>
-                                India's Comptroller and Auditor General ({' '}
-                                <a href="https://cag.gov.in" target="_blank" rel="noopener noreferrer" className="hero-link">
-                                    CAG
-                                </a>
-                                ) is the supreme audit institution for Union and State government accounts, established under Article 148 of the Constitution.
-                                Each year, the CAG publishes hundreds of audit reports covering everything from defence procurement and railway safety to
-                                tax administration and public sector enterprise performance. These reports contain critical findings on government
-                                accountability — but they're published as dense, lengthy PDFs that are difficult to search, compare, or extract insights from at scale.
-                            </p>
-                            <p>
-                                CAG Gateway addresses this by transforming these static documents into an interactive research platform.
-                                Reports are parsed and semantically chunked through a custom multi-tier extraction pipeline, then indexed into a hybrid
-                                search system combining dense vector embeddings with BM25 retrieval and Cohere reranking. Users can explore any report
-                                through AI-powered chat with streaming source citations, navigate extracted charts and tables with PDF cross-referencing,
-                                read AI-generated summaries in multiple formats, and perform cross-report time series analysis to track how audit findings
-                                evolve across financial years. To learn how this system works under the hood, visit the{' '}
-                                <button className="hero-link-btn" onClick={() => setView('how-it-works')}>How It Works</button> section.
-                            </p>
-                        </div>
-                        <div className="hero-disclaimer">
-                            <p>
-                                <strong>Disclaimer:</strong> This is an independent research project and is not affiliated with or endorsed by the CAG of India.
-                                All audit reports used are public documents published by the CAG. Their non-commercial use is protected under
-                                Section 52(1)(q) of the Indian Copyright Act, 1957, which permits the reproduction of public documents for informational purposes.
-                            </p>
-                        </div>
-                    </div>
-                    <TierSelector
-                        activeTier={activeTier}
-                        onTierChange={(tier) => {
-                            setActiveTier(tier);
-                            setSelectedState(null); // Clear state filter when changing tier
-                        }}
-                        counts={tierCounts}
-                    />
-                    {/* Tier-aware stats bar - shows dynamic data based on selected tier */}
-                    <div className="stats-bar">
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.totalReports ?? '–'}</span>
-                            <span className="stat-label">Active Reports</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats ? `${enhancedStats.totalFindings}+` : '–'}</span>
-                            <span className="stat-label">Total Findings</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
-                            <span className="stat-label">Monetary Impact</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">
-                                {reportsLoading ? '–' : (
-                                    activeTier === 'union'
-                                        ? (enhancedStats?.ministryCount ?? '–')
-                                        : (enhancedStats?.stateCount ?? '–')
-                                )}
-                            </span>
-                            <span className="stat-label">{activeTier === 'union' ? 'Ministries' : 'States'}</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.sectorCount ?? '–'}</span>
-                            <span className="stat-label">Sectors</span>
-                        </div>
-                        <div className="stat-item">
-                            <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.yearSpan ?? '–'}</span>
-                            <span className="stat-label">Year Span</span>
-                        </div>
-                    </div>
-                    {/* State filter dropdown for State and Local Body tiers */}
-                    {(activeTier === 'state' || activeTier === 'local') && availableStates.length > 0 && (
-                        <div className="state-filter-row" style={{ padding: '12px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                            <div className="dropdown-group">
-                                <label style={{ fontWeight: 500, color: '#475569', marginRight: '8px' }}>State:</label>
-                                <select
-                                    value={selectedState || 'all'}
-                                    onChange={(e) => setSelectedState(e.target.value === 'all' ? null : e.target.value)}
-                                    style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'white' }}
-                                >
-                                    <option value="all">All States</option>
-                                    {availableStates.map(state => (
-                                        <option key={state} value={state}>{state}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-                    )}
-                    <div className="filter-block">
-                        <div className="filter-row-primary">
-                            <div className="search-box"><SearchIcon /><input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                            <div className="dropdown-group"><label><FilterIcon /> Sector:</label><select value={filterSector} onChange={(e) => setFilterSector(e.target.value)}>{sectors.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                            <div className="view-toggle">
-                                <button
-                                    className={viewMode === 'grid' ? 'active' : ''}
-                                    onClick={() => setViewMode('grid')}
-                                    title="Grid view"
-                                >
-                                    <LayoutGridIcon />
-                                </button>
-                                <button
-                                    className={viewMode === 'list' ? 'active' : ''}
-                                    onClick={() => setViewMode('list')}
-                                    title="List view"
-                                >
-                                    <ListIcon />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="filter-row-secondary">
-                            <div className="secondary-filters-left">
-                                <div className="dropdown-group">
-                                    <label>Ministry:</label>
-                                    <select value={filterMinistry} onChange={(e) => setFilterMinistry(e.target.value)}>
-                                        {ministries.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                </div>
-                                <div className="dropdown-group">
-                                    <label>Year:</label>
-                                    <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
-                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                    </select>
-                                </div>
-                                <div className="filter-divider" />
-                                <div className="audit-type-pills">
-                                    {AUDIT_TYPES.map(type => (
-                                        <button
-                                            key={type.value}
-                                            className={`audit-type-pill ${filterAuditType.has(type.value) ? 'active' : ''}`}
-                                            onClick={() => toggleAuditType(type.value)}
-                                        >
-                                            {type.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            {activeFilterCount > 0 && (
-                                <div className="filter-status">
-                                    <span className="filter-count">{filteredReports.length} of {reports.length} reports</span>
-                                    <button className="clear-filters-btn" onClick={clearAllFilters}>Clear all</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    {reportsLoading && <div className="loading-spinner">Loading reports...</div>}
-                    {!reportsLoading && filteredReports.length === 0 && (
-                        <div className="no-results">
-                            <p>No reports match your current filters.</p>
-                            {hasActiveFilters && (
-                                <button className="clear-filters-link" onClick={clearAllFilters}>Clear all filters</button>
-                            )}
-                        </div>
-                    )}
-                    {!reportsLoading && currentReports.data.length > 0 && (
-                        <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
-                            {currentReports.data.map(report => (
-                                <ReportCard
-                                    key={report.id}
-                                    report={report}
-                                    viewMode={viewMode}
-                                    onClick={() => handleReportClick(report)}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </main>
+            {view === 'directory' && (
+                <DirectoryPage
+                    activeTier={activeTier}
+                    setActiveTier={setActiveTier}
+                    selectedState={selectedState}
+                    setSelectedState={setSelectedState}
+                    tierCounts={tierCounts}
+                    availableStates={availableStates}
+                    enhancedStats={enhancedStats}
+                    reportsLoading={reportsLoading}
+                    searchTerm={searchTerm}
+                    setSearchTerm={setSearchTerm}
+                    sectors={sectors}
+                    filterSector={filterSector}
+                    setFilterSector={setFilterSector}
+                    ministries={ministries}
+                    filterMinistry={filterMinistry}
+                    setFilterMinistry={setFilterMinistry}
+                    years={years}
+                    filterYear={filterYear}
+                    setFilterYear={setFilterYear}
+                    filterAuditType={filterAuditType}
+                    toggleAuditType={toggleAuditType}
+                    auditTypes={AUDIT_TYPES}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    activeFilterCount={activeFilterCount}
+                    filteredReports={filteredReports}
+                    currentReports={currentReports}
+                    reports={reports}
+                    hasActiveFilters={hasActiveFilters}
+                    clearAllFilters={clearAllFilters}
+                    handleReportClick={handleReportClick}
+                    setView={setView}
+                />
             )}
 
             {view === 'time-series' && (
-                <main className="landing-view">
-                    <div className="hero-section"><h1>Time Series Analysis</h1><p className="hero-subtitle">Analyze trends across multiple financial years.</p></div>
-                    {seriesLoading && <div className="loading-spinner">Loading time series...</div>}
-                    {seriesError && <div className="tab-error" style={{margin:'40px auto',maxWidth:'600px'}}><p>Failed to load: {seriesError}</p></div>}
-                    {!seriesLoading && !seriesError && allSeries.length === 0 && <div className="placeholder-text" style={{textAlign:'center',padding:'60px'}}><p>No time series available.</p></div>}
-                    {!seriesLoading && !seriesError && allSeries.length > 0 && (
-                        <div className="report-grid">
-                            {allSeries.map(series => (
-                                <div key={series.series_id} className="report-card series-card" onClick={() => handleSeriesClick(series)}>
-                                    <div className="card-top"><span className="report-num">{series.reports.length} Reports</span><span className="status-badge compliant">Longitudinal Data</span></div>
-                                    <h3>{series.name}</h3>
-                                    <p className="series-desc">{series.description}</p>
-                                    <div className="series-timeline-preview">{series.years_covered.map(year => <div key={year} className="timeline-dot"><span className="year">{year}</span><span className="dot"></span></div>)}</div>
-                                    <div className="card-footer"><span>Cross-Report Intelligence</span><div className="action-link">Start Analysis <ArrowRightIcon /></div></div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </main>
+                <TimeSeriesPage
+                    allSeries={allSeries}
+                    seriesLoading={seriesLoading}
+                    seriesError={seriesError}
+                    handleSeriesClick={handleSeriesClick}
+                />
             )}
 
             {(view === 'report' || view === 'series-chat') && (
@@ -1746,7 +1599,7 @@ function App() {
                 </main>
             )}
 
-            {(view === 'landing' || view === 'time-series' || view === 'how-it-works') && (
+            {(view === 'directory' || view === 'time-series' || view === 'how-it-works') && (
                 <footer className="cag-footer"><div className="footer-content"><p>© 2025 CAG Gateway</p><div className="footer-links"><button>Privacy</button><button>Terms</button></div></div></footer>
             )}
         </div>
