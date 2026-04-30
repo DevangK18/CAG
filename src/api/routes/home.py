@@ -2,6 +2,15 @@
 Home page endpoints — stats, facets, featured rails, and surprise-me.
 
 Phase B: Real implementation using report_service and entity_service.
+Phase E: Cached for performance (§15, §18.1).
+
+CACHE INVALIDATION (§18.1):
+After ingesting new reports, clear home page caches by calling:
+    from src.api.services.report_service import invalidate_aggregates
+    invalidate_aggregates()
+
+This clears stats and trending caches to ensure fresh data.
+For now, restarting the API process also clears caches (they're in-memory).
 """
 
 from fastapi import APIRouter
@@ -58,9 +67,12 @@ async def get_trending():
     """
     Trending searches (last 7 days, anonymized).
 
-    Phase B+ feature. Stub: empty list.
+    Phase D implementation: queries query_logs table with privacy guards.
+    Returns empty list if query_logs table doesn't exist yet.
     """
-    return []
+    from ..services.report_service import get_trending_searches
+
+    return get_trending_searches()
 
 
 @router.get("/surprise/report", response_model=ReportSummary)

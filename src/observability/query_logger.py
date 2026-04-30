@@ -114,6 +114,9 @@ class QueryLogContext:
         self.groundedness_num_grounded: Optional[int] = None
         self.groundedness_report: Optional[Dict[str, Any]] = None
 
+        # Search channel counts (for home_search mode)
+        self.search_channel_counts: Optional[Dict[str, int]] = None
+
         # Status
         self.success = True
         self.error_message: Optional[str] = None
@@ -301,6 +304,25 @@ class QueryLogContext:
         self.success = False
         self.error_message = error_message
 
+    def record_search(self, channel_counts: Dict[str, int]) -> None:
+        """
+        Record search channel hit counts (for home_search mode).
+
+        Args:
+            channel_counts: Dict mapping channel names to result counts
+                           e.g., {"reports": 3, "entities": 2, "findings": 5}
+        """
+        self.search_channel_counts = channel_counts
+
+    def set_extra(self, key: str, value: Any) -> None:
+        """
+        Set arbitrary extra data (fallback for backward compatibility).
+
+        For search channel counts, prefer using record_search() instead.
+        """
+        if key == "channel_counts":
+            self.search_channel_counts = value
+
     def _build_log_dict(self) -> Dict[str, Any]:
         """Build the complete log dictionary for database insertion."""
         # End any open phase
@@ -319,6 +341,14 @@ class QueryLogContext:
             self.token_usage_completion,
         )
 
+        # Build query_enhancement with search channel counts if present
+        query_enhancement = self.query_enhancement or {}
+        if self.search_channel_counts:
+            query_enhancement = {
+                **(query_enhancement),
+                "search_channel_counts": self.search_channel_counts,
+            }
+
         # Build the log dict
         log_dict = {
             "query_id": self.query_id,
@@ -334,7 +364,7 @@ class QueryLogContext:
             "explicit_filters": self.explicit_filters,
             "auto_filters": self.auto_filters,
             "merged_filters": self.merged_filters,
-            "query_enhancement": self.query_enhancement,
+            "query_enhancement": query_enhancement if query_enhancement else None,
             "retrieved_chunks": self.retrieved_chunks,
             "retrieval_search_type": self.retrieval_search_type,
             "retrieval_total_candidates": self.retrieval_total_candidates,

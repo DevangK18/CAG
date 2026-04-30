@@ -14,6 +14,7 @@ Requirements:
 
 import re
 import logging
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
 try:
@@ -52,6 +53,30 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# FINDING SNIPPET (for home page search)
+# =============================================================================
+
+
+@dataclass
+class FindingSnippet:
+    """
+    Lightweight finding result for home page search dropdown.
+
+    Per §8 of 02_backend_implementation_plan.md.
+    """
+
+    chunk_id: str
+    report_id: str
+    section: str
+    page: int
+    snippet: str  # First ~200 chars of chunk content
+    finding_type: Optional[str]
+    severity: Optional[str]
+    amount_crore: Optional[float]
+    score: float
 
 
 # =============================================================================
@@ -832,3 +857,111 @@ class RetrievalService:
         )
 
         return parents
+
+    # =========================================================================
+    # FINDINGS SNIPPET SEARCH (Phase C - Home Page)
+    # =========================================================================
+
+    def search_findings_snippets(
+        self,
+        query: str,
+        limit: int = 5,
+        auto_filter: bool = True,
+    ) -> List[FindingSnippet]:
+        """
+        Lightweight finding search for home page search dropdown.
+
+        Per §8 of 02_backend_implementation_plan.md:
+        - Calls retrieve() with filter for findings only
+        - Returns small snippet objects (first ~200 chars)
+        - Used by search_service._search_findings()
+
+        Args:
+            query: Search query
+            limit: Max findings to return
+            auto_filter: Enable Bridge A auto-filter extraction (default True)
+
+        Returns:
+            List of FindingSnippet objects
+        """
+        if not query or not query.strip():
+            return []
+
+        try:
+            # Build filter for findings only
+            filters = {"finding_type": {"$ne": None}}
+
+            # Call retrieve with the findings filter
+            result = self.retrieve(
+                query=query,
+                top_k=limit,
+                filters=filters,
+            )
+
+            snippets = []
+            seen_chunks = set()
+
+            # Walk through parents and extract highest-scored chunk per finding
+            for parent in result.parents:
+                for child in parent.children:
+                    if child.chunk_id in seen_chunks:
+                        continue
+
+                    # Only include chunks with finding_type
+                    finding_type = child.finding_type
+                    if not finding_type:
+                        continue
+
+                    seen_chunks.add(child.chunk_id)
+
+                    # Truncate content to ~200 chars
+                    content = child.content or ""
+                    snippet_text = content[:200]
+                    if len(content) > 200:
+                        # Try to break at word boundary
+                        last_space = snippet_text.rfind(' ')
+                        if last_space > 150:
+                            snippet_text = snippet_text[:last_space] + "..."
+                        else:
+                            snippet_text = snippet_text + "..."
+
+                    # Extract report_id from chunk_id
+                    # Format: {report_id}_child_p{page}_{type}_{index}
+                    report_id = child.report_id or ""
+                    if not report_id and child.chunk_id:
+                        # Parse from chunk_id if not available
+                        parts = child.chunk_id.rsplit("_child_", 1)
+                        if len(parts) > 1:
+                            report_id = parts[0]
+
+                    # Get section from hierarchy
+                    section = "Unknown Section"
+                    if child.hierarchy:
+                        # Get the most specific (last) hierarchy entry
+                        section_values = list(child.hierarchy.values())
+                        if section_values:
+                            section = section_values[-1]
+
+                    snippets.append(FindingSnippet(
+                        chunk_id=child.chunk_id,
+                        report_id=report_id,
+                        section=section,
+                        page=child.page_physical or 0,
+                        snippet=snippet_text,
+                        finding_type=finding_type,
+                        severity=child.severity,
+                        amount_crore=child.total_amount_crore,
+                        score=child.score,
+                    ))
+
+                    if len(snippets) >= limit:
+                        break
+
+                if len(snippets) >= limit:
+                    break
+
+            return snippets
+
+        except Exception as e:
+            logger.warning(f"search_findings_snippets failed: {e}")
+            return []

@@ -128,6 +128,35 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Query observability init failed: {e}")
 
+    # Initialize search service (Phase C)
+    logger.info("Initializing search service...")
+    try:
+        from .services.search_service import SearchService
+        from .services.report_service import get_glossary_index
+        from src.entity_graph.entity_service import get_entity_service
+
+        rag = get_rag_service()
+        if rag:
+            # Get registry from rag_pipeline
+            from report_registry import get_registry
+            registry = get_registry()
+
+            search_service = SearchService(
+                registry=registry,
+                entity_service=get_entity_service(),
+                retrieval_service=rag.retrieval,
+                glossary_index=get_glossary_index(),
+                config=rag.config,
+            )
+            app.state.search_service = search_service
+            logger.info("Search service initialized successfully")
+        else:
+            logger.warning("RAG service not available; search service disabled")
+            app.state.search_service = None
+    except Exception as e:
+        logger.warning(f"Search service init failed: {e}")
+        app.state.search_service = None
+
     # Log environment configuration
     logger.info("-" * 60)
     logger.info("[CONFIG] Environment: %s", os.environ.get("ENVIRONMENT", "development"))

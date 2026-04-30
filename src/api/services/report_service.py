@@ -8,6 +8,7 @@ lookup functions for the API routes.
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import List, Optional, Dict
 
@@ -34,9 +35,24 @@ _audit_category_index: Dict[str, List[str]] = {}  # audit_category → [report_i
 _tier_index: Dict[str, List[str]] = {}  # government_body_type → [report_ids]
 _recent_reports: List[ReportSummary] = []  # top 20 by year DESC
 
+# Phase E: Pre-computed top entities for facets (§15)
+# Prevents per-request DB query in get_home_facets()
+_top_entities_facets: List[Dict[str, any]] = []  # top 50 non-ministry entities
+
 # Phase B: Glossary index (§5.2)
 _glossary_index: Dict[str, List[Dict[str, str]]] = {}  # term_lower → [entries]
 _glossary_loaded: bool = False
+
+# Phase D: Trending searches cache (§9.4)
+_trending_searches_cache: List[Dict[str, any]] = []
+_trending_searches_cache_time: float = 0.0
+_trending_searches_cache_ttl: int = 3600  # 1 hour in seconds
+
+# Phase E: Home stats cache (§15, §18.1)
+# Prevents repeated expensive Qdrant count queries on every request
+_home_stats_cache: Optional[any] = None
+_home_stats_cache_time: float = 0.0
+_home_stats_cache_ttl: int = 3600  # 1 hour in seconds
 
 
 def normalize_report_no(report_no: Optional[str]) -> Optional[str]:
@@ -373,9 +389,10 @@ def _build_indexes():
     Build pre-computed indexes from loaded reports (Phase B).
 
     Called once at the end of _load_reports().
+    Phase E: Also pre-computes top entities for facets (§15).
     """
     global _ministry_index, _year_index, _audit_year_index, _state_index
-    global _audit_category_index, _tier_index, _recent_reports
+    global _audit_category_index, _tier_index, _recent_reports, _top_entities_facets
 
     _ministry_index = {}
     _year_index = {}
@@ -437,10 +454,38 @@ def _build_indexes():
         reverse=True,
     )[:20]
 
+    # Phase E: Pre-compute top entities for facets (avoids per-request DB query)
+    _top_entities_facets = []
+    try:
+        from src.entity_graph.entity_service import get_entity_service
+        from src.entity_graph.db import session_scope
+        from src.entity_graph.models import Entity
+
+        entity_service = get_entity_service()
+        if entity_service:
+            with session_scope() as session:
+                top_entities = (
+                    session.query(Entity)
+                    .filter(Entity.entity_type != "ministry")
+                    .order_by(Entity.mention_count.desc())
+                    .limit(50)
+                    .all()
+                )
+
+                for ent in top_entities:
+                    _top_entities_facets.append({
+                        'id': ent.id,
+                        'canonical_name': ent.canonical_name,
+                        'mention_count': ent.mention_count,
+                    })
+    except Exception as e:
+        logger.warning(f"Could not pre-compute top entities facets: {e}")
+
     logger.info(
         f"Built indexes: {len(_ministry_index)} ministries, "
         f"{len(_year_index)} years, {len(_state_index)} states, "
-        f"{len(_audit_category_index)} categories"
+        f"{len(_audit_category_index)} categories, "
+        f"{len(_top_entities_facets)} top entities"
     )
 
 
@@ -680,8 +725,17 @@ def get_home_stats():
 
     Returns:
         HomeStats model with counts from registry, entity_service, and qdrant
+
+    Phase E: Cached to avoid expensive Qdrant count queries on every request (§15, §18.1).
+    Cache TTL: 1 hour. Call invalidate_aggregates() after ingestion to clear.
     """
     from ..models import HomeStats
+    global _home_stats_cache, _home_stats_cache_time
+
+    # Check cache (1 hour TTL)
+    now = time.time()
+    if _home_stats_cache and (now - _home_stats_cache_time) < _home_stats_cache_ttl:
+        return _home_stats_cache
 
     _load_reports()
 
@@ -727,7 +781,7 @@ def get_home_stats():
     except Exception as e:
         logger.warning(f"Qdrant stats unavailable: {e}")
 
-    return HomeStats(
+    stats = HomeStats(
         total_reports=total_reports,
         total_entities=total_entities,
         total_ministries=total_ministries,
@@ -738,6 +792,12 @@ def get_home_stats():
         latest_ingest=latest_ingest,
         year_range=year_range,
     )
+
+    # Update cache
+    _home_stats_cache = stats
+    _home_stats_cache_time = now
+
+    return stats
 
 
 def get_home_facets():
@@ -795,32 +855,15 @@ def get_home_facets():
     ministry_facets.sort(key=lambda f: -f.count)
 
     # Entities (top 50 by mention_count, non-ministry)
-    entity_facets = []
-    from src.entity_graph.entity_service import get_entity_service
-    from src.entity_graph.db import session_scope
-
-    entity_service = get_entity_service()
-    if entity_service:
-        # Get top entities (excluding ministries)
-        with session_scope() as session:
-            from src.entity_graph.models import Entity
-
-            top_entities = (
-                session.query(Entity)
-                .filter(Entity.entity_type != "ministry")
-                .order_by(Entity.mention_count.desc())
-                .limit(50)
-                .all()
-            )
-
-            for ent in top_entities:
-                entity_facets.append(
-                    FacetValue(
-                        value=str(ent.id),
-                        label=ent.canonical_name,
-                        count=ent.mention_count,
-                    )
-                )
+    # Phase E: Use pre-computed list to avoid per-request DB query (§15)
+    entity_facets = [
+        FacetValue(
+            value=str(ent['id']),
+            label=ent['canonical_name'],
+            count=ent['mention_count'],
+        )
+        for ent in _top_entities_facets
+    ]
 
     # Audit categories
     category_facets = [
@@ -968,3 +1011,179 @@ def get_home_featured():
         deep_dives=deep_dives,
         popular_starts=popular_starts,
     )
+
+
+# ============================================================================
+# Phase D: Trending Searches (§9)
+# ============================================================================
+
+
+def _sanitize_query_text(query_text: str) -> Optional[str]:
+    """
+    Sanitize query text to remove potentially sensitive data (§9.3).
+
+    Filters out:
+    - Email addresses (x@y.z pattern)
+    - Phone numbers (10+ digits)
+    - Document IDs (UUID patterns, long alphanumeric strings)
+
+    Args:
+        query_text: Raw query text
+
+    Returns:
+        Sanitized query text, or None if it should be filtered out
+    """
+    if not query_text:
+        return None
+
+    # Email pattern: word@word.word
+    if re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', query_text):
+        logger.debug(f"Filtered trending query containing email: {query_text[:20]}...")
+        return None
+
+    # Phone number pattern: 10+ consecutive digits
+    if re.search(r'\b\d{10,}\b', query_text):
+        logger.debug(f"Filtered trending query containing phone number: {query_text[:20]}...")
+        return None
+
+    # UUID pattern: 8-4-4-4-12 hex format
+    if re.search(r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b', query_text):
+        logger.debug(f"Filtered trending query containing UUID: {query_text[:20]}...")
+        return None
+
+    # Long alphanumeric strings that look like document IDs (20+ chars, no spaces)
+    if re.search(r'\b[A-Za-z0-9_-]{20,}\b', query_text):
+        logger.debug(f"Filtered trending query containing document ID: {query_text[:20]}...")
+        return None
+
+    return query_text
+
+
+def get_trending_searches() -> List[Dict[str, any]]:
+    """
+    Get trending searches from the last 7 days (§9).
+
+    Queries the query_logs table with privacy guards:
+    - Only surfaces queries asked 3+ times (HAVING COUNT(*) >= 3)
+    - Filters out emails, phone numbers, document IDs
+    - Results cached for 1 hour
+
+    Returns:
+        List of dicts with keys: query_text, hit_count, last_seen
+        Empty list if query_logs table doesn't exist or query fails
+    """
+    global _trending_searches_cache, _trending_searches_cache_time
+
+    # Check cache (1 hour TTL)
+    now = time.time()
+    if _trending_searches_cache and (now - _trending_searches_cache_time) < _trending_searches_cache_ttl:
+        return _trending_searches_cache
+
+    # Query the database
+    try:
+        from src.entity_graph.db import get_engine
+        from sqlalchemy import text
+
+        engine = get_engine()
+        if not engine:
+            logger.warning("No database engine available for trending searches")
+            return []
+
+        # SQL from §9.2 (adapted to include home_search mode)
+        # Note: Removed environment='prod' filter to work in all environments
+        # In production, consider adding: AND environment = 'prod'
+        sql = text("""
+            SELECT
+                query_text,
+                COUNT(*) AS hit_count,
+                MAX(timestamp) AS last_seen
+            FROM query_logs
+            WHERE
+                timestamp > NOW() - INTERVAL '7 days'
+                AND interaction_mode IN ('home', 'directory', 'agentic_sub', 'home_search')
+                AND success = TRUE
+                AND length(query_text) BETWEEN 5 AND 100
+            GROUP BY query_text
+            HAVING COUNT(*) >= 3
+            ORDER BY hit_count DESC
+            LIMIT 10
+        """)
+
+        with engine.connect() as conn:
+            result = conn.execute(sql)
+            rows = result.fetchall()
+
+        # Sanitize and build response
+        trending = []
+        for row in rows:
+            query_text = row[0]
+            hit_count = row[1]
+            last_seen = row[2]
+
+            # Sanitize (§9.3)
+            sanitized_query = _sanitize_query_text(query_text)
+            if not sanitized_query:
+                continue
+
+            trending.append({
+                "query_text": sanitized_query,
+                "hit_count": hit_count,
+                "last_seen": last_seen.isoformat() if last_seen else None,
+            })
+
+        # Update cache
+        _trending_searches_cache = trending
+        _trending_searches_cache_time = now
+
+        logger.info(f"Loaded {len(trending)} trending searches")
+        return trending
+
+    except Exception as e:
+        # Graceful degradation: return empty list if query_logs table doesn't exist
+        # or any other error occurs
+        logger.warning(f"Could not load trending searches: {e}")
+        return []
+
+
+# ============================================================================
+# Phase E: Cache Management (§18.1)
+# ============================================================================
+
+
+def invalidate_aggregates():
+    """
+    Clear all home page caches (stats, trending, etc.).
+
+    Call this after new reports are ingested to ensure fresh data.
+    Per §18.1: entity_service.canonicalize and entity_service.index operations
+    should call this post-completion.
+
+    For now, restarting the API process also clears caches (they're in-memory).
+
+    Example usage in ingestion runbook:
+        ```python
+        from src.api.services.report_service import invalidate_aggregates
+        invalidate_aggregates()
+        ```
+    """
+    global _home_stats_cache, _home_stats_cache_time
+    global _trending_searches_cache, _trending_searches_cache_time
+    global _reports_cache, _initialized
+
+    logger.info("Invalidating home page aggregates cache")
+
+    # Clear stats cache
+    _home_stats_cache = None
+    _home_stats_cache_time = 0.0
+
+    # Clear trending cache
+    _trending_searches_cache = []
+    _trending_searches_cache_time = 0.0
+
+    # Optionally reload reports (forces rebuild of indexes)
+    # Only do this if reports were actually re-ingested
+    # For now, we just clear the caches; report reload happens on next API restart
+    # _initialized = False
+    # _load_reports()
+
+    logger.info("Home page cache invalidated successfully")
