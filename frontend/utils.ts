@@ -119,3 +119,34 @@ export function sanitizeReportTitle(title: string): string {
 
   return cleaned || title;
 }
+
+/**
+ * Check if a ministry/organization name is valid (not "Unknown" or similar)
+ * Single source of truth for filtering out invalid ministries.
+ *
+ * @param value - Ministry name to check
+ * @returns true if valid, false if null/undefined/empty or contains "unknown"
+ */
+export function isValidMinistry(value: string | null | undefined): boolean {
+  if (!value || value.trim() === '') {
+    return false;
+  }
+  return !value.toLowerCase().includes('unknown');
+}
+
+/**
+ * Format large numbers for display in stats tiles
+ * >=1000 → "Xk" not "X,000"
+ *
+ * @param num - Number to format
+ * @returns Formatted string
+ */
+export function formatStat(num: number): string {
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(1)}M`.replace('.0M', 'M');
+  }
+  if (num >= 1000) {
+    return `${(num / 1000).toFixed(1)}k`.replace('.0k', 'k');
+  }
+  return num.toString();
+}

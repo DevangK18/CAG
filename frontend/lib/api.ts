@@ -884,127 +884,103 @@ import type {
 
 /**
  * Get home page stats
- * Phase A: Stub implementation
  */
 export async function getHomeStats(): Promise<HomeStats> {
-  return Promise.resolve({
-    total_reports: 37,
-    total_entities: 390,
-    total_ministries: 50,
-    total_mentions: 25000,
-    total_findings: 5000,
-    total_charts: 150,
-    total_tables: 200,
-    latest_ingest: '2024-12-01',
-    year_range: [2020, 2024],
-  });
+  const response = await fetch(`${API_URL}/home/stats`);
+  if (!response.ok) throw new Error('Failed to fetch home stats');
+  return response.json();
 }
 
 /**
  * Get home page facets
- * Phase A: Stub implementation
  */
 export async function getHomeFacets(): Promise<HomeFacets> {
-  return Promise.resolve({
-    tiers: [
-      { value: 'union', label: 'Union', count: 20 },
-      { value: 'state', label: 'State', count: 15 },
-      { value: 'local_body', label: 'Local Body', count: 2 },
-    ],
-    states: [
-      { value: 'MH', label: 'Maharashtra', count: 5 },
-      { value: 'KA', label: 'Karnataka', count: 4 },
-    ],
-    years: [
-      { value: '2024', label: '2024', count: 10 },
-      { value: '2023', label: '2023', count: 15 },
-    ],
-    ministries: [],
-    entities: [],
-    audit_categories: [],
-  });
+  const response = await fetch(`${API_URL}/home/facets`);
+  if (!response.ok) throw new Error('Failed to fetch home facets');
+  return response.json();
 }
 
 /**
  * Get home page featured content
- * Phase A: Stub implementation
  */
 export async function getHomeFeatured(): Promise<HomeFeatured> {
-  return Promise.resolve({
-    top_ministries: [],
-    top_entities: [],
-    recent_reports: [],
-    deep_dives: [],
-    popular_starts: [],
-  });
+  const response = await fetch(`${API_URL}/home/featured`);
+  if (!response.ok) throw new Error('Failed to fetch home featured content');
+  return response.json();
 }
 
 /**
  * Get trending searches
- * Phase A: Stub implementation
  */
 export async function getHomeTrending(): Promise<TrendingSearch[]> {
-  return Promise.resolve([]);
+  const response = await fetch(`${API_URL}/home/trending`);
+  if (!response.ok) throw new Error('Failed to fetch trending searches');
+  return response.json();
 }
 
 /**
  * Get random surprise report
- * Phase A: Stub implementation
  */
 export async function getSurpriseReport(): Promise<APIReportSummary> {
-  return Promise.resolve({
-    id: '2023_01_sample',
-    title: 'Sample Report',
-    report_no: '2023/01',
-    ministry: 'Ministry of Sample',
-    sector: 'Sample Sector',
-    year: 2023,
-    findings_count: 10,
-    monetary_impact: '₹100 crore',
-    status: 'published',
-    filename: 'sample.pdf',
-    government_body_type: 'union',
-    audit_category: 'performance',
-  });
+  const response = await fetch(`${API_URL}/home/surprise/report`);
+  if (!response.ok) throw new Error('Failed to fetch surprise report');
+  return response.json();
 }
 
 /**
  * Get random surprise entity
- * Phase A: Stub implementation
  */
 export async function getSurpriseEntity(): Promise<EntitySummary> {
-  return Promise.resolve({
-    id: 1,
-    canonical_name: 'Sample Entity',
-    entity_type: 'PSU',
-    primary_tier: 'union',
-    aliases: [],
-    first_seen_year: 2020,
-    last_seen_year: 2024,
-    mention_count: 100,
-    finding_count: 20,
-    report_count: 5,
-  });
+  const response = await fetch(`${API_URL}/home/surprise/entity`);
+  if (!response.ok) throw new Error('Failed to fetch surprise entity');
+  return response.json();
 }
 
 /**
  * Smart search across all channels
- * Phase A: Stub implementation
+ * Phase C: Full implementation with AbortController support
+ *
+ * @param params.q - Search query
+ * @param params.type - Optional channel filter
+ * @param params.limit - Max results per channel
+ * @param signal - Optional AbortSignal for cancellation
+ * @returns Grouped search results or null if aborted
  */
-export async function smartSearch(params: {
-  q: string;
-  type?: SearchChannel;
-  limit?: number;
-}): Promise<GroupedSearchResults> {
-  return Promise.resolve({
-    reports: [],
-    ministries: [],
-    entities: [],
-    findings: [],
-    glossary: [],
-    top_hit_channel: null,
-    top_hit_score: null,
-  });
+export async function smartSearch(
+  params: {
+    q: string;
+    type?: SearchChannel;
+    limit?: number;
+  },
+  signal?: AbortSignal
+): Promise<GroupedSearchResults | null> {
+  const searchParams = new URLSearchParams();
+  searchParams.set('q', params.q);
+  if (params.type && params.type !== 'all') {
+    searchParams.set('type', params.type);
+  }
+  if (params.limit) {
+    searchParams.set('limit', params.limit.toString());
+  }
+
+  try {
+    const response = await fetch(
+      `${API_URL}/home/search?${searchParams.toString()}`,
+      { signal }
+    );
+
+    if (!response.ok) {
+      throw new Error('Search failed');
+    }
+
+    return response.json();
+  } catch (err) {
+    // Handle AbortError gracefully
+    if (err instanceof Error && err.name === 'AbortError') {
+      return null;
+    }
+    throw err;
+  }
 }
 
 /**

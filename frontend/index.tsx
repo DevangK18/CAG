@@ -1504,7 +1504,9 @@ function App() {
                         setPreviousView(view);
                         setView(newView);
                     }}
-                    setChatMode={setChatMode}
+                    setCurrentSeriesId={(id: string) => {
+                        setSelectedSeries(allSeries.find(s => s.id === id) || null);
+                    }}
                     openChatDrawer={() => {
                         setChatMode('agentic');
                         setChatOpen(true);

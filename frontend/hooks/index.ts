@@ -17,3 +17,10 @@ export { useSeriesChat } from './useSeriesChat';
 // New phase 10 additions
 export { useOverview } from './useOverview';
 export { useSummaries } from './useSummaries';
+
+// Home page hooks (Phase B/C)
+export { useHomeStats } from './useHomeStats';
+export { useHomeFacets } from './useHomeFacets';
+export { useHomeFeatured } from './useHomeFeatured';
+export { useSurpriseMe } from './useSurpriseMe';
+export { useSmartSearch } from './useSmartSearch';

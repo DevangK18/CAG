@@ -135,6 +135,246 @@
 }
 
 /* ============================================
+   SEARCH DROPDOWN
+   ============================================ */
+
+.home-search-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 8px;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    max-height: 480px;
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.home-search-dropdown-header {
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.home-search-dropdown-loading,
+.home-search-dropdown-error,
+.home-search-dropdown-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.home-search-dropdown-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.home-search-dropdown-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+.home-search-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 16px 16px;
+}
+
+.home-search-example-chip {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.home-search-example-chip:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.home-search-channel {
+    border-top: 1px solid var(--border);
+}
+
+.home-search-channel:first-child {
+    border-top: none;
+}
+
+.home-search-channel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.home-search-spinner {
+    animation: spin 1s linear infinite;
+    color: var(--accent);
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   SEARCH RESULT ROW
+   ============================================ */
+
+.home-search-result-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.home-search-result-row:hover,
+.home-search-result-row.selected {
+    background: var(--bg-primary);
+}
+
+.home-search-result-row.selected {
+    background: var(--accent-light);
+}
+
+.home-search-result-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-muted);
+}
+
+.home-search-result-icon.ministry {
+    background: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.home-search-result-icon.entity {
+    background: #f0fff4;
+    color: #276749;
+}
+
+.home-search-result-icon.finding {
+    background: #fffaf0;
+    color: #c05621;
+}
+
+.home-search-result-icon.glossary {
+    background: #faf5ff;
+    color: #6b46c1;
+}
+
+.home-search-result-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.home-search-result-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-search-result-snippet {
+    font-size: 13px;
+    color: var(--text-main);
+    font-style: italic;
+    line-height: 1.4;
+}
+
+.home-search-result-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.home-search-result-sep {
+    color: var(--border);
+}
+
+.home-search-result-type {
+    background: var(--bg-primary);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.home-search-result-abbr {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.home-search-result-extra {
+    margin-left: 8px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.home-search-result-severity {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.home-search-result-severity.critical {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+.home-search-result-severity.high {
+    background: #feebc8;
+    color: #c05621;
+}
+
+.home-search-result-severity.medium {
+    background: #fefcbf;
+    color: #744210;
+}
+
+.home-search-result-severity.low {
+    background: #c6f6d5;
+    color: #276749;
+}
+
+/* ============================================
    SURPRISE ME BUTTON
    ============================================ */
 
