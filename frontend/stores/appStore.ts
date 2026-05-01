@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { CitationMap } from '../lib/api';
 import { buildNormalizedCitationMap } from '../lib/citationUtils';
+import { GroundednessReport } from '../types';
 
 export interface Message {
   id: string;
@@ -15,6 +16,7 @@ export interface Message {
   content: string;
   isStreaming?: boolean;
   isWaitingForResponse?: boolean; // Waiting for first token
+  groundednessReport?: GroundednessReport | null;
 }
 
 export type ResponseStyle = 'executive' | 'concise' | 'detailed' | 'technical' | 'comparative' | 'adaptive';
@@ -75,6 +77,7 @@ export interface AppState {
   setIsStreaming: (isStreaming: boolean) => void;
   clearMessages: () => void;
   setShowLowRelevanceCaveat: (show: boolean) => void; // Phase 1
+  setLastMessageGroundedness: (report: GroundednessReport) => void; // Phase D
 
   // Citation actions
   setCitationMap: (map: CitationMap) => void;
@@ -186,6 +189,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsStreaming: (isStreaming) => set({ isStreaming }),
 
   setShowLowRelevanceCaveat: (show) => set({ showLowRelevanceCaveat: show }),
+
+  setLastMessageGroundedness: (report) => set((state) => {
+    const messages = [...state.messages];
+    if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+      messages[messages.length - 1] = {
+        ...messages[messages.length - 1],
+        groundednessReport: report,
+      };
+    }
+    return { messages };
+  }),
 
   clearMessages: () => set({
     messages: [],

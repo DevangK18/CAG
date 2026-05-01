@@ -55,6 +55,7 @@ import { HowItWorks } from './components/HowItWorks/HowItWorks';
 import { DirectoryPage } from './components/Directory/DirectoryPage';
 import { TimeSeriesPage } from './components/TimeSeries/TimeSeriesPage';
 import { HomePage } from './components/Home/HomePage';
+import { EntityPage } from './components/Entity/EntityPage';
 import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
@@ -1278,6 +1279,7 @@ function App() {
                                         content={m.content}
                                         isStreaming={isThisMessageStreaming}
                                         isWaitingForResponse={m.isWaitingForResponse}
+                                        groundednessReport={m.groundednessReport}
                                     />
                                 );
                             })}
@@ -1512,6 +1514,10 @@ function App() {
                         setChatOpen(true);
                     }}
                 />
+            )}
+
+            {view === 'entity' && (
+                <EntityPage onNavigateToReport={handleSelectReport} />
             )}
 
             {view === 'directory' && (

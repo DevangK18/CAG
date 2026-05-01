@@ -401,6 +401,15 @@
     background: var(--accent-light);
 }
 
+.home-shuffle-spin {
+    animation: shuffle-spin 0.4s ease-in-out;
+}
+
+@keyframes shuffle-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 /* ============================================
    STATS TILES
    ============================================ */

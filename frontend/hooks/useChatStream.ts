@@ -30,6 +30,7 @@ export function useChatStream(): UseChatStreamResult {
     setCitationMap,
     clearMessages,
     setShowLowRelevanceCaveat,
+    setLastMessageGroundedness,
   } = useAppStore();
 
   const sendMessage = useCallback(async (
@@ -113,9 +114,10 @@ export function useChatStream(): UseChatStreamResult {
             console.log(`[agentic:${event.type}]`, event.data);
             break;
 
-          // Phase 13: groundedness event. Log for now; UI can consume later.
+          // Phase D: groundedness event - wire to store
           case 'groundedness':
             console.log('[groundedness]', event.data);
+            setLastMessageGroundedness(event.data);
             break;
         }
       }
@@ -128,7 +130,7 @@ export function useChatStream(): UseChatStreamResult {
       setIsStreaming(false);
       setLastMessageStreaming(false);
     }
-  }, [isStreaming, responseStyle, addMessage, appendToLastMessage, setLastMessageStreaming, setLastMessageWaiting, setCitationMap, setIsStreaming, setShowLowRelevanceCaveat]);
+  }, [isStreaming, responseStyle, addMessage, appendToLastMessage, setLastMessageStreaming, setLastMessageWaiting, setCitationMap, setIsStreaming, setShowLowRelevanceCaveat, setLastMessageGroundedness]);
 
   return {
     sendMessage,

@@ -14,12 +14,14 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { useAppStore } from '../stores/appStore';
 import { lookupCitation } from '../lib/citationUtils';
+import { GroundednessReport } from '../types';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string;
   isStreaming?: boolean;
   isWaitingForResponse?: boolean;
+  groundednessReport?: GroundednessReport | null;
 }
 
 // =============================================================================
@@ -324,10 +326,88 @@ function LoadingAnimation() {
 }
 
 // =============================================================================
+// Groundedness Badge Component
+// =============================================================================
+
+interface GroundednessBadgeProps {
+  report: GroundednessReport;
+}
+
+function GroundednessBadge({ report }: GroundednessBadgeProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Determine if this is verified or has issues
+  const isVerified = report.overall_score >= 0.8 && report.verified === true;
+  const hasIssues = report.overall_score < 0.8 || report.num_ungrounded > 0;
+
+  if (isVerified && !hasIssues) {
+    // Green checkmark badge (subtle, not clickable)
+    return (
+      <div className="mt-2 inline-flex items-center px-2 py-1 rounded text-xs bg-green-50 text-green-700 border border-green-200">
+        <span className="mr-1">✓</span>
+        <span>Verified</span>
+      </div>
+    );
+  }
+
+  if (hasIssues) {
+    // Amber warning badge (clickable)
+    return (
+      <div className="mt-2">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="inline-flex items-center px-2 py-1 rounded text-xs bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 cursor-pointer transition-colors"
+        >
+          <span className="mr-1">⚠</span>
+          <span>{report.num_ungrounded} of {report.num_claims} claims unverified</span>
+        </button>
+
+        {isExpanded && (
+          <div className="mt-3 p-3 rounded-lg border border-amber-200 bg-amber-50/50 text-sm">
+            <div className="font-semibold text-amber-900 mb-3">
+              ⚠ {report.num_ungrounded} of {report.num_claims} claims could not be verified against sources
+            </div>
+            <div className="space-y-3">
+              {report.claims.map((claim, idx) => (
+                <div key={idx} className="pb-3 border-b border-amber-100 last:border-b-0 last:pb-0">
+                  <div className="flex items-start">
+                    <span className="mr-2 text-base flex-shrink-0">
+                      {claim.grounded ? '✓' : '⚠'}
+                    </span>
+                    <div className="flex-1">
+                      <div className={claim.grounded ? 'text-gray-700' : 'text-amber-900'}>
+                        {claim.text}
+                      </div>
+                      {claim.source_ref && (
+                        <div className="text-xs text-gray-600 mt-1">
+                          {claim.source_ref} · confidence {claim.confidence.toFixed(2)}
+                        </div>
+                      )}
+                      {!claim.grounded && claim.reason && (
+                        <div className="text-xs text-amber-700 mt-1">
+                          Reason: {claim.reason}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // No groundedness report or neutral state - render nothing
+  return null;
+}
+
+// =============================================================================
 // COMPONENT
 // =============================================================================
 
-export function ChatMessage({ role, content, isStreaming, isWaitingForResponse }: ChatMessageProps) {
+export function ChatMessage({ role, content, isStreaming, isWaitingForResponse, groundednessReport }: ChatMessageProps) {
   const { normalizedCitationMap, navigateToCitation } = useAppStore();
 
   const markdownComponents = useMemo(
@@ -378,6 +458,9 @@ export function ChatMessage({ role, content, isStreaming, isWaitingForResponse }
           {processedContent}
         </ReactMarkdown>
         {isStreaming && <span className="streaming-cursor" />}
+        {!isStreaming && groundednessReport && (
+          <GroundednessBadge report={groundednessReport} />
+        )}
       </div>
     </div>
   );

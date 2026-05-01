@@ -6,7 +6,7 @@
  * Fetches random report or entity on click
  */
 
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSurpriseMe } from '../../hooks';
 import type { APIReportSummary } from '../../lib/api';
 import type { EntitySummary } from '../../types';
@@ -46,6 +46,7 @@ export const SurpriseMeButton: React.FC<SurpriseMeButtonProps> = ({
     onEntitySelect,
 }) => {
     const { result, isLoading, trigger } = useSurpriseMe(variant);
+    const [isSpinning, setIsSpinning] = useState(false);
 
     useEffect(() => {
         if (!result) return;
@@ -60,16 +61,20 @@ export const SurpriseMeButton: React.FC<SurpriseMeButtonProps> = ({
     }, [result, variant, onReportSelect, onEntitySelect]);
 
     const handleClick = async () => {
-        await trigger();
+        // Trigger spin animation
+        setIsSpinning(true);
+        setTimeout(() => setIsSpinning(false), 400);
+
+        // Fetch concurrently (don't await)
+        trigger();
     };
 
     return (
         <button
             className="home-surprise-btn"
             onClick={handleClick}
-            disabled={isLoading}
         >
-            <ShuffleIcon spinning={isLoading} />
+            <ShuffleIcon spinning={isSpinning} />
             <span>Surprise Me</span>
         </button>
     );

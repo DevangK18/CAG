@@ -24,3 +24,6 @@ export { useHomeFacets } from './useHomeFacets';
 export { useHomeFeatured } from './useHomeFeatured';
 export { useSurpriseMe } from './useSurpriseMe';
 export { useSmartSearch } from './useSmartSearch';
+
+// Entity page hook (Phase D)
+export { useEntity } from './useEntity';

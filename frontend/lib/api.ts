@@ -985,19 +985,97 @@ export async function smartSearch(
 
 /**
  * Get entity full details
- * Phase A: Stub implementation
+ * Phase D: Real implementation
  */
 export async function getEntityFull(id: number): Promise<EntityDetail> {
-  return Promise.resolve({
-    id,
-    canonical_name: 'Sample Entity',
-    entity_type: 'PSU',
-    primary_tier: 'union',
-    aliases: [],
-    first_seen_year: 2020,
-    last_seen_year: 2024,
-    mention_count: 100,
-    finding_count: 20,
-    report_count: 5,
-  });
+  const response = await fetch(`${API_URL}/entities/${id}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch entity ${id}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get findings for an entity
+ * Phase D: Entity page
+ */
+export async function getEntityFindings(
+  entityId: number,
+  options?: { minAmountCrore?: number; severity?: string; limit?: number }
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (options?.minAmountCrore !== undefined) {
+    params.set('min_amount_crore', options.minAmountCrore.toString());
+  }
+  if (options?.severity) {
+    params.set('severity', options.severity);
+  }
+  if (options?.limit) {
+    params.set('limit', options.limit.toString());
+  }
+
+  const url = `${API_URL}/entities/${entityId}/findings${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch findings for entity ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.findings || [];
+}
+
+/**
+ * Get reports for an entity
+ * Phase D: Entity page
+ */
+export async function getEntityReports(entityId: number): Promise<string[]> {
+  const response = await fetch(`${API_URL}/entities/${entityId}/reports`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch reports for entity ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.report_ids || [];
+}
+
+/**
+ * Get related entities
+ * Phase D: Entity page
+ */
+export async function getEntityRelated(entityId: number, limit: number = 20): Promise<any[]> {
+  const response = await fetch(`${API_URL}/entities/${entityId}/related?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch related entities for ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.related || [];
+}
+
+/**
+ * Get mentions for an entity
+ * Phase D: Entity page
+ */
+export async function getEntityMentions(
+  entityId: number,
+  options?: { findingType?: string; auditYear?: string; governmentBodyType?: string; limit?: number }
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (options?.findingType) {
+    params.set('finding_type', options.findingType);
+  }
+  if (options?.auditYear) {
+    params.set('audit_year', options.auditYear);
+  }
+  if (options?.governmentBodyType) {
+    params.set('government_body_type', options.governmentBodyType);
+  }
+  if (options?.limit) {
+    params.set('limit', options.limit.toString());
+  }
+
+  const url = `${API_URL}/entities/${entityId}/mentions${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch mentions for entity ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.mentions || [];
 }
