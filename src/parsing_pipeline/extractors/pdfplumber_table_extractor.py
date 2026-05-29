@@ -23,6 +23,7 @@ from pathlib import Path
 
 from src.core.data_contracts import ExtractedContent
 from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
+from src.parsing_pipeline.config import get_config, ContentExtractionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,39 +35,42 @@ class PdfplumberTableExtractor:
     No ML models, no OCR — reads PDF text streams directly.
     Produces markdown + StructuredTable JSON, with confidence scoring.
 
-    CAG-tuned settings:
-    - lines_strict strategy (CAG reports have ruled tables)
-    - snap_tolerance=5 (handles minor line misalignment)
-    - join_tolerance=5 (merges close-together lines)
+    CAG-tuned settings loaded from configuration.
     """
 
-    # pdfplumber table_settings tuned for CAG audit reports
-    # CAG tables are typically ruled (have visible lines/borders)
-    TABLE_SETTINGS = {
-        "vertical_strategy": "lines_strict",
-        "horizontal_strategy": "lines_strict",
-        "snap_tolerance": 5,
-        "snap_x_tolerance": 5,
-        "snap_y_tolerance": 5,
-        "join_tolerance": 5,
-        "join_x_tolerance": 5,
-        "join_y_tolerance": 5,
-        "min_words_vertical": 1,
-        "min_words_horizontal": 1,
-    }
+    def __init__(self, config: Optional[ContentExtractionConfig] = None):
+        """Initialize the pdfplumber table extractor with configuration."""
+        # Load from config if not provided
+        if config is None:
+            config = get_config().content_extraction
 
-    # Fallback settings for tables without strong ruling lines
-    TABLE_SETTINGS_FALLBACK = {
-        "vertical_strategy": "text",
-        "horizontal_strategy": "lines",
-        "snap_tolerance": 5,
-        "join_tolerance": 5,
-        "min_words_vertical": 2,
-        "min_words_horizontal": 1,
-    }
+        self.config = config
 
-    def __init__(self):
-        """Initialize the pdfplumber table extractor."""
+        # pdfplumber table_settings tuned for CAG audit reports
+        # CAG tables are typically ruled (have visible lines/borders)
+        self.TABLE_SETTINGS = {
+            "vertical_strategy": "lines_strict",
+            "horizontal_strategy": "lines_strict",
+            "snap_tolerance": config.pdfplumber_snap_tolerance,
+            "snap_x_tolerance": config.pdfplumber_snap_tolerance,
+            "snap_y_tolerance": config.pdfplumber_snap_tolerance,
+            "join_tolerance": config.pdfplumber_join_tolerance,
+            "join_x_tolerance": config.pdfplumber_join_tolerance,
+            "join_y_tolerance": config.pdfplumber_join_tolerance,
+            "min_words_vertical": 1,
+            "min_words_horizontal": 1,
+        }
+
+        # Fallback settings for tables without strong ruling lines
+        self.TABLE_SETTINGS_FALLBACK = {
+            "vertical_strategy": "text",
+            "horizontal_strategy": "lines",
+            "snap_tolerance": config.pdfplumber_snap_tolerance,
+            "join_tolerance": config.pdfplumber_join_tolerance,
+            "min_words_vertical": 2,
+            "min_words_horizontal": 1,
+        }
+
         self.structured_extractor = StructuredTableExtractor()
         logger.info("PdfplumberTableExtractor initialized (no GPU required)")
 
@@ -104,9 +108,9 @@ class PdfplumberTableExtractor:
             # Step 2: Validate extraction quality
             confidence = self._compute_confidence(raw_table)
 
-            if confidence < 0.2:
+            if confidence < self.config.table_min_confidence:
                 logger.warning(
-                    f"pdfplumber: Very low confidence ({confidence:.2f}) on page {page_num}, "
+                    f"pdfplumber: Low confidence ({confidence:.2f}) on page {page_num}, "
                     f"skipping (will fall through to Tier 3)"
                 )
                 return None
@@ -262,7 +266,8 @@ class PdfplumberTableExtractor:
             return False
 
         fill_ratio = non_empty / total_cells
-        return fill_ratio > 0.3 and non_empty >= 3
+        return (fill_ratio > self.config.table_fill_ratio_threshold and
+                non_empty >= self.config.table_min_non_empty_cells)
 
     # ========== CONFIDENCE SCORING ==========
 
@@ -291,7 +296,7 @@ class PdfplumberTableExtractor:
         empty_cells = sum(1 for row in table for cell in row if not cell.strip())
         empty_ratio = empty_cells / total_cells if total_cells > 0 else 1.0
 
-        if empty_ratio > 0.5:
+        if empty_ratio > self.config.table_empty_ratio_penalty_threshold:
             score -= 0.4
 
         # Factor 2: Column consistency
@@ -301,7 +306,7 @@ class PdfplumberTableExtractor:
             consistent = sum(1 for c in col_counts if c == most_common)
             consistency = consistent / len(col_counts)
 
-            if consistency < 0.7:
+            if consistency < self.config.table_column_consistency_threshold:
                 score -= 0.3
 
         # Factor 3: Numeric data presence (data rows only, skip header)
@@ -318,7 +323,7 @@ class PdfplumberTableExtractor:
             numeric_ratio = numeric_count / len(all_data_cells)
 
             # CAG tables should have some numbers
-            if numeric_ratio < 0.1:
+            if numeric_ratio < self.config.table_numeric_ratio_threshold:
                 score -= 0.2
 
         return max(0.0, min(1.0, score))

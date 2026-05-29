@@ -13,14 +13,17 @@ FILE NAMING UPDATE:
 - Example: 2017_10_Performance_Audit_of_Union_Government_Schemes_for_Flood_Control.pdf
 """
 
+import logging
 import pandas as pd
 import httpx
 import re
 from pathlib import Path
 from tenacity import retry, stop_after_attempt, wait_exponential
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Any, Dict
 from src.core.data_contracts import DocumentTask
+from src.parsing_pipeline.instrumentation import get_noop_emitter
 
+logger = logging.getLogger(__name__)
 
 # State code lookup for report ID generation
 STATE_CODES = {
@@ -168,14 +171,15 @@ class ManifestIngestionService:
     FILE NAMING: Reports saved as {Report_No}_{Recommended_Title}.pdf
     """
 
-    def __init__(self, raw_data_dir: str = "data/raw"):
+    def __init__(self, raw_data_dir: str = "data/raw", trace_emitter=None):
         self.base_raw_data_dir = Path(raw_data_dir)
-        self.raw_data_dir = self.base_raw_data_dir  # Will be updated per manifest
+        self.raw_data_dir = self.base_raw_data_dir
         self.base_raw_data_dir.mkdir(parents=True, exist_ok=True)
 
         # Multi-tier state (set during load_manifest)
         self.government_body_type: GovernmentBodyType = "union"
         self.current_state_name: Optional[str] = None
+        self._trace_emitter = trace_emitter or get_noop_emitter()
 
     def load_manifest(self, manifest_path: str) -> pd.DataFrame:
         """
@@ -195,18 +199,23 @@ class ManifestIngestionService:
         """
         try:
             # Detect government body type from filename first
+            filename = Path(manifest_path).stem.lower()
             self.government_body_type = detect_government_body_type(manifest_path)
-            print(f"Detected government body type: {self.government_body_type}")
+            logger.info(f"Detected government body type: {self.government_body_type}")
 
-            # Set tier-specific raw data directory
-            if self.government_body_type == "union":
-                # Keep existing Union PDFs in data/raw/ (no subdirectory for backward compatibility)
-                self.raw_data_dir = self.base_raw_data_dir
-            else:
-                # State and Local Body reports go in subdirectories
-                self.raw_data_dir = self.base_raw_data_dir / self.government_body_type
+            # Trace: Tier detection decision
+            self._trace_emitter.emit_decision(
+                "1",
+                "tier_detection",
+                self.government_body_type,
+                ["union", "state", "local_body"],
+                f"Detected from filename pattern: {filename}",
+            )
+
+            # Set tier-specific raw data directory (all tiers use subdirectories)
+            self.raw_data_dir = self.base_raw_data_dir / self.government_body_type
             self.raw_data_dir.mkdir(parents=True, exist_ok=True)
-            print(f"PDF storage directory: {self.raw_data_dir}")
+            logger.info(f"PDF storage directory: {self.raw_data_dir}")
 
             # Auto-detect header row: try header=1 first (original CAG format with title row),
             # fall back to header=0 if columns don't look like headers
@@ -219,11 +228,11 @@ class ManifestIngestionService:
             if not found_headers:
                 # Columns look like data values, try header=0 instead
                 df = pd.read_excel(manifest_path, header=0)
-                print(f"Loaded manifest with {len(df)} rows (headers in row 1)")
+                logger.info(f"Loaded manifest with {len(df)} rows (headers in row 1)")
             else:
-                print(f"Loaded manifest with {len(df)} rows (headers in row 2)")
+                logger.info(f"Loaded manifest with {len(df)} rows (headers in row 2)")
 
-            print(f"Raw columns: {list(df.columns)}")
+            logger.debug(f"Raw columns: {list(df.columns)}")
 
             # Strip whitespace from column names
             df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
@@ -266,10 +275,20 @@ class ManifestIngestionService:
                 if first_value:
                     explicit_type = str(first_value).lower().strip().replace(" ", "_")
                     if explicit_type in ("union", "state", "local_body"):
+                        prev_type = self.government_body_type
                         self.government_body_type = explicit_type
-                        print(f"Government body type overridden by column: {self.government_body_type}")
+                        logger.info(f"Government body type overridden by column: {self.government_body_type}")
 
-            print(f"Standardized columns: {list(df.columns)}")
+                        # Trace: Tier override by column
+                        self._trace_emitter.emit_decision(
+                            "1",
+                            "tier_override",
+                            explicit_type,
+                            ["union", "state", "local_body"],
+                            f"Overridden by manifest column (was: {prev_type})",
+                        )
+
+            logger.debug(f"Standardized columns: {list(df.columns)}")
 
             # Validate required columns
             required_columns = ["SL NO", "Report PDF", "Title"]
@@ -280,7 +299,7 @@ class ManifestIngestionService:
             # Validate State/Local required columns
             if self.government_body_type in ("state", "local_body"):
                 if "State Name" not in df.columns:
-                    print("WARNING: State Name column missing for State/Local manifest. Will use 'Unknown'.")
+                    logger.warning("State Name column missing for State/Local manifest. Will use 'Unknown'.")
 
             # Clean and standardize metadata values
             df = self._clean_metadata(df)
@@ -291,19 +310,19 @@ class ManifestIngestionService:
             # Log metadata availability
             metadata_cols = ["Report No", "Ministry", "Department", "Report Type", "Sector", "Date", "State Name", "Audit Category"]
             available = [col for col in metadata_cols if col in df.columns]
-            print(f"Metadata columns available: {available}")
+            logger.info(f"Metadata columns available: {available}")
 
             # Log sample of cleaned metadata
             if len(df) > 0:
                 sample = df.iloc[0]
                 if self.government_body_type == "union":
-                    print(
+                    logger.debug(
                         f"Sample metadata: Report No='{sample.get('Report No', 'N/A')}', "
                         f"Ministry='{sample.get('Ministry', 'N/A')}', "
                         f"Type='{sample.get('Report Type', 'N/A')}'"
                     )
                 else:
-                    print(
+                    logger.debug(
                         f"Sample metadata: Report No='{sample.get('Report No', 'N/A')}', "
                         f"State='{sample.get('State Name', 'N/A')}', "
                         f"Dept='{sample.get('Department', 'N/A')}', "
@@ -353,10 +372,10 @@ class ManifestIngestionService:
                         first, second = parts
                         # year_num format: "2025/15"
                         if first.isdigit() and len(first) == 4:
-                            return f"{int(second)} of {first}"
+                            return f"{second} of {first}"
                         # num_year format: "15/2025"
                         elif second.isdigit() and len(second) == 4:
-                            return f"{int(first)} of {second}"
+                            return f"{first} of {second}"
 
                 # Handle underscore formats: "2017_10" or "02_2024"
                 if "_" in val:
@@ -365,10 +384,10 @@ class ManifestIngestionService:
                         first, second = parts
                         # year_num format: "2017_10"
                         if first.isdigit() and len(first) == 4:
-                            return f"{int(second)} of {first}"
+                            return f"{second} of {first}"
                         # num_year format: "02_2024"
                         elif second.isdigit() and len(second) == 4:
-                            return f"{int(first)} of {second}"
+                            return f"{first} of {second}"
 
                 return val
 
@@ -440,6 +459,8 @@ class ManifestIngestionService:
 
         # Clean State Name
         if "State Name" in df.columns:
+            # Track corrections for tracing
+            state_corrections: List[Dict[str, str]] = []
 
             def clean_state_name(val):
                 if pd.isna(val):
@@ -450,10 +471,16 @@ class ManifestIngestionService:
                 # Title case normalization
                 val_str = val_str.title()
                 # Apply misspelling corrections
-                val_str = STATE_NAME_CORRECTIONS.get(val_str, val_str)
-                return val_str
+                corrected = STATE_NAME_CORRECTIONS.get(val_str, val_str)
+                if corrected != val_str:
+                    state_corrections.append({"raw": val_str, "corrected": corrected})
+                return corrected
 
             df["State Name"] = df["State Name"].apply(clean_state_name)
+
+            # Trace: State name corrections applied
+            if state_corrections:
+                self._trace_emitter.emit_sample("1", "state_name_corrections", state_corrections[:5])
 
         # Clean Audit Category
         if "Audit Category" in df.columns:
@@ -788,14 +815,30 @@ class ManifestIngestionService:
         title = row["Title"]
 
         # Build report ID using new naming convention
+        rec_title = row.get("Recommended Title", "")
+        if pd.isna(rec_title) or str(rec_title).strip() == "":
+            rec_title = row.get("Title", "untitled")
         report_id = self._build_report_id(row)
         local_path = self.raw_data_dir / f"{report_id}.pdf"
 
+        # Trace: Report ID generation
+        self._trace_emitter.emit(
+            "1",
+            "report_id_generation",
+            {
+                "raw_title": str(rec_title)[:50],
+                "report_id": report_id,
+                "tier": self.government_body_type,
+            },
+        )
+
         # Check if PDF already exists (primary or fallback filenames)
         existing_pdf_path = None
+        match_strategy = None
 
         if local_path.exists():
             existing_pdf_path = local_path
+            match_strategy = "exact"
         else:
             # Fallback: Check for Original Title filename (for manually downloaded PDFs)
             original_title = row.get("Title", "")  # "Title" is mapped from "Original Title"
@@ -803,11 +846,22 @@ class ManifestIngestionService:
                 original_title_path = self.raw_data_dir / f"{original_title}.pdf"
                 if original_title_path.exists():
                     existing_pdf_path = original_title_path
-                    print(f"  Found PDF with Original Title: {original_title_path.name[:60]}...")
+                    match_strategy = "original_title_fallback"
+                    logger.info(f"  Found PDF with Original Title: {original_title_path.name[:60]}...")
 
         if existing_pdf_path:
             # File already exists, skip download and return task
             metadata = self._build_metadata(row, title)
+
+            # Trace: PDF resolution decision
+            self._trace_emitter.emit_decision(
+                "1",
+                "pdf_resolution",
+                match_strategy,
+                ["exact", "original_title_fallback", "download"],
+                f"Found existing PDF at {str(existing_pdf_path)[-50:]}",
+            )
+
             return DocumentTask(
                 report_id=report_id,
                 source_url=url,
@@ -824,14 +878,14 @@ class ManifestIngestionService:
 
         # Log metadata for debugging
         if self.government_body_type == "union":
-            print(
+            logger.debug(
                 f"  Metadata for {report_id}: "
                 f"Report No='{metadata['Report No']}', "
                 f"Ministry='{metadata.get('Ministry', 'N/A')}', "
                 f"Type='{metadata['Report Type']}'"
             )
         else:
-            print(
+            logger.debug(
                 f"  Metadata for {report_id}: "
                 f"State='{metadata.get('state_name', 'N/A')}', "
                 f"Dept='{metadata.get('department', 'N/A')}', "
@@ -845,6 +899,15 @@ class ManifestIngestionService:
                     async for chunk in response.aiter_bytes():
                         f.write(chunk)
 
+            # Trace: PDF resolution - downloaded
+            self._trace_emitter.emit_decision(
+                "1",
+                "pdf_resolution",
+                "download",
+                ["exact", "original_title_fallback", "download"],
+                f"Downloaded from {url[:50]}",
+            )
+
             return DocumentTask(
                 report_id=report_id,
                 source_url=url,
@@ -852,6 +915,15 @@ class ManifestIngestionService:
                 initial_metadata=metadata,  # Now includes all fields
             )
         except Exception as e:
+            # Trace: PDF resolution - failed
+            self._trace_emitter.emit_decision(
+                "1",
+                "pdf_resolution",
+                "download_failed",
+                ["exact", "original_title_fallback", "download", "download_failed"],
+                f"Download failed: {str(e)[:100]}",
+            )
+
             failed_task = DocumentTask(
                 report_id=report_id,
                 source_url=url,
@@ -885,11 +957,11 @@ class ManifestIngestionService:
         # Log summary
         successful = [t for t in tasks if t.processing_status != "failed_download"]
         failed = [t for t in tasks if t.processing_status == "failed_download"]
-        print(
+        logger.info(
             f"Ingestion complete: {len(successful)} downloads successful, {len(failed)} failed."
         )
-        print(f"Government body type: {self.government_body_type}")
-        print(f"PDF storage directory: {self.raw_data_dir}")
+        logger.info(f"Government body type: {self.government_body_type}")
+        logger.info(f"PDF storage directory: {self.raw_data_dir}")
 
         # Log metadata coverage (tier-specific)
         if self.government_body_type == "union":
@@ -899,7 +971,7 @@ class ManifestIngestionService:
                 if t.initial_metadata.get("Report No") != "Unknown"
                 and t.initial_metadata.get("Ministry") != "Unknown"
             )
-            print(
+            logger.info(
                 f"Metadata coverage: {metadata_complete}/{len(successful)} reports have complete metadata"
             )
         else:
@@ -909,7 +981,7 @@ class ManifestIngestionService:
                 for t in successful
                 if t.initial_metadata.get("state_name") is not None
             )
-            print(
+            logger.info(
                 f"Metadata coverage: {metadata_complete}/{len(successful)} reports have state_name"
             )
 

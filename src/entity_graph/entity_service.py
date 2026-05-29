@@ -10,6 +10,7 @@ Public API used by:
 import json
 import logging
 from typing import List, Dict, Optional, Any
+from pathlib import Path
 
 from sqlalchemy import func, or_, distinct
 
@@ -19,8 +20,144 @@ from .models import Entity, EntityMention, EntityRelation
 logger = logging.getLogger(__name__)
 
 
+class ChunkLoader:
+    """Load and cache chunk data from JSON files for enrichment."""
+
+    def __init__(self, processed_dir: Path):
+        self.processed_dir = Path(processed_dir)
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_limit = 100
+
+    def _load_chunks_json(self, report_id: str) -> Dict[str, Any]:
+        """
+        Load chunks JSON for a report (cached).
+
+        Tries union, state, local_body subdirectories.
+        Returns empty dict if not found.
+        """
+        # Check cache first
+        if report_id in self._cache:
+            return self._cache[report_id]
+
+        # Try each tier subdirectory
+        result = {}
+        for tier in ["union", "state", "local_body"]:
+            chunks_file = self.processed_dir / tier / f"{report_id}_chunks.json"
+            if chunks_file.exists():
+                try:
+                    with open(chunks_file, "r", encoding="utf-8") as f:
+                        result = json.load(f)
+                        break
+                except Exception as e:
+                    logger.warning(f"Error loading {chunks_file}: {e}")
+                    result = {}
+
+        # Store in cache (with simple LRU: clear if we exceed limit)
+        if len(self._cache) >= self._cache_limit:
+            # Remove oldest entry (arbitrary key)
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[report_id] = result
+
+        return result
+
+    def get_finding_description(self, finding_id: str) -> Optional[str]:
+        """
+        Extract finding description from chunks JSON.
+
+        Parses finding_id to get report_id, loads chunks, searches
+        semantic_enrichment.findings for matching finding_id.
+        Returns finding['text'] or None if not found.
+        """
+        if not finding_id:
+            return None
+
+        # Parse finding_id to extract report_id
+        # Format: {report_id}_finding_{number}
+        parts = finding_id.rsplit("_finding_", 1)
+        if len(parts) != 2:
+            return None
+
+        report_id = parts[0]
+        chunks = self._load_chunks_json(report_id)
+
+        if not chunks:
+            return None
+
+        # Search semantic_enrichment.findings for matching finding_id
+        findings = chunks.get("semantic_enrichment", {}).get("findings", [])
+        for finding in findings:
+            if finding.get("finding_id") == finding_id:
+                # Prefer 'text' over 'summary'
+                return finding.get("text") or finding.get("summary")
+
+        return None
+
+    def get_chunk_context(self, chunk_id: str, mention_text: str) -> Optional[str]:
+        """
+        Extract context snippet around mention_text from chunk.
+
+        Parses chunk_id to get report_id, loads chunks JSON,
+        finds chunk by chunk_id, and extracts ~200 chars around mention_text.
+        """
+        if not chunk_id or not mention_text:
+            return None
+
+        # Parse chunk_id to extract report_id
+        # Format varies, but all contain the report_id at the start
+        # Try to extract report_id from chunk_id (everything before _child_ or _parent_)
+        report_id_candidate = chunk_id.split("_child_")[0].split("_parent_")[0]
+        if not report_id_candidate:
+            return None
+
+        chunks = self._load_chunks_json(report_id_candidate)
+
+        if not chunks:
+            return None
+
+        # Search child_chunks for matching chunk_id
+        child_chunks = chunks.get("child_chunks", [])
+        for chunk in child_chunks:
+            if chunk.get("chunk_id") == chunk_id:
+                content = chunk.get("content", "")
+                if not content:
+                    continue
+
+                # Find mention_text in content
+                idx = content.find(mention_text)
+                if idx == -1:
+                    # If exact match not found, use the first 200 chars
+                    return content[:200] + "..." if len(content) > 200 else content
+
+                # Extract ~200 chars around the mention
+                start = max(0, idx - 100)
+                end = min(len(content), idx + len(mention_text) + 100)
+                snippet = content[start:end]
+
+                # Add ellipsis if truncated
+                if start > 0:
+                    snippet = "..." + snippet
+                if end < len(content):
+                    snippet = snippet + "..."
+
+                return snippet
+
+        return None
+
+
 class EntityService:
     """Read-only entity graph queries."""
+
+    def __init__(self, processed_dir: Optional[Path] = None):
+        """Initialize EntityService with optional processed_dir for enrichment."""
+        if processed_dir:
+            self.chunk_loader = ChunkLoader(processed_dir)
+        else:
+            # Try to get from settings as fallback
+            try:
+                from src.api.config import settings
+                self.chunk_loader = ChunkLoader(settings.PROCESSED_DIR)
+            except (ImportError, AttributeError):
+                self.chunk_loader = None
 
     # -------------------------------------------------------------------------
     # Search & lookup
@@ -101,13 +238,17 @@ class EntityService:
     ) -> List[str]:
         """Distinct report_ids that mention this entity."""
         with session_scope() as session:
-            q = session.query(distinct(EntityMention.report_id)).filter_by(
-                entity_id=entity_id
+            q = session.query(distinct(EntityMention.report_id)).filter(
+                EntityMention.entity_id == entity_id
             )
             if audit_year_range:
                 start, end = audit_year_range
                 q = q.filter(EntityMention.audit_year.between(start, end))
-            return [r[0] for r in q.all()]
+            report_ids = [r[0] for r in q.all()]
+            logger.info(
+                f"get_reports_for_entity(entity_id={entity_id}): found {len(report_ids)} reports"
+            )
+            return report_ids
 
     def get_findings_for_entity(
         self,
@@ -277,7 +418,7 @@ class EntityService:
         }
 
     def _mention_to_dict(self, m: EntityMention) -> Dict[str, Any]:
-        return {
+        result = {
             "id": m.id,
             "entity_id": m.entity_id,
             "report_id": m.report_id,
@@ -293,6 +434,29 @@ class EntityService:
             "government_body_type": m.government_body_type,
             "state_name": m.state_name,
         }
+
+        # Enrich with finding description if applicable
+        if m.finding_id and self.chunk_loader:
+            description = self.chunk_loader.get_finding_description(m.finding_id)
+            result["description"] = description
+
+        # Enrich with context snippet for mentions with chunk_id
+        if m.chunk_id and m.mention_text and self.chunk_loader:
+            context = self.chunk_loader.get_chunk_context(m.chunk_id, m.mention_text)
+            result["context_snippet"] = context
+
+        # Enrich with report title
+        try:
+            from src.rag_pipeline.report_registry import get_registry
+            registry = get_registry()
+            report_info = registry.get_report(m.report_id)
+            result["report_title"] = (
+                report_info.report_title if report_info else m.report_id
+            )
+        except (ImportError, AttributeError):
+            result["report_title"] = m.report_id
+
+        return result
 
 
 # Singleton getter (matches your report_service pattern)
@@ -312,5 +476,11 @@ def get_entity_service() -> Optional[EntityService]:
     if not os.getenv("ENTITY_GRAPH_DSN"):
         return None
     if _service_instance is None:
-        _service_instance = EntityService()
+        # Try to get processed_dir from settings
+        try:
+            from src.api.config import settings
+            _service_instance = EntityService(processed_dir=settings.PROCESSED_DIR)
+        except (ImportError, AttributeError):
+            # Fallback: initialize without processed_dir (enrichment will be disabled)
+            _service_instance = EntityService()
     return _service_instance

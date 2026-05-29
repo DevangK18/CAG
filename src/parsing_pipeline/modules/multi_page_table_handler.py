@@ -14,6 +14,7 @@ from typing import List, Optional, Set
 from collections import Counter
 
 from src.core.table_contracts import StructuredTable, TableRow, TableColumn
+from src.parsing_pipeline.config import get_config, ChunkingConfig
 
 
 class MultiPageTableHandler:
@@ -23,7 +24,7 @@ class MultiPageTableHandler:
     Detection signals (in priority order):
     1. Continuation markers: "Contd.", "(continued)", "..." at end of table
     2. Header repetition: Same headers appear on next page
-    3. Column structure match: Jaccard similarity > 0.8
+    3. Column structure match: Jaccard similarity > threshold (configured)
     4. Missing totals: First fragment has no "Total" row
     5. Position analysis: Table at bottom → content at top of next page
     """
@@ -38,11 +39,14 @@ class MultiPageTableHandler:
         r'\bcontinues?\b',         # "continue", "continues"
     ]
 
-    # Similarity threshold for column structure matching
-    COLUMN_SIMILARITY_THRESHOLD = 0.8
+    def __init__(self, config: Optional[ChunkingConfig] = None):
+        """Initialize the multi-page table handler with configuration."""
+        # Load from config if not provided
+        if config is None:
+            config = get_config().chunking
 
-    def __init__(self):
-        """Initialize the multi-page table handler."""
+        self.column_similarity_threshold = config.multi_page_table_column_similarity_threshold
+
         self.stats = {
             "tables_processed": 0,
             "tables_merged": 0,
@@ -127,7 +131,7 @@ class MultiPageTableHandler:
 
         # RULE 3: Column structure similarity (Jaccard index)
         col_similarity = self._column_similarity(prev, curr)
-        if col_similarity < self.COLUMN_SIMILARITY_THRESHOLD:
+        if col_similarity < self.column_similarity_threshold:
             return False  # Not similar enough to be same table
 
         # RULE 4: Additional validation for high-similarity tables

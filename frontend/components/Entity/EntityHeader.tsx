@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { EntityDetail } from '../../types';
+import { formatEntityType, formatTier } from '../../utils';
 
 interface EntityHeaderProps {
   entity: EntityDetail;
@@ -75,11 +76,11 @@ export function EntityHeader({ entity, onBack }: EntityHeaderProps) {
             fontWeight: '500',
           }}
         >
-          {entity.entity_type}
+          {formatEntityType(entity.entity_type)}
         </span>
         <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>·</span>
-        <span style={{ color: '#6b7280', fontSize: '0.875rem', textTransform: 'capitalize' }}>
-          {entity.primary_tier} tier
+        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+          {formatTier(entity.primary_tier)} Tier
         </span>
       </div>
 

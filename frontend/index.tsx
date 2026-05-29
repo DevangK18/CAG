@@ -56,6 +56,7 @@ import { DirectoryPage } from './components/Directory/DirectoryPage';
 import { TimeSeriesPage } from './components/TimeSeries/TimeSeriesPage';
 import { HomePage } from './components/Home/HomePage';
 import { EntityPage } from './components/Entity/EntityPage';
+import { HomePDFPanel } from './components/Home/HomePDFPanel';
 import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
@@ -289,7 +290,6 @@ const renderMarkdown = (content: string): React.ReactNode => {
 };
 
 function App() {
-    const [view, setView] = useState<ViewState>('home');
     const [selectedSeries, setSelectedSeries] = useState<TimeSeriesInfo | null>(null);
     const [activeTab, setActiveTab] = useState<TabState>('overview');
     const [searchTerm, setSearchTerm] = useState('');
@@ -332,10 +332,13 @@ function App() {
 
     // API INTEGRATION
     const {
+        view, setView,
         currentReportId, setCurrentReportId, messages, responseStyle, setResponseStyle,
         normalizedCitationMap, citationMap, clearMessages, setPdfPage, pdfPage,
         showLowRelevanceCaveat,
-        setPreviousView, chatMode, setChatMode,
+        chatMode, setChatMode,
+        searchFilters, clearSearchFilters,
+        goBack,
     } = useAppStore();
 
     // Fetch filter options
@@ -423,6 +426,40 @@ function App() {
         setBannerMinimized(false);
     }, [currentReportId, selectedSeries]);
 
+    // Apply searchFilters from appStore when navigating to directory (Phase FE-E)
+    useEffect(() => {
+        if (view === 'directory' && searchFilters && Object.keys(searchFilters).length > 0) {
+            // Apply tier filter
+            if (searchFilters.tier) {
+                const tierMapping: Record<string, GovernmentTier> = {
+                    'union': 'union',
+                    'state': 'state',
+                    'local_body': 'local',
+                };
+                const tier = tierMapping[searchFilters.tier];
+                if (tier) setActiveTier(tier);
+            }
+
+            // Apply state filter
+            if (searchFilters.states && searchFilters.states.length > 0) {
+                setSelectedState(searchFilters.states[0]); // Use first state for now
+            }
+
+            // Apply year filter
+            if (searchFilters.years && searchFilters.years.length > 0) {
+                setFilterYear(searchFilters.years[0]); // Use first year for now
+            }
+
+            // Apply audit category filter
+            if (searchFilters.audit_categories && searchFilters.audit_categories.length > 0) {
+                setFilterAuditType(new Set(searchFilters.audit_categories));
+            }
+
+            // Clear searchFilters after applying so they don't persist on subsequent visits
+            clearSearchFilters();
+        }
+    }, [view, searchFilters, clearSearchFilters]);
+
     // Panel visibility functions
     const showPdfPanel = useCallback(() => {
         if (pdfCollapsed) {
@@ -455,6 +492,16 @@ function App() {
         setChatOpen(false);
     };
 
+    const handleSelectReport = (reportId: string) => {
+        // Handler for EntityPage navigation - takes report ID string
+        trackEvent('report_viewed', { report_id: reportId });
+        setCurrentReportId(reportId);
+        setSelectedSeries(null);
+        setView('report');
+        setActiveTab('overview');
+        setChatOpen(false);
+    };
+
     const handleSeriesClick = (series: TimeSeriesInfo) => {
         setSelectedSeries(series);
         setCurrentReportId(null);
@@ -465,14 +512,12 @@ function App() {
     };
 
     const handleBackToHome = () => {
-        setPreviousView(view);
         setCurrentReportId(null);
         setChatOpen(false);
         setView('home');
     };
 
     const handleBackToLanding = () => {
-        setPreviousView(view);
         setCurrentReportId(null);
         setChatOpen(false);
         setView('directory');
@@ -505,15 +550,18 @@ function App() {
         }
     };
 
-    const handleSendMessage = async () => {
-        if (!inputValue.trim() || isStreaming || isSeriesStreaming) return;
-        const query = inputValue.trim();
+    const handleSendMessage = async (useAgentic: boolean = false, explicitQuery?: string) => {
+        const query = (explicitQuery || inputValue).trim();
+        if (!query || isStreaming || isSeriesStreaming) return;
         setInputValue('');
         if (!chatOpen) setChatOpen(true);
         if (view === 'series-chat' && selectedSeries) {
             await sendSeriesMessage(selectedSeries.series_id, query);
+        } else if (view === 'corpus-chat') {
+            // Corpus-wide chat using agentic mode
+            await sendMessage(query, undefined, 'agentic');
         } else if (currentReportId) {
-            await sendMessage(query, [currentReportId]);
+            await sendMessage(query, [currentReportId], useAgentic ? 'agentic' : 'regular');
         }
     };
 
@@ -1494,24 +1542,29 @@ function App() {
                 <nav className="cag-nav">
                     <button onClick={handleBackToHome} className={view === 'home' ? 'active' : ''}>Home</button>
                     <button onClick={handleBackToLanding} className={view === 'directory' ? 'active' : ''}>Report Directory</button>
-                    <button onClick={() => { setPreviousView(view); setView('time-series'); }} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
-                    <button onClick={() => { setPreviousView(view); setView('how-it-works'); }} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
+                    <button onClick={() => { setView('time-series'); }} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
+                    <button onClick={() => { setView('how-it-works'); }} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
                 </nav>
                 <div className="cag-header-right"></div>
             </header>
 
             {view === 'home' && (
                 <HomePage
-                    setView={(newView: ViewState) => {
-                        setPreviousView(view);
-                        setView(newView);
-                    }}
+                    setView={setView}
                     setCurrentSeriesId={(id: string) => {
                         setSelectedSeries(allSeries.find(s => s.id === id) || null);
                     }}
                     openChatDrawer={() => {
                         setChatMode('agentic');
                         setChatOpen(true);
+                        // Open chat in first available report (chat only renders in report views currently)
+                        if (reports.length > 0) {
+                            setCurrentReportId(reports[0].id);
+                            setView('report');
+                        } else {
+                            // Fallback: navigate to directory if no reports loaded yet
+                            setView('directory');
+                        }
                     }}
                 />
             )}
@@ -1632,10 +1685,173 @@ function App() {
                 </main>
             )}
 
+            {view === 'corpus-chat' && (
+                <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    maxWidth: '900px',
+                    margin: '0 auto',
+                    padding: '2rem',
+                    width: '100%',
+                    minHeight: 'calc(100vh - 80px)'
+                }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            alignSelf: 'flex-start',
+                            padding: '8px 16px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            background: 'white',
+                            cursor: 'pointer',
+                            marginBottom: '1.5rem',
+                            fontSize: '0.9rem'
+                        }}
+                    >
+                        ← Back to Home
+                    </button>
+
+                    <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        Ask Across All CAG Reports
+                    </h1>
+                    <p style={{ color: '#64748b', marginBottom: '2rem' }}>
+                        Agentic search with intelligent question decomposition • Auto-filtering by state, year, and tier
+                    </p>
+
+                    <div style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        background: 'white'
+                    }}>
+                        {/* Chat messages area */}
+                        <div style={{
+                            flex: 1,
+                            overflowY: 'auto',
+                            padding: '1.5rem',
+                            minHeight: '400px'
+                        }}>
+                            {messages.length === 0 ? (
+                                <div style={{
+                                    textAlign: 'center',
+                                    padding: '4rem 2rem',
+                                    color: '#94a3b8'
+                                }}>
+                                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💬</div>
+                                    <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>
+                                        Start a conversation
+                                    </h3>
+                                    <p>Ask about findings, trends, recommendations across all 37 reports</p>
+                                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                        {['Key findings on toll collection?', 'Revenue loss trends across states', 'NHAI compliance issues'].map(q => (
+                                            <button
+                                                key={q}
+                                                onClick={() => {
+                                                    if (!isCurrentlyStreaming) {
+                                                        handleSendMessage(true, q);
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '6px 14px',
+                                                    border: '1px solid #e2e8f0',
+                                                    borderRadius: '20px',
+                                                    background: '#f8fafc',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                messages.map((msg, i) => (
+                                    <ChatMessage
+                                        key={msg.id || i}
+                                        role={msg.role}
+                                        content={msg.content}
+                                        isStreaming={i === messages.length - 1 && isCurrentlyStreaming && msg.role === 'assistant'}
+                                        isWaitingForResponse={msg.isWaitingForResponse}
+                                        groundednessReport={msg.groundednessReport}
+                                    />
+                                ))
+                            )}
+                            {isCurrentlyStreaming && <div style={{ padding: '1rem', color: '#64748b' }}>Thinking...</div>}
+                        </div>
+
+                        {/* Chat input */}
+                        <div style={{
+                            borderTop: '1px solid #e2e8f0',
+                            padding: '1rem 1.5rem',
+                            display: 'flex',
+                            gap: '0.75rem'
+                        }}>
+                            <input
+                                className="corpus-chat-input"
+                                type="text"
+                                placeholder="Ask about any CAG audit report..."
+                                style={{
+                                    flex: 1,
+                                    padding: '12px 16px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '0.95rem',
+                                    outline: 'none'
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        const input = e.target as HTMLInputElement;
+                                        const query = input.value.trim();
+                                        if (query && !isCurrentlyStreaming) {
+                                            handleSendMessage(true, query);
+                                            input.value = '';
+                                        }
+                                    }
+                                }}
+                                disabled={isCurrentlyStreaming}
+                            />
+                            <button
+                                onClick={() => {
+                                    const input = document.querySelector('.corpus-chat-input') as HTMLInputElement;
+                                    if (input) {
+                                        const query = input.value.trim();
+                                        if (query && !isCurrentlyStreaming) {
+                                            handleSendMessage(true, query);
+                                            input.value = '';
+                                        }
+                                    }
+                                }}
+                                disabled={isCurrentlyStreaming}
+                                style={{
+                                    padding: '12px 20px',
+                                    background: '#1e293b',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: isCurrentlyStreaming ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.95rem'
+                                }}
+                            >
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Footer is rendered inside HomePage for home view */}
             {(view === 'directory' || view === 'time-series' || view === 'how-it-works') && (
                 <footer className="cag-footer"><div className="footer-content"><p>© 2025 CAG Gateway</p><div className="footer-links"><button>Privacy</button><button>Terms</button></div></div></footer>
             )}
+
+            {/* Home PDF Panel - slides over from right */}
+            <HomePDFPanel />
         </div>
     );
 }

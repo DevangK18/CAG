@@ -70,8 +70,13 @@ async def get_mentions(
 @router.get("/{entity_id}/reports")
 @limiter.limit(RATE_LIMIT_CHAT)
 async def get_reports_for_entity(request: Request, response: Response, entity_id: int):
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"GET /entities/{entity_id}/reports called")
     service = _require_service()
-    return {"report_ids": service.get_reports_for_entity(entity_id)}
+    report_ids = service.get_reports_for_entity(entity_id)
+    logger.info(f"GET /entities/{entity_id}/reports returning {len(report_ids)} report_ids")
+    return {"report_ids": report_ids}
 
 
 @router.get("/{entity_id}/related")

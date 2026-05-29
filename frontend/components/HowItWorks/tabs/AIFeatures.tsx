@@ -112,11 +112,14 @@ graph TB
         D[Phase 10a<br/>Summaries 2/5] --> O4[Claude Opus 4]
         E[Phase 10b<br/>Visual Extraction] --> GF[Gemini 2.5 Flash]
         F[Indexing<br/>Table Summaries] --> GM[GPT-4o-mini]
+        EG[Phase 12<br/>Entity Canonicalization] --> GM
     end
 
     subgraph "Online · Per-Query"
         G[Query Enhancement] --> GM
+        AP[Agentic Planner<br/>Phase 11] --> GM
         I[RAG Generation] --> S4
+        GND[Groundedness<br/>Phase 13] --> GM
         J[Dense Embeddings] --> TE[text-embedding-3-large]
     end
 
@@ -126,29 +129,114 @@ graph TB
     style GF fill:#fff7ed,stroke:#f97316
     style GM fill:#dcfce7,stroke:#22c55e
     style TE fill:#f1f5f9,stroke:#94a3b8
+    style AP fill:#fff7ed,stroke:#ea580c
+    style GND fill:#f0fdf4,stroke:#22c55e
+    style EG fill:#f0f9ff,stroke:#0ea5e9
 `;
 
     return (
         <div className="tab-page">
             <h1 className="page-title">AI Features</h1>
             <p className="page-subtitle">
-                6 AI models orchestrated across offline batch processing and real-time serving.
-                Each model is chosen for a specific cost/quality tradeoff — Claude Opus for
-                long-form analysis, Haiku for structured extraction, Gemini for vision, GPT-4o-mini
-                for commodity tasks. Total corpus setup: under $30.
+                Beyond basic RAG: agentic retrieval for complex queries, entity graph for cross-report reasoning,
+                groundedness verification for accuracy, and intelligent auto-filtering.
+                6 AI models orchestrated across offline batch processing and real-time serving,
+                each chosen for a specific cost/quality tradeoff.
             </p>
 
             {/* ── Hero Stats ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px', margin: '0 0 56px 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', margin: '0 0 56px 0' }}>
                 <Stat value="6" label="AI Models" />
-                <Stat value="28" label="Distinct Prompts" accent="#7c3aed" />
+                <Stat value="390" label="Canonical Entities" accent="#0ea5e9" />
+                <Stat value="3" label="Advanced Phases" accent="#ea580c" />
                 <Stat value="50%" label="Batch API Savings" accent="#059669" />
-                <Stat value="~$0.50" label="Per Report Cost" accent="#d97706" />
-                <Stat value="8" label="Response Styles" accent="#dc2626" />
+                <Stat value="~$0.005" label="Avg Query Cost" accent="#d97706" />
+                <Stat value="6" label="Response Styles" accent="#dc2626" />
             </div>
 
             {/* ══════════════════════════════════════════════
-                SECTION 1: Multi-Model Strategy
+                SECTION 1: Advanced AI Features (Phases 11-13 + Bridge)
+            ══════════════════════════════════════════════ */}
+            <DocSection
+                title="Advanced AI Features"
+                description="Beyond basic RAG — agentic retrieval for complex queries, entity graph for cross-report reasoning, groundedness verification for accuracy, and intelligent auto-filtering. These features work together to handle queries that basic RAG can't."
+            >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                    {/* Agentic Retrieval */}
+                    <div style={{ padding: '20px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Phase 11</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Agentic Retrieval</div>
+                        <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '12px' }}>
+                            Complex multi-hop queries are decomposed into 2-4 sub-queries by a planner (gpt-4o-mini).
+                            Each sub-query runs through retrieval with sufficiency checks. If context is insufficient,
+                            the query is reformulated (up to 3x). Results are merged and synthesized into a unified answer.
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {['Query Decomposition', 'Iterative Retrieval', 'Sufficiency Checks', 'Reformulation'].map(t => (
+                                <span key={t} style={{ fontSize: '11px', fontWeight: 600, color: '#ea580c', background: '#ffedd5', padding: '2px 8px', borderRadius: '4px' }}>{t}</span>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Entity Graph */}
+                    <div style={{ padding: '20px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Phase 12</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Entity Graph</div>
+                        <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '12px' }}>
+                            390 canonical entities with 25k mentions. LLM-powered canonicalization merges aliases
+                            ("NHAI", "National Highways Authority") into unified entities. Enables cross-report queries:
+                            "all NHAI findings" works even when the name varies across reports.
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {['Alias Resolution', 'Cross-Report Links', 'Entity API', 'Aho-Corasick Indexing'].map(t => (
+                                <span key={t} style={{ fontSize: '11px', fontWeight: 600, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: '4px' }}>{t}</span>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Groundedness Verification */}
+                    <div style={{ padding: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Phase 13</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Groundedness Verification</div>
+                        <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '12px' }}>
+                            Post-generation LLM call (gpt-4o-mini) verifies each factual claim against retrieved context.
+                            Returns per-claim grounding scores. Fail-open design: verification errors don't block answers.
+                            Cost: ~$0.0005/query, +200-400ms latency.
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {['Claim Extraction', 'Per-Claim Scoring', 'Fail-Open Design', 'Async Execution'].map(t => (
+                                <span key={t} style={{ fontSize: '11px', fontWeight: 600, color: '#22c55e', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>{t}</span>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Auto-filtering & Observability */}
+                    <div style={{ padding: '20px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Bridge Features</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Auto-filter + Observability</div>
+                        <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '12px' }}>
+                            <strong>Bridge A:</strong> Rule-based extraction of years, states, tiers from query text — no LLM call.
+                            <strong> Bridge C:</strong> 50-column query log with latency breakdown, cost estimates, and groundedness scores.
+                            Dev mode includes full prompts for debugging.
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {['Pattern Matching', 'Short Alias Guard', '50-Column Log', 'Latency Breakdown'].map(t => (
+                                <span key={t} style={{ fontSize: '11px', fontWeight: 600, color: '#8b5cf6', background: '#f3e8ff', padding: '2px 8px', borderRadius: '4px' }}>{t}</span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <CalloutBox type="info">
+                    <strong>Composition over extension:</strong> These features wrap the standard RAG pipeline — they don't replace it.
+                    Simple queries (70-80%) short-circuit to the standard path with zero overhead. Agentic mode only activates
+                    for queries the planner classifies as multi-hop. Entity graph narrowing only fires for comparative queries
+                    mentioning entities. Groundedness runs async and doesn't block response streaming.
+                </CalloutBox>
+            </DocSection>
+
+            {/* ══════════════════════════════════════════════
+                SECTION 2: Multi-Model Strategy
             ══════════════════════════════════════════════ */}
             <DocSection
                 title="Multi-Model Strategy"

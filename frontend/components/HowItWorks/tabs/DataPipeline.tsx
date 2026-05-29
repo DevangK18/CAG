@@ -230,10 +230,11 @@ graph TB
             {/* ── Hero Stats ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px', margin: '0 0 56px 0' }}>
                 <Stat value="12" label="Processing Phases" />
-                <Stat value="3" label="AI Models Used" accent="#7c3aed" />
+                <Stat value="390" label="Canonical Entities" accent="#0ea5e9" />
                 <Stat value="97%" label="TOC Accuracy" accent="#059669" />
                 <Stat value="~$1.50" label="Cost Per Report" accent="#d97706" />
-                <Stat value="159" label="Reports in Corpus" />
+                <Stat value="37" label="Reports Indexed" />
+                <Stat value="25k" label="Entity Mentions" accent="#7c3aed" />
             </div>
 
             {/* ── Pipeline at a Glance ── */}
@@ -699,11 +700,122 @@ graph TB
             </DocSection>
 
             {/* ══════════════════════════════════════════════
-                SECTION 5: Engineering Edge Cases
+                SECTION 5: Entity Graph Pipeline (Phase 12)
+            ══════════════════════════════════════════════ */}
+            <DocSection
+                title="Entity Graph Pipeline"
+                description="Phase 12 builds a cross-report entity graph — enabling queries like 'all NHAI findings' even when the name varies across reports. Three stages: per-report extraction → cross-corpus canonicalization → mention indexing."
+            >
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '24px' }}>
+                    {[
+                        { value: '390', label: 'Canonical Entities', sublabel: '192 Union · 118 State · 80 Local' },
+                        { value: '24,865', label: 'Entity Mentions', sublabel: 'Cross-report indexed' },
+                        { value: '~$0.50', label: 'Canonicalization Cost', sublabel: 'For 37 reports' },
+                        { value: '3', label: 'Pipeline Stages', sublabel: 'Extract → Canon → Index' },
+                    ].map(item => (
+                        <div key={item.label} style={{
+                            padding: '16px', background: '#f0f9ff',
+                            border: '1px solid #bae6fd', borderRadius: '8px', textAlign: 'center',
+                        }}>
+                            <div style={{ fontSize: '24px', fontWeight: 800, color: '#0284c7' }}>{item.value}</div>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginTop: '4px' }}>{item.label}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{item.sublabel}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Stage 1: Per-report extraction */}
+                <div style={{ marginBottom: '28px' }}>
+                    <PhaseLabel number="12a" title="Per-Report Entity Normalization" color="#0ea5e9" />
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
+                        Piggybacks on the existing Phase 10a overview batch — the same LLM call that extracts scope, objectives, and topics
+                        also produces a <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>normalized_entities</code> array.
+                        Each entity includes: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>canonical_name</code> (standardized form),
+                        <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}> type</code> (ministry, PSU, scheme, regulatory_body, etc.),
+                        <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}> aliases</code> (abbreviations and alternate names),
+                        and <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>mention_count</code> in the report.
+                    </p>
+                    <p style={{ lineHeight: 1.7, color: '#475569' }}>
+                        Cost: <InlineStat value="$0" label="additional" /> — bundled with overview extraction.
+                        Output: ~10–25 entities per report.
+                    </p>
+                </div>
+
+                {/* Stage 2: Cross-corpus canonicalization */}
+                <div style={{ marginBottom: '28px' }}>
+                    <PhaseLabel number="12b" title="Cross-Corpus Canonicalization" color="#8b5cf6" />
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
+                        Merges entities across all reports into a deduplicated canonical set. Run via CLI command:
+                        <code style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', marginLeft: '8px', fontSize: '13px' }}>python -m src.entity_graph.canonicalizer --all</code>
+                    </p>
+
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px',
+                    }}>
+                        <div style={{ padding: '16px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#6b21a8', marginBottom: '8px' }}>LLM-Powered Deduplication</div>
+                            <div style={{ fontSize: '13px', color: '#581c87', lineHeight: 1.6 }}>
+                                Pairwise similarity checked via gpt-4o-mini. Merges "NHAI", "National Highways Authority",
+                                and "National Highways Authority of India" into a single canonical entity with all aliases preserved.
+                            </div>
+                        </div>
+                        <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>Cross-State Guards</div>
+                            <div style={{ fontSize: '13px', color: '#991b1b', lineHeight: 1.6 }}>
+                                Prevents merging entities that share a name but belong to different states.
+                                "State Police (Maharashtra)" and "State Police (Karnataka)" remain separate entities.
+                            </div>
+                        </div>
+                    </div>
+
+                    <CalloutBox type="info">
+                        <strong>Two-pass mode (Bridge B):</strong> For large corpora ({">"} 1000 raw entities), canonicalization uses
+                        a two-pass approach: first pass groups by similarity score, second pass refines boundaries using
+                        additional context. Activates automatically above threshold.
+                    </CalloutBox>
+                </div>
+
+                {/* Stage 3: Mention indexing */}
+                <div style={{ marginBottom: '8px' }}>
+                    <PhaseLabel number="12c" title="Mention Indexing" color="#059669" />
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
+                        Uses <strong>Aho-Corasick algorithm</strong> for efficient multi-pattern matching across all report chunks.
+                        Each canonical entity's aliases become patterns in an automaton that scans chunk text in a single pass.
+                    </p>
+
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '14px',
+                    }}>
+                        {[
+                            { metric: 'Scan time', value: '~2s', desc: 'For entire corpus' },
+                            { metric: 'Mentions indexed', value: '24,865', desc: 'Across 37 reports' },
+                            { metric: 'DB writes', value: 'Batch', desc: 'Chunked inserts' },
+                        ].map(item => (
+                            <div key={item.metric} style={{
+                                padding: '12px 16px', background: '#f0fdf4',
+                                border: '1px solid #bbf7d0', borderRadius: '8px', textAlign: 'center',
+                            }}>
+                                <div style={{ fontSize: '12px', color: '#15803d', fontWeight: 600, marginBottom: '4px' }}>{item.metric}</div>
+                                <div style={{ fontSize: '18px', fontWeight: 700, color: '#166534' }}>{item.value}</div>
+                                <div style={{ fontSize: '11px', color: '#64748b' }}>{item.desc}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <p style={{ lineHeight: 1.7, color: '#475569' }}>
+                        Results are stored in PostgreSQL (<code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>entity_mentions</code> table)
+                        with: entity_id, report_id, chunk_id, mention_text, char_start, char_end.
+                        The RAG pipeline uses this index to narrow comparative queries to entity-relevant reports.
+                    </p>
+                </div>
+            </DocSection>
+
+            {/* ══════════════════════════════════════════════
+                SECTION 6: Engineering Edge Cases
             ══════════════════════════════════════════════ */}
             <DocSection
                 title="Engineering Details"
-                description="The difference between a demo and production is edge case handling. These are the problems that only surface when you process 159 real-world government PDFs."
+                description="The difference between a demo and production is edge case handling. These are the problems that only surface when you process 37+ real-world government PDFs."
             >
                 <div style={{ display: 'grid', gap: '12px', marginBottom: '24px' }}>
                     <ProblemSolution
@@ -826,7 +938,7 @@ graph TB
                             each with content (markdown), word count, and Extended Thinking metadata. Generated via Anthropic Batch API.
                         </p>
                         <div style={{ fontSize: '13px', color: '#64748b' }}>
-                            Total: <InlineStat value="5 × 159" label="= 795 summaries" /> across the corpus
+                            Total: <InlineStat value="5 × 37" label="= 185 summaries" /> across the corpus
                         </div>
                     </div>
 
@@ -900,7 +1012,7 @@ graph TB
                             </div>
                         </div>
                         <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>
-                            Full corpus (159 reports): ~$175–285
+                            Current corpus (37 reports): ~$40–65
                         </div>
                     </div>
                 </div>
@@ -909,7 +1021,7 @@ graph TB
                     <strong>Cost optimization strategy:</strong> Phases 1–9 are purely algorithmic — zero API cost for the core pipeline.
                     Phase 5.7 LLM validation only fires for ~15% of reports (~$2–4 total).
                     Batch API pricing provides 50% savings over synchronous calls. Gemini is used only as a last resort for visuals
-                    that structural extraction couldn't handle. Total setup cost for the entire 159-report corpus: under $300.
+                    that structural extraction couldn't handle. Total setup cost for the current 37-report corpus: under $75. Designed to scale to 700+ reports.
                 </CalloutBox>
             </DocSection>
         </div>

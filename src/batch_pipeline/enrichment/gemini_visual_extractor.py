@@ -230,6 +230,7 @@ class GeminiVisualExtractor:
         processed_dir: str = "data/processed",
         images_dir: str = "data/extraction_images",
         requests_per_minute: int = 15,
+        trace_emitter=None,
     ):
         """
         Initialize Gemini Visual Extractor.
@@ -240,12 +241,14 @@ class GeminiVisualExtractor:
             processed_dir: Directory with processed report JSONs
             images_dir: Directory for saved extraction images
             requests_per_minute: Rate limit for Gemini API
+            trace_emitter: Optional TraceEmitter for Phase 10b instrumentation
         """
         self.model = model
         self.batch_jobs_dir = Path(batch_jobs_dir)
         self.processed_dir = Path(processed_dir)
         self.images_dir = Path(images_dir)
         self.visual_extraction_dir = self.batch_jobs_dir / "visual_extraction"
+        self._trace_emitter = trace_emitter
 
         # Create directories
         self.visual_extraction_dir.mkdir(parents=True, exist_ok=True)
@@ -442,6 +445,7 @@ class GeminiVisualExtractor:
     async def process_batch(
         self,
         items: List[Dict],
+        trace_emitter=None,
     ) -> List[Dict]:
         """
         Process a batch of extraction items.
@@ -455,12 +459,14 @@ class GeminiVisualExtractor:
 
         Args:
             items: List of extraction item dicts
+            trace_emitter: Optional TraceEmitter for per-item instrumentation
 
         Returns:
             List of result dicts with extracted data
         """
         results = []
         total = len(items)
+        emitter = trace_emitter or self._trace_emitter
 
         for i, item in enumerate(items, 1):
             item_type = item.get("type", "table")
@@ -485,6 +491,26 @@ class GeminiVisualExtractor:
             result["chunk_id"] = item.get("chunk_id", "")
             result["item_type"] = item_type
             result["image_path"] = item.get("image_path", item.get("image_paths", ""))
+            result["json_file"] = item.get("json_file", "")
+
+            # Trace: Per-item extraction decision
+            if emitter:
+                if result.get("success"):
+                    emitter.emit_decision(
+                        "10b",
+                        f"gemini_extraction_{item_type}",
+                        "success",
+                        ["success", "failed"],
+                        f"{item_type} extraction successful (chunk {item.get('chunk_id', '?')})",
+                    )
+                else:
+                    emitter.emit_decision(
+                        "10b",
+                        f"gemini_extraction_{item_type}",
+                        "failed",
+                        ["success", "failed"],
+                        f"Error: {result.get('error', 'unknown')[:100]}",
+                    )
 
             results.append(result)
 
@@ -497,6 +523,7 @@ class GeminiVisualExtractor:
         json_files: List[Path],
         pdf_dir: str = "data/raw",
         skip_existing: bool = True,
+        trace_emitter=None,
     ) -> str:
         """
         Full orchestration: identify items needing extraction, process them,
@@ -506,12 +533,14 @@ class GeminiVisualExtractor:
             json_files: List of *_chunks.json file paths
             pdf_dir: Directory where source PDFs are stored
             skip_existing: Skip chunks that already have good structured_data
+            trace_emitter: Optional TraceEmitter for Phase 10b instrumentation
 
         Returns:
             Job ID string
         """
         job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         job_id = f"visual_extraction_{job_timestamp}"
+        emitter = trace_emitter or self._trace_emitter
 
         logger.info(f"\n{'='*60}")
         logger.info(f"PHASE 10b: Visual Extraction via Gemini")
@@ -527,6 +556,14 @@ class GeminiVisualExtractor:
 
         if not items:
             logger.info("✅ No items need visual extraction")
+            # Trace: Phase 10b skipped
+            if emitter:
+                emitter.emit_io(
+                    "10b",
+                    {"json_files": len(json_files)},
+                    {"items_identified": 0, "skipped": True},
+                )
+                emitter.set_phase_status("10b", "skipped")
             return job_id
 
         logger.info(f"📊 Found {len(items)} items for Gemini extraction")
@@ -535,13 +572,23 @@ class GeminiVisualExtractor:
         multi = [i for i in items if i["type"] == "multi_page_table"]
         logger.info(f"   Tables: {len(tables)}, Charts: {len(charts)}, Multi-page: {len(multi)}")
 
+        # Trace: Items identified
+        if emitter:
+            emitter.emit_io(
+                "10b",
+                {"json_files": len(json_files), "skip_existing": skip_existing},
+                {"tables": len(tables), "charts": len(charts), "multi_page": len(multi)},
+            )
+
         # Step 2: Process batch
-        results = await self.process_batch(items)
+        results = await self.process_batch(items, trace_emitter=emitter)
 
         # Step 3: Update JSON files
         updates = self._apply_results_to_jsons(results, json_files)
 
         # Step 4: Save job tracker
+        success_count = sum(1 for r in results if r.get("success", False))
+        error_count = sum(1 for r in results if not r.get("success", False))
         tracker = {
             "job_id": job_id,
             "created_at": datetime.now().isoformat(),
@@ -550,8 +597,8 @@ class GeminiVisualExtractor:
             "tables": len(tables),
             "charts": len(charts),
             "multi_page": len(multi),
-            "success_count": sum(1 for r in results if r.get("success", False)),
-            "error_count": sum(1 for r in results if not r.get("success", False)),
+            "success_count": success_count,
+            "error_count": error_count,
             "files_updated": updates,
         }
 
@@ -559,7 +606,29 @@ class GeminiVisualExtractor:
         with open(tracker_path, "w") as f:
             json.dump(tracker, f, indent=2, ensure_ascii=False)
 
-        logger.info(f"\n✅ Visual extraction complete: {tracker['success_count']}/{len(items)} succeeded")
+        # Trace: Final Phase 10b summary
+        if emitter:
+            emitter.emit_io(
+                "10b",
+                {"total_items": len(items)},
+                {
+                    "success_count": success_count,
+                    "error_count": error_count,
+                    "files_updated": updates,
+                    "job_id": job_id,
+                },
+            )
+            if error_count > 0:
+                emitter.emit_red_flag(
+                    "10b",
+                    f"Gemini extraction failed for {error_count} items",
+                    {"error_rate": f"{error_count/len(items)*100:.1f}%"},
+                )
+                emitter.set_phase_status("10b", "partial" if success_count > 0 else "failed")
+            else:
+                emitter.set_phase_status("10b", "success")
+
+        logger.info(f"\n✅ Visual extraction complete: {success_count}/{len(items)} succeeded")
         return job_id
 
     def _identify_extraction_items(

@@ -965,7 +965,7 @@ export async function smartSearch(
 
   try {
     const response = await fetch(
-      `${API_URL}/home/search?${searchParams.toString()}`,
+      `${API_URL}/search?${searchParams.toString()}`,
       { signal }
     );
 
@@ -1028,11 +1028,14 @@ export async function getEntityFindings(
  * Phase D: Entity page
  */
 export async function getEntityReports(entityId: number): Promise<string[]> {
-  const response = await fetch(`${API_URL}/entities/${entityId}/reports`);
+  const url = `${API_URL}/entities/${entityId}/reports`;
+  console.log(`[API] getEntityReports: fetching ${url}`);
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch reports for entity ${entityId}: ${response.statusText}`);
   }
   const data = await response.json();
+  console.log(`[API] getEntityReports(${entityId}): received`, data.report_ids?.length ?? 0, 'report_ids');
   return data.report_ids || [];
 }
 

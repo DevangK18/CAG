@@ -11,8 +11,8 @@ import { ViewState } from '../../types';
 
 interface CTACardsProps {
     setView: (view: ViewState) => void;
-    setChatMode: (mode: 'regular' | 'agentic') => void;
-    openChatDrawer: () => void;
+    setChatMode?: (mode: 'regular' | 'agentic') => void;
+    openChatDrawer?: () => void;
 }
 
 const GridIcon = () => (
@@ -39,8 +39,7 @@ const ChatIcon = () => (
 
 export const CTACards: React.FC<CTACardsProps> = ({ setView, setChatMode, openChatDrawer }) => {
     const handleAskCorpus = () => {
-        setChatMode('agentic');
-        openChatDrawer();
+        setView('corpus-chat');
     };
 
     const cards = [

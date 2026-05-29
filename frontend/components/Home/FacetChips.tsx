@@ -28,12 +28,8 @@ export const FacetChips: React.FC<FacetChipsProps> = ({ setView }) => {
     const [openPopover, setOpenPopover] = useState<string | null>(null);
 
     const handleFacetClick = (facetId: string) => {
-        // Phase B: Open popover (simplified - full implementation in Phase C)
-        // For now, just navigate to directory as a placeholder
-        console.log('Facet clicked:', facetId);
-
-        // Phase B behavior: Navigate immediately to directory
-        // Phase C will add the popover UI
+        // v1: Navigate to directory for filtering
+        // Clicking chips takes you to the full directory where filters are available
         setView('directory');
     };
 
@@ -70,6 +66,7 @@ export const FacetChips: React.FC<FacetChipsProps> = ({ setView }) => {
                     key={facet.id}
                     className="home-facet-chip"
                     onClick={() => handleFacetClick(facet.id)}
+                    title={`Browse reports by ${facet.label.toLowerCase()} — opens Report Directory`}
                 >
                     {facet.label}
                     {facet.count > 0 && <span className="home-facet-count">({facet.count})</span>}

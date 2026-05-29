@@ -94,7 +94,7 @@ sequenceDiagram
             {/* Streaming UI Pattern */}
             <DocSection
                 title="Streaming UI Pattern"
-                description="How the chat interface handles Server-Sent Events"
+                description="Two streaming modes: standard (simple queries) and agentic (complex multi-hop). Different event types for each path."
             >
                 <DiagramCard title="Streaming Message Flow">
                     <MermaidDiagram
@@ -164,6 +164,114 @@ sequenceDiagram
 };`}
                     </CodeBlock>
                 </div>
+            </DocSection>
+
+            {/* Agentic Streaming */}
+            <DocSection
+                title="Agentic Streaming (Phase 11)"
+                description="Complex queries use the agentic endpoint with additional event types for planning, sub-queries, and reformulation."
+            >
+                <div style={{ lineHeight: '1.7', color: '#475569', marginBottom: '16px' }}>
+                    <p>
+                        The <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>useChatStream</code> hook accepts a <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>mode</code> parameter
+                        to select standard vs agentic streaming. Agentic mode calls <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/api/chat/agentic/stream</code> and
+                        handles additional event types for progress feedback.
+                    </p>
+                </div>
+
+                <CodeBlock title="streamChatAgentic in api.ts">
+{`export async function* streamChatAgentic(params: ChatParams) {
+  const response = await fetch('/api/chat/agentic/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    for (const line of chunk.split('\\n')) {
+      if (line.startsWith('data: ')) {
+        const event = JSON.parse(line.slice(6));
+
+        // Agentic-specific events
+        if (event.type === 'planning') {
+          yield { type: 'planning', subQueries: event.sub_queries };
+        } else if (event.type === 'sub_query') {
+          yield { type: 'sub_query', index: event.index, query: event.query };
+        } else if (event.type === 'iteration') {
+          yield { type: 'iteration', sufficient: event.sufficient };
+        } else if (event.type === 'reformulation') {
+          yield { type: 'reformulation', newQuery: event.new_query };
+        } else if (event.type === 'synthesizing') {
+          yield { type: 'synthesizing' };
+        } else if (event.type === 'token') {
+          yield { type: 'token', content: event.content };
+        } else if (event.type === 'groundedness') {
+          yield { type: 'groundedness', report: event.report };
+        } else if (event.type === 'done') {
+          yield { type: 'done' };
+        }
+      }
+    }
+  }
+}`}
+                </CodeBlock>
+
+                <div style={{ marginTop: '16px' }}>
+                    <CalloutBox type="info">
+                        <strong>UI Feedback:</strong> The frontend can show sub-query progress ("Searching for NHAI findings... 2/4"),
+                        reformulation notices ("Refining search..."), and synthesis state ("Combining results...") based on these events.
+                    </CalloutBox>
+                </div>
+            </DocSection>
+
+            {/* Entity API Integration */}
+            <DocSection
+                title="Entity API Integration"
+                description="The Entity Page and related components use dedicated hooks for the Phase 12 entity graph."
+            >
+                <div style={{ lineHeight: '1.7', color: '#475569', marginBottom: '16px' }}>
+                    <p>
+                        Entity data comes from PostgreSQL via the <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/api/entities</code> endpoints.
+                        The frontend includes hooks for listing entities, fetching entity details, and retrieving entity-specific findings.
+                    </p>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Entity-Related Hooks</h3>
+
+                    <CalloutBox type="success">
+                        <strong>useEntities():</strong> Fetches paginated entity list with filters (type, tier, search). Returns entities array, total count, and loading state.
+                    </CalloutBox>
+
+                    <CalloutBox type="info">
+                        <strong>useEntity(entityId):</strong> Fetches single entity with aliases, mention count, and related reports.
+                    </CalloutBox>
+
+                    <CalloutBox type="warning">
+                        <strong>useEntityFindings(entityId):</strong> Fetches all findings mentioning this entity across reports. Grouped by report with severity breakdown.
+                    </CalloutBox>
+                </div>
+
+                <CodeBlock title="Entity Page Data Fetching">
+{`// Entity Page uses multiple data sources
+const EntityPage: React.FC<{ entityId: string }> = ({ entityId }) => {
+  const { entity, isLoading: entityLoading } = useEntity(entityId);
+  const { findings, isLoading: findingsLoading } = useEntityFindings(entityId);
+  const { mentions } = useEntityMentions(entityId, { limit: 50 });
+
+  // Entity details card
+  // Related reports rail
+  // Findings tab with severity filters
+  // Mentions tab with context snippets
+};`}
+                </CodeBlock>
             </DocSection>
 
             {/* Search & Filtering */}

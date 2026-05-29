@@ -105,28 +105,59 @@ const GlossaryIcon = () => (
     </svg>
 );
 
-// Row components for each type
+// Row components for each type - Single horizontal line layout
 const ReportRow: React.FC<{
     result: SearchResultReport;
     className: string;
     onClick: () => void;
 }> = ({ result, className, onClick }) => {
-    const showMinistry = result.ministry && isValidMinistry(result.ministry);
+    // Truncate title to ~60 chars
+    const truncatedTitle = result.title.length > 60
+        ? result.title.slice(0, 57) + '...'
+        : result.title;
 
     return (
-        <div className={className} onClick={onClick}>
-            <div className="home-search-result-icon">
-                <ReportIcon />
-            </div>
-            <div className="home-search-result-content">
-                <div className="home-search-result-title">{result.title}</div>
-                <div className="home-search-result-meta">
-                    {showMinistry && <span>{result.ministry}</span>}
-                    {showMinistry && result.audit_year && <span className="home-search-result-sep">·</span>}
-                    {result.audit_year && <span>{result.audit_year}</span>}
-                    {(showMinistry || result.audit_year) && <span className="home-search-result-sep">·</span>}
-                    <span>{result.findings_count} findings</span>
+        <div
+            className={className}
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                minHeight: '48px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                gap: '12px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                <div style={{
+                    flexShrink: 0,
+                    color: '#6b7280',
+                    display: 'flex',
+                    alignItems: 'center'
+                }}>
+                    📄
                 </div>
+                <div style={{
+                    fontWeight: 500,
+                    color: '#111827',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+                    title={result.title}
+                >
+                    {truncatedTitle}
+                </div>
+            </div>
+            <div style={{
+                fontSize: '0.8rem',
+                color: '#9ca3af',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+            }}>
+                {result.audit_year}
             </div>
         </div>
     );
@@ -138,17 +169,47 @@ const MinistryRow: React.FC<{
     onClick: () => void;
 }> = ({ result, className, onClick }) => {
     return (
-        <div className={className} onClick={onClick}>
-            <div className="home-search-result-icon ministry">
-                <MinistryIcon />
-            </div>
-            <div className="home-search-result-content">
-                <div className="home-search-result-title">{result.canonical_name}</div>
-                <div className="home-search-result-meta">
-                    <span>{result.report_count} reports</span>
-                    <span className="home-search-result-sep">·</span>
-                    <span>{result.finding_count} findings</span>
+        <div
+            className={className}
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                minHeight: '48px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                gap: '12px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                <div style={{
+                    flexShrink: 0,
+                    fontSize: '1.2rem',
+                    display: 'flex',
+                    alignItems: 'center'
+                }}>
+                    🏛️
                 </div>
+                <div style={{
+                    fontWeight: 500,
+                    color: '#111827',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+                    title={result.canonical_name}
+                >
+                    {result.canonical_name}
+                </div>
+            </div>
+            <div style={{
+                fontSize: '0.8rem',
+                color: '#9ca3af',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+            }}>
+                {result.report_count} reports · {result.finding_count} findings
             </div>
         </div>
     );
@@ -160,17 +221,47 @@ const EntityRow: React.FC<{
     onClick: () => void;
 }> = ({ result, className, onClick }) => {
     return (
-        <div className={className} onClick={onClick}>
-            <div className="home-search-result-icon entity">
-                <EntityIcon />
-            </div>
-            <div className="home-search-result-content">
-                <div className="home-search-result-title">{result.canonical_name}</div>
-                <div className="home-search-result-meta">
-                    <span className="home-search-result-type">{result.entity_type}</span>
-                    <span className="home-search-result-sep">·</span>
-                    <span>{result.mention_count} mentions</span>
+        <div
+            className={className}
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                minHeight: '48px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                gap: '12px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                <div style={{
+                    flexShrink: 0,
+                    fontSize: '1.2rem',
+                    display: 'flex',
+                    alignItems: 'center'
+                }}>
+                    🏛️
                 </div>
+                <div style={{
+                    fontWeight: 500,
+                    color: '#111827',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+                    title={result.canonical_name}
+                >
+                    {result.canonical_name}
+                </div>
+            </div>
+            <div style={{
+                fontSize: '0.8rem',
+                color: '#9ca3af',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+            }}>
+                {result.entity_type} · {result.mention_count} mentions
             </div>
         </div>
     );
@@ -181,37 +272,79 @@ const FindingRow: React.FC<{
     className: string;
     onClick: () => void;
 }> = ({ result, className, onClick }) => {
-    // Truncate snippet to ~120 chars
-    const truncatedSnippet = result.snippet.length > 120
-        ? result.snippet.slice(0, 117) + '...'
+    // Truncate snippet to ~60 chars
+    const truncatedSnippet = result.snippet.length > 60
+        ? result.snippet.slice(0, 57) + '...'
         : result.snippet;
 
+    // Severity badge colors
+    const severityColors: Record<string, { bg: string; text: string }> = {
+        critical: { bg: '#fee2e2', text: '#991b1b' },
+        high: { bg: '#fed7aa', text: '#9a3412' },
+        medium: { bg: '#fef3c7', text: '#92400e' },
+        low: { bg: '#dbeafe', text: '#1e40af' },
+    };
+
+    const severityColor = result.severity
+        ? severityColors[result.severity.toLowerCase()] || { bg: '#f3f4f6', text: '#374151' }
+        : { bg: '#f3f4f6', text: '#374151' };
+
+    // Truncate report_id for display
+    const truncatedReportId = result.report_id.length > 30
+        ? result.report_id.slice(0, 27) + '...'
+        : result.report_id;
+
     return (
-        <div className={className} onClick={onClick}>
-            <div className="home-search-result-icon finding">
-                <FindingIcon />
-            </div>
-            <div className="home-search-result-content">
-                <div className="home-search-result-snippet">"{truncatedSnippet}"</div>
-                <div className="home-search-result-meta">
-                    <span>{result.report_id}</span>
-                    {result.section && (
-                        <>
-                            <span className="home-search-result-sep">·</span>
-                            <span>{result.section}</span>
-                        </>
-                    )}
-                    <span className="home-search-result-sep">·</span>
-                    <span>p.{result.page}</span>
-                    {result.severity && (
-                        <>
-                            <span className="home-search-result-sep">·</span>
-                            <span className={`home-search-result-severity ${result.severity.toLowerCase()}`}>
-                                {result.severity}
-                            </span>
-                        </>
-                    )}
+        <div
+            className={className}
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                minHeight: '48px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                gap: '12px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                {result.severity && (
+                    <div style={{
+                        flexShrink: 0,
+                        fontSize: '0.65rem',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        padding: '3px 6px',
+                        borderRadius: '3px',
+                        backgroundColor: severityColor.bg,
+                        color: severityColor.text,
+                        letterSpacing: '0.5px',
+                    }}>
+                        {result.severity}
+                    </div>
+                )}
+                <div style={{
+                    fontWeight: 500,
+                    color: '#111827',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+                    title={result.snippet}
+                >
+                    {truncatedSnippet}
                 </div>
+            </div>
+            <div style={{
+                fontSize: '0.8rem',
+                color: '#9ca3af',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+            }}
+                title={result.report_id}
+            >
+                {truncatedReportId}, p.{result.page}
             </div>
         </div>
     );
@@ -223,29 +356,69 @@ const GlossaryRow: React.FC<{
     onClick: () => void;
     extraCount?: number;
 }> = ({ result, className, onClick, extraCount }) => {
-    // Truncate definition to first 80 chars
+    // Truncate definition preview
     const truncatedDef = result.definition
         ? (result.definition.length > 80 ? result.definition.slice(0, 77) + '...' : result.definition)
-        : null;
+        : 'No definition available';
 
     return (
-        <div className={className} onClick={onClick}>
-            <div className="home-search-result-icon glossary">
-                <GlossaryIcon />
-            </div>
-            <div className="home-search-result-content">
-                <div className="home-search-result-title">
-                    <strong>{result.term}</strong>
+        <div
+            className={className}
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                minHeight: '48px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                gap: '12px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                <div style={{
+                    flexShrink: 0,
+                    fontSize: '1.2rem',
+                    display: 'flex',
+                    alignItems: 'center'
+                }}>
+                    📖
+                </div>
+                <div style={{
+                    fontWeight: 500,
+                    color: '#111827',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}>
+                    {result.term}
                     {result.abbreviation && (
-                        <span className="home-search-result-abbr"> ({result.abbreviation})</span>
+                        <span style={{ fontWeight: 400, color: '#6b7280' }}> ({result.abbreviation})</span>
                     )}
                     {extraCount && extraCount > 0 && (
-                        <span className="home-search-result-extra">+{extraCount} more</span>
+                        <span style={{
+                            marginLeft: '6px',
+                            fontSize: '0.75rem',
+                            color: '#6b7280',
+                            fontWeight: 400,
+                        }}>
+                            +{extraCount} more
+                        </span>
                     )}
                 </div>
-                {truncatedDef && (
-                    <div className="home-search-result-meta">{truncatedDef}</div>
-                )}
+            </div>
+            <div style={{
+                fontSize: '0.8rem',
+                color: '#9ca3af',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                maxWidth: '300px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+            }}
+                title={result.definition || undefined}
+            >
+                {truncatedDef}
             </div>
         </div>
     );

@@ -245,7 +245,7 @@ class RecommendationExtractor:
                 content, re.IGNORECASE
             ))
             if not has_action:
-                continue  # CHANGED: Always skip, regardless of length
+                continue
 
             hierarchy = chunk.get("hierarchy", {})
             recs.append(ExtractedRecommendation(

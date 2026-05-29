@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 # In-memory cache of report metadata
 _reports_cache: Dict[str, ReportDetail] = {}
 _initialized: bool = False
+_total_charts: int = 0
+_total_tables: int = 0
 
 # Ministry canonicalization bridge (Phase A.5)
 # Maps ReportInfo.ministry string → entity_id from entity graph
@@ -183,12 +185,14 @@ def _build_executive_summary(metadata: dict, semantic: dict) -> str:
 
 def _load_reports():
     """Load all report metadata from processed JSON files."""
-    global _reports_cache, _initialized
-    
+    global _reports_cache, _initialized, _total_charts, _total_tables
+
     if _initialized:
         return
-    
+
     _reports_cache = {}
+    _total_charts = 0
+    _total_tables = 0
     
     if not settings.PROCESSED_DIR.exists():
         logger.warning(f"Processed directory not found: {settings.PROCESSED_DIR}")
@@ -210,8 +214,13 @@ def _load_reports():
 
             metadata = data.get("report_metadata", {})
             semantic = data.get("semantic_enrichment", {})
+            visual_assets = data.get("visual_asset_registry", {})
 
             report_id = metadata.get("report_id", json_file.stem.replace("_chunks", ""))
+
+            # Count charts and tables from visual_asset_registry
+            _total_tables += visual_assets.get("total_tables", 0)
+            _total_charts += visual_assets.get("total_figures", 0)
 
             # Extract key findings (first 10)
             findings_raw = semantic.get("findings", [])
@@ -765,21 +774,12 @@ def get_home_stats():
         total_ministries = 0
         total_mentions = 0
 
-    # Qdrant aggregates (with graceful fallback)
-    total_findings = 0
-    total_charts = 0
-    total_tables = 0
+    # Count findings from report registry (more reliable than Qdrant queries)
+    total_findings = sum(r.findings_count for r in _reports_cache.values())
 
-    try:
-        from src.rag_pipeline.qdrant_service import QdrantService
-
-        qdrant = QdrantService()
-
-        total_findings = qdrant.count_filtered({"finding_type": {"$ne": None}})
-        total_charts = qdrant.count_filtered({"content_type": "chart"})
-        total_tables = qdrant.count_filtered({"content_type": "table_markdown"})
-    except Exception as e:
-        logger.warning(f"Qdrant stats unavailable: {e}")
+    # Use cached charts and tables counts from _load_reports()
+    total_charts = _total_charts
+    total_tables = _total_tables
 
     stats = HomeStats(
         total_reports=total_reports,
@@ -1026,6 +1026,8 @@ def _sanitize_query_text(query_text: str) -> Optional[str]:
     - Email addresses (x@y.z pattern)
     - Phone numbers (10+ digits)
     - Document IDs (UUID patterns, long alphanumeric strings)
+    - Blocklisted keywords (test, debug, streaming wrapper, asdf, xxx)
+    - Queries that are just numbers or single characters
 
     Args:
         query_text: Raw query text
@@ -1034,6 +1036,19 @@ def _sanitize_query_text(query_text: str) -> Optional[str]:
         Sanitized query text, or None if it should be filtered out
     """
     if not query_text:
+        return None
+
+    # Blocklist filter (case-insensitive)
+    blocklist = ["test", "debug", "streaming wrapper", "asdf", "xxx"]
+    query_lower = query_text.lower()
+    for blocked in blocklist:
+        if blocked in query_lower:
+            logger.debug(f"Filtered trending query containing blocklisted term '{blocked}': {query_text[:20]}...")
+            return None
+
+    # Filter out queries that are just numbers or single characters
+    if re.match(r'^\d+$', query_text.strip()) or len(query_text.strip()) == 1:
+        logger.debug(f"Filtered trending query (numbers-only or single char): {query_text[:20]}...")
         return None
 
     # Email pattern: word@word.word

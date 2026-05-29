@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import { CitationMap } from '../lib/api';
 import { buildNormalizedCitationMap } from '../lib/citationUtils';
-import { GroundednessReport } from '../types';
+import { GroundednessReport, ViewState } from '../types';
 
 export interface Message {
   id: string;
@@ -27,6 +27,12 @@ export interface PDFHighlight {
   type: 'chart' | 'table' | 'citation';
   label: string;
   section?: string;
+}
+
+export interface HomePdfPanelState {
+  reportId: string;
+  page?: number;
+  highlight?: { label: string; page: number; type: string };
 }
 
 export interface AppState {
@@ -49,7 +55,8 @@ export interface AppState {
   normalizedCitationMap: Map<string, CitationMap[string]>;
 
   // Home page state (Phase A)
-  previousView: string | null;
+  view: ViewState;
+  previousView: ViewState | null;
   searchFilters: {
     tier?: 'union' | 'state' | 'local_body';
     states?: string[];
@@ -60,6 +67,9 @@ export interface AppState {
   };
   currentEntityId: number | null;
   chatMode: 'regular' | 'agentic';
+
+  // Home PDF Panel state
+  homePdfPanel: HomePdfPanelState | null;
 
   // Actions
   setCurrentReportId: (id: string | null) => void;
@@ -83,12 +93,17 @@ export interface AppState {
   setCitationMap: (map: CitationMap) => void;
 
   // Home page actions (Phase A)
-  setPreviousView: (view: string | null) => void;
+  setView: (view: ViewState) => void;
+  setPreviousView: (view: ViewState | null) => void;
   setSearchFilters: (filters: AppState['searchFilters']) => void;
   clearSearchFilters: () => void;
   setCurrentEntityId: (id: number | null) => void;
   setChatMode: (mode: 'regular' | 'agentic') => void;
-  goBack: () => string | null;
+  goBack: () => void;
+
+  // Home PDF Panel actions
+  openHomePdf: (reportId: string, page?: number, highlight?: HomePdfPanelState['highlight']) => void;
+  closeHomePdf: () => void;
 
   // Navigation helper
   navigateToCitation: (citation: CitationMap[string]) => void;
@@ -108,11 +123,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   normalizedCitationMap: new Map(),
 
   // Home page state (Phase A)
+  view: 'home',
   previousView: null,
   searchFilters: {},
   currentEntityId: null,
   chatMode: 'agentic',
-  
+
+  // Home PDF Panel initial state
+  homePdfPanel: null,
+
   // View actions
   setCurrentReportId: (id) => set({ 
     currentReportId: id,
@@ -123,10 +142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   }),
   
   // PDF actions
-  setPdfPage: (page) => {
-    console.log('Setting PDF page to:', page);
-    set({ pdfPage: page });
-  },
+  setPdfPage: (page) => set({ pdfPage: page }),
   setPdfScale: (scale) => set({ pdfScale: scale }),
   setPdfHighlight: (highlight) => set({ pdfHighlight: highlight }),
   
@@ -210,8 +226,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Citation actions
   setCitationMap: (map) => {
-    console.log('Setting citation map with', Object.keys(map).length, 'entries');
-    console.log('Citation map keys:', Object.keys(map));
     const normalizedMap = buildNormalizedCitationMap(map);
     set({
       citationMap: map,
@@ -220,6 +234,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Home page actions (Phase A)
+  setView: (newView) => set((state) => {
+    // Automatically track previous view when view changes
+    if (state.view !== newView) {
+      return { view: newView, previousView: state.view };
+    }
+    return { view: newView };
+  }),
+
   setPreviousView: (view) => set({ previousView: view }),
 
   setSearchFilters: (filters) => set({ searchFilters: filters }),
@@ -231,15 +253,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   setChatMode: (mode) => set({ chatMode: mode }),
 
   goBack: () => {
-    const { previousView } = get();
-    set({ previousView: null });
-    return previousView;
+    const prev = get().previousView;
+    console.log('[goBack] previousView:', prev, 'current view:', get().view);
+    set({ view: prev || 'home', previousView: null });
+  },
+
+  // Home PDF Panel actions
+  openHomePdf: (reportId, page, highlight) => {
+    set({ homePdfPanel: { reportId, page, highlight } });
+  },
+
+  closeHomePdf: () => {
+    set({ homePdfPanel: null });
   },
 
   // Navigate to citation
   navigateToCitation: (citation) => {
     const targetPage = citation.page_physical + 1;
-    console.log('navigateToCitation called, going to page:', targetPage);
     set({ pdfPage: targetPage });
 
     // Set PDF highlight for citation

@@ -61,13 +61,175 @@ graph TB
         <div className="tab-page">
             <h1 className="page-title">Infrastructure</h1>
             <p className="page-subtitle">
-                Docker setup, repository structure, and deployment architecture
+                Two databases (Qdrant for vectors, PostgreSQL for entity graph), multi-provider LLM orchestration,
+                feature flag system, and Docker deployment with Caddy reverse proxy.
             </p>
+
+            {/* Database Architecture */}
+            <DocSection
+                title="Database Architecture"
+                description="Two databases: Qdrant for vector search, PostgreSQL for the entity graph and query logs."
+            >
+                <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px',
+                }}>
+                    {/* Qdrant */}
+                    <div style={{ padding: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '16px', fontWeight: 700, color: '#166534' }}>Qdrant</span>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Vector DB</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6, marginBottom: '12px' }}>
+                            <strong>Two collections:</strong>
+                            <ul style={{ paddingLeft: '16px', marginTop: '6px' }}>
+                                <li><code>cag_child_chunks</code> — 15,669 chunks with hybrid vectors (dense 1536-dim + BM25 sparse)</li>
+                                <li><code>cag_parent_chunks</code> — 2,792 parent sections (metadata-only, no vectors)</li>
+                            </ul>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6 }}>
+                            <strong>Payload indexes:</strong> report_id, government_body_type, state_name, audit_year, audit_category, finding_types, severity
+                        </div>
+                    </div>
+
+                    {/* PostgreSQL */}
+                    <div style={{ padding: '20px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '16px', fontWeight: 700, color: '#0c4a6e' }}>PostgreSQL</span>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: '4px' }}>Entity Graph</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#0c4a6e', lineHeight: 1.6, marginBottom: '12px' }}>
+                            <strong>Database:</strong> <code>cag_entity_graph</code>
+                            <ul style={{ paddingLeft: '16px', marginTop: '6px' }}>
+                                <li><code>entities</code> — 390 canonical entities with aliases</li>
+                                <li><code>entity_mentions</code> — 24,865 indexed mentions</li>
+                                <li><code>entity_relations</code> — Cross-entity relationships</li>
+                                <li><code>query_logs</code> — 50-column observability log</li>
+                            </ul>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#0c4a6e', lineHeight: 1.6 }}>
+                            <strong>Two-DSN pattern:</strong> Docker uses <code>postgres:5432</code>, Mac development uses <code>localhost:5432</code>
+                        </div>
+                    </div>
+                </div>
+
+                <CalloutBox type="info">
+                    <strong>Why two databases?</strong> Qdrant excels at high-dimensional vector search with payload filtering —
+                    perfect for RAG retrieval. PostgreSQL handles relational data (entities with aliases, mention-to-chunk mappings)
+                    and provides full SQL for complex observability queries.
+                </CalloutBox>
+            </DocSection>
+
+            {/* LLM Provider Architecture */}
+            <DocSection
+                title="LLM Provider Architecture"
+                description="Multi-provider support with provider-specific fallbacks. OpenAI is required regardless of main provider."
+            >
+                <div style={{
+                    border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '20px',
+                }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                        <thead>
+                            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Task</th>
+                                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Primary Provider</th>
+                                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Fallback</th>
+                                <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {[
+                                ['RAG Generation', 'LLM_PROVIDER setting', 'GPT-4o-mini', 'Claude, GPT-4, or Gemini based on env'],
+                                ['Embeddings', 'OpenAI', 'None', 'text-embedding-3-large (required)'],
+                                ['Query Enhancement', 'OpenAI', 'None', 'gpt-4o-mini (required)'],
+                                ['Agentic Planner', 'OpenAI', 'None', 'gpt-4o-mini (required for agentic)'],
+                                ['Groundedness', 'OpenAI', 'None', 'gpt-4o-mini (required)'],
+                                ['Reranking', 'Cohere', 'BGE Local', 'rerank-english-v3.0 → bge-reranker-v2-m3'],
+                                ['Batch Summaries', 'Anthropic', 'OpenAI', 'Claude Opus/Sonnet via Batch API'],
+                                ['Visual Extraction', 'Google', 'None', 'Gemini 2.5 Flash'],
+                            ].map(([task, primary, fallback, notes]) => (
+                                <tr key={task} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                    <td style={{ padding: '12px', fontWeight: 600, color: '#1e293b' }}>{task}</td>
+                                    <td style={{ padding: '12px', color: '#475569' }}>{primary}</td>
+                                    <td style={{ padding: '12px', color: '#64748b' }}>{fallback}</td>
+                                    <td style={{ padding: '12px', color: '#64748b', fontSize: '13px' }}>{notes}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <CalloutBox type="warning">
+                    <strong>OPENAI_API_KEY is required</strong> even if you set <code>LLM_PROVIDER=anthropic</code> or <code>google</code>.
+                    Embeddings, query enhancement, agentic planner, and groundedness verification all use OpenAI models
+                    because they offer the best cost/latency for these specific tasks.
+                </CalloutBox>
+            </DocSection>
+
+            {/* Feature Flag System */}
+            <DocSection
+                title="Feature Flag System"
+                description="All advanced features are independently toggleable. Enable/disable via environment variables."
+            >
+                <div style={{
+                    border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '20px',
+                }}>
+                    <div style={{ padding: '14px 18px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                        Feature Flag Matrix
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid #cbd5e1' }}>
+                                {['Feature', 'Env Variable', 'Default', 'Description'].map((h) => (
+                                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {[
+                                ['Agentic Mode', 'ENABLE_AGENTIC', 'true', 'Query decomposition for multi-hop queries'],
+                                ['Groundedness', 'ENABLE_GROUNDEDNESS', 'true', 'Post-generation claim verification'],
+                                ['Auto-filter', 'ENABLE_AUTO_FILTER', 'true', 'Extract filters from query text'],
+                                ['Entity Narrowing', 'ENABLE_ENTITY_NARROWING', 'true', 'Use entity graph for comparative queries'],
+                                ['Query Logging', 'ENABLE_QUERY_LOG', 'true', 'Write to query_logs table'],
+                                ['Dev Mode Logging', 'QUERY_LOG_DEV_MODE', 'false', 'Include full prompts in logs'],
+                                ['Reranking', 'ENABLE_RERANKING', 'true', 'Cohere/BGE cross-encoder reranking'],
+                                ['BGE Fallback', 'ENABLE_BGE_FALLBACK', 'true', 'Fall back to local BGE if Cohere fails'],
+                            ].map(([feature, envVar, defaultVal, desc]) => (
+                                <tr key={envVar} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b' }}>{feature}</td>
+                                    <td style={{ padding: '10px 14px' }}>
+                                        <code style={{ fontSize: '12px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{envVar}</code>
+                                    </td>
+                                    <td style={{ padding: '10px 14px' }}>
+                                        <span style={{
+                                            fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px',
+                                            background: defaultVal === 'true' ? '#dcfce7' : '#fef2f2',
+                                            color: defaultVal === 'true' ? '#166534' : '#991b1b',
+                                        }}>{defaultVal}</span>
+                                    </td>
+                                    <td style={{ padding: '10px 14px', color: '#475569' }}>{desc}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <CodeBlock title="Feature Toggle Example">
+{`# Disable agentic mode for simpler deployments
+ENABLE_AGENTIC=false
+
+# Enable verbose logging for debugging
+QUERY_LOG_DEV_MODE=true
+
+# Disable groundedness to reduce latency
+ENABLE_GROUNDEDNESS=false`}
+                </CodeBlock>
+            </DocSection>
 
             {/* Docker Setup */}
             <DocSection
                 title="Docker Setup"
-                description="Containerized services with Docker Compose"
+                description="Production deployment with docker-compose.prod.yml and Caddy reverse proxy"
             >
                 <DiagramCard title="Docker Compose Architecture">
                     <MermaidDiagram
@@ -77,26 +239,36 @@ graph TB
                 </DiagramCard>
 
                 <div style={{ marginTop: '24px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Starting the Services</h3>
-                    <CodeBlock title="Docker Compose Commands">
-{`# Start Qdrant only (for development)
+                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Development vs Production</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div style={{ padding: '16px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#92400e', marginBottom: '8px' }}>Development</div>
+                            <CodeBlock>
+{`# Just Qdrant + PostgreSQL in Docker
 docker run -p 6333:6333 qdrant/qdrant
+docker run -p 5432:5432 postgres
 
-# Start all services
-docker-compose up -d
+# FastAPI + React run locally
+uvicorn src.api.main:app --reload
+npm run dev`}
+                            </CodeBlock>
+                        </div>
+                        <div style={{ padding: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Production</div>
+                            <CodeBlock>
+{`# Full stack via docker-compose.prod.yml
+docker compose --env-file .env.production \\
+  -f docker-compose.prod.yml build --no-cache
 
-# View logs
-docker-compose logs -f
-
-# Stop all services
-docker-compose down
-
-# Rebuild after code changes
-docker-compose up --build`}
-                    </CodeBlock>
+docker compose --env-file .env.production \\
+  -f docker-compose.prod.yml up -d`}
+                            </CodeBlock>
+                        </div>
+                    </div>
 
                     <CalloutBox type="info">
-                        <strong>Development Mode:</strong> In development, FastAPI and React run locally (not in Docker) for faster iteration. Only Qdrant runs in Docker.
+                        <strong>Production stack:</strong> Caddy (reverse proxy + auto-TLS) → FastAPI (Gunicorn + Uvicorn workers) → Qdrant + PostgreSQL.
+                        Frontend is pre-built and served by Caddy.
                     </CalloutBox>
                 </div>
 
@@ -251,17 +423,37 @@ docker-compose up --build`}
                             <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                                 <td style={{ padding: '12px' }}><code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/api/chat</code></td>
                                 <td style={{ padding: '12px' }}>POST</td>
-                                <td style={{ padding: '12px' }}>Send query, receive streaming response</td>
+                                <td style={{ padding: '12px' }}>Send query, receive streaming response (standard path)</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                <td style={{ padding: '12px' }}><code style={{ background: '#fff7ed', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fed7aa' }}>/api/chat/agentic/stream</code></td>
+                                <td style={{ padding: '12px' }}>POST</td>
+                                <td style={{ padding: '12px' }}>Agentic query with decomposition (Phase 11)</td>
                             </tr>
                             <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                                 <td style={{ padding: '12px' }}><code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/api/series</code></td>
                                 <td style={{ padding: '12px' }}>GET</td>
                                 <td style={{ padding: '12px' }}>List all time series</td>
                             </tr>
-                            <tr>
+                            <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                                 <td style={{ padding: '12px' }}><code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/api/series/:id/chat</code></td>
                                 <td style={{ padding: '12px' }}>POST</td>
                                 <td style={{ padding: '12px' }}>Query time series, streaming response</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                <td style={{ padding: '12px' }}><code style={{ background: '#f0f9ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bae6fd' }}>/api/entities</code></td>
+                                <td style={{ padding: '12px' }}>GET</td>
+                                <td style={{ padding: '12px' }}>List canonical entities with filters (Phase 12)</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                <td style={{ padding: '12px' }}><code style={{ background: '#f0f9ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bae6fd' }}>/api/entities/:id</code></td>
+                                <td style={{ padding: '12px' }}>GET</td>
+                                <td style={{ padding: '12px' }}>Get entity details, aliases, mentions, related reports</td>
+                            </tr>
+                            <tr>
+                                <td style={{ padding: '12px' }}><code style={{ background: '#f0f9ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bae6fd' }}>/api/entities/:id/findings</code></td>
+                                <td style={{ padding: '12px' }}>GET</td>
+                                <td style={{ padding: '12px' }}>Get all findings mentioning this entity</td>
                             </tr>
                         </tbody>
                     </table>
@@ -361,18 +553,46 @@ Components:
                 </CalloutBox>
 
                 <div style={{ marginTop: '16px' }}>
-                    <CodeBlock title="Environment Variables">
-{`# API Keys
-OPENAI_API_KEY=sk-...          # Embeddings + Batch API
-ANTHROPIC_API_KEY=sk-ant-...   # Claude LLM + Batch API
-COHERE_API_KEY=...             # Reranking
+                    <CodeBlock title="Environment Variables (Full Reference)">
+{`# ═══════════════════════════════════════════════════════════
+# API KEYS (Required)
+# ═══════════════════════════════════════════════════════════
+OPENAI_API_KEY=sk-...          # Embeddings, enhancement, agentic, groundedness
+ANTHROPIC_API_KEY=sk-ant-...   # Claude RAG generation + Batch API
+COHERE_API_KEY=...             # Reranking (fallback to BGE if missing)
 GOOGLE_API_KEY=...             # Gemini visual extraction
 
-# Services
+# ═══════════════════════════════════════════════════════════
+# SERVICES
+# ═══════════════════════════════════════════════════════════
 QDRANT_URL=http://localhost:6333
+DATABASE_URL=postgresql://user:pass@localhost:5432/cag_entity_graph
 
-# Optional
-ANTHROPIC_API_KEY=...          # Phase 5.7 TOC validation (optional)`}
+# ═══════════════════════════════════════════════════════════
+# LLM PROVIDER SELECTION
+# ═══════════════════════════════════════════════════════════
+LLM_PROVIDER=anthropic         # anthropic | openai | google
+
+# ═══════════════════════════════════════════════════════════
+# FEATURE FLAGS
+# ═══════════════════════════════════════════════════════════
+ENABLE_AGENTIC=true            # Query decomposition for complex queries
+ENABLE_GROUNDEDNESS=true       # Post-generation verification
+ENABLE_AUTO_FILTER=true        # Extract filters from query text
+ENABLE_ENTITY_NARROWING=true   # Entity graph for comparative queries
+ENABLE_QUERY_LOG=true          # Write to query_logs table
+QUERY_LOG_DEV_MODE=false       # Include full prompts in logs
+
+# ═══════════════════════════════════════════════════════════
+# RATE LIMITING & SECURITY
+# ═══════════════════════════════════════════════════════════
+RATE_LIMIT_CHAT=30/hour        # Chat endpoint rate limit
+VITE_ACCESS_CODE=code1,code2   # Access gate codes (comma-separated)
+
+# ═══════════════════════════════════════════════════════════
+# ANALYTICS (Optional)
+# ═══════════════════════════════════════════════════════════
+VITE_PUBLIC_POSTHOG_KEY=phc_...`}
                     </CodeBlock>
                 </div>
 

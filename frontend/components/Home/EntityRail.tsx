@@ -6,8 +6,9 @@
  * Horizontal scrollable entity cards
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useHomeFeatured } from '../../hooks';
+import { formatEntityType } from '../../utils';
 
 const getEntityIcon = (type: string): string => {
     const t = type.toLowerCase();
@@ -24,6 +25,8 @@ interface EntityRailProps {
 export const EntityRail: React.FC<EntityRailProps> = ({ onEntityClick }) => {
     const { featured, isLoading } = useHomeFeatured();
 
+    const entities = featured?.top_entities || [];
+
     if (isLoading) {
         return (
             <div className="home-rail">
@@ -36,8 +39,6 @@ export const EntityRail: React.FC<EntityRailProps> = ({ onEntityClick }) => {
             </div>
         );
     }
-
-    const entities = featured?.top_entities || [];
 
     if (entities.length === 0) {
         return null;
@@ -55,7 +56,7 @@ export const EntityRail: React.FC<EntityRailProps> = ({ onEntityClick }) => {
                     >
                         <div className="home-entity-icon">{getEntityIcon(entity.entity_type)}</div>
                         <div className="home-entity-name">{entity.canonical_name}</div>
-                        <div className="home-entity-type">{entity.entity_type}</div>
+                        <div className="home-entity-type">{formatEntityType(entity.entity_type)}</div>
                         <div className="home-entity-stats">
                             {entity.mention_count} mentions · {entity.finding_count} findings
                         </div>

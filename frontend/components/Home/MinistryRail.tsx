@@ -6,7 +6,7 @@
  * Horizontal scrollable ministry cards
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useHomeFeatured } from '../../hooks';
 import { isValidMinistry } from '../../utils';
 
@@ -16,6 +16,11 @@ interface MinistryRailProps {
 
 export const MinistryRail: React.FC<MinistryRailProps> = ({ onMinistryClick }) => {
     const { featured, isLoading } = useHomeFeatured();
+
+    // Filter out "Unknown Ministry" and similar
+    const validMinistries = (featured?.top_ministries || []).filter((m) =>
+        isValidMinistry(m.canonical_name)
+    );
 
     if (isLoading) {
         return (
@@ -30,12 +35,8 @@ export const MinistryRail: React.FC<MinistryRailProps> = ({ onMinistryClick }) =
         );
     }
 
-    // Filter out "Unknown Ministry" and similar
-    const validMinistries = (featured?.top_ministries || []).filter((m) =>
-        isValidMinistry(m.canonical_name)
-    );
-
-    if (validMinistries.length === 0) {
+    // Hide section if fewer than 2 items (sparse rail looks sad)
+    if (validMinistries.length < 2) {
         return null;
     }
 
@@ -47,7 +48,9 @@ export const MinistryRail: React.FC<MinistryRailProps> = ({ onMinistryClick }) =
                     <div
                         key={ministry.entity_id}
                         className="home-ministry-card"
-                        onClick={() => onMinistryClick?.(ministry.entity_id)}
+                        onClick={() => {
+                            onMinistryClick?.(ministry.entity_id);
+                        }}
                     >
                         <div className="home-ministry-icon">🏛️</div>
                         <div className="home-ministry-name">{ministry.canonical_name}</div>

@@ -20,7 +20,7 @@ export const DeepDivesRail: React.FC<DeepDivesRailProps> = ({ onSeriesClick }) =
         return (
             <div className="home-rail">
                 <h2 className="home-rail-title">Deep Dive Collections</h2>
-                <div className="home-rail-scroll">
+                <div className="home-deep-dive-cards-grid">
                     {[1, 2, 3].map((i) => (
                         <div key={i} className="home-skeleton-card" />
                     ))}
@@ -38,7 +38,7 @@ export const DeepDivesRail: React.FC<DeepDivesRailProps> = ({ onSeriesClick }) =
     return (
         <div className="home-rail">
             <h2 className="home-rail-title">Deep Dive Collections</h2>
-            <div className="home-rail-scroll">
+            <div className="home-deep-dive-cards-grid">
                 {series.map((item) => (
                     <div
                         key={item.series_id}

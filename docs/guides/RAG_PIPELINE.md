@@ -37,6 +37,181 @@ for citation in response.citations:
 
 ---
 
+## Recent Additions (Phases 11–13 + Bridge)
+
+This section documents features added in Phases 11, 12, 13, and the Bridge Phase (A–D). These build on top of the v3.2 baseline documented in the rest of this file. For full implementation details, rationale, and operational guides, see `PHASES_11_12_13_BRIDGE_REFERENCE.md`.
+
+### Phase 11: Agentic Retrieval Loop
+
+**Purpose:** Handle complex, multi-hop queries that require iterative reasoning.
+
+**What it does:**
+1. Classifies query complexity (simple / multi-hop / cross-report) via a planner LLM call
+2. Decomposes complex queries into 2–4 sub-queries
+3. For each sub-query: retrieves → checks sufficiency → reformulates and retries (up to 3x)
+4. Merges all sub-query results into one `RetrievalResult`
+5. Synthesizes a unified answer with citations preserved
+
+**Simple queries short-circuit** to the existing `RAGService.ask()` path—no regression for 70–80% of queries.
+
+**Endpoints:**
+- `POST /api/chat/agentic` — synchronous
+- `POST /api/chat/agentic/stream` — SSE streaming
+
+**Files:**
+- `src/rag_pipeline/agentic_service.py` — `AgenticRAGService` class
+- `src/rag_pipeline/retrieval_utils.py` — `merge_retrieval_results()` helper
+
+**Cost & Latency:**
+- Simple queries: unchanged (short-circuited)
+- Multi-hop queries: +5–12s latency, +$0.01–0.03 per query
+
+**Hard limits:** 3 iterations/sub-query, 4 sub-queries max, 30k token budget, 20s wall-clock
+
+**Note:** The planner is hard-wired to OpenAI (`gpt-4o-mini`). If your main LLM is Claude or Gemini, agentic mode still requires `OPENAI_API_KEY`.
+
+### Phase 12: Cross-Report Entity Graph
+
+**Purpose:** Enable cross-report entity reasoning. Vector search alone can't reliably answer "Show me all NHAI findings across 2022–2025" when entities appear under different names.
+
+**Architecture:** Postgres-backed knowledge graph with three tables:
+- `entities` — canonical entities with aliases and metadata (~390 entities)
+- `entity_mentions` — every occurrence in chunks/findings/recommendations (~25k mentions)
+- `entity_relations` — co-occurrence edges within findings (sparse)
+
+**Three-stage pipeline:**
+
+```
+Stage 1: PER-REPORT NORMALIZATION
+  └─ Anthropic batch extracts `normalized_entities` during overview generation
+  └─ Output: data/batch_jobs/overviews/{report_id}_overview_llm.json
+
+Stage 2: CROSS-CORPUS CANONICALIZATION
+  └─ Operator runs: python -m src.entity_graph.cli canonicalize --reset
+  └─ Buckets by lowercase, LLM merges duplicates, scrubs generic aliases
+  └─ Output: data/entity_graph/canonical_entities.json + Postgres
+
+Stage 3: MENTION INDEXING
+  └─ Operator runs: python -m src.entity_graph.cli index
+  └─ Aho-Corasick scanner finds all mentions in chunk text
+  └─ Output: ~25k entity_mentions rows
+```
+
+**Integration:** `ask_comparative()` uses `EntityService` to narrow `report_ids` to only those mentioning the relevant entities—dramatically improving precision for entity-focused queries.
+
+**HTTP API:** See [HTTP API Reference](#http-api-reference) section below.
+
+**Files:** `src/entity_graph/` package, `src/api/routes/entities.py`
+
+**Cost:** Zero per-query (DB lookup only). Canonicalization: ~$0.50–1.00 per run.
+
+### Phase 13: Groundedness Verification
+
+**Purpose:** Verify LLM-generated answers against retrieved context to catch hallucinations.
+
+**What it does:** After the LLM generates an answer, a separate LLM call (gpt-4o-mini) verifies each factual claim against the retrieved context. Returns a per-claim grounding report with overall pass/fail score.
+
+**Behavior:**
+- **Fail-open:** If verification itself errors, the answer still ships
+- **Streaming:** Emitted as final event between last `token` and `done`
+
+**Output shape:**
+```json
+{
+  "verified": true,
+  "overall_score": 0.85,
+  "num_claims": 7,
+  "num_grounded": 6,
+  "num_ungrounded": 1,
+  "claims": [
+    {
+      "claim_text": "₹124.18 crore loss at Nathavalasa toll plaza",
+      "cited_source": "Section 3.2.1, p.36",
+      "grounded": true,
+      "confidence": 0.95,
+      "reason": "Exact figure appears in cited source"
+    }
+  ],
+  "provider_used": "openai"
+}
+```
+
+**Files:** `src/rag_pipeline/groundedness_service.py`
+
+**Cost & Latency:** ~$0.0005/query, +200–400ms (thread-pooled, doesn't block token streaming)
+
+### Bridge A: Auto-filter Retrieval
+
+**Purpose:** When a query mentions a year, state, ministry, sector, or government tier, automatically apply that as a Qdrant payload filter—but only when no explicit filter is set.
+
+**When it activates:**
+| Calling context | Explicit filters? | Auto-filter? |
+|----------------|-------------------|--------------|
+| Directory chat (specific report) | `{report_id: X}` | No |
+| Time series query | `{report_id: [...]}` | No |
+| Home page chat | `{}` | **YES** |
+| Agentic sub-query (home context) | `{}` | **YES** |
+
+**Detection rules** (all rule-based, no LLM call):
+- **Years:** `\b(20\d{2})\b` → converts to `audit_year` or `report_year` range
+- **States:** substring match against 28 states + 8 UTs with aliases
+- **Tiers:** union (Central, GoI, ministry of), local_body (panchayat, ULB, ATIR)
+- **Audit categories:** performance, compliance, financial, revenue, commercial, atir
+
+**Short ambiguous alias guard:** `up`, `mp`, `tn`, `hp`, `wb`, `jk` require ≥2 occurrences OR explicit context cue to avoid false positives (e.g., "audit process **up** to 2023" silently filtering to Uttar Pradesh).
+
+**Files:** `src/rag_pipeline/auto_filter.py`
+
+### Bridge B: Two-pass Canonicalization
+
+**Purpose:** Improve entity canonicalization quality at scale.
+
+**Activation:** Controlled by `entity_graph.two_pass_threshold` (default 1000). Below this threshold, single-pass only. Above, two-pass automatically.
+
+```
+At 37 reports (594 records):  pass 2 SKIPPED
+At 700 reports (~11k records): pass 2 ACTIVATES, ~$10–15 cost
+```
+
+**How pass 2 works:** Sorts pass-1 canonicals by (entity_type, primary_tier, canonical_name), batches of 250. LLM returns merge pairs `[{keep_id, absorb_id, reason}]` rather than rewriting entities. Cross-state guards prevent merging different state governments.
+
+### Bridge C: Query Observability
+
+**Purpose:** Capture every query (dev and prod) with full context for debugging, regression detection, and cost tracking.
+
+**Storage:** Postgres-backed `query_logs` table (50 columns) in the same DB as entity graph.
+
+**Key fields captured:**
+- Query inputs: text, style, filters (explicit + auto + merged)
+- Enhancement: question_type, expanded_queries, suggested_filters
+- Retrieval: candidates, rerank scores, sufficiency
+- Agentic: complexity, sub_query_count, iterations, bail_reason, trace
+- Generation: provider, model, final_answer, citations_count
+- Groundedness: score, verified, claim breakdown
+- Latency: total_ms, breakdown by stage
+- Status: success, error_message
+
+**Dev vs prod mode:**
+- `dev_debug=True`: captures full LLM prompts and full chunk content
+- `dev_debug=False` (production): strips these to save space
+
+**Pattern:** Context manager with async fire-and-forget writes—DB hiccups never block the response.
+
+**Files:** `src/observability/` package (`query_logger.py`, `models.py`, `cost_calculator.py`)
+
+### Bridge D: Comparative Breadth Cap
+
+**Purpose:** Cap the number of reports `ask_comparative()` runs per-report retrieval against.
+
+**Default:** `entity_graph.comparative_max_reports = 20`
+
+**Smart selection logic** when narrowed_report_ids exceeds cap:
+1. If matched entities exist: sort by sum of entity mention counts in each report
+2. Else if query mentions years: sort by year proximity to mentioned years
+3. Else: sort by `report_year` descending (most recent first)
+
+---
+
 ## Two-Pipeline Architecture
 
 The RAG system operates as two distinct pipelines with different runtime characteristics:
@@ -98,6 +273,51 @@ graph TB
     style TC fill:#fff3cd
 ```
 
+### Extended Architecture (Phases 11–13 + Bridge)
+
+```mermaid
+graph TB
+    subgraph "Agentic Path (Phase 11)"
+        AQ[User Question] --> AG[AgenticRAGService]
+        AG --> PL[Planner<br/>gpt-4o-mini]
+        PL -->|simple| RS[RAGService.ask]
+        PL -->|multi-hop| SQ[Sub-query Loop]
+        SQ --> AF[AutoFilterExtractor<br/>Bridge A]
+        AF --> RET[RetrievalService]
+        RET -->|insufficient| REF[Reformulate]
+        REF --> RET
+        RET -->|sufficient| MRG[merge_retrieval_results]
+    end
+
+    subgraph "Standard Path"
+        RS --> GEN
+        MRG --> GEN[LLM Generation]
+    end
+
+    subgraph "Post-Generation (Phase 13)"
+        GEN --> GND[GroundednessService]
+        GND --> RESP[RAGResponse]
+    end
+
+    subgraph "Observability (Bridge C)"
+        AG -.-> QL[(query_logs<br/>Postgres)]
+        RS -.-> QL
+        RESP -.-> QL
+    end
+
+    subgraph "Entity Graph (Phase 12)"
+        ES[(entities<br/>Postgres)] --> ENS[EntityService]
+        ENS --> COMP[ask_comparative]
+        COMP --> |entity narrowing| RS
+    end
+
+    style PL fill:#fff3cd
+    style GND fill:#d4edda
+    style QL fill:#e1f5ff
+    style ES fill:#e1f5ff
+    style AF fill:#fff3cd
+```
+
 ---
 
 ## Tech Stack & Dependencies
@@ -120,10 +340,21 @@ graph TB
 - **Neighbor Predictor:** O(1) chunk ID prediction for context expansion
 - **Report Registry:** Multi-tier report metadata and time series management
 
+### Additional Libraries (Phases 11–13 + Bridge)
+
+| Library | Purpose |
+|---------|---------|
+| **SQLAlchemy** | ORM for entity graph and query observability (Postgres) |
+| **psycopg** | PostgreSQL driver (async-compatible) |
+| **pyahocorasick** | Aho-Corasick multi-pattern string matching for entity mention scanning |
+
 ### External Services
 
 - **Qdrant Vector Database:** Local (Docker) or cloud-hosted
   - Collections: `cag_child_chunks` (hybrid vectors), `cag_parent_chunks` (metadata)
+- **PostgreSQL Database:** Entity graph and query observability
+  - Database: `cag_entity_graph`
+  - Tables: `entities`, `entity_mentions`, `entity_relations`, `query_logs`
 
 ---
 
@@ -168,6 +399,9 @@ class RAGResponse:
     reranker_used: str            # "cohere", "bge", "none"
     search_type: str              # "hybrid", "dense"
     model_used: str               # LLM identifier
+    # Phase 11/13 additions:
+    groundedness: Optional[Dict]   # Groundedness verification report
+    agentic_trace: Optional[Dict]  # Agentic loop execution trace
 ```
 
 **`ReportInfo`** (in `report_registry.py`):
@@ -194,13 +428,15 @@ class ReportInfo:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `OPENAI_API_KEY` | Yes | Embeddings, GPT-4, Query enhancement |
+| `OPENAI_API_KEY` | Yes | Embeddings, GPT-4, Query enhancement, Agentic planner, Groundedness |
 | `ANTHROPIC_API_KEY` | Optional | Claude generation |
 | `GOOGLE_API_KEY` | Optional | Gemini generation |
 | `COHERE_API_KEY` | Optional | Cohere reranking |
 | `QDRANT_URL` | Yes | Qdrant connection (default: `http://localhost:6333`) |
 | `QDRANT_API_KEY` | Optional | Qdrant Cloud authentication |
 | `LLM_PROVIDER` | Optional | Provider selection: `openai`, `claude`, or `gemini` (default: `openai`) |
+| `ENTITY_GRAPH_DSN` | Optional | PostgreSQL connection for entity graph + observability |
+| `APP_ENV` | Optional | `dev` or `prod` — controls observability detail level |
 
 ---
 
@@ -932,11 +1168,56 @@ python -m src.rag_pipeline.indexer --input-dir data/processed --recreate
 | `num_expansions` | 3 | Total queries (original + expansions) |
 | `min_rerank_score` | 0.25 | Minimum top-1 score for sufficiency (30% lower for State/Local) |
 
+### Groundedness Configuration (Phase 13)
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `groundedness.enabled` | true | Enable post-generation verification |
+| `groundedness.block_on_failure` | false | Block response if groundedness fails (not recommended) |
+
+### Agentic Configuration (Phase 11)
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `agentic.enabled` | true | Enable agentic retrieval loop |
+| `agentic.max_sub_queries` | 4 | Maximum sub-queries from decomposition |
+| `agentic.max_iterations_per_subquery` | 3 | Max reformulation retries per sub-query |
+| `agentic.token_budget` | 30000 | Total token budget across all sub-queries |
+| `agentic.wall_clock_timeout_s` | 20 | Hard timeout in seconds |
+
+### Entity Graph Configuration (Phase 12)
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `entity_graph.enabled` | true | Enable entity graph features |
+| `entity_graph.enable_comparative_filtering` | true | Use entity narrowing in ask_comparative() |
+| `entity_graph.two_pass_threshold` | 1000 | Raw record count that triggers two-pass canonicalization |
+| `entity_graph.comparative_max_reports` | 20 | Max reports for comparative retrieval (Bridge D) |
+
+### Auto-filter Configuration (Bridge A)
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `auto_filter.enabled` | true | Enable auto-filter extraction |
+| `auto_filter.allow_year_inference` | true | Infer year filters from query |
+| `auto_filter.allow_tier_inference` | true | Infer tier filters from query |
+| `auto_filter.state_confidence_min_occurrences` | 1 | Min occurrences for non-ambiguous state matches |
+
+### Observability Configuration (Bridge C)
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `observability.enabled` | true | Enable query logging |
+| `observability.environment` | `dev` | Environment tag (`dev` or `prod`) |
+| `observability.dev_debug` | true | Capture full prompts and chunk content |
+| `observability.sampling_rate` | 1.0 | Fraction of queries to log (1.0 = all) |
+| `observability.log_query_text` | true | Include query text in logs |
+
 ---
 
 ## Performance Profile
 
-### Latency Breakdown (Typical Query)
+### Latency Breakdown (Typical Query — Standard Path)
 
 | Stage | Time |
 |-------|------|
@@ -949,16 +1230,41 @@ python -m src.rag_pipeline.indexer --input-dir data/processed --recreate
 | Sufficiency check + Passage reordering | ~5ms |
 | Tier context injection | ~5ms |
 | LLM generation | ~1500-2000ms |
+| Groundedness verification (Phase 13) | +200-400ms (parallel) |
 | **Total end-to-end** | **~2-3s** |
+
+### Latency Breakdown (Agentic Query — Phase 11)
+
+| Stage | Time |
+|-------|------|
+| Planning / decomposition | ~100ms |
+| Per sub-query (2-4x): retrieval + sufficiency | ~500-1500ms each |
+| Reformulation retries (if needed) | +500ms each |
+| Result merging | ~10ms |
+| Synthesis LLM generation | ~2000-3000ms |
+| Groundedness verification | +200-400ms (parallel) |
+| **Total end-to-end** | **~5-12s** |
 
 ### Cost Breakdown
 
-**Per-Query Cost:**
+**Per-Query Cost (Standard Path):**
 - Query enhancement (gpt-4o-mini): ~$0.0002
 - Query embedding: ~$0.0001
 - Cohere reranking: ~$0.001
 - LLM generation (gpt-4o-mini): ~$0.002-0.005
-- **Total:** ~$0.003-0.008 per query
+- Groundedness verification (Phase 13): ~$0.0005
+- **Total:** ~$0.004-0.009 per query
+
+**Per-Query Cost (Agentic Path - Phase 11):**
+- Planner LLM call: ~$0.0002
+- Per sub-query (2-4x): embedding + retrieval + reranking
+- Synthesis LLM call: ~$0.005-0.01
+- Groundedness verification: ~$0.0005
+- **Total:** ~$0.01-0.03 per agentic query
+
+**Entity Graph (Phase 12):**
+- Per-query cost: **$0** (DB lookup only)
+- Canonicalization (one-time per corpus): ~$0.50-1.00 for 37 reports, ~$10-15 for 700 reports
 
 **Per-Report Indexing Cost:**
 - Dense embeddings: ~$0.01 (varies with report length)
@@ -988,3 +1294,233 @@ State and Local Body reports use different administrative vocabulary than Union 
 
 **Passage Reordering for Attention:**
 Research shows LLMs attend most to the beginning and end of context. Interleaving parents by relevance (best→worst→second-best→second-worst) places the most relevant content at attention-optimal positions, improving answer quality at zero additional cost.
+
+---
+
+## HTTP API Reference
+
+### Chat Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/chat` | Synchronous chat (standard path) |
+| `POST` | `/api/chat/stream` | SSE streaming chat (standard path) |
+| `POST` | `/api/chat/agentic` | Synchronous agentic chat (Phase 11) |
+| `POST` | `/api/chat/agentic/stream` | SSE streaming agentic chat (Phase 11) |
+
+### Entity Graph Endpoints (Phase 12)
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/entities/search` | Search entities by name, type, tier |
+| `GET` | `/api/entities/{id}` | Get entity details |
+| `GET` | `/api/entities/{id}/mentions` | Get entity mentions with filters |
+| `GET` | `/api/entities/{id}/reports` | Get reports mentioning entity |
+| `GET` | `/api/entities/{id}/related` | Get related entities (co-occurrence) |
+| `GET` | `/api/entities/{id}/findings` | Get findings mentioning entity |
+
+**Query parameters for `/api/entities/search`:**
+- `q` — search term
+- `entity_type` — filter by type (ministry, psu, scheme, state_government, etc.)
+- `primary_tier` — filter by tier (union, state, local_body)
+- `limit` — max results (default 10)
+
+**Query parameters for `/api/entities/{id}/mentions`:**
+- `finding_type` — filter by finding type
+- `audit_year` — filter by audit year
+- `severity` — filter by severity
+
+---
+
+## Streaming Events
+
+### Standard Path Events
+
+| Event Type | When | Payload |
+|------------|------|---------|
+| `citation_map` | After retrieval | Citation metadata for linking |
+| `token` | Each LLM token | String token |
+| `groundedness` | After token stream | Groundedness report (Phase 13) |
+| `done` | End of stream | `null` |
+
+### Agentic Path Events (Phase 11)
+
+| Event Type | When | Payload |
+|------------|------|---------|
+| `planning` | After decomposition | `{complexity, sub_queries, reason}` |
+| `sub_query` | Before each sub-query | `{index, query, total}` |
+| `iteration` | After each loop | `{sub_index, iterations, sufficient, num_chunks}` |
+| `reformulation` | When query rewritten | `{sub_index, new_query}` |
+| `citation_map` | After merge | Citation metadata |
+| `synthesizing` | Before answer generation | `null` |
+| `token` | Each LLM token | String token |
+| `groundedness` | After token stream | Groundedness report |
+| `agentic_trace` | Before done | Full execution trace |
+| `done` | End of stream | `null` |
+
+---
+
+## Operational Commands
+
+### RAG Pipeline
+
+```bash
+# Index all reports into Qdrant
+python -m src.rag_pipeline.indexer --input-dir data/processed --recreate
+
+# Index and migrate (with multi-tier support)
+poetry run python scripts/index_and_migrate_qdrant.py --all
+```
+
+### Entity Graph (Phase 12)
+
+```bash
+# Initialize database tables (one-time)
+poetry run python -m src.entity_graph.cli init-db
+
+# Canonicalize entities from all overview files
+poetry run python -m src.entity_graph.cli canonicalize --reset
+
+# Index mentions across all reports
+poetry run python -m src.entity_graph.cli index
+
+# Index a single report
+poetry run python -m src.entity_graph.cli index-report --file data/processed/.../report_chunks.json
+
+# View entity graph statistics
+poetry run python -m src.entity_graph.cli stats
+```
+
+---
+
+## Postgres Setup
+
+The entity graph and query observability use a shared PostgreSQL database (`cag_entity_graph`).
+
+### Local Development
+
+A standalone Postgres container runs on port 5433:
+
+```bash
+# Start Postgres container
+docker run -d \
+  --name cag-postgres \
+  -p 5433:5432 \
+  -e POSTGRES_PASSWORD=admin_pass \
+  -v cag_postgres_data:/var/lib/postgresql/data \
+  postgres:16
+
+# Create user and database
+docker exec -it cag-postgres psql -U postgres <<EOF
+CREATE USER cag WITH PASSWORD 'cag_dev_pass';
+CREATE DATABASE cag_entity_graph OWNER cag;
+GRANT ALL PRIVILEGES ON DATABASE cag_entity_graph TO cag;
+EOF
+```
+
+### Two-DSN Pattern
+
+Different hostnames are needed for Mac vs Docker contexts:
+
+| Context | Hostname |
+|---------|----------|
+| Mac terminal (poetry run, psql) | `localhost:5433` |
+| Inside Docker container | `host.docker.internal:5433` |
+
+**Solution:** Two `.env` files with different `ENTITY_GRAPH_DSN` values:
+
+```bash
+# .env (Mac context)
+ENTITY_GRAPH_DSN=postgresql+psycopg://cag:cag_dev_pass@localhost:5433/cag_entity_graph
+
+# .env.production (Docker context)
+ENTITY_GRAPH_DSN=postgresql+psycopg://cag:cag_dev_pass@host.docker.internal:5433/cag_entity_graph
+```
+
+See `PHASES_11_12_13_BRIDGE_REFERENCE.md` for full Postgres setup, backup/restore, and production deployment details.
+
+---
+
+## File Index / Repo Structure
+
+### RAG Pipeline (`src/rag_pipeline/`)
+
+```
+src/rag_pipeline/
+├── models.py                  # Data models (RetrievedChunk, RAGResponse, etc.)
+├── embedding_service.py       # Dense/sparse embeddings, table summaries
+├── qdrant_service.py          # Vector DB operations
+├── retrieval_service.py       # Hybrid search, reranking, neighbor expansion
+├── query_enhancer.py          # LLM-powered query expansion
+├── rag_service.py             # Main RAGService orchestration
+├── report_registry.py         # Report metadata and time series
+├── indexer.py                 # Batch indexing orchestration
+├── agentic_service.py         # AgenticRAGService (Phase 11)
+├── groundedness_service.py    # Groundedness verification (Phase 13)
+├── auto_filter.py             # Auto-filter extraction (Bridge A)
+└── retrieval_utils.py         # Shared utilities (merge_retrieval_results, merge_filters)
+```
+
+### Entity Graph (`src/entity_graph/`) — Phase 12
+
+```
+src/entity_graph/
+├── __init__.py
+├── db.py                      # SQLAlchemy engine and session
+├── models.py                  # ORM models (Entity, EntityMention, EntityRelation)
+├── canonicalizer.py           # Cross-corpus canonicalization logic
+├── mention_indexer.py         # Aho-Corasick mention scanning
+├── entity_service.py          # Query interface for entity lookups
+└── cli.py                     # CLI commands (init-db, canonicalize, index, stats)
+```
+
+### Observability (`src/observability/`) — Bridge C
+
+```
+src/observability/
+├── __init__.py
+├── models.py                  # QueryLog ORM model (50 columns)
+├── query_logger.py            # QueryLogger + QueryLogContext
+└── cost_calculator.py         # Token/cost estimation
+```
+
+### API Routes (`src/api/routes/`)
+
+```
+src/api/routes/
+├── reports.py                 # Report listing and metadata
+├── chat.py                    # /chat and /chat/agentic endpoints
+├── series.py                  # Time series endpoints
+└── entities.py                # Entity graph API (Phase 12)
+```
+
+### Tests
+
+```
+tests/
+├── rag_pipeline/              # RAG pipeline tests
+├── entity_graph/              # Entity graph tests (Phase 12)
+└── observability/             # Observability tests (Bridge C)
+```
+
+---
+
+## Known Limitations
+
+### Current Gaps
+
+1. **Token usage and `cost_estimate_usd` currently NULL in query_logs** — `record_generation()` is called with `prompt_tokens=None`. Provider response token counts not yet captured. Worth fixing if cost dashboards become important.
+
+2. **Agentic planner hard-wired to OpenAI** — The planner uses `gpt-4o-mini` regardless of `LLM_PROVIDER`. Requires `OPENAI_API_KEY` even if main generation uses Claude or Gemini.
+
+3. **Aho-Corasick scanner relies on canonical alias list** — If an entity alias wasn't captured during canonicalization, mentions won't be found. The scanner can't discover new aliases.
+
+4. **Per-chunk `entities_mentioned` field mostly None** — The Aho-Corasick scanner side-steps this, but it means chunk-level entity metadata isn't available for filtering.
+
+5. **No automatic regeneration on low groundedness** — `regenerate_on_failure=False` by default. Low-scoring answers still ship with a warning rather than being regenerated.
+
+6. **Sub-queries run sequentially, not parallelized** — Agentic mode processes sub-queries one at a time. Parallelization would reduce latency but increase complexity.
+
+### Deferred Improvements
+
+See `PHASES_11_12_13_BRIDGE_REFERENCE.md` Section 12 ("Known limitations and follow-ups") for the complete list of planned improvements.

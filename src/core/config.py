@@ -139,7 +139,7 @@ class LLMConfig:
                 "LLM_CLAUDE_MODEL", "claude-sonnet-4-20250514"
             )
         if self.openai_model is None:
-            self.openai_model = os.getenv("LLM_OPENAI_MODEL", "gpt-4o-mini")
+            self.openai_model = os.getenv("LLM_OPENAI_MODEL", "gpt-4o")
         if self.gemini_model is None:
             self.gemini_model = os.getenv("LLM_GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -199,8 +199,8 @@ class AgenticConfig:
 
     enabled: bool = True  # OFF by default; exposed via /chat/agentic endpoint
 
-    # Planner (query decomposer) uses a small fast model
-    planner_model: str = "gpt-4o-mini"  # OpenAI only for now
+    # Planner (query decomposer) upgraded to gpt-4o for better query understanding
+    planner_model: str = "gpt-4o"  # OpenAI only for now
 
     # Loop bounds
     max_sub_queries: int = 4
@@ -239,7 +239,11 @@ class EntityGraphConfig:
 
     # Postgres DSN — required when enabled
     # Example: postgresql+psycopg://cag_user:pass@localhost:5432/cag_entity_graph
-    dsn: Optional[str] = None
+    dsn: Optional[str] = os.getenv("ENTITY_GRAPH_DSN")
+    if not dsn:
+        raise RuntimeError(
+            "ENTITY_GRAPH_DSN not set. Required for entity graph operations."
+        )
 
     # Canonicalization model (cross-corpus dedup)
     canonicalization_model: str = "gpt-4o-mini"

@@ -16,6 +16,9 @@ from typing import Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
 
+from src.parsing_pipeline.config import get_config, LLMValidationConfig
+from src.parsing_pipeline.instrumentation import get_noop_emitter
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -76,20 +79,37 @@ Return ONLY the JSON array, no explanations."""
 
     def __init__(
         self,
-        model: str = "claude-haiku-4-5-20251001",
-        max_input_chars: int = 8000,
-        quality_threshold: int = 50,
+        model: Optional[str] = None,
+        max_input_chars: Optional[int] = None,
+        quality_threshold: Optional[int] = None,
+        config: Optional[LLMValidationConfig] = None,
+        trace_emitter=None,
     ):
         """
         Args:
-            model: Claude model to use (Haiku for cost efficiency)
-            max_input_chars: Max chars of document text to send
-            quality_threshold: Only validate TOCs with quality below this
+            model: Claude model to use (overrides config)
+            max_input_chars: Max chars of document text to send (overrides config)
+            quality_threshold: Only validate TOCs with quality below this (overrides config)
+            config: LLMValidationConfig instance (default: load from global config)
+            trace_emitter: Optional TraceEmitter for instrumentation
         """
-        self.model = model
-        self.max_input_chars = max_input_chars
-        self.quality_threshold = quality_threshold
+        # Load from config if not provided
+        if config is None:
+            config = get_config().llm_validation
+
+        self.enabled = config.enabled
+        self.model = model if model is not None else config.model
+        self.max_input_chars = (
+            max_input_chars if max_input_chars is not None
+            else config.max_input_chars
+        )
+        self.quality_threshold = (
+            quality_threshold if quality_threshold is not None
+            else config.quality_threshold
+        )
+        self.max_pages = config.max_pages_to_extract
         self._client = None
+        self._trace_emitter = trace_emitter or get_noop_emitter()
 
     def _get_client(self):
         """Lazy-initialize Anthropic client."""
@@ -101,25 +121,80 @@ Return ONLY the JSON array, no explanations."""
                 raise ImportError("Install anthropic: pip install anthropic")
         return self._client
 
-    def should_validate(self, task) -> bool:
+    def should_validate(self, task, trace_emitter=None) -> bool:
         """Check if this task's TOC needs LLM validation."""
-        if not task.scaffold:
-            return True
-        quality = task.scaffold.get("toc_quality", 0)
-        toc = task.scaffold.get("toc", [])
-        return quality < self.quality_threshold or len(toc) < 3
+        emitter = trace_emitter or self._trace_emitter
 
-    def validate_toc(self, task) -> dict:
+        quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
+        toc_count = len(task.scaffold.get("toc", [])) if task.scaffold else 0
+
+        # Check if disabled in config
+        if not self.enabled:
+            # Trace: Red flag if disabled but would have needed validation
+            would_need = quality < self.quality_threshold or toc_count < 3
+            if would_need:
+                emitter.emit_red_flag(
+                    "5.7",
+                    "llm_disabled_but_needed",
+                    {
+                        "quality": quality,
+                        "threshold": self.quality_threshold,
+                        "toc_count": toc_count,
+                    },
+                )
+            emitter.emit_decision(
+                "5.7",
+                "eligibility",
+                "skipped",
+                ["will_fire", "skipped"],
+                "disabled_in_config",
+            )
+            return False
+
+        if not task.scaffold:
+            emitter.emit_decision(
+                "5.7",
+                "eligibility",
+                "will_fire",
+                ["will_fire", "skipped"],
+                "no_scaffold",
+            )
+            return True
+
+        needs_validation = quality < self.quality_threshold or toc_count < 3
+        if needs_validation:
+            reason = f"quality={quality} < {self.quality_threshold}" if quality < self.quality_threshold else f"toc_count={toc_count} < 3"
+            emitter.emit_decision(
+                "5.7",
+                "eligibility",
+                "will_fire",
+                ["will_fire", "skipped"],
+                reason,
+            )
+        else:
+            emitter.emit_decision(
+                "5.7",
+                "eligibility",
+                "skipped",
+                ["will_fire", "skipped"],
+                f"quality={quality} >= {self.quality_threshold} and toc_count={toc_count} >= 3",
+            )
+        return needs_validation
+
+    def validate_toc(self, task, trace_emitter=None) -> dict:
         """
         Validate and potentially correct the TOC using Claude Haiku.
 
         Args:
             task: DocumentTask with scaffold and PDF path
+            trace_emitter: Optional TraceEmitter for instrumentation
 
         Returns:
             Updated scaffold dict
         """
-        if not self.should_validate(task):
+        emitter = trace_emitter or self._trace_emitter
+
+        if not self.should_validate(task, trace_emitter=emitter):
             return task.scaffold
 
         # Extract raw text from first pages
@@ -142,6 +217,8 @@ Return ONLY the JSON array, no explanations."""
             existing_toc_section=existing_toc_section,
             document_text=document_text[:self.max_input_chars],
         )
+
+        prev_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
 
         # Call Claude Haiku
         try:
@@ -167,7 +244,35 @@ Return ONLY the JSON array, no explanations."""
                 scaffold = task.scaffold or {"toc": [], "page_map": {}, "heading_positions": {}}
                 scaffold["toc"] = llm_toc
                 scaffold["toc_method"] = f"{scaffold.get('toc_method', 'unknown')}+llm_validated"
-                scaffold["toc_quality"] = min(85, max(scaffold.get("toc_quality", 0), 70))
+                new_quality = min(85, max(scaffold.get("toc_quality", 0), 70))
+                scaffold["toc_quality"] = new_quality
+
+                # Trace: LLM call result - success
+                emitter.emit_io(
+                    "5.7",
+                    {
+                        "model": self.model,
+                        "input_chars": len(document_text[:self.max_input_chars]),
+                        "entries_before": len(existing_toc),
+                        "quality_before": prev_quality,
+                    },
+                    {
+                        "entries_after": len(llm_toc),
+                        "quality_after": new_quality,
+                    },
+                )
+
+                # Trace: Sample of TOC changes
+                if existing_toc or llm_toc:
+                    changes_sample = []
+                    for i, entry in enumerate(llm_toc[:5]):
+                        before = existing_toc[i] if i < len(existing_toc) else None
+                        changes_sample.append({
+                            "index": i,
+                            "before": before[1][:40] if before else None,
+                            "after": entry[1][:40],
+                        })
+                    emitter.emit_sample("5.7", "toc_changes", changes_sample)
 
                 logger.info(
                     f"[{task.report_id}] LLM validation: {len(llm_toc)} entries "
@@ -175,6 +280,16 @@ Return ONLY the JSON array, no explanations."""
                 )
                 return scaffold
             else:
+                # Trace: Red flag - LLM returned insufficient entries
+                emitter.emit_red_flag(
+                    "5.7",
+                    "llm_no_effect",
+                    {
+                        "entries_returned": len(llm_toc) if llm_toc else 0,
+                        "reason": "insufficient_entries",
+                        "report_id": task.report_id,
+                    },
+                )
                 logger.warning(
                     f"[{task.report_id}] LLM validation returned insufficient entries "
                     f"({len(llm_toc) if llm_toc else 0})"
@@ -182,11 +297,13 @@ Return ONLY the JSON array, no explanations."""
                 return task.scaffold
 
         except Exception as e:
+            # Trace: Error in LLM call
+            emitter.emit_error("5.7", "llm_api_error", str(e)[:200])
             logger.error(f"[{task.report_id}] LLM validation failed: {e}")
             return task.scaffold
 
     def _extract_early_pages_text(self, task) -> str:
-        """Extract raw text from first ~15 pages of the PDF."""
+        """Extract raw text from first pages of the PDF (configured max_pages)."""
         pdf_path = task.ocred_pdf_path or task.local_pdf_path
         if not pdf_path:
             return ""
@@ -194,7 +311,7 @@ Return ONLY the JSON array, no explanations."""
         try:
             doc = fitz.open(pdf_path)
             text_parts = []
-            max_pages = min(15, len(doc))
+            max_pages = min(self.max_pages, len(doc))
 
             for page_num in range(max_pages):
                 page = doc[page_num]

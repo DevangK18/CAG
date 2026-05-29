@@ -89,10 +89,10 @@ class ValidationService:
         child_chunks = report_data.get("child_chunks", [])
         metadata = report_data.get("report_metadata", {})
 
-        # 1. Hierarchy Validation (FIXED)
+        # 1. Hierarchy Validation
         hierarchy_stats = self._validate_hierarchy(parent_chunks, child_chunks)
 
-        # 2. Page Order Validation (FIXED - checks parent page ranges)
+        # 2. Page Order Validation (checks parent page ranges)
         page_stats = self._validate_page_order(parent_chunks)
 
         # 3. TOC Quality Validation (ENHANCED)
@@ -143,7 +143,6 @@ class ValidationService:
             "caption_quality": caption_stats,
             "cross_references": xref_stats,
             "temporal": temporal_stats,
-            # P4-7: Phase 4 feature validation
             "recommendations": rec_stats,
             "executive_summary": exec_stats,
             "visual_registry": visual_registry_stats,
@@ -218,7 +217,6 @@ class ValidationService:
         orphan_rate = (orphans / total_children) * 100
         deep_link_rate = (deep_links / total_children) * 100
 
-        # FIXED: More aggressive status detection
         if orphan_rate > 50:
             status = "CRITICAL_ORPHANS"
         elif concentration_rate > 60:  # LOWERED from 90
@@ -597,10 +595,10 @@ class ValidationService:
             )
 
         # =================================================================
-        # WEIGHTED TOTAL (P3-7 Updated)
+        # WEIGHTED TOTAL
         # =================================================================
         overall = (
-            h_score * 0.35      # Hierarchy: 35% (was 45%)
+            h_score * 0.35      # Hierarchy: 35%
             + p_score * 0.10    # Page Order: 10%
             + t_score * 0.20    # TOC Quality: 20% (was 25%)
             + m_score * 0.10    # Metadata: 10%
@@ -924,7 +922,7 @@ class ValidationService:
         """Collect all issues into a structured list for reporting."""
         issues = []
 
-        # Hierarchy issues - FIXED THRESHOLDS
+        # Hierarchy issues
         if hierarchy.get("orphan_rate", 0) > 10:
             issues.append(
                 {
@@ -935,7 +933,6 @@ class ValidationService:
                 }
             )
 
-        # FIXED: Lower threshold for flat hierarchy warning
         if hierarchy.get("deep_link_rate", 0) < 30:
             severity = "CRITICAL" if hierarchy["deep_link_rate"] < 10 else "HIGH"
             issues.append(
@@ -947,7 +944,6 @@ class ValidationService:
                 }
             )
 
-        # FIXED: Lower threshold for concentration (50% not 80%)
         if hierarchy.get("concentration_rate", 0) > 40:
             severity = "CRITICAL" if hierarchy["concentration_rate"] > 60 else "HIGH"
             issues.append(

@@ -5,6 +5,8 @@ Serializes hierarchical chunks to Phase 2-ready JSON format.
 UPDATED: Added report_year extraction for RAG pipeline compatibility.
 """
 
+import logging
+
 import json
 import re
 from pathlib import Path
@@ -13,6 +15,8 @@ from datetime import datetime
 
 from src.core.data_contracts import DocumentTask, ParentChunk, ChildChunk
 
+
+logger = logging.getLogger(__name__)
 
 class AssemblyService:
     """
@@ -28,21 +32,23 @@ class AssemblyService:
     UPDATED: Now extracts report_year as integer for RAG filtering.
     """
 
-    def __init__(self, output_dir: str = "data/processed"):
+    def __init__(self, output_dir: str = "data/processed", trace_emitter=None):
         """
         Initialize the assembly service.
 
         Args:
             output_dir: Directory for output JSON files
+            trace_emitter: Optional TraceEmitter for Phase 8 instrumentation
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._trace_emitter = trace_emitter
 
         # Manifest file tracks all assembled documents
         self.manifest_path = self.output_dir / "manifest.json"
         self.manifest = self._load_or_create_manifest()
 
-        print(f"AssemblyService initialized. Output: {self.output_dir}")
+        logger.info(f"AssemblyService initialized. Output: {self.output_dir}")
 
     def _load_or_create_manifest(self) -> Dict[str, Any]:
         """Load existing manifest or create new one."""
@@ -137,6 +143,8 @@ class AssemblyService:
         task: DocumentTask,
         parent_chunks: List[ParentChunk],
         child_chunks: List[ChildChunk],
+        skip_manifest: bool = False,
+        trace_emitter=None,
     ) -> str:
         """
         Main entry point: assemble final JSON output for a document.
@@ -145,18 +153,27 @@ class AssemblyService:
             task: Fully processed DocumentTask
             parent_chunks: List of parent chunks
             child_chunks: List of child chunks
+            skip_manifest: If True, skip updating corpus manifest (for parallel execution)
+            trace_emitter: Optional TraceEmitter for Phase 8 instrumentation
 
         Returns:
             Path to output JSON file
         """
-        print(f"Assembling document: {task.report_id}")
+        emitter = trace_emitter or self._trace_emitter
+        logger.info(f"Assembling document: {task.report_id}")
 
         # Extract report_year once for use in metadata
         report_year = self._extract_report_year(task)
         if report_year:
-            print(f"  Extracted report_year: {report_year}")
+            logger.info(f"  Extracted report_year: {report_year}")
         else:
-            print(f"  Warning: Could not extract report_year")
+            logger.warning(f"  Warning: Could not extract report_year")
+            if emitter:
+                emitter.emit_red_flag(
+                    "8",
+                    "Could not extract report_year",
+                    {"report_id": task.report_id},
+                )
 
         # Build complete output structure
         assembled_data = {
@@ -170,7 +187,7 @@ class AssemblyService:
             ),
         }
 
-        # P3-2: Replace generic image captions with contextual ones
+        # Replace generic image captions with contextual ones
         from src.parsing_pipeline.modules.enrichment.contextual_caption_service import ContextualCaptionService
         caption_service = ContextualCaptionService()
         total_images, replaced = caption_service.replace_generic_captions(
@@ -178,9 +195,9 @@ class AssemblyService:
             assembled_data["parent_chunks"],
         )
         if replaced > 0:
-            print(f"  P3-2: Replaced {replaced}/{total_images} generic image captions")
+            logger.info(f"  Replaced {replaced}/{total_images} generic image captions")
 
-        # P3-3: Annotate chunks with temporal references
+        # Annotate chunks with temporal references
         from src.parsing_pipeline.modules.enrichment.temporal_extractor import TemporalExtractor
         temporal_extractor = TemporalExtractor()
         temporal_count = 0
@@ -191,9 +208,9 @@ class AssemblyService:
                     chunk_dict["temporal_references"] = temporal_refs
                     temporal_count += 1
         if temporal_count > 0:
-            print(f"  P3-3: Annotated {temporal_count} chunks with temporal references")
+            logger.info(f"  Annotated {temporal_count} chunks with temporal references")
 
-        # P3-4: Compute extraction confidence for all chunks
+        # Compute extraction confidence for all chunks
         toc_quality = 75.0  # Default if not available
         if task.scaffold and isinstance(task.scaffold, dict):
             toc_quality = task.scaffold.get("toc_quality_score", 75.0)
@@ -202,21 +219,21 @@ class AssemblyService:
             chunk["extraction_confidence"] = self._compute_chunk_confidence(
                 chunk, assembled_data["parent_chunks"], toc_quality
             )
-        print(f"  P3-4: Computed extraction confidence for {len(assembled_data['child_chunks'])} chunks")
+        logger.info(f"  Computed extraction confidence for {len(assembled_data['child_chunks'])} chunks")
 
-        # P4-1: Build footnote index
+        # Build footnote index
         footnote_index = self._build_footnote_index(assembled_data["child_chunks"])
         assembled_data["footnote_index"] = footnote_index
         if footnote_index:
-            print(f"  P4-1: Indexed {len(footnote_index)} footnotes")
+            logger.info(f"  Indexed {len(footnote_index)} footnotes")
 
-        # P4-5: Build visual asset registry
+        # Build visual asset registry
         visual_asset_registry = self._build_visual_asset_registry(
             assembled_data["child_chunks"],
             assembled_data["parent_chunks"],
         )
         assembled_data["visual_asset_registry"] = visual_asset_registry
-        print(
+        logger.info(
             f"  P4-5: Visual assets: {visual_asset_registry['total_tables']} tables, "
             f"{visual_asset_registry['total_figures']} figures"
         )
@@ -228,10 +245,11 @@ class AssemblyService:
         output_path = tier_dir / f"{task.report_id}_chunks.json"
         self._write_json(assembled_data, output_path)
 
-        # Update manifest
-        self._update_manifest(task.report_id, parent_chunks, child_chunks, output_path)
+        # Update manifest (skipped in parallel mode - done in main process)
+        if not skip_manifest:
+            self._update_manifest(task.report_id, parent_chunks, child_chunks, output_path)
 
-        print(f"Assembly complete: {output_path}")
+        logger.info(f"Assembly complete: {output_path}")
         return str(output_path)
 
     def _build_report_metadata(
@@ -361,7 +379,7 @@ class AssemblyService:
                 },
             }
 
-            # P0-1: Include structured table data for queryable tables
+            # Include structured table data for queryable tables
             if child.structured_data is not None:
                 chunk_dict["structured_data"] = child.structured_data
 
@@ -606,7 +624,7 @@ class AssemblyService:
                 )
                 fig_num = f"fig_{fig_match.group(1)}" if fig_match else None
 
-                # P4-6: Classify visual subtype
+                # Classify visual subtype
                 visual_subtype = self._classify_visual_subtype(content, hierarchy)
 
                 figures.append({

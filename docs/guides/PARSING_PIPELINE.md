@@ -25,6 +25,7 @@
 - [Error Handling & Edge Cases](#error-handling--edge-cases)
 - [Testing & Validation](#testing--validation)
 - [Performance Metrics](#performance-metrics)
+- [Trace Instrumentation](#trace-instrumentation)
 
 ---
 
@@ -81,6 +82,7 @@ graph TB
 5. **Quality Gates**: Multi-tier fallback strategies for table/chart extraction with quality thresholds
 6. **Dead Letter Queue**: Failed extractions are saved with metadata for debugging
 7. **Multi-Layer TOC Validation**: 3-layer progressive TOC improvement (heuristic → AI layout → LLM validation) for ~97% accuracy
+8. **Multi-Tier Support**: Automatic detection and tier-specific processing for Union, State, and Local Body reports with appropriate severity thresholds, language patterns, and entity recognition
 
 ### Key Data Structures
 
@@ -130,12 +132,16 @@ graph TB
 - `modules/excel_analysis.py` — Helper for analyzing Excel structure and column mappings
 
 **Logic**:
-1. Read Excel manifest file (e.g., `CAG Main Docs CCDT.xlsx`)
-2. Parse each row to extract metadata fields: Title, Report No, Department, Sector, Date, Report Type, Source URL
-3. Generate unique `report_id` from filename: `{year}_{serial}_{sanitized_title}`
-4. Create `DocumentTask` object for each row with `initial_metadata` populated
-5. Download PDFs from URLs if not already cached locally
-6. Return list of DocumentTask objects ready for Phase 2
+1. Read Excel manifest file (e.g., `CAG_Union_Reports.xlsx`, `CAG_State_Reports.xlsx`, `CAG_Local_Body_Reports.xlsx`)
+2. **Detect government tier** from filename or `Government Body Type` column override
+3. Parse each row to extract metadata fields: Title, Report No, Department, Sector, Date, Report Type, Source URL, State Name (for State/Local)
+4. Generate unique `report_id` based on tier:
+   - **Union**: `{year}_{serial}_{sanitized_title}`
+   - **State**: `{state_code}_{year}_{no}_{sanitized_title}`
+   - **Local**: `{state_code}_ATIR_{year}_{sanitized_title}`
+5. Create `DocumentTask` object for each row with `initial_metadata` populated (includes `government_body_type`, `state_name`)
+6. Download PDFs from URLs if not already cached locally
+7. Return list of DocumentTask objects ready for Phase 2
 
 **Input**: Excel file with columns: Title, Report No, Department, Sector, Date, Report Type, Source URL
 **Output**: `List[DocumentTask]` with populated `initial_metadata` and `local_pdf_path`
@@ -157,11 +163,11 @@ graph TB
 
 **Logic**:
 1. Open PDF with PyMuPDF
-2. Sample first 3 pages to extract text using `page.get_text()`
-3. Calculate text density: `characters_extracted / total_pages`
+2. Sample first N pages (default: 10, configurable) to extract text using `page.get_text()`
+3. Calculate text density: `average non-whitespace characters per page`
 4. Apply classification threshold:
-   - If text density > 50 characters/page → **native PDF**
-   - If text density ≤ 50 characters/page → **scanned PDF**
+   - If text density > 150 characters/page (default, configurable) → **native PDF**
+   - If text density ≤ 150 characters/page → **scanned PDF**
 5. Update `DocumentTask.classification` field
 6. Log classification result for routing decisions in later phases
 
@@ -169,40 +175,43 @@ graph TB
 **Output**: `DocumentTask` with `classification` field set to "native" or "scanned"
 
 **Key Features**:
-- Configurable threshold for classification (default: 50 chars/page)
+- Configurable threshold for classification (default: 150 chars/page, 10 sample pages)
 - Handles corrupted PDFs gracefully with fallback to "scanned"
 - Multi-page sampling to avoid false positives from cover pages
 - Routing signal for Phase 6 (table extraction tier selection)
+- Configuration via `parsing_config.yaml` or environment variables
 
 ---
 
 ### Phase 3: OCR Processing
 
-**Purpose**: Convert scanned PDFs to searchable PDFs using Tesseract OCR, enabling downstream text extraction.
+**Purpose**: Convert scanned PDFs to searchable PDFs using OCRmyPDF (Tesseract wrapper), enabling downstream text extraction.
 
 **Files**:
-- `modules/ocr_service.py` — Tesseract OCR wrapper with page-by-page processing
+- `modules/ocr_service.py` — OCRmyPDF subprocess wrapper with timeout handling
 
 **Logic**:
 1. **Skip if native PDF**: Only process documents classified as "scanned" in Phase 2
-2. For each page in scanned PDF:
-   - Render page to PIL Image at 300 DPI using PyMuPDF
-   - Run Tesseract OCR to generate hOCR data (includes text + bounding boxes)
-   - Embed OCR text layer back into PDF page
+2. Run OCRmyPDF subprocess on entire PDF:
+   - OCRmyPDF handles page-by-page OCR internally using Tesseract
+   - Automatically embeds invisible text layer into PDF
+   - Supports force OCR mode (re-OCR even if text layer exists)
+   - Timeout protection (default: 600 seconds, configurable for large documents)
 3. Save OCR'd PDF to `data/processed/ocred/{report_id}_ocred.pdf`
 4. Update `DocumentTask.ocred_pdf_path` to point to new file
-5. Log OCR statistics: total pages processed, processing time
+5. Log OCR statistics: total pages processed, processing time, success/failure status
 
 **Input**: `DocumentTask` with `classification="scanned"` and `local_pdf_path`
 **Output**: `DocumentTask` with `ocred_pdf_path` populated
 
-**Key Configuration**:
-- **Language**: English only (`eng`). To add Hindi: install `tesseract-lang-hin` and change `lang='eng+hin'` at line 99
-- **DPI**: 300 (high quality for accurate OCR)
-- **PSM Mode**: 3 (automatic page segmentation)
-- **Output Format**: Searchable PDF with invisible text layer
+**Key Configuration** (see `parsing_config.yaml`):
+- **Language**: English only (`eng` default). To add Hindi: install `tesseract-lang-hin` and set `language='eng+hin'`
+- **Timeout**: 600 seconds default (increase for 200+ page documents)
+- **Output Type**: `pdfa` (PDF/A format for archival), or `pdf` for smaller files
+- **Force OCR**: `true` (ensures clean OCR text even if partial text layer exists)
+- **Configurable via**: `parsing_config.yaml` or `PARSING_OCR_*` environment variables
 
-**Performance Note**: OCR is the slowest phase (10-30 seconds per page). Skip for native PDFs to save time.
+**Performance Note**: OCR is the slowest phase (10-30 seconds per page). Skip for native PDFs to save time. Large documents may require timeout adjustment.
 
 ---
 
@@ -212,24 +221,27 @@ graph TB
 
 **Files**:
 - `modules/scaffolding_service.py` — Main orchestrator for ToC extraction and metadata enrichment
-- `modules/intelligent_toc_service.py` — Advanced ToC parser with multi-strategy detection
 - `modules/toc_table_parser.py` — Specialized parser for ToC presented as tables
 - `modules/hierarchy_enricher.py` — Builds hierarchical section structure from flat ToC
 - `modules/report_type_profiles.py` — Report-type specific extraction patterns (7 profiles)
 
 **Logic**:
 1. **Select PDF source**: Use OCR'd PDF for scanned docs, raw PDF for native docs
-2. **Extract page mapping**: Roman numerals, Arabic numbers, logical page labels
-3. **Parse Table of Contents** using multi-strategy approach:
+2. **Score PDF bookmarks** using `TOCQualityMetrics`:
+   - Apply assembly-pattern penalty (catches garbage PDF-merger bookmarks like "01 Cover", "p001")
+   - Apply CAG-pattern bonus (boosts Chapter/Annexure/Executive Summary patterns)
+   - Reject bookmarks below `bookmark_quality_threshold` (default 0.6)
+3. **Extract page mapping**: Roman numerals, Arabic numbers, logical page labels
+5. **Parse Table of Contents** using multi-strategy approach:
    - **Pre-pass**: Printed TOC extraction from first ~15 pages using regex patterns
    - Strategy 1: Dedicated ToC page detection (heading + dot leaders)
    - Strategy 2: Table-based ToC extraction (common in CAG reports)
    - Strategy 3: Heading-based inference from document structure
-4. **Normalize ToC format** to `[[level, title, page], ...]`
-5. **Infer hierarchy levels** using quantile bucketing for deterministic level assignment
-6. **Capture heading positions** (Y-coordinates) for accurate child chunk assignment
-7. **Build hierarchy** for parent chunks (level_1, level_2, level_3, ...)
-8. Store in `DocumentTask.scaffold` as dict with keys: `toc`, `page_map`, `heading_positions`, `toc_quality_score`
+6. **Normalize ToC format** to `[[level, title, page], ...]`
+7. **Infer hierarchy levels** using quantile bucketing for deterministic level assignment
+8. **Capture heading positions** (Y-coordinates) for accurate child chunk assignment
+9. **Build hierarchy** for parent chunks (level_1, level_2, level_3, ...)
+10. Store in `DocumentTask.scaffold` as dict with keys: `toc`, `page_map`, `heading_positions`, `toc_quality_metrics`
 
 **Input**: `DocumentTask` with `local_pdf_path` or `ocred_pdf_path`
 **Output**: `DocumentTask.scaffold` populated with ToC structure and metadata
@@ -819,13 +831,24 @@ TOC accuracy improves from ~95% to ~97%+ for tail cases.
 
 ### Phase 9: Semantic Enrichment
 
-**Purpose**: Extract CAG-specific semantic entities (findings, recommendations, monetary values, entities) for cross-report analytics.
+**Purpose**: Extract CAG-specific semantic entities (findings, recommendations, monetary values, entities) for cross-report analytics with **multi-tier taxonomy support** for Union, State, and Local Body reports.
 
 **Files**:
-- `modules/semantic_enrichment_service.py` — Semantic tagging and entity extraction engine
-- `modules/semantic_patterns.py` — Enhanced pattern library with evidence linking
-- `modules/report_type_profiles.py` — Report-type specific extraction patterns
-- `modules/evidence_linker.py` — Links findings to supporting evidence chunks
+- `modules/semantic_enrichment_service.py` — Slim orchestrator coordinating focused extractors (findings, entities, sections, recommendations)
+- `modules/enrichment/finding_extractor.py` — Finding extraction with tier-specific severity classification
+- `modules/enrichment/entity_extractor.py` — Extracts schemes, ministries, organizations
+- `modules/enrichment/section_classifier.py` — Classifies sections by semantic type
+- `modules/enrichment/box_element_extractor.py` — Detects illustrative box elements
+- `modules/enrichment/monetary_processor.py` — Extracts and normalizes monetary values to paise
+- `modules/enrichment/recommendation_extractor.py` — Multi-strategy recommendation extraction (structural, numbered, verb-based)
+- `modules/enrichment/temporal_extractor.py` — Temporal reference extraction (audit periods, fiscal years)
+- `modules/enrichment/annexure_linker.py` — Links chunks to annexures
+- `modules/enrichment/cross_reference_resolver.py` — Resolves cross-references (para X, table Y, section Z)
+- `modules/enrichment/executive_summary_parser.py` — Parses executive summary index with citation resolution
+- `modules/enrichment/contextual_caption_service.py` — Replaces generic image captions with contextual ones (used by Phase 8)
+- `modules/semantic_patterns.py` — Enhanced pattern library (87+ State/Local-specific regex patterns)
+- `modules/report_type_profiles.py` — Report-type specific extraction patterns (7 profiles)
+- `modules/evidence_linker.py` — Links findings to supporting evidence chunks (tables, paragraphs)
 
 **Logic**:
 
@@ -847,16 +870,16 @@ TOC accuracy improves from ~95% to ~97%+ for tail cases.
    - Extract monetary values using regex patterns (₹ X crore, Rs. Y lakh)
    - Normalize to INR paise for comparison: `₹847.71 crore` → 84771000000 paise
    - Classify finding type using pattern matching:
-     - Irregular Expenditure, Loss of Revenue, Wasteful Expenditure
-     - Non-Compliance, System Deficiency, Performance Shortfall
-     - Fraud/Misappropriation, Procedural Lapse
-   - Calculate severity based on monetary value:
-     - CRITICAL: > ₹100 crore or systemic issues
-     - HIGH: ₹10-100 crore
-     - MEDIUM: ₹1-10 crore
-     - LOW: < ₹1 crore
+     - **Common types** (all tiers): Irregular Expenditure, Loss of Revenue, Wasteful Expenditure, Non-Compliance, System Deficiency, Performance Shortfall, Fraud/Misappropriation, Procedural Lapse
+     - **State/Local-specific types**: Idle Assets, Non-Realization of Dues, Incomplete Infrastructure, Accounting Irregularity, Fund Utilization Failure
+   - Calculate severity based on monetary value using **tier-specific thresholds**:
+     - **Union reports**: CRITICAL ≥ ₹100 crore, HIGH ≥ ₹10 crore, MEDIUM ≥ ₹1 crore, LOW < ₹1 crore
+     - **State reports**: CRITICAL ≥ ₹50 crore, HIGH ≥ ₹5 crore, MEDIUM ≥ ₹0.5 crore, LOW < ₹0.5 crore
+     - **Local Body reports**: CRITICAL ≥ ₹10 crore, HIGH ≥ ₹1 crore, MEDIUM ≥ ₹0.1 crore, LOW < ₹0.1 crore
    - Link to source chunk and parent section hierarchy
 3. Create `Finding` objects with structured data
+
+**Multi-Tier Support**: The pipeline automatically detects report tier (Union/State/Local Body) from filename or manifest metadata and applies appropriate severity thresholds. State and Local Body reports use language-specific patterns (GST/ITC terminology, PRI/ULB entities) for higher extraction accuracy.
 
 **9.3 Recommendation Extraction** (3-strategy approach):
 1. **Strategy 1: Structural** — Dedicated "Recommendations" section
@@ -1434,9 +1457,8 @@ flowchart TB
 | 1 | `modules/manifest_ingestion_service.py` | Service | Excel parsing, PDF download |
 | 1 | `modules/excel_analysis.py` | Helper | Excel structure analysis |
 | 2 | `modules/triage_service.py` | Service | PDF classification (native/scanned) |
-| 3 | `modules/ocr_service.py` | Service | Tesseract OCR wrapper |
-| 4 | `modules/scaffolding_service.py` | Service | ToC extraction orchestrator |
-| 4 | `modules/intelligent_toc_service.py` | Service | Multi-strategy ToC parser |
+| 3 | `modules/ocr_service.py` | Service | OCRmyPDF subprocess wrapper (Tesseract backend) |
+| 4 | `modules/scaffolding_service.py` | Service | ToC extraction orchestrator with bookmark quality scoring |
 | 4 | `modules/toc_table_parser.py` | Helper | Table-based ToC extraction |
 | 4 | `modules/hierarchy_enricher.py` | Helper | Hierarchy builder |
 | 4 | `modules/report_type_profiles.py` | Config | Report-type extraction patterns (7 profiles) |
@@ -1455,7 +1477,18 @@ flowchart TB
 | 8 | `enrichment/temporal_extractor.py` | Enricher | Temporal reference extraction |
 | 8 | `enrichment/annexure_linker.py` | Enricher | Annexure linking |
 | 8 | `enrichment/cross_reference_resolver.py` | Enricher | Cross-reference resolution |
-| 9 | `modules/semantic_enrichment_service.py` | Service | Semantic entity extraction |
+| 9 | `modules/semantic_enrichment_service.py` | Service | Orchestrator coordinating focused extractors |
+| 9 | `modules/enrichment/finding_extractor.py` | Extractor | Tier-specific finding extraction |
+| 9 | `modules/enrichment/entity_extractor.py` | Extractor | Schemes, ministries, organizations |
+| 9 | `modules/enrichment/section_classifier.py` | Extractor | Section type classification |
+| 9 | `modules/enrichment/box_element_extractor.py` | Extractor | Box element detection |
+| 9 | `modules/enrichment/monetary_processor.py` | Helper | Monetary value extraction and normalization |
+| 9 | `modules/enrichment/recommendation_extractor.py` | Extractor | Multi-strategy recommendation extraction |
+| 9 | `modules/enrichment/temporal_extractor.py` | Extractor | Temporal metadata extraction |
+| 9 | `modules/enrichment/annexure_linker.py` | Helper | Annexure cross-reference linking |
+| 9 | `modules/enrichment/cross_reference_resolver.py` | Helper | Cross-chunk reference resolution |
+| 9 | `modules/enrichment/executive_summary_parser.py` | Extractor | Executive summary index parsing |
+| 9 | `modules/enrichment/contextual_caption_service.py` | Helper | Generic caption replacement |
 | 9 | `modules/semantic_patterns.py` | Config | Enhanced extraction patterns |
 | 9 | `modules/evidence_linker.py` | Helper | Finding-evidence linking |
 | 10 | `batch_pipeline/batch_service.py` | Service | Anthropic Batch API with Extended Thinking |
@@ -1473,7 +1506,7 @@ flowchart TB
 
 | File | Purpose |
 |------|---------|
-| `core/data_contracts.py` | Pydantic models: DocumentTask, ExtractedContent, ParentChunk, ChildChunk, Finding, Recommendation, SemanticEnrichment |
+| `core/data_contracts.py` | Pydantic models: DocumentTask, ExtractedContent, ParentChunk, ChildChunk, Finding, Recommendation, SemanticEnrichment, TOCQualityMetrics |
 | `core/table_contracts.py` | StructuredTable model with row/column metadata |
 | `core/chart_contracts.py` | Chart data models |
 | `core/config.py` | Central configuration (API keys, paths, thresholds) |
@@ -1708,20 +1741,82 @@ Examples:
 
 ### Throughput
 
-**Single-Threaded**: 3-4 reports per hour (native PDFs), 2-3 reports per hour (scanned PDFs)
-**Parallel Processing**: 10-20 reports per hour (limited by CPU for Docling/OCR phases)
+**Sequential Mode** (default, `--workers 1`):
+- 3-4 reports per hour (native PDFs)
+- 2-3 reports per hour (scanned PDFs with OCR)
+
+**Parallel Mode** (`--workers N`):
+- 10-20 reports per hour with 4 workers (limited by CPU/memory for Docling)
+- Near-linear scaling up to 4 workers; diminishing returns beyond due to memory pressure
+- Each worker uses ~2-4 GB RAM (Docling model weights)
+
+### Parallel Execution
+
+The pipeline supports parallel processing of phases 4-9 using `--workers N`:
+
+```bash
+# Process with 4 parallel workers
+python -m src.parsing_pipeline.main "manifest.xlsx" --workers 4
+
+# Sequential processing (default, byte-identical output)
+python -m src.parsing_pipeline.main "manifest.xlsx" --workers 1
+```
+
+**Architecture**:
+- **Per-document parallelism**: Each `DocumentTask` runs through phases 4-9 as one unit
+- **Worker initialization**: Docling model (~2GB) loaded once per worker at startup
+- **Manifest safety**: Manifest writes deferred to main process (no lock contention)
+- **Failure isolation**: One task crash doesn't affect other workers
+
+**Memory Budget**:
+- Default: 1 (sequential). Recommended: `min(cpu_count // 2, 4)` workers
+- Each worker needs ~2-4 GB for Docling model
+- Recommended: Leave headroom for OS and other processes
+
+**When to Use Parallel Mode**:
+- Processing 10+ reports (overhead not worth it for fewer)
+- System has 16+ GB RAM
+- Native PDFs (OCR is sequential in phases 1-3 anyway)
+
+**Phase Compatibility**:
+- Phases 1-3: Always sequential (caching handles efficiency)
+- Phases 4-9: Parallel when `--workers > 1`
+- Phase 10: Already async/batch (unaffected)
 
 ### Scalability
 
 **Current Limits**:
-- OCR: CPU-bound, ~2-3 pages per minute
+- OCR: CPU-bound, ~2-3 pages per minute (Phase 3, sequential)
 - Docling: GPU would accelerate by ~5x, but CPU works for moderate scale
+- Memory: ~2-4 GB per parallel worker
 - Batch API: 50,000 requests per batch (essentially unlimited for CAG corpus)
+
+**Achieved Optimizations**:
+- Parallel pipeline execution via `--workers N` for phases 4-9
+- Smart caching for phases 1-3 (avoids re-processing)
+- Manifest write consolidation (single write at end of parallel run)
 
 **Future Optimizations**:
 - GPU acceleration for Docling (Phase 5) and OCR (Phase 3)
-- Parallel pipeline execution (process multiple reports concurrently)
 - Incremental processing (skip already-processed reports)
+
+### Logging
+
+**Architecture**:
+- **Module-level output**: Uses logger-based logging (imported `logger = logging.getLogger(__name__)`)
+- **Main orchestrator**: Uses print for CLI progress bars (intentional for user visibility)
+- **Log file**: Rotating log at `logs/parsing_pipeline_YYYYMMDD.log` (10MB per file, 5 backups)
+- **Console output**: INFO level by default
+- **File output**: DEBUG level always
+
+**Control**:
+- `--debug` flag: Sets all loggers to DEBUG level (including Docling, urllib3, pdfminer)
+- Without `--debug`: Third-party loggers suppressed to WARNING level
+
+**Log format**:
+```
+2026-05-17 14:30:15 | src.parsing_pipeline.modules.scaffolding_service | INFO | Extracting TOC for report_id_123
+```
 
 ---
 
@@ -1730,11 +1825,20 @@ Examples:
 ### Running the Pipeline
 
 ```bash
-# Full pipeline (all 159 reports)
+# Full pipeline (all 159 reports, sequential)
 python -m src.parsing_pipeline.main "CAG Main Docs CCDT.xlsx"
+
+# Full pipeline with parallel processing (4 workers)
+python -m src.parsing_pipeline.main "CAG Main Docs CCDT.xlsx" --workers 4
 
 # Quick test (2 reports)
 python -m src.parsing_pipeline.main "Newtest.xlsx"
+
+# Parallel quick test
+python -m src.parsing_pipeline.main "Newtest.xlsx" --workers 2
+
+# Enable trace instrumentation (for debugging)
+python -m src.parsing_pipeline.main "Newtest.xlsx" --trace
 
 # Granular Phase 10 control
 python run_pipeline_quick.py "Newtest.xlsx"                    # Phases 1-9 only
@@ -1751,52 +1855,69 @@ python -m src.batch_pipeline.process_results
 
 ### Key Configuration Points
 
-**OCR Language** (`ocr_service.py:99`):
-```python
-lang='eng'  # Change to 'eng+hin' for Hindi support
+All pipeline thresholds and parameters are centralized in the configuration system. See **`docs/guides/PARSING_CONFIG.md`** for the complete reference guide.
+
+**Configuration Architecture**:
+- **Code Defaults**: `src/parsing_pipeline/config.py` — Dataclass definitions with fallback defaults
+- **YAML File**: `parsing_config.yaml` at repo root — Persistent configuration
+- **Environment Variables**: `PARSING_{PHASE}_{SETTING}` — Runtime overrides
+
+**Priority**: Environment Variables → YAML File → Code Defaults
+
+**Key Thresholds** (defaults shown, all configurable):
+
+| Phase | Setting | Default | Configuration Path |
+|-------|---------|---------|-------------------|
+| **Phase 2: Triage** | Text threshold | 150 chars/page | `triage.text_threshold` |
+| | Sample pages | 10 | `triage.sample_pages` |
+| **Phase 3: OCR** | Language | "eng" | `ocr.language` |
+| | Timeout | 600 seconds | `ocr.timeout` |
+| **Phase 4: Scaffolding** | Min TOC quality score | 20 | `scaffolding.min_toc_quality_score` |
+| | Bookmark quality threshold | 0.6 | `scaffolding.bookmark_quality_threshold` |
+| | Min TOC entries | 3 | `scaffolding.embedded_toc_min_entries` |
+| **Phase 5: Layout** | Confidence threshold | 0.65 | `layout.confidence_threshold` |
+| | Table min cells | 3 | `layout.table_min_non_empty_cells` |
+| **Phase 5.5: TOC Reconciliation** | Similarity threshold | 0.65 | `toc_reconciliation.similarity_threshold` |
+| | Min Docling headers | 3 | `toc_reconciliation.min_docling_headers` |
+| **Phase 5.7: LLM Validation** | Quality threshold | 50 | `llm_validation.quality_threshold` |
+| | Model | claude-haiku-4-5 | `llm_validation.model` |
+| **Phase 6: Content Extraction** | pdfplumber snap tolerance | 5 | `content_extraction.pdfplumber_snap_tolerance` |
+| | Table min confidence | 0.2 | `content_extraction.table_min_confidence` |
+| **Phase 7: Chunking** | Column similarity | 0.8 | `chunking.multi_page_table_column_similarity_threshold` |
+| **Phase 9: Semantic Enrichment** | Finding confidence | 0.4 | `semantic_enrichment.finding_confidence_threshold` |
+| | Union critical threshold | ₹100 crore | `semantic_enrichment.severity_thresholds.union.critical` |
+| | State critical threshold | ₹50 crore | `semantic_enrichment.severity_thresholds.state.critical` |
+| | Local critical threshold | ₹10 crore | `semantic_enrichment.severity_thresholds.local_body.critical` |
+
+**Configuration Files**:
+- **Complete Reference**: `docs/guides/PARSING_CONFIG.md` — Detailed documentation of all 40+ parameters
+- **YAML Configuration**: `parsing_config.yaml` — Edit to change defaults persistently
+- **Environment Overrides**: Set `PARSING_*` environment variables for runtime changes
+
+**Example Configuration Change**:
+```yaml
+# parsing_config.yaml
+triage:
+  text_threshold: 200  # More aggressive OCR triggering
+  sample_pages: 15     # More thorough sampling
+
+layout:
+  confidence_threshold: 0.70  # Stricter block filtering
+  accelerator_device: "mps"   # Use Apple Silicon GPU
+
+llm_validation:
+  enabled: true
+  quality_threshold: 60  # Validate more reports
 ```
 
-**Layout Confidence Threshold** (`layout_analysis_service.py:23`):
-```python
-confidence_threshold = 0.65  # Lower = more blocks, higher = fewer false positives
+**Example Environment Override**:
+```bash
+export PARSING_TRIAGE_TEXT_THRESHOLD=200
+export PARSING_LAYOUT_CONFIDENCE_THRESHOLD=0.70
+export PARSING_LLM_VALIDATION_ENABLED=false
 ```
 
-**Table Quality Gate** (`layout_analysis_service.py:161`):
-```python
-if non_empty_cells >= 3:  # Minimum cells for valid table
-```
-
-**ToC Quality Gate** (`scaffolding_service.py` - varies by strategy):
-```python
-if toc_quality_score < 20:  # Reject poor quality ToCs
-```
-
-**TOC Reconciliation Thresholds** (`toc_reconciliation_service.py`):
-```python
-similarity_threshold = 0.65  # Min string similarity for title matching
-min_docling_headers = 3      # Min Docling headers to consider usable signal
-confidence_threshold = 0.60  # Min Docling confidence for Section-header blocks
-```
-
-**LLM TOC Validation** (`toc_llm_validator.py`):
-```python
-quality_threshold = 50       # Only validate TOCs with quality below this
-max_input_chars = 8000       # Max chars of document text to send to LLM
-model = "claude-haiku-4-5-20251001"  # Cost-efficient Haiku model
-# Requires ANTHROPIC_API_KEY environment variable (graceful skip if not set)
-```
-
-**Batch API Models** (`batch_service.py`):
-```python
-models = {
-    "overview": "claude-sonnet-4-20250514",
-    "executive": "claude-sonnet-4-20250514",
-    "journalist": "claude-opus-4-20250514",
-    "deep_dive": "claude-opus-4-20250514",
-    "simple": "claude-sonnet-4-20250514",
-    "policy": "claude-sonnet-4-20250514",
-}
-```
+**Batch API Models**: Configured in `src/batch_pipeline/batch_service.py` (not in parsing_config.yaml). Requires `ANTHROPIC_API_KEY` environment variable.
 
 ### Output Locations
 
@@ -1809,4 +1930,129 @@ models = {
 - **Corpus Manifest**: `data/processed/manifest.json`
 - **Batch Jobs**: `data/batch_jobs/jobs/*.json`
 - **LLM Overviews**: `data/batch_jobs/overviews/*.json`
+- **Trace Files**: `logs/traces/{report_id}_trace_{date}.md`
+
+---
+
+## Trace Instrumentation
+
+The pipeline includes an optional **trace instrumentation** feature that emits detailed per-report markdown traces documenting every decision, fallback, input/output, and anomaly during processing. This is invaluable for debugging quality issues or understanding why a specific report was processed a certain way.
+
+### Enabling Tracing
+
+```bash
+# Enable tracing (implies --workers 1)
+python -m src.parsing_pipeline.main "manifest.xlsx" --trace
+
+# Combine with other flags
+python -m src.parsing_pipeline.main "manifest.xlsx" --trace --skip 10a --reports Report_A
+```
+
+**Note**: `--trace` forces sequential processing (`--workers 1`) to ensure accurate per-report tracing.
+
+### Trace Output Format
+
+Each report generates a markdown file at `logs/traces/{report_id}_trace_{date}.md` with:
+
+```markdown
+# Pipeline Trace: 2023_07_CAGs_Compliance_Audit_on_Toll_Operation
+
+**Generated**: 2026-05-17T14:30:00
+**Tier**: union | **Pages**: 234 | **Total Duration**: 18m 42s
+**Final Status**: enrichment_complete
+
+## Red Flags
+
+| Phase | Flag | Details |
+|-------|------|---------|
+| 7.5 | Hierarchy concentration >50% | Parent "Chapter 2" has 70.6% children |
+| 9 | High "other" findings | 45% of findings classified as "other" |
+
+## Pass/Fail Summary
+
+| Phase | Status | Duration |
+|-------|--------|----------|
+| 1 | ✓ | 2.3s |
+| 4 | ✓ | 4.2s |
+| ... | ... | ... |
+
+## Phase 4: Document Scaffolding
+
+### Input
+- PDF: data/raw/union/2023_07_...pdf (234 pages)
+
+### Output
+- TOC entries: 47
+- TOC quality: 72
+
+### Mechanism & Decisions
+- **bookmark_quality**: `accept`
+  - Reason: Score 81.0 vs threshold 60.0
+  - Alternatives: accept, reject
+
+### Samples
+**bookmark_entries (5 samples)**:
+| level | title | page |
+|-------|-------|------|
+| 1 | Executive Summary | 5 |
+| 1 | Chapter I: Introduction | 12 |
+| ... | ... | ... |
+
+### Duration
+4.2s
+```
+
+### Red Flags Auto-Detection
+
+The trace system automatically flags anomalies that warrant attention:
+
+| Flag | Trigger | Phase |
+|------|---------|-------|
+| High TOC rejection rate | >25% of candidates rejected | Phase 4 |
+| Hierarchy concentration | >50% children assigned to one parent | Phase 7.5 |
+| Docling returned 0 blocks | Layout analysis found nothing | Phase 5 |
+| High "other" finding ratio | >30% findings classified as "other" | Phase 9 |
+
+### Configuration
+
+Trace settings are configurable in `parsing_config.yaml`:
+
+```yaml
+instrumentation:
+  enabled: false           # Master switch (use --trace CLI flag instead)
+  output_dir: "logs/traces" # Output directory for trace files
+  sample_count: 5          # Max samples per category
+  incremental_flush: false # Flush after each phase (crash protection)
+```
+
+### TraceEmitter API
+
+For developers extending the pipeline, the `TraceEmitter` class provides:
+
+```python
+from src.parsing_pipeline.instrumentation import TraceEmitter, get_noop_emitter
+
+# Create enabled emitter (in orchestrator)
+emitter = TraceEmitter(enabled=True, output_dir="logs/traces")
+
+# Get no-op emitter when tracing disabled (zero overhead)
+emitter = get_noop_emitter()
+
+# API methods (all no-ops when disabled)
+emitter.start_report(report_id, metadata)  # Initialize per-report trace
+emitter.emit_decision(phase, decision, chosen, alternatives, reason)  # Decision point
+emitter.emit_io(phase, input_summary, output_summary)  # Phase I/O
+emitter.emit_sample(phase, category, examples)  # Sample data
+emitter.emit_fallback(phase, primary, fell_back_to, trigger)  # Fallback trigger
+emitter.emit_red_flag(phase, flag, details)  # Anomaly detection
+emitter.emit_error(phase, error)  # Error event
+emitter.set_phase_status(phase, status)  # Set phase status
+with emitter.phase_timer(phase):  # Time a phase
+    # Phase code
+trace_path = emitter.finalize_report(final_status)  # Write trace file
+```
+
+### Zero Overhead When Disabled
+
+All `TraceEmitter` methods check `if not self.enabled: return` as their first operation, ensuring zero overhead when tracing is off. The pipeline output (chunks JSON) is byte-identical whether tracing is enabled or disabled.
 

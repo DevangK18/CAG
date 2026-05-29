@@ -22,8 +22,8 @@ const tabs: Tab[] = [
     { id: 'infrastructure', label: 'Infrastructure' },
 ];
 
-// Tabs that are under development
-const underDevelopmentTabs: TabId[] = ['frontend', 'infrastructure'];
+// Tabs that are under development (none currently)
+const underDevelopmentTabs: TabId[] = [];
 
 const UnderDevelopmentOverlay: React.FC = () => (
     <div className="under-development-overlay">
@@ -50,7 +50,7 @@ const UnderDevelopmentOverlay: React.FC = () => (
 );
 
 export const HowItWorks: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<TabId>('data-pipeline');
+    const [activeTab, setActiveTab] = useState<TabId>('overview');
 
     const isUnderDevelopment = underDevelopmentTabs.includes(activeTab);
 

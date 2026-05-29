@@ -61,7 +61,7 @@ export const TrendingSearches: React.FC<TrendingSearchesProps> = ({ onQueryClick
         );
     }
 
-    if (error || trending.length === 0) {
+    if (error || trending.length < 2) {
         return null;
     }
 

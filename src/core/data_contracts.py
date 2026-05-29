@@ -17,6 +17,77 @@ from typing import List, Optional, Literal, Dict, Tuple, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
+from dataclasses import dataclass, field
+
+
+# ==================== TOC QUALITY METRICS ====================
+
+
+# Source types for TOC extraction - tracks which method produced the TOC
+TOCSource = Literal[
+    "bookmarks",          # PDF embedded bookmarks
+    "toc_table",          # Parsed from printed TOC table
+    "heuristic",          # Font-based heading detection
+    "combined",           # Multiple sources merged
+    "docling_reconciled", # Phase 5.5 reconciliation with Docling
+    "llm_validated",      # Phase 5.7 LLM validation
+    "none",               # No TOC extracted
+]
+
+
+@dataclass
+class TOCQualityMetrics:
+    """
+    Quality metrics for a TOC extraction.
+
+    Used by Phase 4 (Scaffolding) to score bookmark quality and decide
+    whether to use embedded TOC or fall back to heuristic generation.
+
+    The score() method returns 0-100 based on structural quality and
+    confidence adjustments (assembly pattern penalties, CAG pattern bonuses).
+    """
+
+    source: str  # TOCSource literal value
+    entry_count: int
+    level_count: int  # Number of unique hierarchy levels
+    has_chapters: bool
+    has_sections: bool
+    page_coverage: float  # Fraction of document pages covered (0-1)
+    confidence: float  # Confidence adjustment factor (0-1)
+
+    def score(self) -> float:
+        """
+        Calculate overall quality score (0-100).
+
+        Scoring breakdown:
+        - Entry count: 0-30 points (2 points per entry, max 30)
+        - Level depth: 0-25 points (8 points per level, max 25)
+        - Has chapters: 15 points
+        - Has sections: 15 points
+        - Page coverage: 0-15 points (proportional to coverage)
+
+        Final score is multiplied by confidence factor.
+        """
+        score = 0.0
+
+        # Entry count (0-30 points)
+        score += min(30, self.entry_count * 2)
+
+        # Level depth (0-25 points)
+        score += min(25, self.level_count * 8)
+
+        # Has chapters (15 points)
+        if self.has_chapters:
+            score += 15
+
+        # Has sections (15 points)
+        if self.has_sections:
+            score += 15
+
+        # Page coverage (0-15 points)
+        score += self.page_coverage * 15
+
+        return min(100, score) * self.confidence
 
 
 # ==================== PHASE 1-3: EXTRACTION MODELS ====================

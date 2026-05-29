@@ -21,15 +21,27 @@ export function EntityReportsTab({ entityId, onNavigateToReport }: EntityReports
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Guard: ensure entityId is valid
+    if (!entityId || typeof entityId !== 'number') {
+      console.error(`[EntityReportsTab] Invalid entityId:`, entityId);
+      setError('Invalid entity ID');
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const fetchReports = async () => {
+      console.log(`[EntityReportsTab] Fetching reports for entityId=${entityId}`);
       setIsLoading(true);
       setError(null);
+      // Clear previous reports immediately to avoid showing stale data
+      setReports([]);
 
       try {
         // Step 1: Get report IDs
         const reportIds = await getEntityReports(entityId);
+        console.log(`[EntityReportsTab] entityId=${entityId} got reportIds:`, reportIds);
 
         if (!cancelled && reportIds.length > 0) {
           // Step 2: Fetch each report's details
@@ -37,15 +49,18 @@ export function EntityReportsTab({ entityId, onNavigateToReport }: EntityReports
           const reportData = await Promise.all(reportPromises);
 
           if (!cancelled) {
+            console.log(`[EntityReportsTab] entityId=${entityId} setting ${reportData.length} reports`);
             setReports(reportData);
             setIsLoading(false);
           }
         } else if (!cancelled) {
+          console.log(`[EntityReportsTab] entityId=${entityId} no reports found`);
           setReports([]);
           setIsLoading(false);
         }
       } catch (err) {
         if (!cancelled) {
+          console.error(`[EntityReportsTab] entityId=${entityId} error:`, err);
           setError(err instanceof Error ? err.message : 'Failed to load reports');
           setIsLoading(false);
         }

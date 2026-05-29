@@ -6,9 +6,9 @@
  * 10 deterministic items per day (server-seeded)
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useHomeFeatured } from '../../hooks';
-import { isValidMinistry } from '../../utils';
+import { isValidMinistry, formatEntityType } from '../../utils';
 import type { FeaturedMinistry, FeaturedEntity } from '../../types';
 
 const getIcon = (item: FeaturedMinistry | FeaturedEntity): string => {
@@ -75,7 +75,9 @@ export const PopularStartingPoints: React.FC<PopularStartingPointsProps> = ({ on
                     <div
                         key={item.entity_id}
                         className="home-popular-tile"
-                        onClick={() => onItemClick?.(item.entity_id)}
+                        onClick={() => {
+                            onItemClick?.(item.entity_id);
+                        }}
                     >
                         <div className="home-popular-icon">{getIcon(item)}</div>
                         <div className="home-popular-name">{getName(item)}</div>

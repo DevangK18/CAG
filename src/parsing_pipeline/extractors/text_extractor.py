@@ -3,12 +3,16 @@ TextExtractor: Precision text extraction using PyMuPDF bounding box clipping.
 Handles all textual content types: paragraphs, headers, lists, footnotes, etc.
 """
 
+import logging
+
 import fitz  # PyMuPDF
 from typing import List, Optional
 import re
 
 from src.core.data_contracts import ExtractedContent
 
+
+logger = logging.getLogger(__name__)
 
 class TextExtractor:
     """
@@ -18,7 +22,7 @@ class TextExtractor:
 
     def __init__(self):
         """Initialize with text processing patterns."""
-        print("TextExtractor initialized with PyMuPDF text extraction.")
+        logger.info("TextExtractor initialized with PyMuPDF text extraction.")
 
     def _normalize_text(self, text: str) -> str:
         """
@@ -179,7 +183,7 @@ class TextExtractor:
             )
 
         except Exception as e:
-            print(f"Text extraction failed on page {page_num}: {e}")
+            logger.error(f"Text extraction failed on page {page_num}: {e}")
             import traceback
 
             traceback.print_exc()

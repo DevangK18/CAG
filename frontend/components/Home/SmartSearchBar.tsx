@@ -40,11 +40,47 @@ export const SmartSearchBar: React.FC<SmartSearchBarProps> = ({
     onResultSelect,
     externalQuery,
 }) => {
-    const placeholders = [
-        'Try: railway safety findings',
-        'Try: NHAI',
-        'Try: Maharashtra 2023',
-    ];
+    const placeholdersByChannel: Record<SearchChannel, string[]> = {
+        all: [
+            'Try: Railway Safety Findings',
+            'Try: NHAI',
+            'Try: Maharashtra 2023',
+            'Try: GST Compliance',
+            'Try: Revenue Loss',
+        ],
+        reports: [
+            'Try: State Finances Uttarakhand',
+            'Try: Performance Audit Steel Authority',
+            'Try: Compliance Audit Railways',
+            'Try: Public Health Infrastructure',
+        ],
+        ministries: [
+            'Try: Ministry of Railways',
+            'Try: Ministry of Finance',
+            'Try: Ministry of Health',
+            'Try: Ministry of Road Transport',
+        ],
+        entities: [
+            'Try: NHAI',
+            'Try: Steel Authority of India',
+            'Try: Panchayati Raj Institutions',
+            'Try: Income Tax Appellate Tribunal',
+        ],
+        findings: [
+            'Try: Revenue Loss',
+            'Try: Non-Compliance with Rules',
+            'Try: Excess Expenditure',
+            'Try: Toll Collection Irregularities',
+        ],
+        glossary: [
+            'Try: ETC',
+            'Try: FRBM',
+            'Try: GST',
+            'Try: CAG',
+        ],
+    };
+
+    const placeholders = placeholdersByChannel[activeChannel];
 
     const [query, setQuery] = useState(externalQuery ?? '');
     const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -65,31 +101,37 @@ export const SmartSearchBar: React.FC<SmartSearchBarProps> = ({
         }
     }, [externalQuery]);
 
+    // Reset placeholder index when channel changes
+    useEffect(() => {
+        setPlaceholderIndex(0);
+    }, [activeChannel]);
+
     // Rotating placeholder
     useEffect(() => {
         const interval = setInterval(() => {
             setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
         }, 3000);
         return () => clearInterval(interval);
-    }, []);
+    }, [placeholders.length]);
 
     // "/" keyboard shortcut - focus search when not in another input
     useEffect(() => {
         const handleGlobalKeydown = (e: KeyboardEvent) => {
-            if (e.key === '/') {
-                const activeEl = document.activeElement;
-                // Check if we're in any input-type element
-                if (
-                    activeEl instanceof HTMLInputElement ||
-                    activeEl instanceof HTMLTextAreaElement ||
-                    activeEl instanceof HTMLSelectElement ||
-                    activeEl?.getAttribute('contenteditable') === 'true'
-                ) {
-                    return;
-                }
-                e.preventDefault();
-                inputRef.current?.focus();
+            if (e.key !== '/') return;
+
+            const activeEl = document.activeElement;
+            // Check if we're in any input-type element
+            if (
+                activeEl instanceof HTMLInputElement ||
+                activeEl instanceof HTMLTextAreaElement ||
+                activeEl instanceof HTMLSelectElement ||
+                activeEl?.hasAttribute('contenteditable')
+            ) {
+                return;
             }
+
+            e.preventDefault();
+            inputRef.current?.focus();
         };
 
         document.addEventListener('keydown', handleGlobalKeydown);

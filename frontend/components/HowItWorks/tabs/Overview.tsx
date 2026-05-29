@@ -31,6 +31,17 @@ const ProblemPoint: React.FC<{ stat: string; text: string }> = ({ stat, text }) 
     </div>
 );
 
+const CapabilityCard: React.FC<{ title: string; description: string; accent: string }> = ({ title, description, accent }) => (
+    <div style={{
+        padding: '16px 20px', background: '#fff',
+        border: '1px solid #e2e8f0', borderLeft: `4px solid ${accent}`,
+        borderRadius: '0 8px 8px 0',
+    }}>
+        <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>{title}</div>
+        <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>{description}</div>
+    </div>
+);
+
 /* ─── main component ─── */
 
 export const Overview: React.FC = () => {
@@ -38,28 +49,39 @@ export const Overview: React.FC = () => {
     const architectureDiagram = `
 graph TB
     subgraph "Offline · Document Processing"
-        PDF[PDF Reports<br/>Native + Scanned] --> Parse[12-Phase Pipeline<br/>OCR · Tables · Structure]
+        PDF[PDF Reports<br/>Union · State · Local Body] --> Parse[12-Phase Pipeline<br/>OCR · Tables · Structure]
         Parse --> Enrich[Semantic Enrichment<br/>Findings · Entities · Severity]
         Enrich --> Index[Hybrid Indexing<br/>Dense + BM25 Sparse]
         Index --> Qdrant[(Qdrant Vector DB<br/>15,000+ chunks)]
         Parse --> Batch[Batch AI Processing<br/>Overviews · Summaries]
         Batch --> Store[(Processed JSON<br/>per report)]
+        Batch --> EG[Entity Extraction<br/>Normalization]
+        EG --> PG[(PostgreSQL<br/>Entity Graph)]
     end
 
     subgraph "Online · User Query"
-        User[User Question] --> QE[Query Enhancement<br/>Expansion + Filters]
-        QE --> Hybrid[Hybrid Search<br/>Vector + BM25 + RRF]
+        User[User Question] --> QE[Query Enhancement<br/>Expansion + Auto-filter]
+        QE --> Router{Query<br/>Complexity}
+        Router -->|simple| Hybrid[Hybrid Search<br/>Vector + BM25 + RRF]
+        Router -->|multi-hop| Agent[Agentic Loop<br/>Decompose · Iterate]
+        Agent --> Hybrid
         Hybrid --> Qdrant
+        PG --> Entity[Entity Narrowing<br/>for Comparative]
+        Entity --> Hybrid
         Qdrant --> Rerank[Cohere Reranking<br/>+ Context Assembly]
         Rerank --> LLM[LLM Generation<br/>with Source Citations]
-        LLM --> Stream[Streaming Response<br/>+ Clickable Citations]
+        LLM --> Ground[Groundedness Check<br/>Claim Verification]
+        Ground --> Stream[Streaming Response<br/>+ Clickable Citations]
     end
 
     style PDF fill:#fef3c7,stroke:#f59e0b
     style Qdrant fill:#dcfce7,stroke:#22c55e
+    style PG fill:#e0f2fe,stroke:#0ea5e9
     style LLM fill:#fae8ff,stroke:#d946ef
     style User fill:#e0e7ff,stroke:#6366f1
     style Stream fill:#e0e7ff,stroke:#6366f1
+    style Agent fill:#fff7ed,stroke:#ea580c
+    style Ground fill:#f0fdf4,stroke:#22c55e
 `;
 
     return (
@@ -89,9 +111,9 @@ graph TB
                 </div>
 
                 <CalloutBox type="note">
-                    <strong>Why this matters:</strong> The CAG is a constitutional body (Articles 148–151 of the Indian Constitution) 
-                    whose mandate is to audit every rupee of government spending. These audit reports are the primary mechanism for 
-                    government financial accountability in the world's largest democracy. When citizens can't access them, 
+                    <strong>Why this matters:</strong> The CAG is a constitutional body (Articles 148–151 of the Indian Constitution)
+                    whose mandate is to audit every rupee of government spending. These audit reports are the primary mechanism for
+                    government financial accountability in the world's largest democracy. When citizens can't access them,
                     the accountability chain breaks at the last mile.
                 </CalloutBox>
             </DocSection>
@@ -112,7 +134,7 @@ graph TB
                     }}>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Ask questions in plain language</div>
                         <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6 }}>
-                            "What were the major financial irregularities in railway procurement?" — and get a real answer, 
+                            "What were the major financial irregularities in railway procurement?" — and get a real answer,
                             drawn from the actual audit report, with source citations you can click to verify.
                         </div>
                     </div>
@@ -122,7 +144,7 @@ graph TB
                     }}>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Every answer is verifiable</div>
                         <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6 }}>
-                            The original PDF sits alongside every AI response. Click a citation and the document scrolls 
+                            The original PDF sits alongside every AI response. Click a citation and the document scrolls
                             to the exact page. The source of truth and the intelligence to understand it — side by side.
                         </div>
                     </div>
@@ -132,7 +154,7 @@ graph TB
                     }}>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Structured intelligence from unstructured PDFs</div>
                         <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6 }}>
-                            Findings automatically classified by type and severity. Tables extracted and made interactive. 
+                            Findings automatically classified by type and severity. Tables extracted and made interactive.
                             Summaries generated for five different audiences. What took hours of reading now takes seconds.
                         </div>
                     </div>
@@ -142,7 +164,7 @@ graph TB
                     }}>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>All three tiers of Indian government</div>
                         <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6 }}>
-                            Union (central government), State (28 states), and Local Bodies (districts and municipalities). 
+                            Union (central government), State (28 states), and Local Bodies (districts and municipalities).
                             The same pipeline processes all tiers with zero code changes — validated at 92–96% accuracy on unseen reports.
                         </div>
                     </div>
@@ -150,20 +172,51 @@ graph TB
             </DocSection>
 
             {/* ══════════════════════════════════════════════
+                FOUR QUERY PATHS
+            ══════════════════════════════════════════════ */}
+            <DocSection
+                title="Four Ways to Query"
+                description="Different query paths optimized for different use cases — from focused single-report questions to complex cross-corpus research."
+            >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '12px' }}>
+                    <CapabilityCard
+                        title="Directory Chat"
+                        description="Ask questions about a single report. The PDF sits alongside the chat, and citations link directly to source pages. Best for deep-diving into a specific audit."
+                        accent="#3b82f6"
+                    />
+                    <CapabilityCard
+                        title="Time Series"
+                        description="Compare findings across multiple years of the same audit type. Track trends, identify recurring issues, and see how ministry performance changes over time."
+                        accent="#8b5cf6"
+                    />
+                    <CapabilityCard
+                        title="Home Page Chat"
+                        description="Open-ended questions across the entire corpus. Auto-filtering detects years, states, and topics from your query to narrow results automatically."
+                        accent="#10b981"
+                    />
+                    <CapabilityCard
+                        title="Agentic Mode"
+                        description="Complex multi-hop questions get decomposed into sub-queries. The system retrieves iteratively, reformulating when needed, then synthesizes a unified answer."
+                        accent="#f59e0b"
+                    />
+                </div>
+            </DocSection>
+
+            {/* ══════════════════════════════════════════════
                 IMPACT NUMBERS
             ══════════════════════════════════════════════ */}
-            <DocSection title="Current Coverage">
+            <DocSection title="Current Scale">
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
                     gap: '14px', marginTop: '14px',
                 }}>
-                    <ImpactStat value="28" label="Reports Indexed" sublabel="19 Union · 5 State · 4 Local Body" />
-                    <ImpactStat value="1,022+" label="Findings Extracted" sublabel="Classified by type and severity" accent="#dc2626" />
-                    <ImpactStat value="20,000+" label="Table Cells" sublabel="Freed from PDF and made searchable" accent="#f59e0b" />
-                    <ImpactStat value="140" label="AI Summaries" sublabel="5 variants × 28 reports" accent="#7c3aed" />
+                    <ImpactStat value="37" label="Reports Indexed" sublabel="19 Union · 12 State · 6 Local Body" />
+                    <ImpactStat value="390" label="Canonical Entities" sublabel="Ministries · PSUs · Schemes" accent="#0ea5e9" />
+                    <ImpactStat value="25k" label="Entity Mentions" sublabel="Cross-report links indexed" accent="#8b5cf6" />
+                    <ImpactStat value="185" label="AI Summaries" sublabel="5 variants × 37 reports" accent="#7c3aed" />
                     <ImpactStat value="3" label="Government Tiers" sublabel="Union · State · Local Bodies" accent="#059669" />
-                    <ImpactStat value="$0.39" label="Indexing Cost" sublabel="Total for all 28 reports" accent="#0284c7" />
+                    <ImpactStat value="700+" label="Target Scale" sublabel="Designed for full corpus" accent="#64748b" />
                 </div>
             </DocSection>
 
@@ -177,15 +230,56 @@ graph TB
                 <DiagramCard title="End-to-End Data Flow">
                     <MermaidDiagram
                         chart={architectureDiagram}
-                        caption="Reports are parsed through a 12-phase pipeline, semantically enriched, and indexed into a hybrid vector database. User queries go through expansion, hybrid search (dense + sparse), neural reranking, and LLM generation with source citations streamed back in real time."
+                        caption="Reports are parsed through a 12-phase pipeline, semantically enriched, and indexed into a hybrid vector database with entity graph. User queries go through enhancement, hybrid search (with optional agentic decomposition), neural reranking, LLM generation with groundedness verification, and streaming response with citations."
                     />
                 </DiagramCard>
 
                 <CalloutBox type="info" style={{ marginTop: '16px' }}>
-                    <strong>Design principle:</strong> The core parsing pipeline (Phases 1_9) is purely algorithmic — zero API cost.
-                    AI models are used only where they add irreplaceable value: overview extraction, summary generation, 
-                    and real-time query answering. This keeps the system sustainable on minimal resources.
+                    <strong>Design principle:</strong> The core parsing pipeline is purely algorithmic — zero API cost.
+                    AI models are used only where they add irreplaceable value: overview extraction, summary generation,
+                    entity canonicalization, query enhancement, answer generation, and groundedness verification.
                 </CalloutBox>
+            </DocSection>
+
+            {/* ══════════════════════════════════════════════
+                KEY CAPABILITIES
+            ══════════════════════════════════════════════ */}
+            <DocSection
+                title="Key Capabilities"
+                description="Production features beyond basic RAG — built for reliability and accuracy at scale."
+            >
+                <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
+                    <CapabilityCard
+                        title="Hybrid Search"
+                        description="Dense vector embeddings + BM25 sparse vectors with CAG-specific pattern boosting. Legal references, entity acronyms, and monetary terms get weighted to improve retrieval for audit-specific queries."
+                        accent="#3b82f6"
+                    />
+                    <CapabilityCard
+                        title="Agentic Retrieval"
+                        description="Complex queries are decomposed into 2–4 sub-queries, each retrieved iteratively with sufficiency checks. Reformulates and retries up to 3x per sub-query. Simple queries short-circuit to the standard path."
+                        accent="#f59e0b"
+                    />
+                    <CapabilityCard
+                        title="Entity Graph"
+                        description="390 canonical entities (ministries, PSUs, schemes) with 25k mentions across reports. Enables cross-report entity reasoning — find all NHAI findings even when the name varies across years."
+                        accent="#0ea5e9"
+                    />
+                    <CapabilityCard
+                        title="Groundedness Verification"
+                        description="Every LLM answer is verified claim-by-claim against retrieved context. Per-claim grounding scores help identify potential hallucinations. Fail-open design: verification errors don't block answers."
+                        accent="#22c55e"
+                    />
+                    <CapabilityCard
+                        title="Auto-filtering"
+                        description="Queries mentioning years, states, or audit categories automatically get filtered without user intervention. Short ambiguous aliases (UP, MP, TN) require context confirmation to avoid false positives."
+                        accent="#8b5cf6"
+                    />
+                    <CapabilityCard
+                        title="Full Observability"
+                        description="50-column query log captures every query with latency breakdown, retrieval stats, groundedness scores, and cost estimates. Dev mode includes full prompts for debugging."
+                        accent="#64748b"
+                    />
+                </div>
             </DocSection>
 
             {/* ══════════════════════════════════════════════
@@ -203,10 +297,10 @@ graph TB
                     }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Data Pipeline</div>
                         <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
-                            How raw PDF reports become structured, enriched data. 12 processing phases covering ingestion, 
-                            OCR, layout analysis, table extraction (3-tier strategy for native and scanned PDFs), 
-                            document structuring, semantic enrichment (15+ finding types, entity extraction, monetary normalization), 
-                            and batch AI processing for overviews and summaries. Cost: ~$1.10–1.80 per report.
+                            How raw PDF reports become structured, enriched data. 12 processing phases covering ingestion,
+                            OCR, layout analysis, table extraction (3-tier strategy for native and scanned PDFs),
+                            document structuring, semantic enrichment, and batch AI processing. <strong>Entity Graph pipeline:</strong> per-report
+                            normalization → cross-corpus canonicalization → mention indexing with Aho-Corasick scanning.
                         </div>
                     </div>
 
@@ -217,11 +311,10 @@ graph TB
                     }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>RAG & Search</div>
                         <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
-                            How questions become answers. Hybrid retrieval combining dense vector search (OpenAI embeddings) 
-                            with a custom BM25 implementation built for audit documents — understanding section references like 
-                            "Para 2.3.1" and monetary amounts in "₹ crore" format. Reciprocal Rank Fusion, Cohere neural reranking, 
-                            parent-child chunk expansion, and LLM generation with inline source citations. End-to-end latency: 2–3 seconds. 
-                            Cost: ~$0.003–0.007 per query.
+                            How questions become answers. Hybrid retrieval combining dense vector search with
+                            custom BM25 built for audit documents. Query enhancement with expansion and classification.
+                            Cohere neural reranking. <strong>Agentic path</strong> for complex multi-hop queries.
+                            <strong> Groundedness verification</strong> for answer accuracy. End-to-end latency: 2–3s standard, 5–12s agentic.
                         </div>
                     </div>
 
@@ -232,11 +325,10 @@ graph TB
                     }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>AI Features</div>
                         <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
-                            6 AI models orchestrated across offline and real-time workloads. Claude Opus for deep analysis, 
-                            Claude Sonnet for RAG generation and summaries, Claude Haiku for structured extraction, 
-                            Gemini Flash for visual extraction, GPT-4o-mini for commodity tasks and query enhancement, 
-                            OpenAI embeddings for vector search. 8 response styles for different user needs. 
-                            Anti-hallucination safeguards at every layer. Total corpus setup cost: under $30.
+                            Multi-provider LLM orchestration (Claude, GPT-4, Gemini) across offline and real-time workloads.
+                            6 response styles. <strong>Agentic retrieval</strong> with query decomposition and iterative refinement.
+                            <strong> Entity graph</strong> for cross-report reasoning. <strong>Groundedness verification</strong> for
+                            hallucination detection. Auto-filtering and full query observability.
                         </div>
                     </div>
                 </div>
@@ -254,6 +346,7 @@ graph TB
                         <TechBadge name="Python 3.11+" category="language" />
                         <TechBadge name="FastAPI" category="backend" />
                         <TechBadge name="Pydantic" category="backend" />
+                        <TechBadge name="SQLAlchemy" category="backend" />
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>Frontend</span>
@@ -264,17 +357,17 @@ graph TB
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>AI / LLM</span>
-                        <TechBadge name="Claude (Opus/Sonnet/Haiku)" category="ai" />
+                        <TechBadge name="Claude (Opus/Sonnet)" category="ai" />
                         <TechBadge name="GPT-4o-mini" category="ai" />
                         <TechBadge name="Gemini 2.5 Flash" category="ai" />
                         <TechBadge name="OpenAI Embeddings" category="ai" />
                         <TechBadge name="Cohere Rerank" category="ai" />
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>Search</span>
-                        <TechBadge name="Qdrant Cloud" category="database" />
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>Databases</span>
+                        <TechBadge name="Qdrant" category="database" />
+                        <TechBadge name="PostgreSQL" category="database" />
                         <TechBadge name="Custom BM25" category="database" />
-                        <TechBadge name="RRF Fusion" category="database" />
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>Parsing</span>
@@ -302,17 +395,17 @@ graph TB
                     marginTop: '12px',
                 }}>
                     <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.7, marginBottom: '14px' }}>
-                        CAG Gateway is an independent civic technology project built by a single developer. It is not affiliated 
-                        with the Comptroller & Auditor General of India or any government body. The platform processes publicly 
+                        CAG Gateway is an independent civic technology project built by a single developer. It is not affiliated
+                        with the Comptroller & Auditor General of India or any government body. The platform processes publicly
                         available government documents under Section 52(1)(q) of the Indian Copyright Act, 1957.
                     </p>
                     <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.7, marginBottom: '14px' }}>
-                        The mission is straightforward: use AI to make government accountability information accessible to everyone — 
-                        journalists, researchers, RTI activists, and ordinary citizens. Not behind a paywall. Not for specialists. 
+                        The mission is straightforward: use AI to make government accountability information accessible to everyone —
+                        journalists, researchers, RTI activists, and ordinary citizens. Not behind a paywall. Not for specialists.
                         For everyone.
                     </p>
                     <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.7, margin: 0 }}>
-                        India's CAG audits the spending of 1.4 billion people's tax money. The findings should be as easy to access 
+                        India's CAG audits the spending of 1.4 billion people's tax money. The findings should be as easy to access
                         as the headlines they sometimes become — but rarely are. That's the gap this project exists to close.
                     </p>
                 </div>

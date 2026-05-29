@@ -15,6 +15,7 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
     --skip              Skip optional phases. Choices: 5.5, 5.7, 10a, 10b, 10c
     --quiet             Only show phase results, not per-document progress
     --reports           Filter to specific report IDs (space-separated)
+    --trace             Enable trace instrumentation (implies --workers 1)
 
 ## Examples
 
@@ -70,6 +71,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import asyncio
 import sys
 import json
+import logging
+import logging.handlers
 from pathlib import Path
 from datetime import datetime
 
@@ -104,6 +107,9 @@ from src.parsing_pipeline.pipeline_state import PipelineState
 
 # Import data contracts for Pydantic conversion
 from src.core.data_contracts import ParentChunk, ChildChunk, DocumentTask
+
+# Import instrumentation
+from src.parsing_pipeline.instrumentation import ReportMetadata
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -141,12 +147,33 @@ class PipelineOrchestrator:
         skip_phases: list = None,
         quiet: bool = False,
         report_filter: list = None,
+        workers: int = 1,
+        trace: bool = False,
     ):
         self.manifest_path = manifest_path
         self.skip = set(skip_phases or [])
         self.quiet = quiet
         self.report_filter = report_filter
+        self.workers = workers
+        self.trace = trace
         self.state = PipelineState()
+
+        # Setup trace emitter if enabled
+        if trace:
+            from src.parsing_pipeline.instrumentation import TraceEmitter, get_noop_emitter
+            from src.parsing_pipeline.config import get_config
+
+            config = get_config()
+            self.state.trace_emitter = TraceEmitter(
+                enabled=True,
+                output_dir=config.instrumentation.output_dir,
+                sample_count=config.instrumentation.sample_count,
+                incremental_flush=config.instrumentation.incremental_flush,
+            )
+        else:
+            # Use a no-op emitter (avoids None checks throughout the codebase)
+            from src.parsing_pipeline.instrumentation import get_noop_emitter
+            self.state.trace_emitter = get_noop_emitter()
 
         # Cache directory
         self.cache_dir = Path("data/raw/.cache")
@@ -165,34 +192,13 @@ class PipelineOrchestrator:
             )
             return
 
-        # Phase 4: Scaffolding
-        self._phase_scaffolding()
-
-        # Phase 5: Layout Analysis
-        self._phase_layout()
-
-        # Phase 5.5: TOC Reconciliation (optional)
-        if "5.5" not in self.skip:
-            self._phase_toc_reconciliation()
-
-        # Phase 5.7: LLM TOC Validation (optional)
-        if "5.7" not in self.skip:
-            self._phase_llm_toc_validation()
-
-        # Phase 6: Content Extraction
-        self._phase_content_extraction()
-
-        # Phase 7: Chunking
-        self._phase_chunking()
-
-        # Phase 7.5: Hierarchy Enrichment
-        self._phase_hierarchy_enrichment()
-
-        # Phase 8: Assembly
-        self._phase_assembly()
-
-        # Phase 9: Semantic Enrichment
-        self._phase_semantic_enrichment()
+        # Phases 4-9: Either parallel or sequential based on --workers flag
+        if self.workers > 1:
+            # Parallel execution across multiple processes
+            self._run_phases_4_to_9_parallel()
+        else:
+            # Sequential execution (default, byte-identical output)
+            self._run_phases_4_to_9_sequential()
 
         # Phase 10a: Overview & Summary (optional)
         if "10a" not in self.skip:
@@ -205,6 +211,9 @@ class PipelineOrchestrator:
         # Phase 10c: Visual Post-processing (optional)
         if "10c" not in self.skip:
             self._phase_visual_postprocess()
+
+        # Finalize all traces after last enabled phase
+        self._finalize_all_traces()
 
         # Print comprehensive summary
         self._print_summary()
@@ -233,6 +242,90 @@ class PipelineOrchestrator:
                 f"Filtered to {len(all_tasks)} reports: {', '.join(self.report_filter)}"
             )
 
+        # Start trace for each task after tier detection is available
+        # NOTE (Fix 1, Round 5): Multi-report batches now work correctly with per-report contexts.
+        emitter = self.state.trace_emitter
+        for task in all_tasks:
+            if emitter.enabled:
+                pdf_path = Path(task.local_pdf_path)
+                file_size = pdf_path.stat().st_size if pdf_path.exists() else 0
+
+                # Fix 2: Get actual page count from PDF (initial_metadata doesn't have it)
+                page_count = 0
+                if pdf_path.exists() and file_size > 0:
+                    try:
+                        import fitz  # PyMuPDF
+                        with fitz.open(str(pdf_path)) as doc:
+                            page_count = doc.page_count
+                    except Exception:
+                        pass  # Fall back to 0 if PDF can't be opened
+
+                metadata = ReportMetadata(
+                    report_id=task.report_id,
+                    tier=task.initial_metadata.get("government_body_type", "union"),
+                    source_pdf_path=str(pdf_path),
+                    page_count=page_count,
+                    file_size_bytes=file_size,
+                    state_name=task.initial_metadata.get("state_name"),
+                )
+                emitter.start_report(task.report_id, metadata)
+
+                # Emit Phase 1 events (manifest ingestion)
+                with emitter.phase_timer("1"):
+                    emitter.emit_decision(
+                        "1",
+                        "tier_detection",
+                        task.initial_metadata.get("government_body_type", "union"),
+                        ["union", "state", "local_body"],
+                        f"Detected from manifest filename pattern",
+                    )
+
+                    # File resolution decision
+                    pdf_resolved = pdf_path.exists() and file_size > 0
+                    download_failed = task.processing_status == "failed_download"
+                    if download_failed:
+                        emitter.emit_decision(
+                            "1",
+                            "file_resolution",
+                            "download_failed",
+                            ["local_found", "downloaded", "download_failed"],
+                            f"Failed to download from {task.source_url[:50] if task.source_url else 'unknown'}",
+                        )
+                        emitter.emit_red_flag(
+                            "1",
+                            "PDF download failed",
+                            {"report_id": task.report_id, "url": task.source_url},
+                        )
+                    elif pdf_resolved:
+                        # Check if this was a pre-existing file (no download)
+                        emitter.emit_decision(
+                            "1",
+                            "file_resolution",
+                            "local_found",
+                            ["local_found", "downloaded", "download_failed"],
+                            f"PDF found at {str(pdf_path)[-50:]}",
+                        )
+
+                    emitter.emit_io(
+                        "1",
+                        {"manifest_row": task.initial_metadata.get("SL NO", "unknown")},
+                        {
+                            "report_id": task.report_id,
+                            "pdf_path": str(pdf_path),
+                            "file_size_mb": round(file_size / (1024 * 1024), 2),
+                            "pdf_exists": pdf_resolved,
+                        },
+                    )
+                    if task.initial_metadata.get("state_name"):
+                        emitter.emit_decision(
+                            "1",
+                            "state_code_mapping",
+                            task.initial_metadata.get("state_name"),
+                            [],
+                            "Mapped from State Name column",
+                        )
+                    emitter.set_phase_status("1", "success" if pdf_resolved else "failed")
+
         # Split into cached and new tasks
         cached_tasks = []
         new_tasks = []
@@ -243,6 +336,31 @@ class PipelineOrchestrator:
                 # Reconstruct from cache
                 cached_task = self._reconstruct_from_cache(task, cache_status)
                 cached_tasks.append(cached_task)
+
+                # Emit retrospective Phase 2-3 events for cached tasks
+                if emitter.enabled:
+                    with emitter.phase_timer("2"):
+                        emitter.emit_decision(
+                            "2",
+                            "classification",
+                            cached_task.classification or "native_text",
+                            ["native_text", "scanned"],
+                            "Reconstructed from cache",
+                        )
+                        emitter.set_phase_status("2", "success")
+
+                    if cached_task.classification == "scanned":
+                        with emitter.phase_timer("3"):
+                            if cached_task.ocred_pdf_path:
+                                emitter.emit_io(
+                                    "3",
+                                    {"input_pdf": cached_task.local_pdf_path},
+                                    {"ocred_pdf": cached_task.ocred_pdf_path},
+                                )
+                                emitter.set_phase_status("3", "success")
+                            else:
+                                emitter.emit_error("3", "OCR cache incomplete")
+                                emitter.set_phase_status("3", "failed")
             else:
                 new_tasks.append(task)
 
@@ -328,26 +446,35 @@ class PipelineOrchestrator:
         return task
 
     async def _process_new_tasks(self, new_tasks: list):
-        """Process new tasks through phases 1-3."""
+        """Process new tasks through phases 2-3 (triage and OCR)."""
+        emitter = self.state.trace_emitter
+
         # Phase 2: Triage
-        triage_service = TriageService()
+        triage_service = TriageService(trace_emitter=emitter)
         triaged_native = []
         triaged_scanned = []
 
         for i, task in enumerate(new_tasks, 1):
             self._log(f"  [{i}/{len(new_tasks)}] Triaging {task.report_id}")
-            result = triage_service.triage_document(task)
 
-            if result.classification == "native_text":
-                triaged_native.append(result)
-                self._write_triage_cache(result)
-            elif result.classification == "scanned":
-                triaged_scanned.append(result)
-                self._write_triage_cache(result)
-            else:
-                self.state.failed["triage"].append(
-                    (result, result.error_log[-1] if result.error_log else "Unknown")
-                )
+            with emitter.phase_timer("2"):
+                # Service now emits detailed classification decisions internally
+                result = triage_service.triage_document(task, trace_emitter=emitter)
+
+                if result.classification == "native_text":
+                    triaged_native.append(result)
+                    self._write_triage_cache(result)
+                    emitter.set_phase_status("2", "success")
+                elif result.classification == "scanned":
+                    triaged_scanned.append(result)
+                    self._write_triage_cache(result)
+                    emitter.set_phase_status("2", "success")
+                else:
+                    self.state.failed["triage"].append(
+                        (result, result.error_log[-1] if result.error_log else "Unknown")
+                    )
+                    emitter.emit_error("2", result.error_log[-1] if result.error_log else "Unknown")
+                    emitter.set_phase_status("2", "failed")
 
         self._log(
             f"✓ Triage: {len(triaged_native)} native, {len(triaged_scanned)} scanned"
@@ -356,25 +483,43 @@ class PipelineOrchestrator:
         # Phase 3: OCR (if needed)
         ocred_successful = []
         if triaged_scanned:
-            ocr_service = OCRService()
+            ocr_service = OCRService(trace_emitter=emitter)
             for i, task in enumerate(triaged_scanned, 1):
                 self._log(f"  [{i}/{len(triaged_scanned)}] OCR {task.report_id}")
-                result = ocr_service.ocr_document(task)
 
-                if result.processing_status == "ocr_complete":
-                    ocred_successful.append(result)
-                    self._write_ocr_cache(result)
-                else:
-                    self.state.failed["ocr"].append(
-                        (
-                            result,
-                            result.error_log[-1] if result.error_log else "Unknown",
+                with emitter.phase_timer("3"):
+                    # Service now emits detailed OCR events internally
+                    result = ocr_service.ocr_document(task, trace_emitter=emitter)
+
+                    if result.processing_status == "ocr_complete":
+                        ocred_successful.append(result)
+                        self._write_ocr_cache(result)
+                        emitter.set_phase_status("3", "success")
+                    else:
+                        self.state.failed["ocr"].append(
+                            (
+                                result,
+                                result.error_log[-1] if result.error_log else "Unknown",
+                            )
                         )
-                    )
+                        emitter.emit_error("3", result.error_log[-1] if result.error_log else "Unknown")
+                        emitter.set_phase_status("3", "failed")
 
             self._log(
                 f"✓ OCR: {len(ocred_successful)}/{len(triaged_scanned)} successful"
             )
+
+            # Red flag for high OCR failure rate
+            ocr_failure_rate = 1 - (len(ocred_successful) / len(triaged_scanned)) if triaged_scanned else 0
+            if ocr_failure_rate > 0.20:  # More than 20% failure
+                emitter.emit_red_flag(
+                    "3",
+                    f"High OCR failure rate: {ocr_failure_rate*100:.1f}%",
+                    {
+                        "failed_count": len(triaged_scanned) - len(ocred_successful),
+                        "total_scanned": len(triaged_scanned),
+                    },
+                )
 
         # Update state
         self.state.triaged_native = triaged_native
@@ -405,17 +550,90 @@ class PipelineOrchestrator:
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 4: SCAFFOLDING
     # ═══════════════════════════════════════════════════════════════════════
+    # PHASES 4-9: PARALLEL OR SEQUENTIAL DISPATCH
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _run_phases_4_to_9_parallel(self):
+        """Run phases 4-9 in parallel using ProcessPoolExecutor."""
+        from src.parsing_pipeline.parallel_runner import run_parallel
+
+        self._log(f"\n{'='*60}", force=True)
+        self._log(f"PARALLEL MODE: {self.workers} workers", force=True)
+        self._log(f"{'='*60}", force=True)
+
+        # Run parallel execution
+        parallel_state = run_parallel(
+            tasks=self.state.successful_triaged,
+            skip_phases=self.skip,
+            quiet=self.quiet,
+            workers=self.workers,
+            output_dir="data/processed",
+        )
+
+        # Merge parallel state into our state
+        self.state.scaffold_complete = parallel_state.scaffold_complete
+        self.state.layout_complete = parallel_state.layout_complete
+        self.state.content_complete = parallel_state.content_complete
+        self.state.chunking_complete = parallel_state.chunking_complete
+        self.state.assembly_complete = parallel_state.assembly_complete
+        self.state.enrichment_complete = parallel_state.enrichment_complete
+
+        # Merge failures
+        for phase, failures in parallel_state.failed.items():
+            self.state.failed[phase].extend(failures)
+
+    def _run_phases_4_to_9_sequential(self):
+        """Run phases 4-9 sequentially (default behavior)."""
+        # Phase 4: Scaffolding
+        self._phase_scaffolding()
+
+        # Phase 5: Layout Analysis
+        self._phase_layout()
+
+        # Phase 5.5: TOC Reconciliation (optional)
+        if "5.5" not in self.skip:
+            self._phase_toc_reconciliation()
+
+        # Phase 5.7: LLM TOC Validation (optional)
+        if "5.7" not in self.skip:
+            self._phase_llm_toc_validation()
+
+        # Phase 6: Content Extraction
+        self._phase_content_extraction()
+
+        # Phase 7: Chunking
+        self._phase_chunking()
+
+        # Phase 7.5: Hierarchy Enrichment
+        self._phase_hierarchy_enrichment()
+
+        # Phase 8: Assembly
+        self._phase_assembly()
+
+        # Phase 9: Semantic Enrichment
+        self._phase_semantic_enrichment()
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PHASE 4: SCAFFOLDING
+    # ═══════════════════════════════════════════════════════════════════════
 
     def _phase_scaffolding(self):
         """Phase 4: Document Scaffolding."""
         self._phase_header("4", "DOCUMENT SCAFFOLDING")
         service = ScaffoldingService()
+        emitter = self.state.trace_emitter
 
         for i, task in enumerate(self.state.successful_triaged, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             self._log(
                 f"  [{i:2d}/{len(self.state.successful_triaged)}] Scaffolding {task.report_id}"
             )
-            result = service.build_scaffold(task)
+
+            # Note: start_report() and Phase 1-3 events are now emitted in _phases_1_to_3
+            # This was moved in Fix 2 to capture Phase 1-3 events in real-time
+            result = service.build_scaffold(task, trace_emitter=emitter)
 
             if result.processing_status in ("scaffold_complete", "scaffold_partial"):
                 self.state.scaffold_complete.append(result)
@@ -444,12 +662,16 @@ class PipelineOrchestrator:
         """Phase 5: Layout Analysis."""
         self._phase_header("5", "LAYOUT ANALYSIS")
         service = LayoutAnalysisService()
+        emitter = self.state.trace_emitter
 
         for i, task in enumerate(self.state.scaffold_complete, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             self._log(
                 f"  [{i:2d}/{len(self.state.scaffold_complete)}] Layout analysis {task.report_id}"
             )
-            result = service.analyze_layout(task)
+            result = service.analyze_layout(task, trace_emitter=emitter)
 
             if result.processing_status == "layout_complete":
                 self.state.layout_complete.append(result)
@@ -477,7 +699,8 @@ class PipelineOrchestrator:
     def _phase_toc_reconciliation(self):
         """Phase 5.5: TOC Reconciliation."""
         self._phase_header("5.5", "TOC RECONCILIATION")
-        service = TOCReconciliationService()
+        emitter = self.state.trace_emitter
+        service = TOCReconciliationService(trace_emitter=emitter)
         reconciled_count = 0
 
         self._log(
@@ -485,23 +708,45 @@ class PipelineOrchestrator:
         )
 
         for i, task in enumerate(self.state.layout_complete, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             prev_toc_count = len(task.scaffold.get("toc", [])) if task.scaffold else 0
             prev_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
-            result = service.reconcile(task)
-            new_toc_count = (
-                len(result.scaffold.get("toc", [])) if result.scaffold else 0
-            )
-            new_quality = (
-                result.scaffold.get("toc_quality", 0) if result.scaffold else 0
-            )
 
-            if new_toc_count != prev_toc_count or new_quality != prev_quality:
-                reconciled_count += 1
-                self._log(
-                    f"  [{i:2d}/{len(self.state.layout_complete)}] {task.report_id}: "
-                    f"{prev_toc_count} → {new_toc_count} TOC entries, "
-                    f"quality {prev_quality} → {new_quality}"
+            with emitter.phase_timer("5.5"):
+                result = service.reconcile(task, trace_emitter=emitter)
+                new_toc_count = (
+                    len(result.scaffold.get("toc", [])) if result.scaffold else 0
                 )
+                new_quality = (
+                    result.scaffold.get("toc_quality", 0) if result.scaffold else 0
+                )
+
+                # Emit Phase 5.5 trace data
+                emitter.emit_io(
+                    "5.5",
+                    {"toc_entries": prev_toc_count, "toc_quality": prev_quality},
+                    {"toc_entries": new_toc_count, "toc_quality": new_quality},
+                )
+
+                if new_toc_count != prev_toc_count or new_quality != prev_quality:
+                    reconciled_count += 1
+                    strategy = task.scaffold.get("reconciliation_strategy", "unknown")
+                    emitter.emit_decision(
+                        "5.5",
+                        "reconciliation_strategy",
+                        strategy,
+                        ["supplement", "merge", "replace", "none"],
+                        f"Quality {prev_quality} → {new_quality}",
+                    )
+                    self._log(
+                        f"  [{i:2d}/{len(self.state.layout_complete)}] {task.report_id}: "
+                        f"{prev_toc_count} → {new_toc_count} TOC entries, "
+                        f"quality {prev_quality} → {new_quality}"
+                    )
+
+                emitter.set_phase_status("5.5", "success")
 
         self._log(
             f"✓ Reconciliation: {reconciled_count}/{len(self.state.layout_complete)} documents updated",
@@ -515,22 +760,55 @@ class PipelineOrchestrator:
     def _phase_llm_toc_validation(self):
         """Phase 5.7: LLM TOC Validation (low-quality TOCs only)."""
         self._phase_header("5.7", "LLM TOC VALIDATION (LOW-QUALITY ONLY)")
+        emitter = self.state.trace_emitter
 
         # Check if ANTHROPIC_API_KEY is available
         if os.environ.get("ANTHROPIC_API_KEY"):
-            llm_validator = TOCLLMValidator()
+            llm_validator = TOCLLMValidator(trace_emitter=emitter)
             llm_validated_count = 0
             llm_skipped_count = 0
 
             for i, task in enumerate(self.state.layout_complete, 1):
-                if llm_validator.should_validate(task):
-                    self._log(
-                        f"  [{i:2d}/{len(self.state.layout_complete)}] LLM validating {task.report_id}"
-                    )
-                    task.scaffold = llm_validator.validate_toc(task)
-                    llm_validated_count += 1
-                else:
-                    llm_skipped_count += 1
+                # Switch to this report's trace context (Fix 1: per-report isolation)
+                emitter.set_current_report(task.report_id)
+
+                with emitter.phase_timer("5.7"):
+                    if llm_validator.should_validate(task, trace_emitter=emitter):
+                        prev_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
+                        prev_entries = len(task.scaffold.get("toc", [])) if task.scaffold else 0
+
+                        self._log(
+                            f"  [{i:2d}/{len(self.state.layout_complete)}] LLM validating {task.report_id}"
+                        )
+                        task.scaffold = llm_validator.validate_toc(task, trace_emitter=emitter)
+                        llm_validated_count += 1
+
+                        new_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
+                        new_entries = len(task.scaffold.get("toc", [])) if task.scaffold else 0
+
+                        emitter.emit_io(
+                            "5.7",
+                            {"toc_entries": prev_entries, "quality": prev_quality},
+                            {"toc_entries": new_entries, "quality": new_quality},
+                        )
+                        emitter.emit_decision(
+                            "5.7",
+                            "llm_validation",
+                            "validated",
+                            ["validated", "skipped"],
+                            f"Quality below threshold",
+                        )
+                        emitter.set_phase_status("5.7", "success")
+                    else:
+                        llm_skipped_count += 1
+                        emitter.emit_decision(
+                            "5.7",
+                            "llm_validation",
+                            "skipped",
+                            ["validated", "skipped"],
+                            f"Quality above threshold or disabled",
+                        )
+                        emitter.set_phase_status("5.7", "skipped")
 
             self._log(
                 f"✓ LLM Validation: {llm_validated_count} validated, {llm_skipped_count} skipped",
@@ -541,6 +819,19 @@ class PipelineOrchestrator:
             self._log(
                 "  Set ANTHROPIC_API_KEY to enable LLM validation for low-quality TOCs"
             )
+            # Emit skipped status for all reports
+            for task in self.state.layout_complete:
+                # Switch to this report's trace context (Fix 1: per-report isolation)
+                emitter.set_current_report(task.report_id)
+
+                emitter.emit_decision(
+                    "5.7",
+                    "llm_validation",
+                    "skipped",
+                    ["validated", "skipped"],
+                    "ANTHROPIC_API_KEY not set",
+                )
+                emitter.set_phase_status("5.7", "skipped")
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 6: CONTENT EXTRACTION
@@ -550,12 +841,16 @@ class PipelineOrchestrator:
         """Phase 6: Content Extraction with progress bar."""
         self._phase_header("6", "CONTENT EXTRACTION (AI-POWERED)")
         service = ContentExtractionService()
+        emitter = self.state.trace_emitter
 
         self._log(
             f"Extracting content from {len(self.state.layout_complete)} documents using AI vision models..."
         )
 
         for i, task in enumerate(self.state.layout_complete, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             self._log(
                 f"  [{i:2d}/{len(self.state.layout_complete)}] Content extraction {task.report_id}"
             )
@@ -565,43 +860,62 @@ class PipelineOrchestrator:
                 if not self.quiet:
                     print_progress(current, total, f"{current}/{total} blocks")
 
-            # Extract with progress callback
-            result = service.extract_content(
-                task, progress_callback=on_progress if not self.quiet else None
-            )
+            layout_block_count = sum(len(b) for b in (task.layout or {}).values())
 
-            # Clear progress bar if shown
-            if not self.quiet:
-                clear_progress()
+            with emitter.phase_timer("6"):
+                # Extract with progress callback and trace emitter for per-table instrumentation
+                result = service.extract_content(
+                    task,
+                    progress_callback=on_progress if not self.quiet else None,
+                    trace_emitter=emitter,
+                )
 
-            if result.processing_status in (
-                "completed_content_extraction",
-                "partial_content_extraction",
-            ):
-                self.state.content_complete.append(result)
-                content_count = (
-                    len(result.extracted_content) if result.extracted_content else 0
-                )
-                tables = sum(
-                    1
-                    for c in (result.extracted_content or [])
-                    if c.content_type == "table"
-                )
-                figures = sum(
-                    1
-                    for c in (result.extracted_content or [])
-                    if c.content_type == "figure"
-                )
-                self._log(
-                    f"             ✓ {content_count} blocks ({tables} tables, {figures} figures)"
-                )
-            else:
-                self.state.failed["content_extraction"].append(
-                    (result, result.error_log[-1] if result.error_log else "Unknown")
-                )
-                self._log(
-                    f"             ✗ FAILED: {result.error_log[-1] if result.error_log else 'Unknown'}"
-                )
+                # Clear progress bar if shown
+                if not self.quiet:
+                    clear_progress()
+
+                if result.processing_status in (
+                    "completed_content_extraction",
+                    "partial_content_extraction",
+                ):
+                    self.state.content_complete.append(result)
+                    content_count = (
+                        len(result.extracted_content) if result.extracted_content else 0
+                    )
+                    tables = sum(
+                        1
+                        for c in (result.extracted_content or [])
+                        if c.content_type in ("table", "table_markdown") or
+                           (c.content_type == "image_caption" and c.layout_label == "Table")
+                    )
+                    figures = sum(
+                        1
+                        for c in (result.extracted_content or [])
+                        if c.content_type == "figure"
+                    )
+                    self._log(
+                        f"             ✓ {content_count} blocks ({tables} tables, {figures} figures)"
+                    )
+
+                    # Emit Phase 6 trace data
+                    emitter.emit_io(
+                        "6",
+                        {"layout_blocks": layout_block_count},
+                        {"content_blocks": content_count, "tables": tables, "figures": figures},
+                    )
+                    emitter.set_phase_status(
+                        "6",
+                        "success" if result.processing_status == "completed_content_extraction" else "partial"
+                    )
+                else:
+                    self.state.failed["content_extraction"].append(
+                        (result, result.error_log[-1] if result.error_log else "Unknown")
+                    )
+                    self._log(
+                        f"             ✗ FAILED: {result.error_log[-1] if result.error_log else 'Unknown'}"
+                    )
+                    emitter.emit_error("6", result.error_log[-1] if result.error_log else "Unknown")
+                    emitter.set_phase_status("6", "failed")
 
         self._phase_result(
             "6",
@@ -638,35 +952,72 @@ class PipelineOrchestrator:
     def _phase_chunking(self):
         """Phase 7: Document Chunking."""
         self._phase_header("7", "DOCUMENT CHUNKING")
-        service = ChunkingService()
+        emitter = self.state.trace_emitter
+        service = ChunkingService(trace_emitter=emitter)
 
         self._log(
             f"Creating semantic chunks for {len(self.state.content_complete)} documents..."
         )
 
         for i, task in enumerate(self.state.content_complete, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             self._log(
                 f"  [{i:2d}/{len(self.state.content_complete)}] Chunking {task.report_id}"
             )
-            try:
-                parent_chunks, child_chunks = service.chunk_document(task)
+            content_count = len(task.extracted_content) if task.extracted_content else 0
 
-                # Update task with chunks
-                task.parent_chunks = parent_chunks
-                task.child_chunks = child_chunks
-                task.processing_status = "chunking_complete"
+            with emitter.phase_timer("7"):
+                try:
+                    parent_chunks, child_chunks = service.chunk_document(task, trace_emitter=emitter)
 
-                self.state.chunking_complete.append(task)
-                parent_count = len(parent_chunks) if parent_chunks else 0
-                child_count = len(child_chunks) if child_chunks else 0
-                self._log(
-                    f"             ✓ {parent_count} parent chunks, {child_count} child chunks"
-                )
-            except Exception as e:
-                task.processing_status = "failed_chunking"
-                task.error_log.append(f"Chunking error: {str(e)}")
-                self.state.failed["chunking"].append((task, str(e)))
-                self._log(f"             ✗ FAILED: {str(e)}")
+                    # Update task with chunks
+                    task.parent_chunks = parent_chunks
+                    task.child_chunks = child_chunks
+                    task.processing_status = "chunking_complete"
+
+                    self.state.chunking_complete.append(task)
+                    parent_count = len(parent_chunks) if parent_chunks else 0
+                    child_count = len(child_chunks) if child_chunks else 0
+                    self._log(
+                        f"             ✓ {parent_count} parent chunks, {child_count} child chunks"
+                    )
+
+                    # Emit Phase 7 trace data
+                    emitter.emit_io(
+                        "7",
+                        {"content_blocks": content_count, "toc_entries": len(task.scaffold.get("toc", [])) if task.scaffold else 0},
+                        {"parent_chunks": parent_count, "child_chunks": child_count},
+                    )
+
+                    # Red flag for low parent count (poor TOC/section detection)
+                    if parent_count == 0 and child_count > 10:
+                        emitter.emit_red_flag(
+                            "7",
+                            "No parent chunks created",
+                            {
+                                "child_count": child_count,
+                                "report_id": task.report_id,
+                                "toc_entries": len(task.scaffold.get("toc", [])) if task.scaffold else 0,
+                            },
+                        )
+                    elif parent_count > 0 and child_count / parent_count > 50:
+                        emitter.emit_red_flag(
+                            "7",
+                            f"Very high child-to-parent ratio ({child_count}/{parent_count})",
+                            {"ratio": round(child_count / parent_count, 1)},
+                        )
+
+                    emitter.set_phase_status("7", "success")
+
+                except Exception as e:
+                    task.processing_status = "failed_chunking"
+                    task.error_log.append(f"Chunking error: {str(e)}")
+                    self.state.failed["chunking"].append((task, str(e)))
+                    self._log(f"             ✗ FAILED: {str(e)}")
+                    emitter.emit_error("7", str(e))
+                    emitter.set_phase_status("7", "failed")
 
         self._phase_result(
             "7",
@@ -696,7 +1047,8 @@ class PipelineOrchestrator:
     def _phase_hierarchy_enrichment(self):
         """Phase 7.5: Intelligent Hierarchy Enrichment."""
         self._phase_header("7.5", "INTELLIGENT HIERARCHY ENRICHMENT")
-        enricher = HierarchyEnricher()
+        emitter = self.state.trace_emitter
+        enricher = HierarchyEnricher(trace_emitter=emitter)
         enriched_count = 0
         skipped_count = 0
 
@@ -705,35 +1057,89 @@ class PipelineOrchestrator:
         )
 
         for i, task in enumerate(self.state.chunking_complete, 1):
-            if task.parent_chunks and task.child_chunks:
-                should_enrich, reason = should_enrich_hierarchy(
-                    task.parent_chunks, task.child_chunks
-                )
-                if should_enrich:
-                    self._log(
-                        f"  [{i:2d}/{len(self.state.chunking_complete)}] Enriching {task.report_id}"
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
+            with emitter.phase_timer("7.5"):
+                if task.parent_chunks and task.child_chunks:
+                    should_enrich, reason = should_enrich_hierarchy(
+                        task.parent_chunks, task.child_chunks
                     )
-                    self._log(f"             Reason: {reason}")
-                    try:
-                        enriched_parents, enriched_children = enricher.enrich_hierarchy(
-                            parent_chunks=task.parent_chunks,
-                            child_chunks=task.child_chunks,
-                            report_id=task.report_id,
-                            aggressive=False,
-                        )
-                        task.parent_chunks = enriched_parents
-                        task.child_chunks = enriched_children
-                        enriched_count += 1
+
+                    prev_parents = len(task.parent_chunks)
+                    prev_children = len(task.child_chunks)
+
+                    if should_enrich:
                         self._log(
-                            f"             ✓ {len(enriched_parents)} parents, {len(enriched_children)} children"
+                            f"  [{i:2d}/{len(self.state.chunking_complete)}] Enriching {task.report_id}"
                         )
-                    except Exception as e:
-                        self._log(f"             ⚠ Enrichment failed: {e}")
+                        self._log(f"             Reason: {reason}")
+
+                        # Check for concentration red flag
+                        if "concentration" in reason.lower():
+                            emitter.emit_red_flag(
+                                "7.5",
+                                "Hierarchy concentration detected",
+                                {"reason": reason, "report_id": task.report_id},
+                            )
+
+                        try:
+                            enriched_parents, enriched_children = enricher.enrich_hierarchy(
+                                parent_chunks=task.parent_chunks,
+                                child_chunks=task.child_chunks,
+                                report_id=task.report_id,
+                                aggressive=False,
+                                trace_emitter=emitter,
+                            )
+                            task.parent_chunks = enriched_parents
+                            task.child_chunks = enriched_children
+                            enriched_count += 1
+                            self._log(
+                                f"             ✓ {len(enriched_parents)} parents, {len(enriched_children)} children"
+                            )
+
+                            emitter.emit_io(
+                                "7.5",
+                                {"parents": prev_parents, "children": prev_children},
+                                {"parents": len(enriched_parents), "children": len(enriched_children)},
+                            )
+                            emitter.emit_decision(
+                                "7.5",
+                                "enrichment",
+                                "enriched",
+                                ["enriched", "skipped"],
+                                reason,
+                            )
+                            emitter.set_phase_status("7.5", "success")
+
+                        except Exception as e:
+                            self._log(f"             ⚠ Enrichment failed: {e}")
+                            skipped_count += 1
+                            emitter.emit_error("7.5", str(e))
+                            emitter.set_phase_status("7.5", "partial")
+                    else:
                         skipped_count += 1
+                        emitter.emit_decision(
+                            "7.5",
+                            "enrichment",
+                            "skipped",
+                            ["enriched", "skipped"],
+                            "Hierarchy quality acceptable",
+                        )
+                        emitter.set_phase_status("7.5", "skipped")
                 else:
+                    # Fix 4: Explain why Phase 7.5 was skipped
                     skipped_count += 1
-            else:
-                skipped_count += 1
+                    parent_count = len(task.parent_chunks) if task.parent_chunks else 0
+                    child_count = len(task.child_chunks) if task.child_chunks else 0
+                    emitter.emit_decision(
+                        "7.5",
+                        "enrichment",
+                        "skipped",
+                        ["enriched", "skipped"],
+                        f"No chunks to enrich (parents={parent_count}, children={child_count})",
+                    )
+                    emitter.set_phase_status("7.5", "skipped")
 
         self._log(
             f"\n✓ Hierarchy Enrichment: {enriched_count} enriched, {skipped_count} skipped",
@@ -747,48 +1153,65 @@ class PipelineOrchestrator:
     def _phase_assembly(self):
         """Phase 8: Document Assembly & Output."""
         self._phase_header("8", "DOCUMENT ASSEMBLY & OUTPUT")
-        assembly_service = AssemblyService(output_dir="data/processed")
+        emitter = self.state.trace_emitter
+        assembly_service = AssemblyService(output_dir="data/processed", trace_emitter=emitter)
 
         self._log(
             f"Assembling final JSON outputs for {len(self.state.chunking_complete)} documents..."
         )
 
         for i, task in enumerate(self.state.chunking_complete, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             self._log(
                 f"  [{i:2d}/{len(self.state.chunking_complete)}] Assembling {task.report_id}"
             )
-            try:
-                # Convert chunks to Pydantic models
-                parent_chunks = [
-                    ParentChunk(**pc) if isinstance(pc, dict) else pc
-                    for pc in (task.parent_chunks or [])
-                ]
-                child_chunks = [
-                    ChildChunk(**cc) if isinstance(cc, dict) else cc
-                    for cc in (task.child_chunks or [])
-                ]
 
-                # Assemble document
-                output_path = assembly_service.assemble_document(
-                    task=task,
-                    parent_chunks=parent_chunks,
-                    child_chunks=child_chunks,
-                )
+            with emitter.phase_timer("8"):
+                try:
+                    # Convert chunks to Pydantic models
+                    parent_chunks = [
+                        ParentChunk(**pc) if isinstance(pc, dict) else pc
+                        for pc in (task.parent_chunks or [])
+                    ]
+                    child_chunks = [
+                        ChildChunk(**cc) if isinstance(cc, dict) else cc
+                        for cc in (task.child_chunks or [])
+                    ]
 
-                task.assembled_output_path = output_path
-                task.processing_status = "assembly_complete"
+                    # Assemble document
+                    output_path = assembly_service.assemble_document(
+                        task=task,
+                        parent_chunks=parent_chunks,
+                        child_chunks=child_chunks,
+                        trace_emitter=emitter,
+                    )
 
-                self._log(
-                    f"             ✓ {len(parent_chunks)} parents, {len(child_chunks)} children → {Path(output_path).name}"
-                )
+                    task.assembled_output_path = output_path
+                    task.processing_status = "assembly_complete"
 
-                self.state.assembly_complete.append(task)
+                    self._log(
+                        f"             ✓ {len(parent_chunks)} parents, {len(child_chunks)} children → {Path(output_path).name}"
+                    )
 
-            except Exception as e:
-                task.processing_status = "failed_assembly"
-                task.error_log.append(f"Assembly error: {str(e)}")
-                self.state.failed["assembly"].append((task, str(e)))
-                self._log(f"             ✗ FAILED: {str(e)}")
+                    # Emit Phase 8 trace data
+                    emitter.emit_io(
+                        "8",
+                        {"parent_chunks": len(parent_chunks), "child_chunks": len(child_chunks)},
+                        {"output_path": output_path},
+                    )
+                    emitter.set_phase_status("8", "success")
+
+                    self.state.assembly_complete.append(task)
+
+                except Exception as e:
+                    task.processing_status = "failed_assembly"
+                    task.error_log.append(f"Assembly error: {str(e)}")
+                    self.state.failed["assembly"].append((task, str(e)))
+                    self._log(f"             ✗ FAILED: {str(e)}")
+                    emitter.emit_error("8", str(e))
+                    emitter.set_phase_status("8", "failed")
 
         self._phase_result(
             "8",
@@ -814,12 +1237,16 @@ class PipelineOrchestrator:
         self._phase_header("9", "SEMANTIC ENRICHMENT")
         service = SemanticEnrichmentService()
         validation_service = ValidationService()
+        emitter = self.state.trace_emitter
 
         self._log(
             "Extracting findings, recommendations, and entities for cross-report analytics..."
         )
 
         for i, task in enumerate(self.state.assembly_complete, 1):
+            # Switch to this report's trace context (Fix 1: per-report isolation)
+            emitter.set_current_report(task.report_id)
+
             self._log(
                 f"  [{i:2d}/{len(self.state.assembly_complete)}] Enriching {task.report_id}"
             )
@@ -834,6 +1261,7 @@ class PipelineOrchestrator:
                     report_metadata=assembled_data["report_metadata"],
                     parent_chunks=assembled_data["parent_chunks"],
                     child_chunks=assembled_data["child_chunks"],
+                    trace_emitter=emitter,
                 )
 
                 # Add enrichment to data
@@ -860,6 +1288,8 @@ class PipelineOrchestrator:
                 task.error_log.append(f"Enrichment error: {str(e)}")
                 self.state.failed["enrichment"].append((task, str(e)))
                 self._log(f"             ✗ FAILED: {str(e)}")
+                emitter.emit_error("9", str(e))
+                emitter.set_phase_status("9", "failed")
 
         self._phase_result(
             "9",
@@ -868,7 +1298,7 @@ class PipelineOrchestrator:
             len(self.state.assembly_complete),
         )
 
-        # P4-7: Comprehensive validation with Phase 4 features
+        # Comprehensive validation
         if self.state.enrichment_complete:
             self._log(
                 "\n  Running comprehensive validation (including Phase 4 features)..."
@@ -1029,17 +1459,24 @@ class PipelineOrchestrator:
                     self._log(
                         f"Submitting {len(chunk_files)} reports for visual extraction..."
                     )
-                    gemini_extractor = GeminiVisualExtractor()
+                    emitter = self.state.trace_emitter
+                    gemini_extractor = GeminiVisualExtractor(trace_emitter=emitter)
                     job_id = await gemini_extractor.submit_visual_extraction_job(
                         json_files=chunk_files,
                         pdf_dir="data/raw",
                         skip_existing=True,
+                        trace_emitter=emitter,
                     )
                     self.state.phase10b_completed = True
                     self.state.chunk_files = chunk_files
                     self._log(f"✅ Phase 10b complete: {job_id}", force=True)
                 else:
                     self._log("No chunk files found for visual extraction.")
+                    # Trace: No files to process
+                    emitter = self.state.trace_emitter
+                    if emitter:
+                        emitter.emit_io("10b", {"chunk_files": 0}, {"skipped": True})
+                        emitter.set_phase_status("10b", "skipped")
 
             except ImportError as e:
                 self._log(f"⚠️  Gemini extraction not available: {e}", force=True)
@@ -1076,8 +1513,9 @@ class PipelineOrchestrator:
                     VisualPostProcessor,
                 )
 
-                processor = VisualPostProcessor()
-                stats = processor.process_all(self.state.chunk_files)
+                emitter = self.state.trace_emitter
+                processor = VisualPostProcessor(trace_emitter=emitter)
+                stats = processor.process_all(self.state.chunk_files, trace_emitter=emitter)
 
                 self.state.phase10c_completed = True
 
@@ -1092,11 +1530,58 @@ class PipelineOrchestrator:
 
             except Exception as e:
                 self._log(f"⚠️  Phase 10c failed: {e}", force=True)
+                emitter = self.state.trace_emitter
+                if emitter:
+                    emitter.emit_error("10c", str(e))
+                    emitter.set_phase_status("10c", "failed")
                 import traceback
 
                 traceback.print_exc()
         else:
             self._log("No chunk files available from Phase 10b. Skipping Phase 10c.")
+            # Trace: Phase 10c skipped
+            emitter = self.state.trace_emitter
+            if emitter:
+                emitter.emit_io("10c", {"chunk_files": 0}, {"skipped": True})
+                emitter.set_phase_status("10c", "skipped")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TRACE FINALIZATION
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _finalize_all_traces(self):
+        """Finalize ALL report traces after the last enabled phase completes.
+
+        This must be called AFTER all enabled phases complete, not in Phase 9,
+        because Phases 10b and 10c run after Phase 9 and their events would be lost.
+
+        Fix 1 (Round 5): Now uses per-report contexts, so each report in a multi-report
+        batch gets its own isolated trace file. finalize_all_reports() iterates through
+        all report contexts and writes each to disk.
+        """
+        emitter = self.state.trace_emitter
+        if not emitter.enabled:
+            return
+
+        # Determine final status based on which phases completed
+        if self.state.phase10c_completed:
+            final_status = "phase_10c_complete"
+        elif self.state.phase10b_completed:
+            final_status = "phase_10b_complete"
+        elif self.state.phase10a_submitted:
+            final_status = "phase_10a_submitted"
+        elif self.state.enrichment_complete:
+            final_status = "enrichment_complete"
+        else:
+            final_status = "incomplete"
+
+        # Finalize ALL report contexts (Fix 1: per-report isolation)
+        trace_paths = emitter.finalize_all_reports(final_status)
+        for trace_path in trace_paths:
+            self._log(f"✓ Trace finalized: {trace_path}", force=True)
+
+        if not trace_paths:
+            self._log("No trace files generated (no reports processed with --trace)", force=True)
 
     # ═══════════════════════════════════════════════════════════════════════
     # SUMMARY & LOGGING HELPERS
@@ -1302,6 +1787,10 @@ class PipelineOrchestrator:
             print(f"Skipping phases: {', '.join(sorted(self.skip))}")
         if self.report_filter:
             print(f"Report filter: {len(self.report_filter)} reports")
+        if self.workers > 1:
+            print(f"Mode: PARALLEL ({self.workers} workers for phases 4-9)")
+        if self.trace:
+            print(f"Mode: TRACE (emitting markdown traces to {self.state.trace_emitter.output_dir})")
         if self.quiet:
             print("Mode: QUIET (per-document progress suppressed)")
         print()
@@ -1310,6 +1799,64 @@ class PipelineOrchestrator:
 # ═══════════════════════════════════════════════════════════════════════════
 # CLI ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def setup_logging(debug: bool = False):
+    """
+    Configure root logger with console and rotating file handlers.
+
+    Args:
+        debug: If True, set all loggers to DEBUG level. Otherwise, WARNING for noisy libs.
+    """
+    # Create logs directory
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate log filename with date
+    log_filename = logs_dir / f"parsing_pipeline_{datetime.now().strftime('%Y%m%d')}.log"
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+
+    # Remove existing handlers to avoid duplicates
+    root_logger.handlers.clear()
+
+    # Console handler (stdout)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter(
+        '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+
+    # Rotating file handler (10MB per file, keep 5 backups)
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_filename,
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+
+    # Suppress noisy third-party loggers unless debug mode
+    if not debug:
+        logging.getLogger('docling').setLevel(logging.WARNING)
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
+        logging.getLogger('pdfminer').setLevel(logging.WARNING)
+        logging.getLogger('PIL').setLevel(logging.WARNING)
+        logging.getLogger('httpx').setLevel(logging.WARNING)
+        logging.getLogger('asyncio').setLevel(logging.WARNING)
+
+    root_logger.info(f"Logging configured: console (INFO) + file ({log_filename}, DEBUG)")
 
 
 async def main():
@@ -1354,8 +1901,35 @@ Examples:
         default=None,
         help="Filter to specific report IDs (space-separated)",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging for all loggers including third-party libraries",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Number of parallel workers for phases 4-9 (default: 1 = sequential). "
+             "Recommended: min(cpu_count/2, 4) due to ~2-4GB memory per worker.",
+    )
+    parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="Enable trace instrumentation. Emits detailed per-report markdown traces "
+             "documenting decisions, fallbacks, and I/O. Implies --workers 1.",
+    )
 
     args = parser.parse_args()
+
+    # Handle --trace flag constraints
+    if args.trace and args.workers > 1:
+        print(f"Note: --trace requires sequential execution. Overriding --workers {args.workers} to 1.")
+        args.workers = 1
+
+    # Setup logging (must be done early, before any loggers are used)
+    setup_logging(debug=args.debug)
 
     # Validate manifest path
     manifest_file = Path(args.manifest_path)
@@ -1377,6 +1951,8 @@ Examples:
         skip_phases=args.skip,
         quiet=args.quiet,
         report_filter=args.reports,
+        workers=args.workers,
+        trace=args.trace,
     )
     await orchestrator.run()
 

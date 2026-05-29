@@ -9,6 +9,10 @@ progress and manage the flow between phases.
 from dataclasses import dataclass, field
 from collections import defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from src.parsing_pipeline.instrumentation import TraceEmitter
 
 
 @dataclass
@@ -56,3 +60,6 @@ class PipelineState:
 
     # Failure tracking - keyed by phase name, value is list of (task, error_msg)
     failed: dict = field(default_factory=lambda: defaultdict(list))
+
+    # Trace instrumentation emitter (None when tracing disabled)
+    trace_emitter: Optional["TraceEmitter"] = None

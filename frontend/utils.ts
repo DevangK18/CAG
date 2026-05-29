@@ -150,3 +150,95 @@ export function formatStat(num: number): string {
   }
   return num.toString();
 }
+
+/**
+ * Format entity type for display
+ * Converts snake_case entity types to human-readable names with proper capitalization
+ *
+ * @param type - Raw entity type string
+ * @returns Formatted display name
+ */
+export function formatEntityType(type: string): string {
+  const map: Record<string, string> = {
+    psu: 'PSU',
+    scheme: 'Scheme',
+    regulatory_authority: 'Regulatory Authority',
+    autonomous_body: 'Autonomous Body',
+    local_body: 'Local Body',
+    state_government: 'State Government',
+    ministry: 'Ministry',
+  };
+  return map[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Format monetary amounts in Indian numbering system with crore suffix
+ *
+ * @param amount - Amount in crores
+ * @returns Formatted string with rupee symbol and 'cr' suffix, or empty string for zero/null
+ */
+export function formatAmountCrore(amount: number): string {
+  if (!amount || amount === 0) return '';
+  return `₹${amount.toLocaleString('en-IN')} cr`;
+}
+
+/**
+ * Format tier for display
+ * Converts tier values to human-readable format
+ *
+ * @param tier - Raw tier string (union, state, local_body)
+ * @returns Formatted tier name
+ */
+export function formatTier(tier: string): string {
+  const map: Record<string, string> = {
+    union: 'Union',
+    state: 'State',
+    local_body: 'Local Body',
+  };
+  return map[tier] || tier.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Format audit category for display
+ * Converts snake_case audit category to Title Case
+ *
+ * @param category - Raw audit category string (e.g., "performance", "compliance_audit")
+ * @returns Formatted display name (e.g., "Performance Audit", "Compliance Audit")
+ */
+export function formatAuditCategory(category: string): string {
+  if (!category) return '';
+  const map: Record<string, string> = {
+    performance: 'Performance Audit',
+    compliance: 'Compliance Audit',
+    financial: 'Financial Audit',
+    revenue: 'Revenue Audit',
+    commercial: 'Commercial Audit',
+    atir: 'ATIR',
+  };
+  return map[category.toLowerCase()] || category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Format report slug/ID as a readable title
+ * Converts slug format to human-readable title with year in parentheses
+ *
+ * Example:
+ *   "2025_38_Performance_Audit_of_Blast_Furnace_in_Steel_Authority_of_India_Limited"
+ *   → "Performance Audit of Blast Furnace in Steel Authority of India Limited (2025)"
+ *
+ * @param slug - Report slug/ID string
+ * @returns Formatted title string
+ */
+export function formatReportSlug(slug: string): string {
+  if (!slug) return slug;
+
+  const parts = slug.split('_');
+  if (parts.length < 3) return slug;
+
+  const year = parts[0];
+  // Skip the serial number (parts[1]) and start from the title parts
+  const titleParts = parts.slice(2);
+  const title = titleParts.join(' ');
+
+  return `${title} (${year})`;
+}

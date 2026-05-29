@@ -51,6 +51,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     }, [setCurrentReportId, setView]);
 
     const handleEntityClick = useCallback((entityId: number) => {
+        console.log('[HomePage] navigating to entity:', entityId, 'setting previousView to home');
         setCurrentEntityId(entityId);
         setView('entity');
     }, [setCurrentEntityId, setView]);
@@ -107,6 +108,17 @@ export const HomePage: React.FC<HomePageProps> = ({
         setSearchQuery(query);
     }, []);
 
+    // Tools grid handlers
+    const handleOpenChat = useCallback(() => {
+        setChatMode('agentic');
+        openChatDrawer();
+    }, [setChatMode, openChatDrawer]);
+
+    const handleFocusSearch = useCallback((channel: SearchChannel) => {
+        setActiveChannel(channel);
+        // User can then click into the search bar
+    }, []);
+
     return (
         <div className="home-page">
             <HomeHero
@@ -137,7 +149,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <TrendingSearches onQueryClick={handleTrendingQueryClick} />
             </div>
 
-            <ToolsGrid />
+            <ToolsGrid
+                onNavigate={setView}
+                onOpenChat={handleOpenChat}
+                onFocusSearch={handleFocusSearch}
+            />
 
             <footer className="home-footer">
                 <div className="home-footer-links">
@@ -156,7 +172,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <span className="home-footer-link">Terms</span>
                 </div>
                 <div className="home-footer-copyright">
-                    © 2025 CAG Gateway
+                    © {new Date().getFullYear()} CAG Gateway
                 </div>
             </footer>
         </div>

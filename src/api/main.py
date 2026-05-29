@@ -128,33 +128,95 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Query observability init failed: {e}")
 
-    # Initialize search service (Phase C)
+    # Initialize search service (Phase C) - resilient initialization
+    # Each dependency is wrapped individually so failures don't block others
     logger.info("Initializing search service...")
     try:
         from .services.search_service import SearchService
         from .services.report_service import get_glossary_index
-        from src.entity_graph.entity_service import get_entity_service
 
-        rag = get_rag_service()
-        if rag:
-            # Get registry from rag_pipeline
+        # Collect dependencies - each wrapped in try/except for resilience
+        search_deps = {"available": [], "failed": []}
+
+        # 1. Registry (in-memory, should always work)
+        registry = None
+        try:
             from report_registry import get_registry
             registry = get_registry()
+            if registry:
+                search_deps["available"].append("registry")
+            else:
+                search_deps["failed"].append("registry (not initialized)")
+        except Exception as e:
+            search_deps["failed"].append(f"registry ({e})")
+            logger.warning(f"Search registry unavailable: {e}")
 
-            search_service = SearchService(
-                registry=registry,
-                entity_service=get_entity_service(),
-                retrieval_service=rag.retrieval,
-                glossary_index=get_glossary_index(),
-                config=rag.config,
-            )
-            app.state.search_service = search_service
-            logger.info("Search service initialized successfully")
-        else:
-            logger.warning("RAG service not available; search service disabled")
-            app.state.search_service = None
+        # 2. Entity service (requires Postgres - optional)
+        entity_service = None
+        try:
+            from src.entity_graph.entity_service import get_entity_service
+            entity_service = get_entity_service()
+            if entity_service:
+                search_deps["available"].append("entity_service")
+            else:
+                search_deps["failed"].append("entity_service (no ENTITY_GRAPH_DSN)")
+        except Exception as e:
+            search_deps["failed"].append(f"entity_service ({e})")
+            logger.warning(f"Search entity_service unavailable: {e}")
+
+        # 3. Retrieval service (requires Qdrant - optional)
+        retrieval_service = None
+        try:
+            rag = get_rag_service()
+            if rag and rag.retrieval:
+                retrieval_service = rag.retrieval
+                search_deps["available"].append("retrieval_service")
+            else:
+                search_deps["failed"].append("retrieval_service (RAG not available)")
+        except Exception as e:
+            search_deps["failed"].append(f"retrieval_service ({e})")
+            logger.warning(f"Search retrieval_service unavailable: {e}")
+
+        # 4. Glossary index (in-memory, should always work)
+        glossary_index = {}
+        try:
+            glossary_index = get_glossary_index()
+            if glossary_index:
+                search_deps["available"].append(f"glossary ({len(glossary_index)} terms)")
+            else:
+                search_deps["failed"].append("glossary (empty)")
+        except Exception as e:
+            search_deps["failed"].append(f"glossary ({e})")
+            logger.warning(f"Search glossary_index unavailable: {e}")
+
+        # 5. Config (optional)
+        config = None
+        try:
+            rag = get_rag_service()
+            if rag:
+                config = rag.config
+        except Exception:
+            pass  # Config is optional, no warning needed
+
+        # Create SearchService with whatever dependencies are available
+        # Reports (rapidfuzz) and glossary channels work without external deps
+        search_service = SearchService(
+            registry=registry,
+            entity_service=entity_service,
+            retrieval_service=retrieval_service,
+            glossary_index=glossary_index,
+            config=config,
+        )
+        app.state.search_service = search_service
+
+        # Log status
+        if search_deps["available"]:
+            logger.info(f"Search service initialized with: {', '.join(search_deps['available'])}")
+        if search_deps["failed"]:
+            logger.warning(f"Search service missing: {', '.join(search_deps['failed'])}")
+
     except Exception as e:
-        logger.warning(f"Search service init failed: {e}")
+        logger.error(f"Search service init failed completely: {e}")
         app.state.search_service = None
 
     # Log environment configuration

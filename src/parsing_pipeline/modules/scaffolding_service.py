@@ -21,7 +21,7 @@ PHASE 2 FIXES IMPLEMENTED (2025-12-23):
 
 from pathlib import Path
 import fitz  # PyMuPDF
-from typing import List, Tuple, Dict, Optional
+from typing import TYPE_CHECKING, Any, List, Tuple, Dict, Optional
 from dataclasses import dataclass
 import numpy as np
 from collections import Counter
@@ -29,8 +29,12 @@ import re
 import logging
 from datetime import datetime
 
-from src.core.data_contracts import DocumentTask
+from src.core.data_contracts import DocumentTask, TOCQualityMetrics
 from src.parsing_pipeline.modules.toc_table_parser import TOCTableParser, TOCEntry
+from src.parsing_pipeline.config import get_config, ScaffoldingConfig
+
+if TYPE_CHECKING:
+    from src.parsing_pipeline.instrumentation import TraceEmitter
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +179,6 @@ class TOCRejectionLogger:
                 f"{'!' * 60}"
             )
             self.logger.warning(alert_msg)
-            print(alert_msg)  # Also print to console
 
         return (alert_raised, stats)
 
@@ -316,9 +319,9 @@ class ScaffoldingService:
     ]
 
     # =========================================================================
-    # PHASE 1 + PHASE 2: Patterns for HIGH CONFIDENCE valid TOC entries
-    # PHASE 2 FIX: Many patterns now require exact match ($ anchor) to avoid
-    # matching "Executive Summary | Vv |" type garbage
+    # Patterns for HIGH CONFIDENCE valid TOC entries
+    # Many patterns require exact match ($ anchor) to avoid false positives
+    # like "Executive Summary | Vv |" type garbage
     # =========================================================================
     TOC_ACCEPT_PATTERNS = [
         # Chapter patterns (Roman and Arabic numerals)
@@ -368,10 +371,11 @@ class ScaffoldingService:
 
     def __init__(
         self,
-        embed_toc_min_entries: int = 5,  # FIX BUG 1: Restored to 5 from 3
+        embed_toc_min_entries: int = 5,
         body_text_percentile: float = 80.0,
         heading_size_ratio: float = 1.4,
         heading_min_length: int = 10,
+        config: Optional[ScaffoldingConfig] = None,
     ):
         """
         Initialize the scaffolding service.
@@ -381,11 +385,20 @@ class ScaffoldingService:
             body_text_percentile: Percentile used to determine baseline body font size
             heading_size_ratio: Minimum size ratio above baseline for heading detection
             heading_min_length: Minimum character length for potential headings
+            config: Optional ScaffoldingConfig for bookmark quality settings
         """
+        # Load config (with fallback to global config)
+        if config is None:
+            config = get_config().scaffolding
+        self._config = config
+
         self.embed_toc_min_entries = embed_toc_min_entries
         self.body_text_percentile = body_text_percentile
         self.heading_size_ratio = heading_size_ratio
         self.heading_min_length = heading_min_length
+
+        # Bookmark quality threshold (0-1 range, default 0.6)
+        self.bookmark_quality_threshold = config.bookmark_quality_threshold
 
         # Compile patterns for efficiency
         self._reject_patterns = [
@@ -395,119 +408,218 @@ class ScaffoldingService:
             re.compile(p, re.IGNORECASE) for p in self.TOC_ACCEPT_PATTERNS
         ]
 
+        # Compile bookmark quality patterns (from config for hot-reload support)
+        self._assembly_patterns = [
+            re.compile(p, re.IGNORECASE) for p in config.assembly_bookmark_patterns
+        ]
+        self._cag_patterns = [
+            re.compile(p, re.IGNORECASE) for p in config.cag_quality_patterns
+        ]
+
         # Initialize rejection logger
         self.toc_rejection_logger = TOCRejectionLogger()
 
         # Store last alert info for pipeline integration
         self._last_toc_alert: Optional[Dict] = None
 
-    def build_scaffold(self, task: DocumentTask) -> DocumentTask:
+    def build_scaffold(
+        self,
+        task: DocumentTask,
+        trace_emitter: Optional["TraceEmitter"] = None,
+    ) -> DocumentTask:
         """
         Build the complete document scaffold: ToC and page mappings.
 
         Args:
             task: DocumentTask with processed PDF path
+            trace_emitter: Optional trace emitter for instrumentation
 
         Returns:
             Updated DocumentTask with scaffold field populated
         """
+        # Use no-op emitter if none provided
+        if trace_emitter is None:
+            from src.parsing_pipeline.instrumentation import get_noop_emitter
+            trace_emitter = get_noop_emitter()
+
         pdf_path = self._get_pdf_path(task)
         if not pdf_path:
             task.error_log.append("No valid PDF path found for scaffolding")
             task.processing_status = "failed_scaffold"
+            trace_emitter.set_phase_status("4", "failed")
             return task
 
-        # P0-2: Initialize scaffold with heading_positions dict
+        # Initialize scaffold with heading_positions dict for Y-coordinate tracking
         task.scaffold = {"toc": [], "page_map": {}, "heading_positions": {}}
 
-        try:
-            doc = fitz.Document(pdf_path)
+        # Track TOC extraction method for tracing
+        toc_method = "none"
+        toc_entries_before_filter = 0
 
-            # Phase 1: Extract ToC via bookmarks/embedded outlines
-            task = self._extract_embedded_toc(task, doc)
+        with trace_emitter.phase_timer("4"):
+            try:
+                doc = fitz.Document(pdf_path)
 
-            # Phase 2: Fallback to heuristic ToC generation if none found
-            if not task.scaffold["toc"]:
-                heuristic_toc, heading_positions = self._generate_heuristic_toc(doc, task.report_id)
-                if heuristic_toc:
-                    task.scaffold["toc"] = heuristic_toc
-                    task.scaffold["heading_positions"] = heading_positions  # P0-2: Store Y-positions
-                    task.error_log.append(
-                        f"Heuristic ToC generated with {len(heuristic_toc)} entries"
-                    )
+                # Phase 1: Extract ToC via bookmarks/embedded outlines
+                task = self._extract_embedded_toc(task, doc, trace_emitter=trace_emitter)
 
-                # Check if there was a high rejection alert
-                if self._last_toc_alert:
-                    task.error_log.append(
-                        f"⚠️ TOC ALERT: {self._last_toc_alert['message']} - "
-                        f"Review logs/rejected_toc.log"
-                    )
-                    self._last_toc_alert = None
+                if task.scaffold["toc"]:
+                    toc_method = task.scaffold.get("toc_method", "embedded_bookmarks")
 
-            # Phase 2.5: Try printed TOC pre-pass as supplementary signal
-            printed_toc, printed_confidence = self._extract_printed_toc(pdf_path, task.report_id)
-
-            if printed_toc and printed_confidence > 0.5:
-                current_toc = task.scaffold.get("toc", [])
-                current_quality = task.scaffold.get("toc_quality", 0)
-
-                # Infer quality if not explicitly set but TOC exists
-                # Embedded/heuristic TOCs don't set quality, but if they have entries they're likely decent
-                if current_toc and current_quality == 0:
-                    # Infer quality based on entry count and structure
-                    if len(current_toc) >= 5:
-                        current_quality = 70  # Assume decent quality if has multiple entries
-                    else:
-                        current_quality = 50  # Medium quality for fewer entries
-
-                if not current_toc or current_quality < 40:
-                    # No existing TOC or very low quality — use printed TOC as primary
-                    task.scaffold["toc"] = printed_toc
-                    task.scaffold["toc_method"] = "printed_toc_prepass"
-                    task.scaffold["toc_quality"] = int(printed_confidence * 100)
-                    logger.info(f"[{task.report_id}] Using printed TOC pre-pass as primary ({len(printed_toc)} entries)")
-                    task.error_log.append(
-                        f"Printed TOC pre-pass used as primary: {len(printed_toc)} entries"
-                    )
-
-                elif current_quality < 70 and len(printed_toc) > len(current_toc):
-                    # Medium quality existing TOC but printed has more entries — supplement
-                    # Merge: keep existing, add any printed entries not already present
-                    existing_titles = {entry[1].lower().strip() for entry in current_toc}
-                    new_entries = [
-                        entry for entry in printed_toc
-                        if entry[1].lower().strip() not in existing_titles
-                    ]
-                    if new_entries:
-                        merged = current_toc + new_entries
-                        # Re-sort by page number
-                        merged.sort(key=lambda e: e[2])
-                        task.scaffold["toc"] = merged
-                        task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+printed_supplement"
-                        logger.info(f"[{task.report_id}] Supplemented TOC with {len(new_entries)} printed entries")
+                # Phase 2: Fallback to heuristic ToC generation if none found
+                if not task.scaffold["toc"]:
+                    heuristic_toc, heading_positions = self._generate_heuristic_toc(doc, task.report_id)
+                    if heuristic_toc:
+                        task.scaffold["toc"] = heuristic_toc
+                        task.scaffold["heading_positions"] = heading_positions
+                        toc_method = "heuristic"
                         task.error_log.append(
-                            f"TOC supplemented with {len(new_entries)} printed entries"
+                            f"Heuristic ToC generated with {len(heuristic_toc)} entries"
+                        )
+                        trace_emitter.emit_fallback(
+                            "4",
+                            "embedded_bookmarks",
+                            "heuristic_toc",
+                            "No embedded bookmarks found or quality too low",
                         )
 
-            # Phase 3: Generate page number mappings (always done)
-            task = self._build_page_mappings(task, doc)
+                    # Check if there was a high rejection alert
+                    if self._last_toc_alert:
+                        task.error_log.append(
+                            f"⚠️ TOC ALERT: {self._last_toc_alert['message']} - "
+                            f"Review logs/rejected_toc.log"
+                        )
+                        # Fix 3: Extract rejection_rate from stats dict (not "rate" key)
+                        stats = self._last_toc_alert.get("stats", {})
+                        rejection_rate = stats.get("rejection_rate", 0) if stats else 0
+                        trace_emitter.emit_red_flag(
+                            "4",
+                            "High TOC rejection rate",
+                            {
+                                "rejection_rate_pct": f"{rejection_rate * 100:.1f}%",
+                                "rejected_count": stats.get("total_rejected", 0),
+                                "total_count": stats.get("total_candidates", 0),
+                            },
+                        )
+                        self._last_toc_alert = None
 
-            # Phase 4: Filter/dedupe ToC for quality
-            if task.scaffold["toc"]:
-                filtered = self._filter_and_dedupe_toc(task.scaffold["toc"])
-                task.scaffold["toc"] = filtered
-                task.error_log.append(
-                    f"Filtered ToC entries: {len(filtered)} remaining"
+                # Phase 2.5: Try printed TOC pre-pass as supplementary signal
+                printed_toc, printed_confidence = self._extract_printed_toc(pdf_path, task.report_id)
+
+                if printed_toc and printed_confidence > 0.5:
+                    current_toc = task.scaffold.get("toc", [])
+                    current_quality = task.scaffold.get("toc_quality", 0)
+
+                    # Infer quality if not explicitly set but TOC exists
+                    # Embedded/heuristic TOCs don't set quality, but if they have entries they're likely decent
+                    if current_toc and current_quality == 0:
+                        # Infer quality based on entry count and structure
+                        if len(current_toc) >= 5:
+                            current_quality = 70  # Assume decent quality if has multiple entries
+                        else:
+                            current_quality = 50  # Medium quality for fewer entries
+
+                    if not current_toc or current_quality < 40:
+                        # No existing TOC or very low quality — use printed TOC as primary
+                        task.scaffold["toc"] = printed_toc
+                        task.scaffold["toc_method"] = "printed_toc_prepass"
+                        task.scaffold["toc_quality"] = int(printed_confidence * 100)
+                        toc_method = "printed_toc"
+                        logger.info(f"[{task.report_id}] Using printed TOC pre-pass as primary ({len(printed_toc)} entries)")
+                        task.error_log.append(
+                            f"Printed TOC pre-pass used as primary: {len(printed_toc)} entries"
+                        )
+                        trace_emitter.emit_decision(
+                            "4",
+                            "toc_source",
+                            "printed_toc_prepass",
+                            ["embedded_bookmarks", "heuristic", "printed_toc"],
+                            f"Current quality {current_quality} < 40, printed confidence {printed_confidence:.2f}",
+                        )
+
+                    elif current_quality < 70 and len(printed_toc) > len(current_toc):
+                        # Medium quality existing TOC but printed has more entries — supplement
+                        # Merge: keep existing, add any printed entries not already present
+                        existing_titles = {entry[1].lower().strip() for entry in current_toc}
+                        new_entries = [
+                            entry for entry in printed_toc
+                            if entry[1].lower().strip() not in existing_titles
+                        ]
+                        if new_entries:
+                            merged = current_toc + new_entries
+                            # Re-sort by page number
+                            merged.sort(key=lambda e: e[2])
+                            task.scaffold["toc"] = merged
+                            task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+printed_supplement"
+                            toc_method = f"{toc_method}+printed_supplement"
+                            logger.info(f"[{task.report_id}] Supplemented TOC with {len(new_entries)} printed entries")
+                            task.error_log.append(
+                                f"TOC supplemented with {len(new_entries)} printed entries"
+                            )
+
+                # Phase 3: Generate page number mappings (always done)
+                task = self._build_page_mappings(task, doc)
+
+                # Track entries before filtering
+                toc_entries_before_filter = len(task.scaffold.get("toc", []))
+
+                # Phase 4: Filter/dedupe ToC for quality
+                if task.scaffold["toc"]:
+                    filtered = self._filter_and_dedupe_toc(task.scaffold["toc"])
+                    task.scaffold["toc"] = filtered
+                    task.error_log.append(
+                        f"Filtered ToC entries: {len(filtered)} remaining"
+                    )
+
+                doc.close()
+
+                # Validate results and set status
+                task = self._validate_and_set_status(task)
+
+                # Emit Phase 4 I/O and decisions
+                final_toc_count = len(task.scaffold.get("toc", []))
+                final_quality = task.scaffold.get("toc_quality", 0)
+
+                trace_emitter.emit_io(
+                    "4",
+                    {"pdf_path": pdf_path, "page_count": task.scaffold.get("page_map", {}).get("total_pages", 0)},
+                    {
+                        "toc_entries": final_toc_count,
+                        "toc_quality": final_quality,
+                        "toc_method": toc_method,
+                        "heading_positions": len(task.scaffold.get("heading_positions", {})),
+                    },
                 )
 
-            doc.close()
+                if toc_entries_before_filter > final_toc_count:
+                    trace_emitter.emit(
+                        "4",
+                        "toc_filtering",
+                        {
+                            "entries_before": toc_entries_before_filter,
+                            "entries_after": final_toc_count,
+                            "filtered_out": toc_entries_before_filter - final_toc_count,
+                        },
+                    )
 
-            # Validate results and set status
-            task = self._validate_and_set_status(task)
+                trace_emitter.emit_decision(
+                    "4",
+                    "toc_method_final",
+                    toc_method,
+                    ["embedded_bookmarks", "heuristic", "printed_toc", "none"],
+                    f"Quality: {final_quality}, entries: {final_toc_count}",
+                )
 
-        except Exception as e:
-            task.error_log.append(f"Scaffolding failed with error: {str(e)}")
-            task.processing_status = "failed_scaffold"
+                trace_emitter.set_phase_status(
+                    "4",
+                    "success" if final_toc_count > 0 else "partial",
+                )
+
+            except Exception as e:
+                task.error_log.append(f"Scaffolding failed with error: {str(e)}")
+                task.processing_status = "failed_scaffold"
+                trace_emitter.emit_error("4", str(e))
+                trace_emitter.set_phase_status("4", "failed")
 
         return task
 
@@ -600,16 +712,52 @@ class ScaffoldingService:
         return toc, confidence
 
     def _extract_embedded_toc(
-        self, task: DocumentTask, doc: fitz.Document
+        self,
+        task: DocumentTask,
+        doc: fitz.Document,
+        trace_emitter: Optional["TraceEmitter"] = None,
     ) -> DocumentTask:
         """
         Attempt to extract embedded Table of Contents from PDF bookmarks.
 
-        FIX BUG 1: Enhanced validation with page coverage check.
+        Uses scored validation to catch garbage PDF-merger bookmarks that
+        pass entry count checks but aren't real TOC entries (e.g., "01 Cover",
+        "05 Final_Report", "p001").
         """
+        # Use no-op emitter if none provided
+        if trace_emitter is None:
+            from src.parsing_pipeline.instrumentation import get_noop_emitter
+            trace_emitter = get_noop_emitter()
+
         try:
             toc = doc.get_toc(simple=False)
-            if self._validate_embedded_toc(toc, doc.page_count):
+
+            # Score the bookmarks (replaces binary validation)
+            metrics = self._score_embedded_toc(toc, doc.page_count)
+            score = metrics.score()
+
+            # Threshold check: score() returns 0-100, threshold is 0-1
+            threshold_score = self.bookmark_quality_threshold * 100
+
+            # Trace the bookmark quality scoring decision
+            trace_emitter.emit_decision(
+                "4",
+                "bookmark_quality",
+                "accept" if score >= threshold_score else "reject",
+                ["accept", "reject"],
+                f"Score {score:.1f} vs threshold {threshold_score:.1f}, "
+                f"confidence={metrics.confidence:.2f}, entries={metrics.entry_count}",
+            )
+
+            # Emit sample of bookmark titles for inspection
+            if toc and len(toc) > 0:
+                sample_titles = [
+                    {"level": entry[0], "title": str(entry[1])[:60], "page": entry[2]}
+                    for entry in toc[:5]  # First 5 entries
+                ]
+                trace_emitter.emit_sample("4", "bookmark_entries", sample_titles)
+
+            if score >= threshold_score:
                 # Clean the embedded TOC entries
                 cleaned_toc = []
                 for entry in toc:
@@ -620,53 +768,138 @@ class ScaffoldingService:
                             cleaned_toc.append([level, cleaned_title, page])
 
                 task.scaffold["toc"] = cleaned_toc
+                task.scaffold["toc_quality_metrics"] = {
+                    "source": metrics.source,
+                    "entry_count": metrics.entry_count,
+                    "level_count": metrics.level_count,
+                    "has_chapters": metrics.has_chapters,
+                    "has_sections": metrics.has_sections,
+                    "page_coverage": metrics.page_coverage,
+                    "confidence": metrics.confidence,
+                    "score": score,
+                }
+                task.scaffold["toc_quality"] = int(score)
+                task.scaffold["toc_method"] = "embedded_bookmarks"
                 task.error_log.append(
-                    f"Embedded ToC extracted successfully: {len(cleaned_toc)} entries"
+                    f"Embedded ToC extracted: {len(cleaned_toc)} entries, "
+                    f"score={score:.1f}, confidence={metrics.confidence:.2f}"
                 )
             else:
                 task.error_log.append(
-                    f"Embedded ToC inadequate: {len(toc)} entries, proceeding to heuristic generation"
+                    f"Embedded ToC rejected: {len(toc)} entries, score={score:.1f} "
+                    f"(threshold={threshold_score:.1f}), confidence={metrics.confidence:.2f}, "
+                    f"proceeding to heuristic generation"
                 )
                 task.scaffold["toc"] = []
+                # Store metrics even for rejected TOC (useful for debugging)
+                task.scaffold["rejected_bookmark_metrics"] = {
+                    "source": metrics.source,
+                    "entry_count": metrics.entry_count,
+                    "score": score,
+                    "confidence": metrics.confidence,
+                }
 
         except Exception as e:
             task.error_log.append(
                 f"Embedded ToC extraction failed: {str(e)}, proceeding to heuristic generation"
             )
             task.scaffold["toc"] = []
+            trace_emitter.emit_error("4", f"Embedded TOC extraction failed: {str(e)}")
 
         return task
 
-    def _validate_embedded_toc(self, toc: List[List], total_pages: int) -> bool:
+    def _score_embedded_toc(self, toc: List[List], total_pages: int) -> TOCQualityMetrics:
         """
-        Validate if embedded ToC is sufficiently detailed.
+        Score embedded TOC quality with assembly/CAG pattern detection.
 
-        FIX BUG 1: Enhanced with page coverage check to reject sparse bookmarks.
+        Replaces the binary _validate_embedded_toc() with structured scoring.
+        Catches garbage PDF-merger bookmarks ("01 Cover", "p001") that pass
+        entry count/level checks but aren't real TOC entries.
 
         Args:
             toc: List of TOC entries [level, title, page]
             total_pages: Total number of pages in the document
 
         Returns:
-            True if TOC meets quality requirements
+            TOCQualityMetrics with score() method for threshold comparison
         """
-        # Need enough entries
-        if len(toc) < self.embed_toc_min_entries:
-            return False
+        if not toc:
+            return TOCQualityMetrics(
+                source="bookmarks",
+                entry_count=0,
+                level_count=0,
+                has_chapters=False,
+                has_sections=False,
+                page_coverage=0.0,
+                confidence=0.0,
+            )
 
-        # Check for multiple hierarchy levels (need depth)
+        # Calculate structural metrics
         levels = {entry[0] for entry in toc}
-        if len(levels) < 2:
-            return False
+        level_count = len(levels)
 
-        # NEW: Check page coverage - bookmarks must cover >10% of pages
-        # This prevents accepting sparse bookmarks like just "Preface, Exec Summary, Annexures"
-        pages = {entry[2] for entry in toc if len(entry) >= 3}
-        coverage = len(pages) / max(total_pages, 1)
-        if coverage < 0.1:  # Less than 10% page coverage
-            return False
+        # Check for chapters
+        has_chapters = any(
+            "chapter" in entry[1].lower()
+            for entry in toc
+        )
 
-        return True
+        # Check for numbered sections (e.g., "2.3 Section Title")
+        has_sections = any(
+            re.match(r"^\d+\.\d+", entry[1])
+            for entry in toc
+        )
+
+        # Calculate page coverage
+        pages_covered = set()
+        for entry in toc:
+            if len(entry) >= 3 and isinstance(entry[2], int) and entry[2] > 0:
+                pages_covered.add(entry[2])
+        page_coverage = len(pages_covered) / max(total_pages, 1)
+
+        # Start with base confidence
+        confidence = 1.0
+
+        # Penalty for file-assembly patterns (garbage PDF-merger bookmarks)
+        assembly_count = sum(
+            1 for entry in toc
+            if any(p.match(entry[1]) for p in self._assembly_patterns)
+        )
+        if assembly_count > 0:
+            confidence -= (assembly_count / len(toc)) * 0.5
+
+        # Bonus for CAG-specific patterns (Chapter, Annexure, Executive Summary, etc.)
+        cag_count = sum(
+            1 for entry in toc
+            if any(p.match(entry[1]) for p in self._cag_patterns)
+        )
+        if cag_count > 0:
+            confidence += min(0.2, cag_count * 0.05)
+
+        # Penalty for very few entries
+        if len(toc) < 5:
+            confidence -= 0.3
+
+        # Penalty for single hierarchy level (need depth)
+        if level_count < 2:
+            confidence -= 0.3
+
+        # Penalty for low page coverage
+        if page_coverage < 0.1:
+            confidence -= 0.2
+
+        # Clamp confidence to valid range
+        confidence = max(0.1, min(1.0, confidence))
+
+        return TOCQualityMetrics(
+            source="bookmarks",
+            entry_count=len(toc),
+            level_count=level_count,
+            has_chapters=has_chapters,
+            has_sections=has_sections,
+            page_coverage=page_coverage,
+            confidence=confidence,
+        )
 
     def _is_valid_toc_entry(
         self,
@@ -702,7 +935,7 @@ class ScaffoldingService:
         cleaned = text.strip()
 
         # =====================================================================
-        # PHASE 2 FIX: Structural checks BEFORE any pattern matching
+        # Perform structural checks BEFORE pattern matching (order dependency)
         # These indicate table content regardless of what words are present
         # =====================================================================
 
@@ -924,7 +1157,7 @@ class ScaffoldingService:
             return toc, heading_positions
 
         except Exception as e:
-            print(f"Heuristic ToC generation failed: {e}")
+            self.logger.error(f"Heuristic ToC generation failed: {e}")
             return [], {}
 
     def _extract_text_blocks(
@@ -1229,7 +1462,7 @@ class ScaffoldingService:
         )
 
         toc = []
-        heading_positions = {}  # P0-2: Store Y-positions
+        heading_positions = {}
 
         for candidate in sorted_candidates:
             level = hierarchy_map[candidate]
@@ -1239,7 +1472,7 @@ class ScaffoldingService:
             toc_entry = [level, title, page_physical]
             toc.append(toc_entry)
 
-            # P0-2: Store Y-coordinate of heading (y0 from bbox)
+            # Store Y-coordinate of heading (y0 from bbox) for multi-section page handling
             # Key format: "page_title[:30]" for matching in chunking
             key = f"{page_physical}_{title[:30]}"
             y_position = candidate.bbox[1]  # y0 coordinate (top of heading)

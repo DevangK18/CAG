@@ -18,6 +18,8 @@ from pathlib import Path
 import fitz  # PyMuPDF — already a pipeline dependency
 
 from src.core.data_contracts import DocumentTask
+from src.parsing_pipeline.config import get_config, TOCReconciliationConfig
+from src.parsing_pipeline.instrumentation import get_noop_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -36,30 +38,53 @@ class TOCReconciliationService:
 
     def __init__(
         self,
-        similarity_threshold: float = 0.65,
-        min_docling_headers: int = 3,
-        confidence_threshold: float = 0.60,
+        similarity_threshold: Optional[float] = None,
+        min_docling_headers: Optional[int] = None,
+        confidence_threshold: Optional[float] = None,
+        config: Optional[TOCReconciliationConfig] = None,
+        trace_emitter=None,
     ):
         """
         Args:
-            similarity_threshold: Min string similarity for title matching (0-1)
-            min_docling_headers: Min Docling headers to consider usable signal
-            confidence_threshold: Min Docling confidence for a Section-header block
+            similarity_threshold: Min string similarity for title matching (overrides config)
+            min_docling_headers: Min Docling headers to consider usable signal (overrides config)
+            confidence_threshold: Min Docling confidence for Section-header block (overrides config)
+            config: TOCReconciliationConfig instance (default: load from global config)
+            trace_emitter: Optional TraceEmitter for instrumentation
         """
-        self.similarity_threshold = similarity_threshold
-        self.min_docling_headers = min_docling_headers
-        self.confidence_threshold = confidence_threshold
+        # Load from config if not provided
+        if config is None:
+            config = get_config().toc_reconciliation
 
-    def reconcile(self, task: DocumentTask) -> DocumentTask:
+        self.similarity_threshold = (
+            similarity_threshold if similarity_threshold is not None
+            else config.similarity_threshold
+        )
+        self.min_docling_headers = (
+            min_docling_headers if min_docling_headers is not None
+            else config.min_docling_headers
+        )
+        self.confidence_threshold = (
+            confidence_threshold if confidence_threshold is not None
+            else config.section_header_confidence_threshold
+        )
+        self.quality_high_threshold = config.quality_high_threshold
+        self.quality_medium_threshold = config.quality_medium_threshold
+        self._trace_emitter = trace_emitter or get_noop_emitter()
+
+    def reconcile(self, task: DocumentTask, trace_emitter=None) -> DocumentTask:
         """
         Main entry point. Reconcile scaffold TOC with Docling headers.
 
         Args:
             task: DocumentTask with scaffold (Phase 4) and layout (Phase 5)
+            trace_emitter: Optional TraceEmitter for instrumentation
 
         Returns:
             DocumentTask with updated scaffold.toc and scaffold.heading_positions
         """
+        emitter = trace_emitter or self._trace_emitter
+
         if not task.layout:
             logger.debug(f"[{task.report_id}] No layout data — skipping reconciliation")
             return task
@@ -69,6 +94,16 @@ class TOCReconciliationService:
 
         # Step 1: Extract Docling section headers with text
         docling_headers = self._extract_docling_headers(task)
+
+        # Trace: Docling header extraction result
+        emitter.emit_io(
+            "5.5",
+            {"pages_scanned": len(task.layout)},
+            {
+                "docling_headers_total": len(docling_headers),
+                "above_confidence": len([h for h in docling_headers if h.get("confidence", 0) >= self.confidence_threshold]),
+            },
+        )
 
         if len(docling_headers) < self.min_docling_headers:
             logger.info(
@@ -82,17 +117,41 @@ class TOCReconciliationService:
         current_quality = task.scaffold.get("toc_quality", 50)
 
         # Step 3: Reconcile based on quality tier
-        if current_quality >= 70 and current_toc:
-            reconciled_toc, method = self._supplement_high_quality(
-                current_toc, docling_headers, task.report_id
+        if current_quality >= self.quality_high_threshold and current_toc:
+            # Trace: Quality tier decision - high
+            emitter.emit_decision(
+                "5.5",
+                "quality_tier",
+                "high",
+                ["high", "medium", "low"],
+                f"quality_score={current_quality} >= high_threshold={self.quality_high_threshold}",
             )
-        elif current_quality >= 40 and current_toc:
+            reconciled_toc, method = self._supplement_high_quality(
+                current_toc, docling_headers, task.report_id, emitter
+            )
+        elif current_quality >= self.quality_medium_threshold and current_toc:
+            # Trace: Quality tier decision - medium
+            emitter.emit_decision(
+                "5.5",
+                "quality_tier",
+                "medium",
+                ["high", "medium", "low"],
+                f"quality_score={current_quality}, medium_threshold={self.quality_medium_threshold}",
+            )
             reconciled_toc, method = self._merge_medium_quality(
-                current_toc, docling_headers, task.report_id
+                current_toc, docling_headers, task.report_id, emitter
             )
         else:
+            # Trace: Quality tier decision - low
+            emitter.emit_decision(
+                "5.5",
+                "quality_tier",
+                "low",
+                ["high", "medium", "low"],
+                f"quality_score={current_quality} < medium_threshold={self.quality_medium_threshold}",
+            )
             reconciled_toc, method = self._prefer_docling_low_quality(
-                current_toc, docling_headers, task.report_id
+                current_toc, docling_headers, task.report_id, emitter
             )
 
         # Step 4: Update heading_positions with Y-coordinates from Docling
@@ -110,6 +169,18 @@ class TOCReconciliationService:
         # Update quality score
         new_quality = self._assess_reconciled_quality(reconciled_toc, docling_headers)
         task.scaffold["toc_quality"] = max(current_quality, new_quality)
+
+        # Trace: TOC mutation result
+        emitter.emit_io(
+            "5.5",
+            {"entries_before": prev_count, "quality_before": current_quality},
+            {
+                "entries_after": len(reconciled_toc),
+                "quality_after": task.scaffold["toc_quality"],
+                "method": method,
+                "heading_positions_count": len(heading_positions),
+            },
+        )
 
         logger.info(
             f"[{task.report_id}] Reconciliation ({method}): "
@@ -294,33 +365,51 @@ class TOCReconciliationService:
             return 2  # Default to level 2 (safe middle ground)
 
     def _supplement_high_quality(
-        self, current_toc: List[List], docling_headers: List[Dict], report_id: str
+        self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
     ) -> Tuple[List[List], str]:
         """
         High quality Phase 4 TOC (>=70): Keep existing, add missed headers.
 
         Only adds Docling headers that don't match any existing TOC entry.
         """
+        emitter = emitter or self._trace_emitter
         existing_titles = {entry[1].lower().strip() for entry in current_toc}
 
         new_entries = []
+        match_samples = []  # Collect samples for tracing
         for header in docling_headers:
             # Check if already in TOC (fuzzy title match)
             matched = False
             header_title_lower = header["title"].lower().strip()
+            best_match = {"title": None, "similarity": 0}
 
             for existing_title in existing_titles:
                 similarity = SequenceMatcher(
                     None, header_title_lower, existing_title
                 ).ratio()
+                if similarity > best_match["similarity"]:
+                    best_match = {"title": existing_title, "similarity": similarity}
                 if similarity >= self.similarity_threshold:
                     matched = True
                     break
+
+            # Collect sample data for first 5 headers
+            if len(match_samples) < 5:
+                match_samples.append({
+                    "docling_title": header["title"][:50],
+                    "best_match": best_match["title"][:50] if best_match["title"] else None,
+                    "similarity": round(best_match["similarity"], 2),
+                    "matched": matched,
+                })
 
             if not matched:
                 new_entries.append([
                     header["level"], header["title"], header["page"]
                 ])
+
+        # Trace: Similarity match samples
+        if match_samples:
+            emitter.emit_sample("5.5", "similarity_matches", match_samples)
 
         if new_entries:
             merged = current_toc + new_entries
@@ -331,7 +420,7 @@ class TOCReconciliationService:
         return current_toc, "validated"
 
     def _merge_medium_quality(
-        self, current_toc: List[List], docling_headers: List[Dict], report_id: str
+        self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
     ) -> Tuple[List[List], str]:
         """
         Medium quality Phase 4 TOC (40-69): Merge both signals.
@@ -340,6 +429,8 @@ class TOCReconciliationService:
         For entries only in Docling: add them.
         For entries only in Phase 4: keep them (Docling may have missed some).
         """
+        emitter = emitter or self._trace_emitter
+
         # Build Docling lookup
         docling_lookup = {}
         for header in docling_headers:
@@ -374,13 +465,15 @@ class TOCReconciliationService:
         return merged, "merged"
 
     def _prefer_docling_low_quality(
-        self, current_toc: List[List], docling_headers: List[Dict], report_id: str
+        self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
     ) -> Tuple[List[List], str]:
         """
         Low quality Phase 4 TOC (<40): Prefer Docling as primary.
 
         Falls back to current_toc only if Docling produces fewer entries.
         """
+        emitter = emitter or self._trace_emitter
+
         docling_toc = [
             [h["level"], h["title"], h["page"]]
             for h in docling_headers
@@ -398,7 +491,7 @@ class TOCReconciliationService:
                 f"[{report_id}] Low quality but Docling has fewer entries — "
                 f"falling back to merge strategy"
             )
-            return self._merge_medium_quality(current_toc, docling_headers, report_id)
+            return self._merge_medium_quality(current_toc, docling_headers, report_id, emitter)
 
     def _update_heading_positions(
         self, heading_positions: Dict, docling_headers: List[Dict], toc: List[List]

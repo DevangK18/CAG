@@ -63,9 +63,14 @@ class VisualPostProcessor:
         r"^```",  # Still wrapped in code fences
     ]
 
-    def __init__(self):
-        """Initialize post-processor with StructuredTableExtractor."""
+    def __init__(self, trace_emitter=None):
+        """Initialize post-processor with StructuredTableExtractor.
+
+        Args:
+            trace_emitter: Optional TraceEmitter for Phase 10c instrumentation
+        """
         self.structured_extractor = StructuredTableExtractor()
+        self._trace_emitter = trace_emitter
         self.stats = {
             "tables_processed": 0,
             "tables_filtered_toc": 0,
@@ -77,30 +82,84 @@ class VisualPostProcessor:
 
     # ========== MAIN ENTRY POINTS ==========
 
-    def process_all(self, json_files: List[Path]) -> Dict[str, int]:
+    def process_all(
+        self,
+        json_files: List[Path],
+        trace_emitter=None,
+    ) -> Dict[str, int]:
         """
         Process all chunk JSON files.
 
         Args:
             json_files: List of *_chunks.json file paths
+            trace_emitter: Optional TraceEmitter for Phase 10c instrumentation
 
         Returns:
             Aggregate statistics dict
         """
+        emitter = trace_emitter or self._trace_emitter
+        errors = []
+
+        # Emit initial I/O
+        if emitter:
+            emitter.emit_io(
+                "10c",
+                {"json_files": len(json_files)},
+                {"processing_started": True},
+            )
+
         for json_path in json_files:
             try:
-                self.process_file(json_path)
+                self.process_file(json_path, trace_emitter=emitter)
             except Exception as e:
                 logger.error(f"Failed to process {json_path.name}: {e}")
+                errors.append((json_path.name, str(e)))
+
+        # Emit final summary
+        if emitter:
+            emitter.emit_io(
+                "10c",
+                {"files_processed": len(json_files)},
+                {
+                    "tables_processed": self.stats["tables_processed"],
+                    "tables_filtered_toc": self.stats["tables_filtered_toc"],
+                    "tables_hydrated": self.stats["tables_hydrated"],
+                    "charts_processed": self.stats["charts_processed"],
+                    "charts_hydrated": self.stats["charts_hydrated"],
+                    "titles_enriched": self.stats["titles_enriched"],
+                    "errors": len(errors),
+                },
+            )
+
+            # Red flags for filtered TOCs and errors
+            if self.stats["tables_filtered_toc"] > 0:
+                emitter.emit_decision(
+                    "10c",
+                    "toc_filtering",
+                    f"filtered_{self.stats['tables_filtered_toc']}",
+                    [],
+                    f"Filtered {self.stats['tables_filtered_toc']} TOC tables masquerading as data tables",
+                )
+
+            if errors:
+                emitter.emit_red_flag(
+                    "10c",
+                    f"Post-processing errors in {len(errors)} files",
+                    {"files": [e[0] for e in errors[:5]]},  # First 5 errors
+                )
+                emitter.set_phase_status("10c", "partial")
+            else:
+                emitter.set_phase_status("10c", "success")
 
         return self.stats.copy()
 
-    def process_file(self, json_path: Path) -> Dict[str, int]:
+    def process_file(self, json_path: Path, trace_emitter=None) -> Dict[str, int]:
         """
         Process a single chunk JSON file — applies all post-processing steps.
 
         Args:
             json_path: Path to *_chunks.json
+            trace_emitter: Optional TraceEmitter for per-file instrumentation
 
         Returns:
             Per-file statistics

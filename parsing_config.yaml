@@ -1,0 +1,261 @@
+# CAG Parsing Pipeline Configuration
+# ====================================
+#
+# This file centralizes all thresholds and parameters for the 10-phase parsing pipeline.
+# Adjust these values to tune extraction quality, processing speed, and resource usage.
+#
+# Configuration priority:
+#   1. Environment variables (PARSING_{PHASE}_{SETTING})
+#   2. This YAML file
+#   3. Code defaults (in src/parsing_pipeline/config.py)
+#
+# Example environment variable override:
+#   export PARSING_TRIAGE_TEXT_THRESHOLD=200
+
+# ==============================================================================
+# PHASE 2: DOCUMENT TRIAGE
+# ==============================================================================
+triage:
+  # Number of pages to sample for text density calculation
+  # Higher = more accurate, slower
+  sample_pages: 10
+
+  # Minimum avg non-whitespace chars/page to classify as native_text
+  # Raising this: More PDFs classified as scanned (more OCR)
+  # Lowering this: Fewer PDFs classified as scanned (faster)
+  text_threshold: 150
+
+# ==============================================================================
+# PHASE 3: OCR PROCESSING
+# ==============================================================================
+ocr:
+  # OCR language: 'eng' for English, 'eng+hin' for English+Hindi
+  # Note: Hindi requires tesseract-lang-hin package
+  language: "eng"
+
+  # Maximum OCR processing time (seconds)
+  # Large docs (200+ pages) may need higher timeout
+  timeout: 600
+
+  # OCRmyPDF output format: 'pdfa', 'pdf', 'pdfa-1', 'pdfa-2', 'pdfa-3'
+  output_type: "pdfa"
+
+  # Force OCR even if text layer exists
+  force_ocr: true
+
+# ==============================================================================
+# PHASE 4: DOCUMENT SCAFFOLDING (TOC EXTRACTION)
+# ==============================================================================
+scaffolding:
+  # Minimum TOC entries to accept embedded TOC
+  # Raising this: Stricter validation, may reject short TOCs
+  # Lowering this: Accept shorter TOCs, risk of false positives
+  embedded_toc_min_entries: 3
+
+  # Alert if TOC rejection rate exceeds this fraction (0.25 = 25%)
+  toc_rejection_alert_threshold: 0.25
+
+  # Minimum quality score (0-100) to accept a TOC
+  min_toc_quality_score: 20
+
+  # Bookmark quality scoring (catches garbage PDF-merger bookmarks)
+  # Minimum score (0-1 range, multiplied by 100) to accept PDF bookmarks
+  bookmark_quality_threshold: 0.6
+
+  # Patterns that indicate file-assembly/PDF-merger bookmarks (confidence penalty)
+  # These catch garbage bookmarks like "01 Cover", "05 Final_Report", "p001"
+  assembly_bookmark_patterns:
+    - '^\d{2}\s+\w+'      # "01 Cover", "05 Final_Report"
+    - '^Part\s*\d+$'      # Just "Part 1"
+    - '^Section\s*\d+$'   # Just "Section 1"
+    - '^p\d+'             # "p001"
+
+  # Patterns that indicate high-quality CAG-specific bookmarks (confidence bonus)
+  cag_quality_patterns:
+    - '^Chapter\s+[IVX\d]+'
+    - '^Annexure'
+    - '^Executive\s+Summary'
+    - '^Audit\s+(Objective|Finding|Scope)'
+    - '^\d+\.\d+\s+[A-Z]'  # "2.3 Section Title"
+
+# ==============================================================================
+# PHASE 5: LAYOUT ANALYSIS (DOCLING)
+# ==============================================================================
+layout:
+  # Minimum confidence to accept layout blocks
+  # Raising this: Fewer false positives, may miss valid blocks
+  # Lowering this: More blocks detected, increased noise
+  confidence_threshold: 0.65
+
+  # Minimum non-empty cells to accept Docling TableFormer table
+  # Quality gate to reject garbage tables
+  table_min_non_empty_cells: 3
+
+  # Docling accelerator: 'cpu', 'mps' (Apple Silicon), 'cuda' (NVIDIA)
+  # GPU is 5x faster but requires compatible hardware
+  accelerator_device: "cpu"
+
+  # TableFormer mode: 'FAST' or 'ACCURATE'
+  # ACCURATE: Better quality for scanned PDFs, ~2x slower
+  tableformer_mode: "ACCURATE"
+
+# ==============================================================================
+# PHASE 5.5: TOC RECONCILIATION (FUSE HEURISTIC + DOCLING)
+# ==============================================================================
+toc_reconciliation:
+  # Minimum string similarity (0-1) for title matching
+  # Raising this: Stricter matching, fewer false matches
+  # Lowering this: More lenient, risk of incorrect merges
+  similarity_threshold: 0.65
+
+  # Minimum Docling section headers to enable reconciliation
+  min_docling_headers: 3
+
+  # Minimum confidence for Docling Section-header blocks
+  # Lower than general layout confidence (section headers are harder to detect)
+  section_header_confidence_threshold: 0.60
+
+  # Quality tiers for reconciliation strategy
+  # High (>=70): Supplement with Docling
+  # Medium (40-69): Merge equally
+  # Low (<40): Prefer Docling
+  quality_high_threshold: 70
+  quality_medium_threshold: 40
+
+# ==============================================================================
+# PHASE 5.7: LLM TOC VALIDATION (LAST RESORT)
+# ==============================================================================
+llm_validation:
+  # Enable LLM validation for low-quality TOCs
+  # Set to false to skip (saves ~$0.01-0.02 per report)
+  enabled: true
+
+  # Claude model: 'claude-haiku-4-5-20251001' (cost-efficient)
+  model: "claude-haiku-4-5-20251001"
+
+  # Max chars of document text to send to LLM
+  # 8000 chars covers first ~15 pages
+  max_input_chars: 8000
+
+  # Only validate TOCs with quality below this threshold
+  # Higher: More reports validated (higher API costs)
+  # Lower: Only tail cases
+  quality_threshold: 50
+
+  # Max PDF pages to extract text from
+  max_pages_to_extract: 15
+
+# ==============================================================================
+# PHASE 6: CONTENT EXTRACTION (TABLES, TEXT, IMAGES)
+# ==============================================================================
+content_extraction:
+  # pdfplumber table settings (Tier 1 extraction for native PDFs)
+  pdfplumber_snap_tolerance: 5
+  pdfplumber_join_tolerance: 5
+
+  # Table quality thresholds
+  # Minimum confidence to accept pdfplumber extraction
+  table_min_confidence: 0.2
+
+  # Minimum fraction of non-empty cells
+  # Rejects tables with >70% empty cells
+  table_fill_ratio_threshold: 0.3
+
+  # Minimum non-empty cells required
+  table_min_non_empty_cells: 3
+
+  # Confidence scoring factors
+  table_empty_ratio_penalty_threshold: 0.5
+  table_column_consistency_threshold: 0.7
+  table_numeric_ratio_threshold: 0.1
+
+# ==============================================================================
+# PHASE 7: HIERARCHICAL CHUNKING
+# ==============================================================================
+chunking:
+  # Minimum Jaccard similarity for column structure to merge multi-page tables
+  # Raising this: Stricter matching, fewer false merges
+  # Lowering this: More lenient, risk of merging unrelated tables
+  multi_page_table_column_similarity_threshold: 0.8
+
+  # Maximum page range for a single parent chunk
+  # Prevents pathological cases
+  max_parent_chunk_pages: 100
+
+# ==============================================================================
+# PHASE 9: SEMANTIC ENRICHMENT (FINDINGS, RECOMMENDATIONS)
+# ==============================================================================
+semantic_enrichment:
+  # Tier-specific monetary thresholds for finding severity (in crore)
+  # Union reports: Larger amounts
+  # State reports: Medium amounts
+  # Local Body reports: Smaller amounts
+  severity_thresholds:
+    union:
+      critical: 100
+      high: 10
+      medium: 1
+      low: 0
+    state:
+      critical: 50
+      high: 5
+      medium: 0.5
+      low: 0
+    local_body:
+      critical: 10
+      high: 1
+      medium: 0.10
+      low: 0
+
+  # Minimum confidence to classify chunk as audit finding
+  finding_confidence_threshold: 0.4
+
+  # Minimum monetary value for high severity (₹1 lakh in paise)
+  min_monetary_value_for_high_severity: 10000000
+
+# ==============================================================================
+# TRACE INSTRUMENTATION (DEBUGGING & OBSERVABILITY)
+# ==============================================================================
+instrumentation:
+  # Master switch for trace instrumentation
+  # When false, all TraceEmitter methods are no-ops (zero overhead)
+  # Enable via --trace CLI flag or set to true here
+  enabled: false
+
+  # Directory for trace markdown files
+  # Each report generates: {report_id}_trace_{date}.md
+  output_dir: "logs/traces"
+
+  # Maximum samples per category (e.g., accepted/rejected TOC entries)
+  # Keeps trace files manageable while providing representative examples
+  sample_count: 5
+
+  # Flush events after each phase for crash protection
+  # Creates incremental partial file for debugging pipeline crashes
+  incremental_flush: false
+
+# ==============================================================================
+# OPERATIONAL NOTES
+# ==============================================================================
+#
+# Common tuning scenarios:
+#
+# 1. Faster processing (lower quality):
+#    - triage.text_threshold: 100 (fewer OCR operations)
+#    - layout.confidence_threshold: 0.7 (fewer blocks)
+#    - layout.tableformer_mode: "FAST"
+#    - llm_validation.enabled: false (skip API calls)
+#
+# 2. Higher accuracy (slower):
+#    - triage.text_threshold: 200 (more aggressive OCR)
+#    - layout.confidence_threshold: 0.60 (more blocks)
+#    - toc_reconciliation.similarity_threshold: 0.70 (stricter matching)
+#    - llm_validation.quality_threshold: 60 (validate more reports)
+#
+# 3. Cost reduction:
+#    - llm_validation.enabled: false (no API costs)
+#    - llm_validation.quality_threshold: 40 (validate fewer reports)
+#
+# 4. GPU acceleration:
+#    - layout.accelerator_device: "mps" (Apple Silicon)
+#    - layout.accelerator_device: "cuda" (NVIDIA GPU)

@@ -19,9 +19,11 @@ FIXED VERSION 3 (2025-12-26):
 import re
 from typing import List, Dict, Tuple, Optional, Set, Any, Union
 from dataclasses import dataclass, field, is_dataclass, asdict
-from collections import defaultdict
+from collections import defaultdict, Counter
 import logging
 import hashlib
+
+from src.parsing_pipeline.instrumentation import get_noop_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,6 @@ class HierarchyEnricher:
 
     # =========================================================================
     # SECTION PATTERNS - Each pattern returns (section_id, title) groups
-    # FIXED: Added lowercase lettered patterns at Level 2 for Direct Taxes
     # =========================================================================
     SECTION_PATTERNS = {
         # Level 1: Major document sections (standalone names)
@@ -155,7 +156,6 @@ class HierarchyEnricher:
 
     # =========================================================================
     # HEADER INDICATORS - Patterns that suggest a line is a header
-    # FIXED: Added lowercase lettered pattern
     # =========================================================================
     HEADER_INDICATORS = [
         # Chapter patterns
@@ -215,6 +215,7 @@ class HierarchyEnricher:
         min_section_length: int = 5,  # Reduced from 10 for short titles like "Preface"
         max_section_title_length: int = 200,
         detect_in_paragraphs: bool = True,
+        trace_emitter=None,
     ):
         """
         Initialize Hierarchy Enricher.
@@ -223,10 +224,12 @@ class HierarchyEnricher:
             min_section_length: Minimum characters for section title
             max_section_title_length: Maximum characters for section title
             detect_in_paragraphs: Whether to detect sections in paragraph starts
+            trace_emitter: Optional TraceEmitter for instrumentation
         """
         self.min_section_length = min_section_length
         self.max_section_title_length = max_section_title_length
         self.detect_in_paragraphs = detect_in_paragraphs
+        self._trace_emitter = trace_emitter or get_noop_emitter()
 
         # Compile patterns
         self._section_patterns = {}
@@ -254,6 +257,7 @@ class HierarchyEnricher:
         child_chunks: List[Any],
         report_id: str = "unknown",
         aggressive: bool = False,  # NEW PARAMETER
+        trace_emitter=None,
     ) -> Tuple[List[Dict], List[Dict]]:
         """
         Enrich flat hierarchy by detecting sub-sections.
@@ -264,10 +268,13 @@ class HierarchyEnricher:
             report_id: Report identifier for logging
             aggressive: If True, use aggressive detection even with many parents
                        (used for flat hierarchies and high concentration)
+            trace_emitter: Optional TraceEmitter for instrumentation
 
         Returns:
             Tuple of (enriched_parent_chunks, updated_child_chunks) as dicts
         """
+        emitter = trace_emitter or self._trace_emitter
+
         if not parent_chunks or not child_chunks:
             return (
                 [to_dict(p) for p in parent_chunks] if parent_chunks else [],
@@ -282,7 +289,7 @@ class HierarchyEnricher:
         # OR if aggressive mode was explicitly requested
         is_severely_flat = (
             len(parent_dicts) <= 3 or aggressive
-        )  # FIXED: Added aggressive check
+        )
 
         if is_severely_flat:
             reason = (
@@ -292,6 +299,24 @@ class HierarchyEnricher:
 
         # Build parent lookup
         parent_lookup = {p.get("chunk_id"): p for p in parent_dicts}
+
+        # Trace: Parent distribution sample (top 5 by child count)
+        parent_child_counts = Counter()
+        for c in child_dicts:
+            pid = c.get("parent_chunk_id", "")
+            parent_child_counts[pid] += 1
+
+        top_parents = parent_child_counts.most_common(5)
+        if top_parents:
+            parent_distribution = [
+                {
+                    "parent_id": pid[:50] if pid else "none",
+                    "parent_title": parent_lookup.get(pid, {}).get("toc_entry", "")[:50] if pid else "orphan",
+                    "child_count": count,
+                }
+                for pid, count in top_parents
+            ]
+            emitter.emit_sample("7.5", "parent_distribution", parent_distribution)
 
         # Track new parents and updates
         new_parents = []
@@ -320,6 +345,19 @@ class HierarchyEnricher:
             parent_concentration = (
                 parent_child_count / total_children if total_children > 0 else 0
             )
+
+            # Trace: Red flag for high concentration (>50%)
+            if parent_concentration > 0.50:
+                emitter.emit_red_flag(
+                    "7.5",
+                    "hierarchy_concentration",
+                    {
+                        "parent_id": parent_id[:50],
+                        "parent_title": parent.get("toc_entry", "")[:50],
+                        "child_count": parent_child_count,
+                        "percentage": round(parent_concentration * 100, 1),
+                    },
+                )
 
             # Force aggressive mode for parents with >30% of all children
             use_aggressive = is_severely_flat or parent_concentration > 0.30
@@ -359,6 +397,17 @@ class HierarchyEnricher:
 
         # Combine parents
         enriched_parents = parent_dicts + new_parents
+
+        # Trace: Enrichment result
+        emitter.emit_io(
+            "7.5",
+            {"parents_before": len(parent_dicts), "children_before": len(child_dicts)},
+            {
+                "parents_after": len(enriched_parents),
+                "new_parents": len(new_parents),
+                "reassignments": len(child_updates),
+            },
+        )
 
         logger.info(
             f"[{report_id}] Hierarchy Enricher: Added {len(new_parents)} sub-sections, "
@@ -486,7 +535,7 @@ class HierarchyEnricher:
             if len(content) > self.max_section_title_length:
                 if (
                     self.detect_in_paragraphs or aggressive
-                ):  # FIXED: Added aggressive check
+                ):
                     content = content.split("\n")[0][: self.max_section_title_length]
                 else:
                     continue
@@ -621,7 +670,7 @@ class HierarchyEnricher:
         title_safe = re.sub(r"[^a-zA-Z0-9]", "_", section.title)[:20]
         chunk_id = f"{report_id}_parent_L{section.level}_{section_id_safe or title_safe}_{chunk_hash}"
 
-        # FIX BUG 3: Build hierarchy from detected section structure, not mega-parent
+        # Build hierarchy from detected section structure, not from a single mega-parent
         parent_hierarchy = parent.get("hierarchy", {})
         if not isinstance(parent_hierarchy, dict):
             parent_hierarchy = {}
@@ -731,7 +780,7 @@ class HierarchyEnricher:
         if not new_parent:
             return
 
-        # FIX BUG 2: Write to top-level "hierarchy" field (what assembly reads)
+        # Write to top-level "hierarchy" field (read by assembly service)
         new_hierarchy = new_parent.get("hierarchy", {})
         if isinstance(new_hierarchy, dict):
             child["hierarchy"] = new_hierarchy.copy()  # ← CORRECT LOCATION
@@ -747,6 +796,7 @@ def enrich_report_hierarchy(
     child_chunks: List[Any],
     report_id: str = "unknown",
     aggressive: bool = False,
+    trace_emitter=None,
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     Convenience function for pipeline integration.
@@ -756,12 +806,13 @@ def enrich_report_hierarchy(
         child_chunks: Child content chunks (dict or dataclass)
         report_id: Report identifier
         aggressive: If True, use aggressive section detection
+        trace_emitter: Optional TraceEmitter for instrumentation
 
     Returns:
         Tuple of (enriched_parents, updated_children) as dicts
     """
-    enricher = HierarchyEnricher()
-    return enricher.enrich_hierarchy(parent_chunks, child_chunks, report_id, aggressive)
+    enricher = HierarchyEnricher(trace_emitter=trace_emitter)
+    return enricher.enrich_hierarchy(parent_chunks, child_chunks, report_id, aggressive, trace_emitter=trace_emitter)
 
 
 def should_enrich_hierarchy(
@@ -795,8 +846,6 @@ def should_enrich_hierarchy(
             aggressive_mode = enrich_reason in ["flat_hierarchy", "high_concentration"]
             ...
     """
-    from collections import Counter
-
     # Condition 1: Few parents (original logic)
     if len(parent_chunks) < 10:
         return True, "few_parents"

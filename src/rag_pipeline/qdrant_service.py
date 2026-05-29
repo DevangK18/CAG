@@ -33,7 +33,7 @@ try:
         Prefetch,
         FusionQuery,
         PayloadSchemaType,
-        IsNull,
+        IsNullCondition,
     )
 except ImportError:
     raise ImportError("Install qdrant-client: pip install qdrant-client")
@@ -386,7 +386,7 @@ class QdrantService:
                         conditions.append(
                             FieldCondition(
                                 key=key,
-                                is_null=IsNull(is_null=False),
+                                is_null=IsNullCondition(is_null=False),
                             )
                         )
                     else:
@@ -398,7 +398,7 @@ class QdrantService:
                     conditions.append(
                         FieldCondition(
                             key=key,
-                            is_null=IsNull(is_null=is_null),
+                            is_null=IsNullCondition(is_null=is_null),
                         )
                     )
                 else:

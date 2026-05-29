@@ -161,6 +161,27 @@ const ResponseStyleCard: React.FC<{
     </div>
 );
 
+const PathCard: React.FC<{
+    title: string;
+    subtitle: string;
+    latency: string;
+    cost: string;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+    children: React.ReactNode;
+}> = ({ title, subtitle, latency, cost, color, bgColor, borderColor, children }) => (
+    <div style={{ padding: '20px', background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '10px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{subtitle}</div>
+        <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '10px' }}>{title}</div>
+        <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6, marginBottom: '12px' }}>{children}</div>
+        <div style={{ display: 'flex', gap: '16px', fontSize: '13px' }}>
+            <div><span style={{ fontWeight: 700, color }}>Latency:</span> <span style={{ color: '#475569' }}>{latency}</span></div>
+            <div><span style={{ fontWeight: 700, color }}>Cost:</span> <span style={{ color: '#475569' }}>{cost}</span></div>
+        </div>
+    </div>
+);
+
 /* ─── main component ─── */
 
 export const RAGSearch: React.FC = () => {
@@ -180,22 +201,68 @@ graph TB
     end
 
     subgraph "Online: Query Pipeline"
-        E[User Question] --> F[RAGService]
-        F --> G[Query Embedding]
-        G --> H[Hybrid Search<br/>RRF Fusion]
+        E[User Question] --> QE[Query Enhancement<br/>Expansion + Classification]
+        QE --> AF[Auto-filter<br/>Year · State · Tier]
+        AF --> Router{Complexity<br/>Check}
+        Router -->|simple| H
+        Router -->|multi-hop| AG[Agentic Loop]
+        AG --> H[Hybrid Search<br/>RRF Fusion]
         D --> H
         H --> I[Reranking<br/>Cohere / BGE]
         I --> J[O1 Neighbor<br/>Expansion]
-        J --> K[Parent Grouping<br/>+ Context Assembly]
+        J --> SC[Sufficiency Check<br/>+ Passage Reorder]
+        SC --> K[Parent Grouping<br/>+ Context Assembly]
         L[ReportRegistry] --> K
-        K --> M[LLM Generation<br/>Claude / GPT-4]
-        M --> N[RAGResponse<br/>Answer + Citations]
+        K --> TC[Tier Context<br/>Injection]
+        TC --> M[LLM Generation<br/>Claude / GPT-4]
+        M --> GND[Groundedness<br/>Verification]
+        GND --> N[RAGResponse<br/>Answer + Citations]
     end
 
     style D fill:#e1f5ff,stroke:#0ea5e9
     style N fill:#dcfce7,stroke:#22c55e
     style H fill:#fef3c7,stroke:#f59e0b
     style I fill:#fae8ff,stroke:#d946ef
+    style AG fill:#fff7ed,stroke:#ea580c
+    style GND fill:#f0fdf4,stroke:#22c55e
+    style QE fill:#eff6ff,stroke:#3b82f6
+    style AF fill:#fdf4ff,stroke:#a855f7
+`;
+
+    const agenticDiagram = `
+graph TB
+    Q[User Question] --> PL[Planner<br/>gpt-4o-mini]
+    PL -->|simple| SC[Short-Circuit<br/>to Standard Path]
+    PL -->|multi-hop| DQ[Decompose into<br/>2-4 Sub-queries]
+
+    DQ --> SQ1[Sub-query 1]
+    DQ --> SQ2[Sub-query 2]
+    DQ --> SQN[Sub-query N]
+
+    subgraph "Per Sub-query Loop (max 3 iterations)"
+        SQ1 --> AF1[Auto-filter]
+        AF1 --> RET1[Retrieve]
+        RET1 --> SUF1{Sufficient?}
+        SUF1 -->|no| REF1[Reformulate]
+        REF1 --> RET1
+        SUF1 -->|yes| RES1[Results]
+    end
+
+    SQ2 --> RES2[Results]
+    SQN --> RESN[Results]
+
+    RES1 --> MRG[Merge Results<br/>Dedupe · Score]
+    RES2 --> MRG
+    RESN --> MRG
+
+    MRG --> SYN[Synthesize Answer<br/>with Citations]
+    SYN --> GND[Groundedness<br/>Check]
+    GND --> RESP[Final Response]
+
+    style PL fill:#fef3c7,stroke:#f59e0b
+    style SC fill:#dcfce7,stroke:#22c55e
+    style MRG fill:#e0f2fe,stroke:#0ea5e9
+    style GND fill:#f0fdf4,stroke:#22c55e
 `;
 
     const hybridSearchDiagram = `
@@ -220,264 +287,268 @@ graph LR
     style RR fill:#fae8ff,stroke:#d946ef
 `;
 
-    const contextAssemblyDiagram = `
-graph TB
-    Chunks[Retrieved Chunks<br/>with scores] --> Group[Group by<br/>Parent Section]
-    Group --> Fetch[Fetch Parent<br/>Metadata]
-    Fetch --> Hierarchy[Add Hierarchy<br/>Breadcrumbs]
-    Hierarchy --> Semantic[Add Semantic<br/>Tags]
-    Semantic --> Number[Number Chunks<br/>for Citation]
-    Number --> Truncate[Truncate to<br/>15K chars]
-    Truncate --> Context[Final Context<br/>String]
-
-    style Chunks fill:#e0e7ff
-    style Context fill:#dcfce7
-    style Truncate fill:#fef3c7
-`;
-
     return (
         <div className="tab-page">
             <h1 className="page-title">RAG & Search</h1>
             <p className="page-subtitle">
-                A hybrid search pipeline that retrieves relevant audit chunks using dense + sparse vectors,
-                reranks with cross-encoders, and generates cited answers across 6 response styles.
-                Two distinct pipelines — offline indexing at pennies per report, online querying under 3 seconds.
+                A hybrid search pipeline with agentic retrieval for complex queries, groundedness verification for accuracy,
+                and auto-filtering for intelligent query interpretation. Two query paths — standard (2-3s) and agentic (5-12s).
             </p>
 
             {/* ── Hero Stats ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px', margin: '0 0 56px 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', margin: '0 0 56px 0' }}>
                 <Stat value="15,669" label="Chunks Indexed" />
                 <Stat value="2,792" label="Parent Sections" accent="#7c3aed" />
-                <Stat value="~2.5s" label="End-to-End Latency" accent="#059669" />
-                <Stat value="$0.39" label="Total Indexing Cost" accent="#d97706" />
+                <Stat value="2-3s" label="Standard Latency" accent="#059669" />
+                <Stat value="5-12s" label="Agentic Latency" accent="#f59e0b" />
                 <Stat value="6" label="Response Styles" accent="#dc2626" />
+                <Stat value="$0.005" label="Avg Query Cost" accent="#0ea5e9" />
             </div>
 
             {/* ══════════════════════════════════════════════
-                SECTION 1: Two-Pipeline Architecture
+                SECTION 1: Two Query Paths
             ══════════════════════════════════════════════ */}
             <DocSection
-                title="Two-Pipeline Architecture"
-                description="The RAG system splits into two pipelines with fundamentally different runtime profiles. Indexing runs once per report and costs fractions of a cent. Querying runs per user interaction and optimizes for latency."
+                title="Two Query Paths"
+                description="Simple questions take the standard path (~70-80% of queries). Complex multi-hop questions get decomposed and processed through the agentic loop."
             >
-                <DiagramCard title="Offline Indexing + Online Query Flow">
-                    <MermaidDiagram
-                        chart={architectureDiagram}
-                        caption="The offline pipeline generates 4 types of data per chunk (dense vector, sparse vector, table summary, semantic payload). The online pipeline chains 5 retrieval stages before reaching the LLM. Yellow = fusion, purple = reranking."
-                    />
-                </DiagramCard>
-
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr',
                     gap: '16px',
-                    marginTop: '20px',
+                    marginBottom: '20px',
                 }}>
-                    <div style={{ padding: '20px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Offline Pipeline</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Indexing</div>
-                        <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6, marginBottom: '10px' }}>
-                            JSON → embeddings → Qdrant. Runs once per report.
-                            Generates dense embeddings, BM25 sparse vectors, LLM table summaries, and semantic payloads.
-                        </p>
-                        <div style={{ display: 'flex', gap: '16px', fontSize: '13px' }}>
-                            <div><span style={{ fontWeight: 700, color: '#0369a1' }}>Cost:</span> <span style={{ color: '#475569' }}>~$0.02/report</span></div>
-                            <div><span style={{ fontWeight: 700, color: '#0369a1' }}>Speed:</span> <span style={{ color: '#475569' }}>~2 reports/sec</span></div>
-                        </div>
-                    </div>
-                    <div style={{ padding: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Online Pipeline</div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Querying</div>
-                        <p style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6, marginBottom: '10px' }}>
-                            Question → retrieval → generation → cited response. Runs per user query.
-                            Chains hybrid search, reranking, neighbor expansion, and style-adaptive generation.
-                        </p>
-                        <div style={{ display: 'flex', gap: '16px', fontSize: '13px' }}>
-                            <div><span style={{ fontWeight: 700, color: '#15803d' }}>Cost:</span> <span style={{ color: '#475569' }}>~$0.005/query</span></div>
-                            <div><span style={{ fontWeight: 700, color: '#15803d' }}>Latency:</span> <span style={{ color: '#475569' }}>~2.5s e2e</span></div>
-                        </div>
-                    </div>
+                    <PathCard
+                        title="Standard Path"
+                        subtitle="Simple Queries"
+                        latency="~2-3s"
+                        cost="~$0.004-0.009"
+                        color="#15803d"
+                        bgColor="#f0fdf4"
+                        borderColor="#bbf7d0"
+                    >
+                        Query enhancement → hybrid search → reranking → neighbor expansion →
+                        context assembly → LLM generation → groundedness verification.
+                        Handles factual questions, list queries, and single-report analysis.
+                    </PathCard>
+
+                    <PathCard
+                        title="Agentic Path"
+                        subtitle="Multi-hop Queries"
+                        latency="~5-12s"
+                        cost="~$0.01-0.03"
+                        color="#ea580c"
+                        bgColor="#fff7ed"
+                        borderColor="#fed7aa"
+                    >
+                        Planner decomposes query into 2-4 sub-queries. Each sub-query: retrieve →
+                        check sufficiency → reformulate if needed (up to 3x). Merge results →
+                        synthesize unified answer. For cross-report and comparative questions.
+                    </PathCard>
                 </div>
+
+                <DiagramCard title="Full Query Pipeline">
+                    <MermaidDiagram
+                        chart={architectureDiagram}
+                        caption="User questions flow through enhancement and auto-filtering before routing. Simple queries short-circuit to standard retrieval; complex queries enter the agentic loop. All paths end with groundedness verification."
+                    />
+                </DiagramCard>
+
+                <CalloutBox type="info" style={{ marginTop: '16px' }}>
+                    <strong>Composition over extension:</strong> The agentic path doesn't replace the standard path — it
+                    wraps it. Each sub-query uses the same <code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>RetrievalService</code> as
+                    standard queries. Simple queries (70-80% of traffic) see zero regression.
+                </CalloutBox>
             </DocSection>
 
             {/* ══════════════════════════════════════════════
-                SECTION 2: Embedding & Indexing
+                SECTION 2: Query Enhancement & Auto-filter
             ══════════════════════════════════════════════ */}
             <DocSection
-                title="Embedding & Indexing"
-                description="The offline pipeline generates 4 types of data per chunk. Each serves a different retrieval need — semantic similarity, keyword matching, table understanding, and structured filtering."
+                title="Query Enhancement & Auto-filter"
+                description="Before retrieval, the system enhances the query with LLM-powered expansion and extracts implicit filters from the query text."
             >
-                {/* Dense Embeddings */}
+                {/* Query Enhancement */}
                 <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="1" title="Dense Embeddings" color="#1a365d" />
+                    <StageLabel number="1" title="Query Enhancement" color="#3b82f6" />
                     <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Every child chunk is embedded using OpenAI's <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>text-embedding-3-large</code> at <InlineStat value="1536" label="dimensions" />,
-                        batched in groups of 100 to stay within rate limits. Before embedding, each chunk's text is
-                        prefixed with its TOC hierarchy breadcrumb — so a table in "Chapter II {'>'} 2.3 Revenue Collection"
-                        carries that section context directly in the vector. This means queries about "revenue collection"
-                        naturally boost chunks from the correct section.
-                    </p>
-
-                    <DecisionCard
-                        question="Why 1536 dimensions, not the full 3072?"
-                        answer="OpenAI's research shows <1% quality degradation for this reduction on typical retrieval tasks. We validated empirically on CAG queries and found no measurable recall impact."
-                        tradeoff="50% reduction in storage and search costs. The entire corpus (15,669 vectors) fits comfortably in memory."
-                    />
-
-                    <p style={{ lineHeight: 1.7, color: '#475569' }}>
-                        Total dense embedding cost for all 19 reports: <InlineStat value="$0.28" />. That's less than 1.5 cents per report.
-                    </p>
-                </div>
-
-                {/* Custom BM25 */}
-                <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="2" title="Custom BM25 Sparse Vectors" color="#f59e0b" />
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Dense embeddings capture meaning but miss exact patterns. When a user asks about "Section 143(3) violations,"
-                        semantic similarity alone might return chunks about violations in general. BM25 sparse vectors ensure
-                        exact keyword matches rank high. The custom engine is built specifically for CAG documents with
-                        domain-specific pattern boosting:
+                        A single LLM call (gpt-4o-mini) provides query intelligence before retrieval:
                     </p>
 
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
                         gap: '12px',
                         marginBottom: '16px',
                     }}>
                         {[
-                            { pattern: 'Legal References', examples: 'section_143, rule_86b, form_26as', boost: '3.0×', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-                            { pattern: 'Entity Acronyms', examples: 'acronym_NHAI, acronym_PMJAY', boost: '2.5×', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
-                            { pattern: 'Monetary / Temporal', examples: 'money_crore, year_2023-24', boost: '1.5×', color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd' },
-                        ].map((item) => (
-                            <div key={item.pattern} style={{
-                                padding: '14px 16px',
-                                background: item.bg,
-                                border: `1px solid ${item.border}`,
-                                borderRadius: '8px',
+                            { title: 'Question Classification', desc: 'factual, list, aggregation, comparison, explanation', color: '#1a365d' },
+                            { title: 'Query Expansion', desc: 'Original + 2 alternative phrasings for multi-query retrieval', color: '#059669' },
+                            { title: 'Suggested Filters', desc: 'Inferred finding_type, severity, etc. from query intent', color: '#7c3aed' },
+                        ].map(item => (
+                            <div key={item.title} style={{
+                                padding: '14px 16px', background: '#f8fafc',
+                                border: '1px solid #e2e8f0', borderRadius: '8px',
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>{item.pattern}</span>
-                                    <span style={{ fontSize: '13px', fontWeight: 700, color: item.color }}>{item.boost}</span>
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>{item.examples}</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: item.color, marginBottom: '6px' }}>{item.title}</div>
+                                <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>{item.desc}</div>
                             </div>
                         ))}
                     </div>
 
-                    <DecisionCard
-                        question="Why build custom BM25 instead of using fastembed?"
-                        answer="fastembed pulls in huggingface_hub, which creates version conflicts with Docling (our layout analysis engine in the parsing pipeline). Custom BM25 has zero external dependencies and enables the CAG-specific boosts above."
-                        tradeoff="We maintain the BM25 engine ourselves, but the 3× boost on legal references significantly improves retrieval for the most common CAG query patterns."
-                    />
-                </div>
+                    <CodeBlock title="Query Enhancement Example">
+{`Input: "What went wrong with toll collection?"
 
-                {/* Table Summaries */}
-                <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="3" title="LLM Table Summaries" color="#059669" />
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Markdown tables embed poorly — a 15-row revenue table produces a vector that says
-                        "pipes and dashes" more than "state-wise revenue collection." The pipeline generates
-                        a natural language summary for each table using <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>gpt-4o-mini</code> and
-                        prepends it to the table content before embedding. This makes tables findable via semantic queries.
-                    </p>
+Output:
+  question_type: "explanation"
+  expanded_queries: [
+    "What went wrong with toll collection?",
+    "toll revenue loss audit findings NHAI fee collection",
+    "electronic toll collection ETC compliance shortfall"
+  ]
+  suggested_filters: {"finding_type": "loss_of_revenue"}
+  top_k: 12
+  recommended_style: "explanatory"`}
+                    </CodeBlock>
 
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto 1fr',
-                        gap: '0',
-                        alignItems: 'center',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        margin: '0 0 16px 0',
-                    }}>
-                        <div style={{ padding: '14px 18px', background: '#fef2f2' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>Without Summary</div>
-                            <div style={{ fontSize: '13px', color: '#991b1b', fontFamily: 'monospace', lineHeight: 1.5 }}>| State | Revenue | Growth |<br/>| --- | --- | --- |<br/>| Maharashtra | 12,450 | 8.3 |</div>
-                        </div>
-                        <div style={{ padding: '0 16px', fontSize: '20px', color: '#94a3b8' }}>→</div>
-                        <div style={{ padding: '14px 18px', background: '#f0fdf4' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>With Summary</div>
-                            <div style={{ fontSize: '13px', color: '#166534', lineHeight: 1.5 }}>"Table showing state-wise revenue for FY 2022-23, Maharashtra at ₹12,450 crore (highest)."</div>
-                        </div>
-                    </div>
-
-                    <DecisionCard
-                        question="Why gpt-4o-mini instead of Claude for table summaries?"
-                        answer="Table summarization is a simple task — identify headers, describe the data, note extremes. gpt-4o-mini is 5× cheaper than Claude and produces equivalent quality for this narrow task."
-                        tradeoff="At ~$0.0001 per table, the entire corpus costs $0.12 for table summaries. Total table summary cost across 19 reports: $0.12."
-                    />
-                </div>
-
-                {/* Semantic Payloads */}
-                <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="4" title="Semantic Payloads" color="#7c3aed" />
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Every chunk arrives from the parsing pipeline with semantic enrichment — findings, recommendations,
-                        monetary values, entities. The <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>SemanticPayloadExtractor</code> maps
-                        this data into Qdrant payload fields: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>finding_type</code>, <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>severity</code>,
-                        {' '}<code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>total_amount_crore</code>, <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>is_recommendation</code>.
-                        These fields are indexed in Qdrant for fast filtered queries.
-                    </p>
-                    <p style={{ lineHeight: 1.7, color: '#475569' }}>
-                        The result: users can ask "Show me all high-severity findings above ₹100 crore" and the system
-                        applies <strong>both</strong> semantic search (via vectors) and structured filtering (via payload indexes)
-                        in a single query. Without payload indexing, these filters would require scanning all 15,669 vectors — <InlineStat value="<50ms" label="indexed" /> vs <InlineStat value="~5000ms" label="unindexed" />.
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginTop: '14px' }}>
+                        Cost: <InlineStat value="~$0.0002" label="per query" />. Latency: <InlineStat value="~100ms" />.
+                        The expanded queries enable multi-query retrieval with RRF fusion — different phrasings
+                        capture different relevant chunks.
                     </p>
                 </div>
 
-                {/* Qdrant Collections */}
+                {/* Auto-filter */}
                 <div style={{ marginBottom: '8px' }}>
-                    <StageLabel number="5" title="Qdrant Collection Architecture" color="#0891b2" />
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '16px' }}>
-                        The vector database uses two collections — not one — to cleanly separate searchable content
-                        from section metadata.
+                    <StageLabel number="2" title="Auto-filter Extraction" color="#a855f7" />
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
+                        When no explicit filters are set (home page chat, agentic sub-queries), the system extracts
+                        implicit filters from query text using rule-based patterns — no LLM call required.
                     </p>
 
                     <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '14px',
-                        marginBottom: '16px',
+                        border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '16px',
                     }}>
-                        <div style={{ padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                                <span style={{ background: '#dbeafe', color: '#1e40af', fontSize: '12px', fontWeight: 700, padding: '3px 8px', borderRadius: '4px' }}>CHILD</span>
-                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>cag_child_chunks</span>
-                            </div>
-                            <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                                <strong>15,669 points</strong> — paragraphs, tables, charts.
-                                Dense vectors (1536-dim, cosine) + sparse vectors (BM25 with IDF).
-                                Full payload with semantic fields indexed for filtered search.
-                            </div>
+                        <div style={{
+                            display: 'grid', gridTemplateColumns: '120px 1fr 1fr',
+                            borderBottom: '2px solid #cbd5e1', fontSize: '12px', fontWeight: 700,
+                            textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b',
+                        }}>
+                            <div style={{ padding: '10px 14px', background: '#f8fafc' }}>Filter Type</div>
+                            <div style={{ padding: '10px 14px' }}>Detection Pattern</div>
+                            <div style={{ padding: '10px 14px' }}>Example</div>
                         </div>
-                        <div style={{ padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                                <span style={{ background: '#fae8ff', color: '#7c3aed', fontSize: '12px', fontWeight: 700, padding: '3px 8px', borderRadius: '4px' }}>PARENT</span>
-                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>cag_parent_chunks</span>
+                        {[
+                            { type: 'Years', pattern: '\\b(20\\d{2})\\b', example: '"findings from 2023" → audit_year: 2023', color: '#1a365d' },
+                            { type: 'States', pattern: 'Substring match against 28 states + 8 UTs', example: '"Gujarat audit" → state_name: "Gujarat"', color: '#059669' },
+                            { type: 'Tiers', pattern: '"Central", "GoI", "panchayat", "ULB", "ATIR"', example: '"local body issues" → tier: local_body', color: '#7c3aed' },
+                            { type: 'Categories', pattern: 'performance, compliance, financial, revenue', example: '"compliance failures" → audit_category: compliance', color: '#f59e0b' },
+                        ].map(row => (
+                            <div key={row.type} style={{
+                                display: 'grid', gridTemplateColumns: '120px 1fr 1fr',
+                                borderBottom: '1px solid #e2e8f0', fontSize: '14px',
+                            }}>
+                                <div style={{ padding: '10px 14px', fontWeight: 700, color: row.color, background: '#fafafa' }}>{row.type}</div>
+                                <div style={{ padding: '10px 14px', color: '#475569', fontFamily: 'monospace', fontSize: '12px' }}>{row.pattern}</div>
+                                <div style={{ padding: '10px 14px', color: '#475569', fontSize: '13px' }}>{row.example}</div>
                             </div>
-                            <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-                                <strong>2,792 points</strong> — TOC sections, metadata-only.
-                                Dummy 4-dim vector (Qdrant requires it).
-                                Stores: toc_entry, hierarchy, page ranges.
-                            </div>
-                        </div>
+                        ))}
                     </div>
 
-                    <DecisionCard
-                        question="Why two collections instead of one with filtering?"
-                        answer="Parent chunks don't have searchable content — they're section titles and page ranges. Putting them in the same collection would pollute search results with irrelevant section-level entries. The parent collection serves purely as a metadata store for hierarchy and page range lookups during context assembly."
-                    />
+                    <CalloutBox type="warning">
+                        <strong>Short alias guard:</strong> Ambiguous 2-letter state codes (UP, MP, TN, HP, WB, JK) require
+                        ≥2 occurrences OR explicit context cues to avoid false positives. "Audit process <strong>up</strong> to 2023"
+                        won't silently filter to Uttar Pradesh.
+                    </CalloutBox>
                 </div>
             </DocSection>
 
             {/* ══════════════════════════════════════════════
-                SECTION 3: Hybrid Search
+                SECTION 3: Agentic Retrieval (Phase 11)
+            ══════════════════════════════════════════════ */}
+            <DocSection
+                title="Agentic Retrieval"
+                description="Complex multi-hop queries are decomposed, retrieved iteratively, and synthesized into unified answers. Simple queries short-circuit to the standard path."
+            >
+                <DiagramCard title="Agentic Loop Architecture">
+                    <MermaidDiagram
+                        chart={agenticDiagram}
+                        caption="The planner classifies complexity and decomposes multi-hop queries. Each sub-query runs through retrieval with sufficiency checks and optional reformulation. Results are merged and deduplicated before synthesis."
+                    />
+                </DiagramCard>
+
+                <div style={{ marginTop: '24px', marginBottom: '28px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>How It Works</h3>
+
+                    <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
+                        {[
+                            { step: '1', title: 'Complexity Classification', desc: 'Planner LLM call classifies query as simple (factual, single-report) or multi-hop (comparative, cross-report, requires reasoning across sources).', color: '#1a365d' },
+                            { step: '2', title: 'Query Decomposition', desc: 'Multi-hop queries are broken into 2-4 sub-queries. Each targets a specific aspect of the original question.', color: '#059669' },
+                            { step: '3', title: 'Iterative Retrieval', desc: 'Each sub-query: retrieve → check sufficiency → reformulate if insufficient (up to 3 iterations). Auto-filter applies to each sub-query.', color: '#f59e0b' },
+                            { step: '4', title: 'Result Merging', desc: 'All sub-query results are merged and deduplicated by chunk ID. Scores are preserved for ranking.', color: '#7c3aed' },
+                            { step: '5', title: 'Synthesis', desc: 'Single LLM call generates unified answer with citations from all sub-queries. Groundedness verification runs on the final answer.', color: '#0ea5e9' },
+                        ].map(item => (
+                            <div key={item.step} style={{
+                                display: 'grid', gridTemplateColumns: '40px 1fr',
+                                gap: '14px', padding: '14px 18px',
+                                background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                            }}>
+                                <div style={{
+                                    width: '32px', height: '32px', borderRadius: '50%',
+                                    background: item.color, color: '#fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '14px', fontWeight: 700,
+                                }}>{item.step}</div>
+                                <div>
+                                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>{item.title}</div>
+                                    <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>{item.desc}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '28px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Hard Limits</h3>
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px',
+                    }}>
+                        {[
+                            { value: '4', label: 'Max sub-queries', desc: 'From decomposition' },
+                            { value: '3', label: 'Max iterations', desc: 'Per sub-query' },
+                            { value: '30k', label: 'Token budget', desc: 'Total across all' },
+                            { value: '20s', label: 'Wall-clock', desc: 'Hard timeout' },
+                        ].map(item => (
+                            <div key={item.label} style={{
+                                padding: '16px', background: '#fff7ed',
+                                border: '1px solid #fed7aa', borderRadius: '8px', textAlign: 'center',
+                            }}>
+                                <div style={{ fontSize: '24px', fontWeight: 800, color: '#ea580c' }}>{item.value}</div>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginTop: '4px' }}>{item.label}</div>
+                                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{item.desc}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <DecisionCard
+                    question="Why is the planner hard-wired to OpenAI (gpt-4o-mini)?"
+                    answer="The planner requires fast, reliable JSON output for complexity classification. gpt-4o-mini has the best cost/latency ratio for this narrow task. Even if your main LLM is Claude or Gemini, agentic mode requires OPENAI_API_KEY."
+                    tradeoff="Dependency on OpenAI for agentic queries. Simple queries (70-80%) don't use the planner at all."
+                />
+
+                <CalloutBox type="success">
+                    <strong>Endpoint:</strong> <code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>POST /api/chat/agentic/stream</code> —
+                    SSE streaming with agentic-specific events (planning, sub_query, iteration, reformulation, synthesizing).
+                </CalloutBox>
+            </DocSection>
+
+            {/* ══════════════════════════════════════════════
+                SECTION 4: Hybrid Search
             ══════════════════════════════════════════════ */}
             <DocSection
                 title="Hybrid Search & Retrieval"
-                description="The query pipeline chains 5 stages to go from a user question to a ranked, grouped, context-ready set of chunks. Every stage exists because the previous one alone isn't good enough."
+                description="The core retrieval pipeline: dense + sparse vectors, RRF fusion, cross-encoder reranking, neighbor expansion, and passage reordering."
             >
                 <DiagramCard title="Hybrid Search Pipeline">
                     <MermaidDiagram
@@ -499,50 +570,47 @@ graph TB
                     />
                 </div>
 
-                {/* RRF Fusion */}
+                {/* BM25 Boosts */}
                 <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="1" title="RRF Fusion" color="#ef4444" />
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Reciprocal Rank Fusion combines the two result sets using a rank-based formula.
-                        For each document, it sums <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>1 / (k + rank)</code> across
-                        both searches, where <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>k=60</code> is the standard dampening constant.
-                        Both dense and sparse results contribute <InlineStat value="50" label="candidates each" />,
-                        and the fused set is trimmed to the final candidate pool.
-                    </p>
-
-                    <DecisionCard
-                        question="Why RRF over linear combination?"
-                        answer="Dense cosine similarity ranges [0,1] while BM25 scores can be arbitrarily large. Linear combination requires tuning weights per domain. RRF is rank-based — it normalizes score differences automatically. Research shows RRF consistently outperforms tuned linear combinations across domains."
-                    />
+                    <StageLabel number="1" title="CAG-Specific BM25 Boosts" color="#f59e0b" />
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px',
+                    }}>
+                        {[
+                            { pattern: 'Legal References', examples: 'section_143, rule_86b, form_26as', boost: '3.0×', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+                            { pattern: 'Entity Acronyms', examples: 'acronym_NHAI, acronym_PMJAY', boost: '2.5×', color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
+                            { pattern: 'State/Local Terms', examples: 'state_exchequer, gram_panchayat', boost: '2.0×', color: '#059669', bg: '#f0fdf4', border: '#bbf7d0' },
+                            { pattern: 'Monetary / Temporal', examples: 'money_crore, year_2023-24', boost: '1.5×', color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd' },
+                        ].map((item) => (
+                            <div key={item.pattern} style={{
+                                padding: '14px 16px', background: item.bg,
+                                border: `1px solid ${item.border}`, borderRadius: '8px',
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{item.pattern}</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 700, color: item.color }}>{item.boost}</span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>{item.examples}</div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Reranking */}
                 <div style={{ marginBottom: '28px' }}>
                     <StageLabel number="2" title="Cross-Encoder Reranking" color="#d946ef" />
                     <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Initial search (top 50) optimizes for <strong>recall</strong> — casting a wide net.
-                        Reranking (to top 10) optimizes for <strong>precision</strong> — keeping only the most relevant.
-                        Cross-encoders see the full query-document pair jointly (not just embeddings), giving them
-                        much stronger relevance judgment than bi-encoder similarity.
-                    </p>
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Both rerankers prepend hierarchy breadcrumbs to each chunk before scoring:
-                        {' '}<code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>[Chapter II &gt; 2.3 Revenue &gt; 2.3.1 Direct Taxes] {'{'}{'{'}chunk content{'}'}{'}'}</code>.
-                        This gives the reranker section context — a chunk about "revenue" in the Revenue section
-                        scores higher than an identical mention in an unrelated section.
+                        Initial search (top 50) optimizes for <strong>recall</strong>. Reranking (to top 10) optimizes for <strong>precision</strong>.
+                        Cross-encoders see the full query-document pair jointly, giving stronger relevance judgment than bi-encoder similarity.
                     </p>
 
                     <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '14px',
-                        marginBottom: '14px',
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px',
                     }}>
                         <div style={{ padding: '16px 20px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '8px' }}>
                             <div style={{ fontSize: '14px', fontWeight: 700, color: '#6b21a8', marginBottom: '6px' }}>Cohere (Primary)</div>
                             <div style={{ fontSize: '13px', color: '#581c87', lineHeight: 1.6 }}>
                                 Model: <code style={{ fontSize: '12px' }}>rerank-english-v3.0</code><br />
-                                API-based, state-of-art quality.<br />
                                 ~8-12% better precision@10 on CAG benchmarks.
                             </div>
                         </div>
@@ -550,105 +618,151 @@ graph TB
                             <div style={{ fontSize: '14px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>BGE (Fallback)</div>
                             <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.6 }}>
                                 Model: <code style={{ fontSize: '12px' }}>BAAI/bge-reranker-v2-m3</code><br />
-                                Local cross-encoder, zero API cost.<br />
-                                Within ~5% of Cohere quality.
+                                Local, zero API cost. Within ~5% of Cohere.
                             </div>
                         </div>
                     </div>
-
-                    <DecisionCard
-                        question="Why 50 → 10 (5:1 ratio)?"
-                        answer="50 initial candidates captures ~95% recall — enough to include most relevant chunks. More provides diminishing returns at increased reranking cost. Reranking to 10 ensures the final set is highly precise for context assembly."
-                    />
                 </div>
 
-                {/* O(1) Neighbor Expansion */}
+                {/* Neighbor Expansion + Passage Reordering */}
                 <div style={{ marginBottom: '28px' }}>
-                    <StageLabel number="3" title="O(1) Neighbor Expansion" color="#059669" />
+                    <StageLabel number="3" title="Neighbor Expansion + Passage Reordering" color="#059669" />
                     <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        A retrieved chunk about "revenue loss of ₹64.60 crore" often needs the preceding paragraph
-                        (which sets the context) and the following paragraph (which adds detail). Traditional approaches
-                        search for neighbors — 2 additional vector searches per chunk, multiplied by 10 chunks = 20 searches.
+                        <strong>O(1) Neighbor Lookup:</strong> Deterministic chunk ID format enables direct ID prediction for ±1 neighbors.
+                        <InlineStat value="~20ms" label="for 10 chunks" /> vs ~2,000ms with vector search.
                     </p>
                     <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Our approach exploits the deterministic chunk ID format from the parsing pipeline:
-                    </p>
-
-                    <CodeBlock title="O(1) Neighbor Prediction">
-{`Chunk ID format:
-  {report_id}_child_p{page:03d}_{type}_{index:04d}
-
-Example:
-  Current: "2023_07_child_p045_paragraph_0123"
-  Previous: "2023_07_child_p045_paragraph_0122"  ← index - 1
-  Next:     "2023_07_child_p045_paragraph_0124"  ← index + 1
-
-→ Direct Qdrant fetch by ID (no vector search)`}
-                    </CodeBlock>
-
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginTop: '14px' }}>
-                        Result: <InlineStat value="~20ms" label="for 10 chunks" /> vs ~2,000ms with vector search.
-                        The tradeoff is a hard dependency on consistent chunk ID formatting from the parsing pipeline —
-                        if chunk IDs change format, neighbor prediction breaks. We accept this coupling
-                        because both pipelines are maintained together.
+                        <strong>Lost-in-the-Middle Mitigation:</strong> LLMs attend most to content at the beginning and end of context.
+                        Passage reordering interleaves parents by relevance score: best → worst → second-best → second-worst.
+                        This places the most relevant content at attention-optimal positions.
                     </p>
                 </div>
 
-                {/* Context Assembly */}
+                {/* Context Sufficiency */}
                 <div style={{ marginBottom: '8px' }}>
-                    <StageLabel number="4" title="Parent Grouping & Context Assembly" color="#0284c7" />
-
-                    <DiagramCard title="Context Assembly Pipeline">
-                        <MermaidDiagram
-                            chart={contextAssemblyDiagram}
-                            caption="Retrieved chunks are grouped by parent section, enriched with hierarchy and semantic metadata, numbered for citation reference, and truncated to the context limit."
-                        />
-                    </DiagramCard>
-
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginTop: '16px', marginBottom: '12px' }}>
-                        Chunks are grouped by their <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>parent_chunk_id</code>,
-                        and parent metadata (TOC entry, hierarchy, page range) is fetched from the parent collection.
-                        The final context string is formatted as structured markdown:
+                    <StageLabel number="4" title="Context Sufficiency Check" color="#0284c7" />
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
+                        Before generation, the system checks if the top reranker score exceeds <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>min_rerank_score</code> (default: 0.25).
+                        <strong> Tier-adjusted threshold:</strong> State/Local Body reports use a 30% lower threshold (0.175) because the Cohere reranker
+                        was calibrated for Union report vocabulary.
                     </p>
-
-                    <CodeBlock title="Context Output (sent to LLM)">
-{`## Chapter II > 2.3 Revenue Collection (Pages 35-42)
-
-[1] Revenue loss of ₹64.60 crore occurred at 12 toll plazas...
-    Finding: loss_of_revenue | Severity: HIGH | Amount: ₹64.60 crore
-
-[2] Non-functional ETC equipment was the primary cause...
-
-## Chapter III > 3.1 Procurement (Pages 55-63)
-
-[3] Irregular expenditure of ₹847.71 crore in procurement...
-    Finding: irregular_expenditure | Severity: CRITICAL | Amount: ₹847.71 crore`}
-                    </CodeBlock>
-
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginTop: '14px' }}>
-                        Each chunk is numbered for citation reference. Semantic tags (finding type, severity, amount) are
-                        included so the LLM can cite specific monetary values and severity levels. Context is truncated
-                        to <InlineStat value="15,000" label="chars" /> (~3,750 tokens) — our experiments showed answer quality
-                        plateaus past ~4,000 tokens. List and aggregation questions get 1.5× context since they benefit from more sources.
+                    <p style={{ lineHeight: 1.7, color: '#475569' }}>
+                        If context is insufficient, a caveat is prepended to the answer:
+                        <em style={{ color: '#b45309' }}> "The available reports may not contain specific information to fully answer this question."</em>
                     </p>
                 </div>
             </DocSection>
 
             {/* ══════════════════════════════════════════════
-                SECTION 4: Answer Generation
+                SECTION 5: Groundedness Verification (Phase 13)
             ══════════════════════════════════════════════ */}
             <DocSection
-                title="Answer Generation"
-                description="The generation layer adapts to question type and response style. It's built around strict citation rules, anti-hallucination guardrails, and a multi-style prompt architecture."
+                title="Groundedness Verification"
+                description="Post-generation LLM call verifies each factual claim against retrieved context. Catches hallucinations without blocking the response."
             >
+                <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px',
+                }}>
+                    <div style={{ padding: '20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px' }}>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#166534', marginBottom: '12px' }}>How It Works</h3>
+                        <ol style={{ paddingLeft: '20px', margin: 0, lineHeight: 1.8, color: '#15803d', fontSize: '14px' }}>
+                            <li>After LLM generates answer, extract factual claims</li>
+                            <li>For each claim, verify against retrieved context</li>
+                            <li>Return per-claim grounding score + confidence</li>
+                            <li>Calculate overall grounded/ungrounded ratio</li>
+                            <li>Stream as final event before "done"</li>
+                        </ol>
+                    </div>
+                    <div style={{ padding: '20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Key Properties</h3>
+                        <div style={{ display: 'grid', gap: '8px', fontSize: '14px' }}>
+                            {[
+                                ['Model', 'gpt-4o-mini'],
+                                ['Cost', '~$0.0005/query'],
+                                ['Latency', '+200-400ms (thread-pooled)'],
+                                ['Fail mode', 'Fail-open (errors don\'t block)'],
+                            ].map(([key, val]) => (
+                                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                                    <span style={{ color: '#64748b' }}>{key}</span>
+                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{val}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <CodeBlock title="Groundedness Response Schema">
+{`{
+  "verified": true,
+  "overall_score": 0.85,
+  "num_claims": 7,
+  "num_grounded": 6,
+  "num_ungrounded": 1,
+  "claims": [
+    {
+      "claim_text": "₹124.18 crore loss at Nathavalasa toll plaza",
+      "cited_source": "Section 3.2.1, p.36",
+      "grounded": true,
+      "confidence": 0.95,
+      "reason": "Exact figure appears in cited source"
+    },
+    {
+      "claim_text": "ETC equipment was non-functional for 18 months",
+      "cited_source": "Section 3.2.1, p.37",
+      "grounded": false,
+      "confidence": 0.70,
+      "reason": "Context mentions 'extended period' but not specific duration"
+    }
+  ]
+}`}
+                </CodeBlock>
+
+                <CalloutBox type="note" style={{ marginTop: '16px' }}>
+                    <strong>Design decision:</strong> Groundedness runs in a thread pool and doesn't block token streaming.
+                    Users see the answer stream in real-time, and the groundedness report arrives as the final event.
+                    If verification errors, the answer still ships — we log the error for observability but don't degrade UX.
+                </CalloutBox>
+            </DocSection>
+
+            {/* ══════════════════════════════════════════════
+                SECTION 6: Generation & Response Styles
+            ══════════════════════════════════════════════ */}
+            <DocSection
+                title="Generation & Response Styles"
+                description="Style-adaptive generation with tier-aware context injection and strict citation rules."
+            >
+                {/* Tier Context Injection */}
+                <div style={{ marginBottom: '28px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Tier Context Injection</h3>
+                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
+                        State and Local Body reports use different administrative vocabulary than Union reports.
+                        A context header is prepended to help the LLM understand tier-specific terminology:
+                    </p>
+
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px',
+                    }}>
+                        <CodeBlock title="State Report Context">
+{`REPORT CONTEXT: State audit from Odisha.
+Department: Rural Development
+Audit type: Compliance Audit
+
+State terminology: 'State AG', 'State Exchequer',
+'State Consolidated Fund', 'SPSE' (State PSE)`}
+                        </CodeBlock>
+                        <CodeBlock title="Local Body Context">
+{`REPORT CONTEXT: Local Body audit from Maharashtra.
+
+Terminology: 'PRI' (Panchayati Raj),
+'ULB' (Urban Local Body), 'GP' (Gram Panchayat),
+'ZP' (Zila Parishad), 'ATIR', 'PRIASoft'`}
+                        </CodeBlock>
+                    </div>
+                </div>
+
                 {/* Response Styles */}
                 <div style={{ marginBottom: '28px' }}>
                     <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>6 Response Styles</h3>
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Each style has its own system prompt with tailored structure and word count guidance.
-                        The frontend exposes 6 styles; two more (<code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>EXPLANATORY</code>,
-                        {' '}<code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>REPORT</code>) are available programmatically.
-                    </p>
                     <div style={{ display: 'grid', gap: '8px' }}>
                         <ResponseStyleCard name="Concise" audience="Quick answers, mobile" wordRange="50–100 words" color="#1a365d" />
                         <ResponseStyleCard name="Executive" audience="Decision-makers, bottom-line first" wordRange="150–250 words" color="#059669" />
@@ -659,246 +773,155 @@ Example:
                     </div>
                 </div>
 
-                {/* Question Type Detection */}
-                <div style={{ marginBottom: '28px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Question Type Detection</h3>
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Before retrieval, the system classifies the question to adjust both retrieval parameters and
-                        response formatting. This happens in the <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>_detect_question_type()</code> method:
-                    </p>
-
-                    <div style={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        marginBottom: '16px',
-                        background: '#ffffff',
-                    }}>
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: '100px 1fr 1fr',
-                            gap: '0',
-                            borderBottom: '2px solid #cbd5e1',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            color: '#64748b',
-                        }}>
-                            <div style={{ padding: '10px 14px', background: '#f8fafc' }}>Type</div>
-                            <div style={{ padding: '10px 14px' }}>Trigger Patterns</div>
-                            <div style={{ padding: '10px 14px' }}>Adjustments</div>
-                        </div>
-                        {[
-                            { type: 'LIST', patterns: '"what are", "list all", "enumerate"', adjustments: 'top_k → 15, bullet format', color: '#1a365d' },
-                            { type: 'AGGREGATION', patterns: '"total", "sum", "overall"', adjustments: 'Context limit 1.5×, warn against calculation', color: '#059669' },
-                            { type: 'COMPARISON', patterns: '"compare", "trend", "over years"', adjustments: 'Auto-select COMPARATIVE style', color: '#f59e0b' },
-                            { type: 'EXPLANATION', patterns: '"why", "explain", "cause"', adjustments: 'Auto-select EXPLANATORY style', color: '#7c3aed' },
-                            { type: 'FACTUAL', patterns: '(default)', adjustments: 'No adjustment', color: '#64748b' },
-                        ].map((row) => (
-                            <div key={row.type} style={{
-                                display: 'grid',
-                                gridTemplateColumns: '100px 1fr 1fr',
-                                gap: '0',
-                                borderBottom: '1px solid #e2e8f0',
-                                fontSize: '14px',
-                            }}>
-                                <div style={{ padding: '10px 14px', fontWeight: 700, color: row.color, background: '#fafafa' }}>{row.type}</div>
-                                <div style={{ padding: '10px 14px', color: '#475569', fontFamily: 'monospace', fontSize: '13px' }}>{row.patterns}</div>
-                                <div style={{ padding: '10px 14px', color: '#475569' }}>{row.adjustments}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* System Prompt Architecture */}
-                <div style={{ marginBottom: '28px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>System Prompt Architecture</h3>
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        The prompt system is layered — a base expertise layer plus style-specific and question-type overlays:
-                    </p>
-                    <div style={{
-                        display: 'grid',
-                        gap: '10px',
-                        marginBottom: '16px',
-                    }}>
-                        {[
-                            { layer: 'Base Expertise', desc: 'CAG domain knowledge. Critical rules: ONLY state facts found in context, NEVER invent monetary amounts.', bg: '#f8fafc', border: '#e2e8f0', color: '#1e293b' },
-                            { layer: 'Anti-Pattern Rules', desc: 'Forbidden phrases ("The question is asking...", "Based on the context..."). Required: start directly with the answer.', bg: '#fef2f2', border: '#fecaca', color: '#991b1b' },
-                            { layer: 'Citation Rules', desc: 'Format: [Section Name, p.XX]. Placement: END of sentence, never mid-sentence. Every claim must be cited.', bg: '#eff6ff', border: '#bfdbfe', color: '#1e40af' },
-                            { layer: 'Style-Specific', desc: 'Tailored structure and word count per style. E.g., CONCISE: lead finding → amount → 1-2 details → citation.', bg: '#f0fdf4', border: '#bbf7d0', color: '#166534' },
-                            { layer: 'Question-Type Hints', desc: 'Dynamic suffix added per detected type. E.g., LIST → "Enumerate ALL items. Citation at end of each."', bg: '#fefce8', border: '#fde68a', color: '#854d0e' },
-                        ].map((item) => (
-                            <div key={item.layer} style={{
-                                padding: '14px 18px',
-                                background: item.bg,
-                                border: `1px solid ${item.border}`,
-                                borderRadius: '8px',
-                                display: 'grid',
-                                gridTemplateColumns: '160px 1fr',
-                                gap: '14px',
-                                alignItems: 'start',
-                            }}>
-                                <div style={{ fontSize: '13px', fontWeight: 700, color: item.color }}>{item.layer}</div>
-                                <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>{item.desc}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <DecisionCard
-                        question="Why temperature 0.1 instead of 0?"
-                        answer="Temperature 0 in OpenAI's API can produce repetitive outputs for similar queries — the same phrasing for every 'What is the revenue loss' question. Temperature 0.1 is near-deterministic but avoids the repetition trap."
-                        tradeoff="We prioritize consistency over creativity for factual Q&A. Claude's temperature 0.1 produces reliable, non-repetitive answers."
-                    />
-                </div>
-
-                {/* Time Series */}
-                <div style={{ marginBottom: '28px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Time Series / Comparative Analysis</h3>
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        The <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>ask_comparative()</code> method
-                        retrieves from each report separately and constructs context with strong year boundaries.
-                        Reports are grouped into series using regex patterns in the <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>ReportRegistry</code> —
-                        for example, all FRBM compliance reports across years are matched
-                        by <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>/Fiscal.?Responsibility.*Budget.?Management|FRBM/</code>.
-                    </p>
-
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        The time series prompt system enforces three rules to prevent hallucination across years:
-                    </p>
-
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr 1fr',
-                        gap: '12px',
-                        marginBottom: '16px',
-                    }}>
-                        {[
-                            { rule: 'Year in Citations', desc: 'Mandatory: [2022-23 - Section 3.1, p.45]. Without the year prefix, citations are ambiguous across reports.', bg: '#eff6ff', border: '#bfdbfe' },
-                            { rule: 'Missing Data', desc: '"Data not available for 2021-22" — the LLM is explicitly instructed to state gaps rather than infer or hallucinate.', bg: '#fef2f2', border: '#fecaca' },
-                            { rule: 'Theme Organization', desc: 'Group by theme (fiscal deficit, revenue), not chronologically. Trend indicators (↑ ↓ →) show directionality at a glance.', bg: '#f0fdf4', border: '#bbf7d0' },
-                        ].map((item) => (
-                            <div key={item.rule} style={{
-                                padding: '14px 16px',
-                                background: item.bg,
-                                border: `1px solid ${item.border}`,
-                                borderRadius: '8px',
-                            }}>
-                                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>{item.rule}</div>
-                                <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>{item.desc}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Citation Building */}
+                {/* Citation Rules */}
                 <div style={{ marginBottom: '8px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Citation Pipeline</h3>
-                    <p style={{ lineHeight: 1.7, color: '#475569', marginBottom: '14px' }}>
-                        Citations aren't just text — they're structured objects enriched with full report metadata.
-                        The <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>build_citations()</code> method
-                        maps each retrieved chunk to a <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>Citation</code> that
-                        includes the section name, physical page number (converted from 0-indexed to 1-indexed),
-                        relevance score, finding type, severity, monetary amount, report title, filename, and audit year —
-                        all pulled from the <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>ReportRegistry</code>.
-                    </p>
-                    <p style={{ lineHeight: 1.7, color: '#475569' }}>
-                        The frontend parses citation markers from the LLM response and renders them as clickable chips.
-                        Clicking a citation navigates the PDF viewer to the exact page, highlights the source section,
-                        and — for time series queries — auto-switches to the correct report year.
-                    </p>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Citation Rules</h3>
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px',
+                    }}>
+                        <div style={{ padding: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Correct</div>
+                            <div style={{ fontSize: '14px', color: '#15803d', lineHeight: 1.6 }}>
+                                "Revenue loss was ₹64.60 crore. <strong>[Section 3.2.1, p.36]</strong>"
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#059669', marginTop: '8px' }}>Citation at END of sentence.</div>
+                        </div>
+                        <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>Wrong</div>
+                            <div style={{ fontSize: '14px', color: '#991b1b', lineHeight: 1.6 }}>
+                                "Revenue loss was ₹64.60 crore <strong>[Section 3.2.1, p.36]</strong> due to..."
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '8px' }}>Mid-sentence citation breaks parsing.</div>
+                        </div>
+                    </div>
                 </div>
             </DocSection>
 
             {/* ══════════════════════════════════════════════
-                SECTION 5: Engineering Details
+                SECTION 7: Streaming Events
             ══════════════════════════════════════════════ */}
             <DocSection
-                title="Engineering Details"
-                description="Design decisions and edge cases that surface when you build a RAG system for government audit documents with inconsistent formatting, legal references, and cross-year analysis."
+                title="Streaming Events"
+                description="SSE event sequences for standard and agentic paths. The frontend handles each event type differently."
             >
-                <div style={{ display: 'grid', gap: '12px', marginBottom: '24px' }}>
-                    <ProblemSolution
-                        problem="Chunk IDs need to map to Qdrant integer point IDs. Simple sequential IDs don't work because reports are indexed independently and incrementally."
-                        solution="MD5 hash of chunk_id, first 8 bytes as unsigned long. Deterministic, collision-resistant at our corpus size (~15K chunks). CRC32 was considered but has higher collision risk at scale."
-                    />
-                    <ProblemSolution
-                        problem="The LLM sometimes places citations mid-sentence: 'Revenue was ₹64.60 crore [Section 3.2.1, p.36] due to...' This makes citations hard to parse and visually awkward."
-                        solution="Strict citation placement rule in the system prompt: citations go at the END of sentences, never mid-sentence. The TECHNICAL style has the strongest enforcement since it generates the most citations."
-                    />
-                    <ProblemSolution
-                        problem="Monetary values in different units (lakh, crore, INR) across reports make cross-report comparison unreliable."
-                        solution="All monetary amounts are normalized to crore during semantic enrichment in the parsing pipeline. The RAG layer filters on total_amount_crore as a uniform field."
-                    />
-                    <ProblemSolution
-                        problem="For aggregation queries ('total revenue loss'), the LLM might attempt to sum amounts from context — and get it wrong."
-                        solution="AGGREGATION question type detection triggers a prompt warning: 'Do NOT calculate totals. Report individual amounts and let the user aggregate.' The context limit is also increased 1.5× to include more sources."
-                    />
-                    <ProblemSolution
-                        problem="Table summaries generated at indexing time are cached in Qdrant payloads. But if re-indexing is needed, all summaries must be regenerated."
-                        solution="Table summaries are stored in the payload alongside the raw table content. Re-indexing regenerates them, but at $0.0001 per table, re-generating 10,000 summaries costs $1 — negligible vs the alternative of a separate cache layer."
-                    />
-                </div>
+                <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px',
+                }}>
+                    <div>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Standard Path Events</h3>
+                        <div style={{
+                            border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden',
+                        }}>
+                            {[
+                                { event: 'citation_map', when: 'After retrieval', payload: 'Citation metadata for linking' },
+                                { event: 'token', when: 'Each LLM token', payload: 'String token' },
+                                { event: 'groundedness', when: 'After token stream', payload: 'Grounding report' },
+                                { event: 'done', when: 'End of stream', payload: 'null' },
+                            ].map((row, i) => (
+                                <div key={row.event} style={{
+                                    display: 'grid', gridTemplateColumns: '100px 1fr',
+                                    borderBottom: i < 3 ? '1px solid #e2e8f0' : 'none', fontSize: '13px',
+                                }}>
+                                    <div style={{ padding: '10px 12px', background: '#f8fafc', fontWeight: 600, color: '#059669', fontFamily: 'monospace' }}>{row.event}</div>
+                                    <div style={{ padding: '10px 12px', color: '#475569' }}>{row.when} — {row.payload}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
 
-                <CalloutBox type="note">
-                    <strong>Semantic Filter Combinations:</strong> The payload indexing system supports compound filters —
-                    for example, "high-severity findings above ₹100 crore in reports from 2023 onwards" combines
-                    {' '}<code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>severity: "high"</code>,
-                    {' '}<code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>total_amount_crore: {'{'}"gte": 100{'}'}</code>, and
-                    {' '}<code style={{ background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>report_year: {'{'}"gte": 2023{'}'}</code>.
-                    All filter fields are indexed in Qdrant, keeping filtered search under 50ms regardless of combination complexity.
-                </CalloutBox>
+                    <div>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Agentic Path Events</h3>
+                        <div style={{
+                            border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden',
+                        }}>
+                            {[
+                                { event: 'planning', when: 'After decomposition', payload: 'complexity, sub_queries' },
+                                { event: 'sub_query', when: 'Before each sub-query', payload: 'index, query, total' },
+                                { event: 'iteration', when: 'After each loop', payload: 'sufficient, num_chunks' },
+                                { event: 'reformulation', when: 'When query rewritten', payload: 'new_query' },
+                                { event: 'synthesizing', when: 'Before generation', payload: 'null' },
+                                { event: 'token', when: 'Each LLM token', payload: 'String token' },
+                                { event: 'groundedness', when: 'After token stream', payload: 'Grounding report' },
+                                { event: 'agentic_trace', when: 'Before done', payload: 'Full execution trace' },
+                                { event: 'done', when: 'End of stream', payload: 'null' },
+                            ].map((row, i) => (
+                                <div key={row.event} style={{
+                                    display: 'grid', gridTemplateColumns: '100px 1fr',
+                                    borderBottom: i < 8 ? '1px solid #e2e8f0' : 'none', fontSize: '12px',
+                                }}>
+                                    <div style={{ padding: '8px 10px', background: '#fff7ed', fontWeight: 600, color: '#ea580c', fontFamily: 'monospace' }}>{row.event}</div>
+                                    <div style={{ padding: '8px 10px', color: '#475569' }}>{row.payload}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </DocSection>
 
             {/* ══════════════════════════════════════════════
-                SECTION 6: Performance & Cost
+                SECTION 8: Performance & Cost
             ══════════════════════════════════════════════ */}
             <DocSection
                 title="Performance & Cost"
-                description="Where the time goes, where the money goes, and why the numbers are what they are."
+                description="Latency breakdowns for both paths and per-query cost analysis."
             >
                 {/* Latency Breakdown */}
                 <div style={{ marginBottom: '28px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '16px' }}>Query Latency Breakdown</h3>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '16px' }}>Standard Path Latency</h3>
                     <div style={{
-                        padding: '20px 24px',
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '12px',
+                        padding: '20px 24px', background: '#ffffff',
+                        border: '1px solid #e2e8f0', borderRadius: '12px',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                     }}>
+                        <LatencyBar label="Query enhancement" time="~100ms" widthPercent={5} color="#3b82f6" />
                         <LatencyBar label="Query embedding" time="~100ms" widthPercent={5} color="#1a365d" />
                         <LatencyBar label="Hybrid search + RRF" time="~50ms" widthPercent={2.5} color="#f59e0b" />
                         <LatencyBar label="Cohere reranking" time="~200ms" widthPercent={10} color="#d946ef" />
                         <LatencyBar label="Neighbor expansion" time="~20ms" widthPercent={1} color="#059669" />
-                        <LatencyBar label="Context assembly" time="~10ms" widthPercent={0.5} color="#64748b" />
-                        <LatencyBar label="LLM generation" time="~1.5–2s" widthPercent={80} color="#ef4444" />
+                        <LatencyBar label="Context assembly" time="~15ms" widthPercent={0.75} color="#64748b" />
+                        <LatencyBar label="LLM generation" time="~1.5-2s" widthPercent={75} color="#ef4444" />
+                        <LatencyBar label="Groundedness" time="~300ms" widthPercent={15} color="#22c55e" />
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '2px solid #e2e8f0' }}>
                             <div style={{ width: '200px', fontSize: '14px', fontWeight: 700, color: '#1e293b', textAlign: 'right' }}>Total end-to-end</div>
-                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1a365d' }}>~2–3 seconds</div>
+                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1a365d' }}>~2-3 seconds</div>
                         </div>
                     </div>
-                    <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '10px', lineHeight: 1.5 }}>
-                        LLM generation dominates at 80% of total latency. The retrieval stack (embedding → search → reranking → expansion)
-                        completes in ~380ms. SSE streaming masks generation latency — users see tokens appearing within 500ms.
-                    </p>
+                </div>
+
+                {/* Agentic Latency */}
+                <div style={{ marginBottom: '28px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '12px' }}>Agentic Path Latency</h3>
+                    <div style={{
+                        padding: '16px 20px', background: '#fff7ed',
+                        border: '1px solid #fed7aa', borderRadius: '10px',
+                    }}>
+                        <div style={{ display: 'grid', gap: '6px', fontSize: '14px', color: '#78350f' }}>
+                            <div>Planning / decomposition: <strong>~100ms</strong></div>
+                            <div>Per sub-query (2-4x): retrieval + sufficiency: <strong>~500-1500ms each</strong></div>
+                            <div>Reformulation retries (if needed): <strong>+500ms each</strong></div>
+                            <div>Result merging: <strong>~10ms</strong></div>
+                            <div>Synthesis LLM generation: <strong>~2000-3000ms</strong></div>
+                            <div>Groundedness verification: <strong>+200-400ms</strong></div>
+                            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #fed7aa', fontWeight: 700, color: '#ea580c' }}>
+                                Total end-to-end: ~5-12 seconds
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Cost Breakdown */}
                 <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '20px',
-                    marginBottom: '20px',
+                    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px',
                 }}>
-                    {/* Per-Query Cost */}
                     <div style={{ padding: '20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '14px' }}>Per-Query Cost</h3>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '14px' }}>Standard Query Cost</h3>
                         <div style={{ display: 'grid', gap: '8px', fontSize: '14px' }}>
                             {[
+                                ['Query enhancement (gpt-4o-mini)', '~$0.0002'],
                                 ['Query embedding', '~$0.0001'],
                                 ['Cohere reranking', '~$0.001'],
-                                ['LLM generation (gpt-4o-mini)', '~$0.002–0.005'],
+                                ['LLM generation (gpt-4o-mini)', '~$0.002-0.005'],
+                                ['Groundedness verification', '~$0.0005'],
                             ].map(([item, cost]) => (
                                 <div key={item} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                                     <span style={{ color: '#475569' }}>{item}</span>
@@ -907,43 +930,36 @@ Example:
                             ))}
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #e2e8f0', marginTop: '4px' }}>
                                 <span style={{ fontWeight: 700, color: '#1e293b' }}>Total per query</span>
-                                <span style={{ fontWeight: 700, color: '#1a365d' }}>~$0.003–0.007</span>
+                                <span style={{ fontWeight: 700, color: '#059669' }}>~$0.004-0.009</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Indexing Cost */}
-                    <div style={{ padding: '20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '14px' }}>Indexing Cost (19 reports)</h3>
+                    <div style={{ padding: '20px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#92400e', marginBottom: '14px' }}>Agentic Query Cost</h3>
                         <div style={{ display: 'grid', gap: '8px', fontSize: '14px' }}>
                             {[
-                                ['Dense embeddings (15,669 chunks)', '$0.2754'],
-                                ['Table summaries (gpt-4o-mini)', '$0.1168'],
-                                ['Sparse vectors (built-in BM25)', '$0.00'],
-                                ['Semantic payload extraction', '$0.00'],
+                                ['Planner LLM call', '~$0.0002'],
+                                ['Per sub-query (2-4x): embed + retrieve + rerank', '~$0.002-0.004 each'],
+                                ['Synthesis LLM call', '~$0.005-0.01'],
+                                ['Groundedness verification', '~$0.0005'],
                             ].map(([item, cost]) => (
-                                <div key={item} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
-                                    <span style={{ color: '#475569' }}>{item}</span>
-                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{cost}</span>
+                                <div key={item} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #fde68a' }}>
+                                    <span style={{ color: '#78350f' }}>{item}</span>
+                                    <span style={{ fontWeight: 600, color: '#92400e' }}>{cost}</span>
                                 </div>
                             ))}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #e2e8f0', marginTop: '4px' }}>
-                                <span style={{ fontWeight: 700, color: '#1e293b' }}>Total indexing</span>
-                                <span style={{ fontWeight: 700, color: '#1a365d' }}>$0.3922</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #f59e0b', marginTop: '4px' }}>
+                                <span style={{ fontWeight: 700, color: '#92400e' }}>Total per query</span>
+                                <span style={{ fontWeight: 700, color: '#ea580c' }}>~$0.01-0.03</span>
                             </div>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>
-                            ~$0.02 per report. BM25 and payload extraction are free (algorithmic).
                         </div>
                     </div>
                 </div>
 
-                <CalloutBox type="success">
-                    <strong>Key cost insight:</strong> The retrieval stack is essentially free — hybrid search, neighbor expansion,
-                    and context assembly have zero API cost. The only per-query costs are embedding the query (~$0.0001),
-                    reranking (~$0.001), and LLM generation (~$0.003). Switching from Cohere to BGE eliminates the reranking
-                    cost entirely, dropping per-query cost to ~$0.002–0.005. Indexing the entire 19-report corpus costs less
-                    than a cup of coffee.
+                <CalloutBox type="success" style={{ marginTop: '20px' }}>
+                    <strong>Entity Graph cost:</strong> $0 per query (DB lookup only). Canonicalization is a one-time cost:
+                    ~$0.50-1.00 for 37 reports, ~$10-15 for 700+ reports.
                 </CalloutBox>
             </DocSection>
         </div>

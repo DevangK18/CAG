@@ -26,6 +26,15 @@ export function EntityPage({ onNavigateToReport }: EntityPageProps) {
   const { entity, isLoading, error } = useEntity(currentEntityId);
   const [activeTab, setActiveTab] = useState<EntityTab>('findings');
 
+  // Smart tab default: if no findings, show reports; otherwise show findings
+  React.useEffect(() => {
+    if (entity && entity.finding_count === 0) {
+      setActiveTab('reports');
+    } else if (entity && entity.finding_count > 0) {
+      setActiveTab('findings');
+    }
+  }, [entity?.id]);
+
   // Guard: no entity ID set
   if (!currentEntityId) {
     console.warn('EntityPage: setView("entity") called without setCurrentEntityId');
@@ -55,7 +64,7 @@ export function EntityPage({ onNavigateToReport }: EntityPageProps) {
           {error}
         </div>
         <button
-          onClick={() => goBack()}
+          onClick={() => { console.log('Back clicked'); goBack(); }}
           style={{
             marginTop: '1rem',
             padding: '0.5rem 1rem',
@@ -79,7 +88,7 @@ export function EntityPage({ onNavigateToReport }: EntityPageProps) {
           Entity not found
         </div>
         <button
-          onClick={() => goBack()}
+          onClick={() => { console.log('Back clicked'); goBack(); }}
           style={{
             marginTop: '1rem',
             padding: '0.5rem 1rem',
@@ -98,7 +107,7 @@ export function EntityPage({ onNavigateToReport }: EntityPageProps) {
   return (
     <div className="entity-page" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Entity Header */}
-      <EntityHeader entity={entity} onBack={() => goBack()} />
+      <EntityHeader entity={entity} onBack={() => { console.log('Back clicked'); goBack(); }} />
 
       {/* Tab Navigation */}
       <div

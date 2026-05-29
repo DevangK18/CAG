@@ -10,6 +10,8 @@ PHASE 1 FIXES IMPLEMENTED:
 - P0-3: Multi-page table stitching before chunking
 """
 
+import logging
+
 from typing import List, Tuple, Optional, Dict
 from pathlib import Path
 import hashlib
@@ -20,6 +22,8 @@ from src.core.data_contracts import (
     ParentChunk,
     ChildChunk,
 )
+
+logger = logging.getLogger(__name__)
 from src.core.table_contracts import StructuredTable
 from src.parsing_pipeline.modules.multi_page_table_handler import MultiPageTableHandler
 
@@ -39,38 +43,70 @@ class ChunkingService:
     - Page ranges are calculated forward-looking with guaranteed end >= start
     """
 
-    def __init__(self):
-        """Initialize the chunking service."""
+    def __init__(self, trace_emitter=None):
+        """Initialize the chunking service.
+
+        Args:
+            trace_emitter: Optional TraceEmitter for Phase 7 instrumentation
+        """
         self.multi_page_handler = MultiPageTableHandler()
-        print(
+        self._trace_emitter = trace_emitter
+        logger.info(
             "ChunkingService initialized for hierarchical chunk creation (Phase 1 + P0-3 applied)."
         )
 
     def chunk_document(
-        self, task: DocumentTask
+        self, task: DocumentTask, trace_emitter=None
     ) -> Tuple[List[ParentChunk], List[ChildChunk]]:
         """
         Main entry point: create hierarchical parent and child chunks.
 
         Args:
             task: DocumentTask with scaffold and extracted_content populated
+            trace_emitter: Optional TraceEmitter for Phase 7 instrumentation
 
         Returns:
             Tuple of (parent_chunks, child_chunks)
         """
+        emitter = trace_emitter or self._trace_emitter
+
         # Validate inputs
         if not task.extracted_content:
-            print(f"Warning: No extracted content for {task.report_id}")
+            logger.warning(f"Warning: No extracted content for {task.report_id}")
+            if emitter:
+                emitter.emit_decision(
+                    "7",
+                    "chunking_input",
+                    "no_content",
+                    ["has_content", "no_content"],
+                    "No extracted content available for chunking",
+                )
             return ([], [])
 
-        # P0-3: Merge multi-page tables before chunking
-        self._merge_multi_page_tables(task)
+        # Merge multi-page tables before chunking
+        merged_count = self._merge_multi_page_tables(task)
+        if emitter and merged_count > 0:
+            emitter.emit_decision(
+                "7",
+                "multi_page_table_merge",
+                f"merged_{merged_count}",
+                [],
+                f"Merged {merged_count} multi-page table groups",
+            )
 
         # Create parent chunks from ToC
         parent_chunks = self._create_parent_chunks(task)
 
         if not parent_chunks:
-            print(f"Warning: No parent chunks created for {task.report_id}")
+            logger.warning(f"Warning: No parent chunks created for {task.report_id}")
+            if emitter:
+                emitter.emit_decision(
+                    "7",
+                    "parent_creation",
+                    "no_parents",
+                    ["has_parents", "no_parents"],
+                    "No TOC entries to create parent chunks from",
+                )
             return ([], [])
 
         # Create child chunks from extracted content
@@ -79,14 +115,31 @@ class ChunkingService:
         # Log distribution statistics
         self._log_distribution_stats(parent_chunks, child_chunks)
 
-        print(
+        # Emit instrumentation for parent assignment distribution
+        if emitter and child_chunks:
+            unassigned = sum(1 for c in child_chunks if not c.parent_chunk_id)
+            if unassigned > 0:
+                unassigned_pct = unassigned / len(child_chunks) * 100
+                emitter.emit_sample(
+                    "7",
+                    "parent_assignment",
+                    [{"unassigned_count": unassigned, "total_children": len(child_chunks), "pct": round(unassigned_pct, 1)}],
+                )
+                if unassigned_pct > 20:
+                    emitter.emit_red_flag(
+                        "7",
+                        f"High unassigned child rate: {unassigned_pct:.1f}%",
+                        {"unassigned": unassigned, "total": len(child_chunks)},
+                    )
+
+        logger.info(
             f"Chunking complete for {task.report_id}: "
             f"{len(parent_chunks)} parents, {len(child_chunks)} children"
         )
 
         return (parent_chunks, child_chunks)
 
-    def _merge_multi_page_tables(self, task: DocumentTask) -> None:
+    def _merge_multi_page_tables(self, task: DocumentTask) -> int:
         """
         Merge multi-page tables in extracted content (P0-3).
 
@@ -96,9 +149,12 @@ class ChunkingService:
 
         Args:
             task: DocumentTask with extracted_content
+
+        Returns:
+            Number of multi-page tables merged
         """
         if not task.extracted_content:
-            return
+            return 0
 
         # Extract tables with structured data
         table_items = []
@@ -114,14 +170,14 @@ class ChunkingService:
                     structured_table = StructuredTable(**item.structured_data)
                     table_items.append((item, structured_table))
                 except Exception as e:
-                    print(f"Warning: Failed to parse structured table: {e}")
+                    logger.error(f"Warning: Failed to parse structured table: {e}")
                     non_table_items.append(item)
             else:
                 non_table_items.append(item)
 
         if len(table_items) < 2:
             # No multi-page tables possible
-            return
+            return 0
 
         # Extract just the StructuredTable objects for merging
         structured_tables = [st for _, st in table_items]
@@ -132,7 +188,7 @@ class ChunkingService:
         # Get statistics
         stats = self.multi_page_handler.get_statistics()
         if stats["tables_merged"] > 0:
-            print(
+            logger.info(
                 f"  P0-3: Merged {stats['tables_merged']} multi-page tables "
                 f"({stats['total_fragments_merged']} fragments)"
             )
@@ -211,6 +267,8 @@ class ChunkingService:
         # Update task
         task.extracted_content = new_extracted_content
 
+        return stats["tables_merged"]
+
     def _log_distribution_stats(
         self, parent_chunks: List[ParentChunk], child_chunks: List[ChildChunk]
     ) -> None:
@@ -233,11 +291,11 @@ class ChunkingService:
         deep_children = sum(1 for c in child_chunks if len(c.hierarchy) > 1)
         deep_rate = (deep_children / len(child_chunks)) * 100 if child_chunks else 0
 
-        print(
+        logger.info(
             f"  Distribution: {parents_with_children}/{total_parents} parents have children"
         )
-        print(f"  Concentration: {concentration:.1f}% to top parent")
-        print(f"  Deep hierarchy: {deep_rate:.1f}% of children have level_2+")
+        logger.info(f"  Concentration: {concentration:.1f}% to top parent")
+        logger.info(f"  Deep hierarchy: {deep_rate:.1f}% of children have level_2+")
 
     def _create_parent_chunks(self, task: DocumentTask) -> List[ParentChunk]:
         """
@@ -281,7 +339,7 @@ class ChunkingService:
         """
         parent_chunks = []
 
-        # P0-2: Get heading positions from scaffold
+        # Get heading positions from scaffold for Y-coordinate aware chunking
         scaffold = task.scaffold or {}
         heading_positions = scaffold.get("heading_positions", {})
 
@@ -297,17 +355,17 @@ class ChunkingService:
             level, title, page_physical = toc_entry[:3]
             start_page = page_physical
 
-            # P0-2: Get position key for this section
+            # Generate position key for this section
             position_key = f"{start_page}_{title[:30]}"
 
-            # PHASE 1 FIX + P0-2: Look FORWARD for next entry at same or higher level
+            # Look FORWARD for next entry at same or higher level (with Y-position awareness)
             # to determine end page
             end_page = max_page  # Default: section goes to end of document
 
             for j in range(i + 1, len(toc)):
                 next_level, next_title, next_page = toc[j][:3]
                 if next_level <= level:  # Same or higher level = end of this section
-                    # P0-2: Check if next section has Y-position on the same page
+                    # Check if next section has Y-position on the same page
                     next_position_key = f"{next_page}_{next_title[:30]}"
                     next_has_y_position = next_position_key in heading_positions
 
@@ -324,8 +382,7 @@ class ChunkingService:
                         end_page = max(start_page, next_page - 1)
                     break
 
-            # PHASE 1 FIX: CRITICAL - Ensure end_page >= start_page
-            # This fixes the inversion bug
+            # CRITICAL: Ensure end_page >= start_page to avoid invalid page ranges
             if end_page < start_page:
                 end_page = start_page
 
@@ -339,7 +396,7 @@ class ChunkingService:
             start_logical = page_map.get(start_page, str(start_page + 1))
             end_logical = page_map.get(end_page, str(end_page + 1))
 
-            # P0-2: Get Y-position from heading_positions dict (position_key already defined above)
+            # Get Y-position from heading_positions dict (position_key already defined above)
             start_y_position = heading_positions.get(position_key, None)
 
             parent_chunk = ParentChunk(
@@ -351,7 +408,7 @@ class ChunkingService:
                 toc_entry=title,
                 toc_level=level,
                 content_summary=None,
-                start_y_position=start_y_position,  # P0-2: Add Y-position
+                start_y_position=start_y_position,
                 # Multi-tier metadata (Phase A expansion)
                 government_body_type=task.initial_metadata.get("government_body_type", "union"),
                 state_name=task.initial_metadata.get("state_name"),
@@ -431,7 +488,7 @@ class ChunkingService:
         )
         page_map = task.scaffold.get("page_map", {}) if task.scaffold else {}
 
-        # PHASE 1 FIX: Pre-build page-to-parents index for efficient lookup
+        # Pre-build page-to-parents index for efficient lookup
         page_parent_index = self._build_page_parent_index(parent_chunks)
 
         # Track fallback assignments for diagnostics
@@ -443,18 +500,18 @@ class ChunkingService:
                 task.report_id, extracted_content, i
             )
 
-            # PHASE 1 FIX + P0-2: Find the MOST SPECIFIC parent for this page
-            # P0-2: Pass content bbox for Y-aware assignment
+            # Find the MOST SPECIFIC parent for this page (deepest level match with Y-awareness)
+            # Pass content bbox for Y-aware assignment
             parent_chunk = self._find_best_parent_for_page(
                 extracted_content.source_page_physical,
                 parent_chunks,
                 page_parent_index,
-                extracted_content.source_bbox,  # P0-2: Pass bbox for Y-position filtering
+                extracted_content.source_bbox,  # Pass bbox for Y-position filtering
             )
 
             if parent_chunk:
                 parent_chunk_id = parent_chunk.chunk_id
-                # PHASE 1 FIX: Inherit the FULL hierarchy from parent
+                # Inherit the FULL hierarchy from parent (not just immediate parent level)
                 hierarchy = parent_chunk.hierarchy.copy()
             else:
                 # Fallback: assign to first parent
@@ -467,7 +524,7 @@ class ChunkingService:
                     else {"level_1": "Document"}
                 )
                 fallback_count += 1
-                print(
+                logger.info(
                     f"  ⚠️  Fallback assignment: page {extracted_content.source_page_physical}, "
                     f"type={extracted_content.content_type} → {parent_chunks[0].toc_entry if parent_chunks else 'unknown'}"
                 )
@@ -494,7 +551,7 @@ class ChunkingService:
                 report_no=report_no,
                 source_filename=source_filename,
                 hierarchy=hierarchy,
-                structured_data=extracted_content.structured_data,  # P0-1: Propagate structured data
+                structured_data=extracted_content.structured_data,
                 # Multi-tier metadata (Phase A expansion) - propagates to Qdrant payloads
                 government_body_type=task.initial_metadata.get("government_body_type", "union"),
                 state_name=task.initial_metadata.get("state_name"),
@@ -504,7 +561,7 @@ class ChunkingService:
             child_chunks.append(child_chunk)
 
         if fallback_count > 0:
-            print(
+            logger.info(
                 f"  ⚠️  {fallback_count}/{len(task.extracted_content)} children "
                 f"({fallback_count/len(task.extracted_content)*100:.1f}%) assigned via fallback"
             )
@@ -577,7 +634,7 @@ class ChunkingService:
         if len(candidates) == 1:
             return candidates[0]
 
-        # P0-2: Y-coordinate aware filtering for multi-section pages
+        # Y-coordinate aware filtering for multi-section pages
         # Algorithm: Find the LAST section that starts AT OR BEFORE the content's Y-position
         if content_bbox and len(candidates) > 1:
             content_y = content_bbox[1]  # y0 coordinate (top of content)
@@ -626,7 +683,7 @@ class ChunkingService:
                 if best_parent:
                     candidates = [best_parent]
 
-        # PHASE 1 FIX + P0-2: Sort candidates to find the MOST SPECIFIC parent
+        # Sort candidates to find the MOST SPECIFIC parent (deepest level, then Y-position)
         # Priority: highest toc_level > smallest page range > closest start page
         def sort_key(parent: ParentChunk) -> Tuple[int, int, int]:
             start, end = parent.page_range_physical

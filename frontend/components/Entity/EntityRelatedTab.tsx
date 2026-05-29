@@ -83,8 +83,8 @@ export function EntityRelatedTab({ entityId }: EntityRelatedTabProps) {
       >
         {relatedEntities.map((entity, idx) => (
           <div
-            key={idx}
-            onClick={() => handleEntityClick(entity.entity_id)}
+            key={entity.id || idx}
+            onClick={() => handleEntityClick(entity.id)}
             style={{
               padding: '1rem',
               border: '1px solid #e5e7eb',
@@ -141,8 +141,8 @@ export function EntityRelatedTab({ entityId }: EntityRelatedTabProps) {
                 gap: '0.75rem',
               }}
             >
-              {entity.co_mention_count !== undefined && (
-                <span>{entity.co_mention_count} co-mentions</span>
+              {entity.co_occurrence_count !== undefined && (
+                <span>{entity.co_occurrence_count} co-mentions</span>
               )}
               {entity.mention_count !== undefined && (
                 <span>{entity.mention_count} mentions</span>

@@ -25,6 +25,8 @@ from src.parsing_pipeline.extractors.pdfplumber_table_extractor import Pdfplumbe
 from src.parsing_pipeline.extractors.text_extractor import TextExtractor
 from src.parsing_pipeline.modules.chunk_filter_service import ChunkFilterService
 
+logger = logging.getLogger(__name__)
+
 
 class ContentExtractionService:
     """
@@ -61,9 +63,17 @@ class ContentExtractionService:
         r"\b(the|a|an|and|or|of|in|to|for|with|by|as|at|from)$",  # Ends with preposition/article
     ]
 
-    def __init__(self):
-        """Initialize extractor instances and build routing map."""
-        print("Initializing ContentExtractionService...")
+    def __init__(self, trace_emitter=None):
+        """Initialize extractor instances and build routing map.
+
+        Args:
+            trace_emitter: Optional TraceEmitter for instrumentation. If None,
+                          tracing calls are no-ops.
+        """
+        logger.info("Initializing ContentExtractionService...")
+
+        # Store trace emitter for per-table instrumentation
+        self._trace_emitter = trace_emitter
 
         # Initialize specialized extractors
         # V2: PdfplumberTableExtractor replaces TATR+Tesseract TableExtractor
@@ -86,7 +96,7 @@ class ContentExtractionService:
             "Section-header": self.text_extractor.extract,
             "Title": self.text_extractor.extract,
             "List-item": self.text_extractor.extract,
-            "Footnote": self._extract_footnote,  # P4-1: Dedicated footnote handler
+            "Footnote": self._extract_footnote,
             "Page-header": None,  # Skip noise elements
             "Page-footer": None,  # Skip noise elements
         }
@@ -98,10 +108,10 @@ class ContentExtractionService:
         ]
         self._incomplete_end = [re.compile(p) for p in self.INCOMPLETE_END_PATTERNS]
 
-        print(
+        logger.info(
             f"Router configured with {len([r for r in self.router.values() if r is not None])} active extractors"
         )
-        print("ContentExtractionService ready!")
+        logger.info("ContentExtractionService ready!")
 
     def _select_pdf_source(self, task: DocumentTask) -> str:
         """
@@ -221,14 +231,15 @@ class ContentExtractionService:
             if cropped_image:
                 image_path = content_type_dir / f"{basename}.png"
                 cropped_image.save(image_path)
-                print(f"SAVED FAILED EXTRACTION: {label} → {image_path}")
+                logger.error(f"SAVED FAILED EXTRACTION: {label} → {image_path}")
 
         except Exception as e:
             # Don't let DLQ saving fail break the pipeline
-            print(f"Warning: Failed to save failed extraction info: {e}")
+            logger.error(f"Warning: Failed to save failed extraction info: {e}")
 
     def _route_block(
-        self, block: Dict, pdf_path: str, page_num: int, report_id: str, is_scanned: bool
+        self, block: Dict, pdf_path: str, page_num: int, report_id: str, is_scanned: bool,
+        trace_emitter=None
     ) -> Optional[ExtractedContent]:
         """
         Route individual layout block to appropriate extractor.
@@ -243,6 +254,7 @@ class ContentExtractionService:
             page_num: Physical page number
             report_id: Report identifier for logging/tracing
             is_scanned: True if PDF is scanned (from task.classification)
+            trace_emitter: Optional TraceEmitter for per-table instrumentation
 
         Returns:
             ExtractedContent object or None if extraction failed/skipped
@@ -250,13 +262,23 @@ class ContentExtractionService:
         label = block.get("label", "Unknown")
         bbox = block.get("bbox", [])
         confidence = block.get("confidence")
+        emitter = trace_emitter or self._trace_emitter
 
         # Special routing for Table blocks (3-tier strategy)
         if label == "Table":
             if is_scanned:
                 # SCANNED PDFs: Tier 2 → Tier 3 (skip pdfplumber)
                 if block.get("docling_table_markdown"):
-                    print(f"  Scanned PDF: Using Docling TableFormer (page {page_num}) - Tier 2")
+                    logger.info(f"  Scanned PDF: Using Docling TableFormer (page {page_num}) - Tier 2")
+                    # Trace: Scanned PDF uses Docling directly (Tier 2)
+                    if emitter:
+                        emitter.emit_decision(
+                            "6",
+                            "table_extraction_tier",
+                            "tier2_docling",
+                            ["tier1_pdfplumber", "tier2_docling", "tier3_gemini"],
+                            f"Scanned PDF skips Tier 1, Docling markdown available (page {page_num})",
+                        )
                     return self._use_docling_table(
                         markdown=block["docling_table_markdown"],
                         page_num=page_num,
@@ -265,7 +287,15 @@ class ContentExtractionService:
                     )
                 else:
                     # Docling failed, go straight to Tier 3
-                    print(f"  Scanned PDF: No Docling table, saving for Gemini (page {page_num}) - Tier 3")
+                    logger.info(f"  Scanned PDF: No Docling table, saving for Gemini (page {page_num}) - Tier 3")
+                    # Trace: Scanned PDF falls back to Gemini (Tier 3)
+                    if emitter:
+                        emitter.emit_fallback(
+                            "6",
+                            "tier2_docling",
+                            "tier3_gemini",
+                            f"Scanned PDF, no Docling markdown available (page {page_num})",
+                        )
                     return self._extract_and_save_visual(
                         pdf_path=pdf_path,
                         page_num=page_num,
@@ -288,11 +318,28 @@ class ContentExtractionService:
                     )
 
                     if result:
+                        # Trace: Tier 1 success
+                        if emitter:
+                            emitter.emit_decision(
+                                "6",
+                                "table_extraction_tier",
+                                "tier1_pdfplumber",
+                                ["tier1_pdfplumber", "tier2_docling", "tier3_gemini"],
+                                f"Native PDF, pdfplumber extraction successful (page {page_num})",
+                            )
                         return result  # Tier 1 success
 
                     # Tier 1 failed, try Tier 2 (Docling)
                     if block.get("docling_table_markdown"):
-                        print(f"  Native PDF: pdfplumber failed, using Docling (page {page_num}) - Tier 2")
+                        logger.error(f"  Native PDF: pdfplumber failed, using Docling (page {page_num}) - Tier 2")
+                        # Trace: Fallback from Tier 1 to Tier 2
+                        if emitter:
+                            emitter.emit_fallback(
+                                "6",
+                                "tier1_pdfplumber",
+                                "tier2_docling",
+                                f"pdfplumber returned None (page {page_num})",
+                            )
                         return self._use_docling_table(
                             markdown=block["docling_table_markdown"],
                             page_num=page_num,
@@ -301,7 +348,15 @@ class ContentExtractionService:
                         )
 
                     # Both Tier 1 and 2 failed, use Tier 3
-                    print(f"  Native PDF: pdfplumber + Docling failed, saving for Gemini (page {page_num}) - Tier 3")
+                    logger.error(f"  Native PDF: pdfplumber + Docling failed, saving for Gemini (page {page_num}) - Tier 3")
+                    # Trace: Fallback to Tier 3
+                    if emitter:
+                        emitter.emit_fallback(
+                            "6",
+                            "tier1_pdfplumber + tier2_docling",
+                            "tier3_gemini",
+                            f"Both pdfplumber and Docling failed (page {page_num})",
+                        )
                     return self._extract_and_save_visual(
                         pdf_path=pdf_path,
                         page_num=page_num,
@@ -313,8 +368,16 @@ class ContentExtractionService:
 
                 except Exception as e:
                     # pdfplumber crashed, try Tier 2 or 3
-                    print(f"  pdfplumber error: {e}")
+                    logger.error(f"  pdfplumber error: {e}")
                     if block.get("docling_table_markdown"):
+                        # Trace: pdfplumber crashed, fallback to Tier 2
+                        if emitter:
+                            emitter.emit_fallback(
+                                "6",
+                                "tier1_pdfplumber",
+                                "tier2_docling",
+                                f"pdfplumber exception: {str(e)[:100]} (page {page_num})",
+                            )
                         return self._use_docling_table(
                             markdown=block["docling_table_markdown"],
                             page_num=page_num,
@@ -322,6 +385,14 @@ class ContentExtractionService:
                             confidence=confidence,
                         )
                     else:
+                        # Trace: pdfplumber crashed, fallback to Tier 3
+                        if emitter:
+                            emitter.emit_fallback(
+                                "6",
+                                "tier1_pdfplumber",
+                                "tier3_gemini",
+                                f"pdfplumber exception, no Docling available: {str(e)[:100]} (page {page_num})",
+                            )
                         return self._extract_and_save_visual(
                             pdf_path=pdf_path,
                             page_num=page_num,
@@ -357,7 +428,7 @@ class ContentExtractionService:
                 f"EXTRACTION FAILURE: {report_id} | Page {page_num} | Label '{label}' | "
                 f"BBox {bbox} | Error: {str(e)}"
             )
-            print(error_msg)
+            logger.error(error_msg)
 
             # --- DEAD LETTER QUEUE: Save failed block image ---
             self._save_failed_extraction(
@@ -497,7 +568,7 @@ class ContentExtractionService:
             structured_data = structured_table.model_dump() if structured_table else None
 
         except Exception as e:
-            print(f"    Warning: Structured extraction failed for Docling table: {e}")
+            logger.error(f"    Warning: Structured extraction failed for Docling table: {e}")
             structured_data = None
 
         return ExtractedContent(
@@ -678,14 +749,15 @@ class ContentExtractionService:
             merged.append(content)
 
         if merge_count > 0:
-            print(f"  Cross-page merge: Combined {merge_count} split paragraphs")
+            logger.info(f"  Cross-page merge: Combined {merge_count} split paragraphs")
 
         return merged
 
     def extract_content(
         self,
         task: DocumentTask,
-        progress_callback: Optional[Callable[[int, int], None]] = None
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+        trace_emitter=None
     ) -> DocumentTask:
         """
         Main service entry point: extract content from all layout blocks.
@@ -695,11 +767,16 @@ class ContentExtractionService:
         Args:
             task: DocumentTask with populated layout field
             progress_callback: Optional callback function (current, total) for progress updates
+            trace_emitter: Optional TraceEmitter for per-table instrumentation
 
         Returns:
             Updated DocumentTask with extracted_content field populated
         """
         start_time = time.time()
+
+        # Store trace_emitter for use by _route_block
+        if trace_emitter:
+            self._trace_emitter = trace_emitter
 
         # Validation: Check for required layout data
         if not task.layout:
@@ -726,15 +803,15 @@ class ContentExtractionService:
         # Determine if this is a scanned PDF (for tier routing)
         is_scanned = task.classification == "scanned"
 
-        # Print initial progress message only if no callback provided
+        # Log initial progress message only if no callback provided
         if not progress_callback:
-            print(
+            logger.info(
                 f"Processing {total_blocks} layout blocks from {len(task.layout)} pages..."
             )
             if is_scanned:
-                print(f"  PDF type: SCANNED - will prioritize Docling TableFormer (Tier 2)")
+                logger.info(f"  PDF type: SCANNED - will prioritize Docling TableFormer (Tier 2)")
             else:
-                print(f"  PDF type: NATIVE - will prioritize pdfplumber (Tier 1)")
+                logger.info(f"  PDF type: NATIVE - will prioritize pdfplumber (Tier 1)")
 
         processed_blocks = 0
         successful_extractions = 0
@@ -753,6 +830,7 @@ class ContentExtractionService:
                     page_num=page_num,
                     report_id=task.report_id,
                     is_scanned=is_scanned,
+                    trace_emitter=self._trace_emitter,
                 )
 
                 if result:
@@ -766,11 +844,11 @@ class ContentExtractionService:
                     else:
                         # Fallback for backward compatibility
                         progress_pct = (processed_blocks / total_blocks) * 100
-                        print(
+                        logger.info(
                             f"Processed {processed_blocks}/{total_blocks} blocks ({progress_pct:.1f}%)"
                         )
 
-        # PHASE 3 FIX: Apply cross-page paragraph merging
+        # Apply cross-page paragraph merging to rejoin split paragraphs
         merged_elements = self._merge_cross_page_paragraphs(extracted_elements)
 
         # PHASE 2: Apply garbage filtering
@@ -784,7 +862,7 @@ class ContentExtractionService:
                 f"Filtered {len(filtered_content)}/{len(merged_elements)} "
                 f"garbage chunks ({len(filtered_content) / len(merged_elements) * 100:.1f}%)"
             )
-            print(filter_msg)
+            logger.info(filter_msg)
             task.error_log.append(filter_msg)
 
         # PHASE 2 BUG FIX: Use filtered content (not raw extracted_elements)
@@ -797,9 +875,11 @@ class ContentExtractionService:
             if processed_blocks > 0
             else 0
         )
+        failed_count = processed_blocks - successful_extractions
 
-        # Set final status based on results
-        if not task.error_log:
+        # Set final status based on extraction failures (not error_log which includes non-fatal warnings)
+        # Bug fix: error_log contains garbage filtering messages which are normal cleanup, not failures
+        if failed_count == 0 and valid_content:
             task.processing_status = "completed_content_extraction"
         elif valid_content:
             task.processing_status = "partial_content_extraction"
@@ -813,19 +893,55 @@ class ContentExtractionService:
         )
         task.error_log.append(summary_msg)
 
-        print(f"Content extraction complete: {summary_msg}")
+        # Fix 5: Emit Phase 6 completion summary with diagnostic info
+        emitter = self._trace_emitter
+        if emitter and hasattr(emitter, "emit"):
+            filtered_count = len(filtered_content) if filtered_content else 0
+
+            # Emit diagnostic summary for partial status
+            emitter.emit(
+                "6",
+                "extraction_summary",
+                {
+                    "total_blocks": total_blocks,
+                    "processed_blocks": processed_blocks,
+                    "successful_extractions": successful_extractions,
+                    "failed_extractions": failed_count,
+                    "filtered_garbage": filtered_count,
+                    "valid_content_count": len(valid_content) if valid_content else 0,
+                    "success_rate_pct": round(success_rate, 1),
+                    "status": task.processing_status,
+                    "has_errors": bool(task.error_log),
+                },
+            )
+
+            # Red flag for high failure rate
+            if failed_count > 0 and processed_blocks > 0:
+                failure_rate = failed_count / processed_blocks
+                if failure_rate > 0.2:  # More than 20% failures
+                    emitter.emit_red_flag(
+                        "6",
+                        f"High content extraction failure rate ({failure_rate*100:.1f}%)",
+                        {
+                            "failed_count": failed_count,
+                            "total_blocks": processed_blocks,
+                            "failure_rate_pct": round(failure_rate * 100, 1),
+                        },
+                    )
+
+        logger.info(f"Content extraction complete: {summary_msg}")
         return task
 
     def shutdown(self):
         """Clean up all extractor resources."""
-        print("Shutting down ContentExtractionService...")
+        logger.info("Shutting down ContentExtractionService...")
 
         try:
             if hasattr(self.table_extractor, "shutdown"):
                 self.table_extractor.shutdown()
         except Exception as e:
-            print(f"Warning: TableExtractor shutdown failed: {e}")
+            logger.error(f"Warning: TableExtractor shutdown failed: {e}")
 
         # V2: VisualAssetExtractor removed — no Florence-2 cleanup needed
         # TextExtractor doesn't need special cleanup
-        print("ContentExtractionService shutdown complete.")
+        logger.info("ContentExtractionService shutdown complete.")

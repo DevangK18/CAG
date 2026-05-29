@@ -7,6 +7,7 @@ Dispatches to search_service with parallel channel handlers.
 
 import logging
 from fastapi import APIRouter, Request, HTTPException
+from starlette.responses import Response
 
 from ..models import GroupedSearchResults
 from ..rate_limit import limiter, RATE_LIMIT_CHAT
@@ -19,6 +20,7 @@ router = APIRouter()
 @limiter.limit(RATE_LIMIT_CHAT)
 async def search(
     request: Request,
+    response: Response,
     q: str,
     type: str = "all",
     limit: int = 5,
