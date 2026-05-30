@@ -32,6 +32,26 @@ class AssemblyService:
     UPDATED: Now extracts report_year as integer for RAG filtering.
     """
 
+    # P2-19: Assembly artifact patterns for empty-parent cleanup
+    # IMPORTANT: These must be EXPLICIT patterns for known assembly artifacts.
+    # DO NOT add broad patterns like r"^\d" or r"^[a-z]" — those would delete
+    # legitimate parents like "1.1 Introduction" that have 0 children.
+    ASSEMBLY_ARTIFACT_PATTERNS = [
+        # File merger labels: "01_Cover", "15_Separator" (digit-underscore-capital required)
+        re.compile(r"^\d+_[A-Z]"),
+        # State code prefixes from merged files: "WBOCW_123", "MH_456"
+        re.compile(r"^[A-Z]{2,}_\d+"),
+        # Explicit placeholder pages
+        re.compile(r"^Blank\s+Page$", re.IGNORECASE),
+        re.compile(r"^Cover$", re.IGNORECASE),
+        re.compile(r"^Separator$", re.IGNORECASE),
+        re.compile(r"^Title\s+Page$", re.IGNORECASE),
+        # Just a page number
+        re.compile(r"^\d+$"),
+        # Just dashes
+        re.compile(r"^-+$"),
+    ]
+
     def __init__(self, output_dir: str = "data/processed", trace_emitter=None):
         """
         Initialize the assembly service.
@@ -67,12 +87,14 @@ class AssemblyService:
 
     def _extract_report_year(self, task: DocumentTask) -> Optional[int]:
         """
-        Extract report year as integer from available metadata.
+        P1-12: Extract report year as integer from available metadata.
 
-        Tries multiple sources in order:
-        1. publication_date (Date field): "2023-08-10" → 2023
+        Priority order (P1-12 fix - Report No preferred):
+        1. Report No: "15 of 2023" → 2023 (audit year, most accurate)
         2. report_id: "2023_07_Performance_Audit_..." → 2023
-        3. Report No: "15 of 2023" → 2023
+        3. publication_date (Date field): fallback - may be publication year, not audit year
+
+        Also detects and logs conflicts between sources.
 
         Args:
             task: DocumentTask with metadata
@@ -81,62 +103,66 @@ class AssemblyService:
             Integer year or None if extraction fails
         """
         metadata = task.initial_metadata or {}
+        sources: dict = {}  # Track all extracted years for conflict detection
 
-        # Method 1: Parse from publication_date (most reliable)
-        date_str = metadata.get("Date", "")
-        if date_str and date_str != "Unknown":
-            # Try YYYY-MM-DD format
-            match = re.match(r"^(\d{4})-\d{2}-\d{2}", str(date_str))
-            if match:
-                try:
-                    return int(match.group(1))
-                except ValueError:
-                    pass
-
-            # Try other date formats
-            try:
-                # Handle various date formats
-                for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"]:
-                    try:
-                        dt = datetime.strptime(str(date_str)[:10], fmt)
-                        return dt.year
-                    except ValueError:
-                        continue
-            except Exception:
-                pass
-
-        # Method 2: Parse from report_id (e.g., "2023_07_Performance_Audit_...")
-        if task.report_id:
-            match = re.match(r"^(\d{4})_", task.report_id)
-            if match:
-                try:
-                    year = int(match.group(1))
-                    # Validate it's a reasonable year
-                    if 2000 <= year <= 2100:
-                        return year
-                except ValueError:
-                    pass
-
-        # Method 3: Parse from Report No (e.g., "15 of 2023")
+        # Method 1: Report No (now preferred - P1-12)
         report_no = metadata.get("Report No", "")
         if report_no and report_no != "Unknown":
             # Try "X of YYYY" format
             match = re.search(r"of\s+(\d{4})", str(report_no))
             if match:
-                try:
-                    return int(match.group(1))
-                except ValueError:
-                    pass
+                sources["report_no"] = int(match.group(1))
+            else:
+                # Try "YYYY/X" or "YYYY_X" format
+                match = re.match(r"^(\d{4})[/_]", str(report_no))
+                if match:
+                    sources["report_no"] = int(match.group(1))
 
-            # Try "YYYY/X" or "YYYY_X" format
-            match = re.match(r"^(\d{4})[/_]", str(report_no))
+        # Method 2: Parse from report_id (e.g., "2023_07_Performance_Audit_...")
+        if task.report_id:
+            # Handle both Union format (YYYY_NN_...) and State format (ST_YYYY_NN_...)
+            match = re.match(r"^(?:[A-Z]{2}_)?(\d{4})_", task.report_id)
             if match:
-                try:
-                    return int(match.group(1))
-                except ValueError:
-                    pass
+                year = int(match.group(1))
+                # Validate it's a reasonable year
+                if 2000 <= year <= 2100:
+                    sources["report_id"] = year
 
-        return None
+        # Method 3: Parse from publication_date (fallback)
+        date_str = metadata.get("Date", "")
+        if date_str and date_str != "Unknown":
+            # Try YYYY-MM-DD format
+            match = re.match(r"^(\d{4})-\d{2}-\d{2}", str(date_str))
+            if match:
+                sources["publication_date"] = int(match.group(1))
+            else:
+                # Try other date formats
+                for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"]:
+                    try:
+                        dt = datetime.strptime(str(date_str)[:10], fmt)
+                        sources["publication_date"] = dt.year
+                        break
+                    except ValueError:
+                        continue
+
+        # P1-12: Conflict detection and logging
+        unique_years = set(sources.values())
+        if len(unique_years) > 1:
+            logger.warning(f"P1-12: Year extraction conflict: {sources}")
+            if self._trace_emitter:
+                selected = sources.get("report_no") or sources.get("report_id")
+                self._trace_emitter.emit_red_flag(
+                    phase="8",
+                    flag="year_extraction_conflict",
+                    details={
+                        "sources": sources,
+                        "selected": selected,
+                        "report_id": task.report_id,
+                    },
+                )
+
+        # Return in priority order (P1-12: Report No preferred)
+        return sources.get("report_no") or sources.get("report_id") or sources.get("publication_date")
 
     def assemble_document(
         self,
@@ -162,6 +188,18 @@ class AssemblyService:
         emitter = trace_emitter or self._trace_emitter
         logger.info(f"Assembling document: {task.report_id}")
 
+        # P1-15e: Phase 8 entry emit
+        if emitter:
+            emitter.emit_io(
+                phase="8",
+                input_data={
+                    "parent_chunks": len(parent_chunks),
+                    "child_chunks": len(child_chunks),
+                    "processing_status_before": task.processing_status,
+                },
+                output_data={},
+            )
+
         # Extract report_year once for use in metadata
         report_year = self._extract_report_year(task)
         if report_year:
@@ -175,10 +213,15 @@ class AssemblyService:
                     {"report_id": task.report_id},
                 )
 
+        # P2-19: Clean up empty artifact parents before serialization
+        cleaned_parents = self._cleanup_empty_parents(
+            parent_chunks, child_chunks, trace_emitter=emitter
+        )
+
         # Build complete output structure
         assembled_data = {
             "report_metadata": self._build_report_metadata(task, report_year),
-            "parent_chunks": self._serialize_parent_chunks(parent_chunks),
+            "parent_chunks": self._serialize_parent_chunks(cleaned_parents),
             "child_chunks": self._serialize_child_chunks(
                 child_chunks, task, report_year
             ),
@@ -250,6 +293,25 @@ class AssemblyService:
             self._update_manifest(task.report_id, parent_chunks, child_chunks, output_path)
 
         logger.info(f"Assembly complete: {output_path}")
+
+        # P1-15e: Phase 8 exit emit
+        if emitter:
+            content_types = {}
+            for c in child_chunks:
+                ctype = c.content_type
+                content_types[ctype] = content_types.get(ctype, 0) + 1
+            emitter.emit_io(
+                phase="8",
+                input_data={},
+                output_data={
+                    "output_path": str(output_path),
+                    "content_types_assembled": content_types,
+                    "total_tables": visual_asset_registry["total_tables"],
+                    "total_figures": visual_asset_registry["total_figures"],
+                    "assembly_timestamp": datetime.utcnow().isoformat() + "Z",  # P1-16
+                },
+            )
+
         return str(output_path)
 
     def _build_report_metadata(
@@ -304,6 +366,82 @@ class AssemblyService:
             List of dictionaries
         """
         return [chunk.dict() for chunk in parent_chunks]
+
+    def _is_assembly_artifact(self, toc_entry: str) -> bool:
+        """
+        P2-19: Check if a toc_entry matches assembly artifact patterns.
+
+        Args:
+            toc_entry: Parent chunk toc_entry (title)
+
+        Returns:
+            True if matches an artifact pattern
+        """
+        if not toc_entry:
+            return False
+
+        for pattern in self.ASSEMBLY_ARTIFACT_PATTERNS:
+            if pattern.match(toc_entry):
+                return True
+        return False
+
+    def _cleanup_empty_parents(
+        self,
+        parent_chunks: List[ParentChunk],
+        child_chunks: List[ChildChunk],
+        trace_emitter=None,
+    ) -> List[ParentChunk]:
+        """
+        P2-19: Remove parents with 0 children that match assembly-artifact patterns.
+
+        Runs after Phase 7 (parent-child assignment) and P0-04 (chapter promotion).
+
+        IMPORTANT: Only removes parents matching EXPLICIT artifact patterns.
+        Parents with legitimate titles (e.g., "1.1 Introduction") are PRESERVED
+        even if they have 0 children — that's a signal of mis-parenting elsewhere,
+        not a cleanup target.
+
+        Args:
+            parent_chunks: List of ParentChunk objects
+            child_chunks: List of ChildChunk objects
+            trace_emitter: Optional TraceEmitter
+
+        Returns:
+            Cleaned list of parent chunks
+        """
+        # Build child count per parent
+        child_counts: Dict[str, int] = {}
+        for child in child_chunks:
+            pid = child.parent_chunk_id
+            child_counts[pid] = child_counts.get(pid, 0) + 1
+
+        cleaned = []
+        removed = []
+
+        for parent in parent_chunks:
+            count = child_counts.get(parent.chunk_id, 0)
+            toc_entry = parent.toc_entry or ""
+
+            if count == 0 and self._is_assembly_artifact(toc_entry):
+                removed.append(toc_entry)
+            else:
+                cleaned.append(parent)
+
+        if removed:
+            logger.info(f"  P2-19: Removed {len(removed)} empty artifact parents")
+            if trace_emitter:
+                trace_emitter.emit_sample(
+                    "8",
+                    "empty_parents_removed",
+                    [{"toc_entry": t} for t in removed[:5]],
+                )
+                trace_emitter.emit(
+                    "8",
+                    "empty_parent_cleanup",
+                    {"removed_count": len(removed), "remaining": len(cleaned)},
+                )
+
+        return cleaned
 
     def _serialize_child_chunks(
         self,
@@ -500,9 +638,9 @@ class AssemblyService:
             "assembly_timestamp": datetime.utcnow().isoformat(),
         }
 
-    def _build_footnote_index(self, child_chunks: List[Dict]) -> List[Dict[str, Any]]:
+    def _build_footnote_index(self, child_chunks: List[Dict]) -> Dict[str, Dict[str, Any]]:
         """
-        P4-1: Build a flat index of all footnotes for easy lookup.
+        P2-20: Build footnote index as dict keyed by footnote number.
 
         Extracts footnote chunks from child_chunks and creates a structured index
         separate from main content flow, facilitating frontend footnote display.
@@ -511,9 +649,11 @@ class AssemblyService:
             child_chunks: Serialized child chunk dictionaries
 
         Returns:
-            List of footnote index entries with metadata
+            Dict keyed by footnote number: {"1": {...}, "2": {...}}
+            Unnumbered footnotes get auto_N keys.
         """
-        footnotes = []
+        footnotes: Dict[str, Dict[str, Any]] = {}
+        auto_counter = 0
 
         for chunk in child_chunks:
             if chunk.get("content_type") != "footnote":
@@ -523,14 +663,24 @@ class AssemblyService:
             # Format: "[Footnote 7] Content..." or "[Footnote] Content..."
             footnote_num = self._extract_footnote_number(chunk.get("content", ""))
 
-            footnotes.append({
-                "footnote_number": footnote_num,
+            # P2-20: Handle unnumbered footnotes with auto_N key
+            if footnote_num is None:
+                auto_counter += 1
+                footnote_num = f"auto_{auto_counter}"
+
+            # P2-20: Handle duplicate footnote numbers (overwrite with warning)
+            if footnote_num in footnotes:
+                logger.warning(
+                    f"P2-20: Duplicate footnote number '{footnote_num}', overwriting"
+                )
+
+            footnotes[footnote_num] = {
+                "chunk_id": chunk.get("chunk_id"),
                 "content": chunk["content"],
                 "page_physical": chunk.get("source_page_physical"),
                 "page_logical": chunk.get("source_page_logical"),
-                "chunk_id": chunk.get("chunk_id"),
                 "parent_section": chunk.get("hierarchy", {}),
-            })
+            }
 
         return footnotes
 
@@ -572,6 +722,11 @@ class AssemblyService:
         """
         tables = []
         figures = []
+
+        # P1-14c: Additional registry fields
+        tables_by_section: Dict[str, List[str]] = {}
+        figures_by_section: Dict[str, List[str]] = {}
+        extraction_stats: Dict[str, int] = {}
 
         # Build parent lookup
         parent_lookup = {p.get("chunk_id"): p for p in parent_chunks}
@@ -616,6 +771,14 @@ class AssemblyService:
                     "has_structured_data": structured is not None,
                 })
 
+                # P1-14c: Track tables by section
+                if parent_id:
+                    tables_by_section.setdefault(parent_id, []).append(chunk_id)
+
+                # P1-14c: Track extraction method statistics
+                extraction_method = chunk.get("extraction_method") or chunk.get("model_used") or "unknown"
+                extraction_stats[extraction_method] = extraction_stats.get(extraction_method, 0) + 1
+
             elif content_type == "image_caption":
                 # Extract figure number
                 fig_match = re.match(
@@ -639,11 +802,19 @@ class AssemblyService:
                     "visual_subtype": visual_subtype,  # P4-6
                 })
 
+                # P1-14c: Track figures by section
+                if parent_id:
+                    figures_by_section.setdefault(parent_id, []).append(chunk_id)
+
         return {
             "tables": tables,
             "figures": figures,
             "total_tables": len(tables),
             "total_figures": len(figures),
+            # P1-14c: Additional registry fields
+            "tables_by_section": tables_by_section,
+            "figures_by_section": figures_by_section,
+            "extraction_stats": extraction_stats,
         }
 
     def _extract_table_identity(

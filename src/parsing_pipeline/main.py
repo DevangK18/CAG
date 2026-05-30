@@ -75,6 +75,7 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
+from typing import List
 
 # Import services from modules
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
@@ -1437,6 +1438,61 @@ class PipelineOrchestrator:
     # PHASE 10b: VISUAL EXTRACTION
     # ═══════════════════════════════════════════════════════════════════════
 
+    def _validate_phase_10b_completion(self, chunk_files: List[Path]) -> bool:
+        """
+        P1-14a: Verify Phase 10b hydration completed successfully.
+
+        Checks that image_caption chunks have been hydrated with descriptions
+        rather than containing raw file paths.
+
+        Args:
+            chunk_files: List of chunk JSON files to validate
+
+        Returns:
+            True if all image_caption chunks are hydrated, False otherwise
+        """
+        emitter = self.state.trace_emitter
+        incomplete_total = 0
+        sample_incomplete = []
+
+        for chunk_file in chunk_files:
+            try:
+                with open(chunk_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                child_chunks = data.get("child_chunks", [])
+                for chunk in child_chunks:
+                    if chunk.get("content_type") == "image_caption":
+                        content = chunk.get("content", "")
+                        # Check if content is still a file path (not hydrated)
+                        if content.startswith("data/extraction_images/") or content.startswith("/"):
+                            incomplete_total += 1
+                            if len(sample_incomplete) < 3:
+                                sample_incomplete.append(chunk.get("chunk_id", "unknown"))
+
+            except Exception as e:
+                self._log(f"  Warning: Could not validate {chunk_file.name}: {e}")
+                continue
+
+        if incomplete_total > 0:
+            self._log(
+                f"⚠️  P1-14a: {incomplete_total} image_caption chunks still have file paths (not hydrated)",
+                force=True,
+            )
+            if emitter:
+                emitter.emit_red_flag(
+                    phase="10b",
+                    flag="image_captions_not_hydrated",
+                    details={
+                        "count": incomplete_total,
+                        "sample": sample_incomplete,
+                    },
+                )
+            return False
+
+        self._log(f"  ✓ P1-14a: All image_caption chunks hydrated successfully")
+        return True
+
     async def _phase_visual_extraction(self):
         """Phase 10b: Visual Extraction via Gemini (Tables + Charts)."""
         self._phase_header("10b", "VISUAL EXTRACTION (Gemini)")
@@ -1469,6 +1525,10 @@ class PipelineOrchestrator:
                     )
                     self.state.phase10b_completed = True
                     self.state.chunk_files = chunk_files
+
+                    # P1-14a: Validate hydration completion
+                    self._validate_phase_10b_completion(chunk_files)
+
                     self._log(f"✅ Phase 10b complete: {job_id}", force=True)
                 else:
                     self._log("No chunk files found for visual extraction.")

@@ -20,21 +20,54 @@ import fitz  # PyMuPDF — already a pipeline dependency
 from src.core.data_contracts import DocumentTask
 from src.parsing_pipeline.config import get_config, TOCReconciliationConfig
 from src.parsing_pipeline.instrumentation import get_noop_emitter
+from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 
 logger = logging.getLogger(__name__)
 
 
 class TOCReconciliationService:
     """
-    Reconciles Phase 4 scaffold TOC with Phase 5 Docling section headers.
+    Reconciles Phase 4 scaffold TOC with Docling section headers.
 
-    Strategy:
-    - High quality Phase 4 TOC (quality >= 70): Supplement with missed headers
-    - Medium quality (40-69): Merge signals, prefer Docling for validation
-    - Low quality (<40): Prefer Docling-detected headers as primary structure
+    P0-02 improvements:
+    - Empty TOC explicit handling
+    - Noise rejection patterns
+    - Quality cap at 85 for Phase 5.7 eligibility
+    - Parent deduplication
 
-    Always: Add Y-coordinates from Docling bboxes to heading_positions.
+    P0-04 improvements:
+    - Chapter pattern promotion to L1
+    - L1 count sanity check (≤15)
+    - Orphan section detection
     """
+
+    # P0-02: Noise patterns to reject from candidate headers
+    NOISE_PATTERNS = [
+        r"^\([Pp]aragraphs?\s+[\d.]+\)",  # "(Paragraph 3.2)"
+        r"^\([Ss]ource:?\s.*\)$",          # "(Source: Records...)"
+        r"^Report\s+No\.\s+\d+\s+of",      # Running header
+        r"^Page\s+\d+$",                    # Page number
+        r"^[a-z]\.\s+",                     # List item "a. ..."
+        r"^\([ivxlcdm]+\)\s+",              # "(i) ...", "(iv) ..."
+        r"^\d+$",                            # Just a number
+        r"^-+$",                             # Just dashes
+    ]
+
+    # P0-04: Chapter patterns for L1 promotion
+    CHAPTER_PATTERNS = [
+        r"^Chapter\s+(\d+|[IVXivx]+)\b",
+        r"^CHAPTER\s+(\d+|[IVXivx]+)\b",
+        r"^Annexure\s+[A-Z0-9]+",
+        r"^ANNEXURE\s+[A-Z0-9]+",
+        r"^Appendix\s+[A-Z0-9]+",
+        r"^APPENDIX\s+[A-Z0-9]+",
+    ]
+
+    # P0-02: Quality cap for Phase 5.7 eligibility
+    QUALITY_CAP = 85
+
+    # P0-04: Maximum expected L1 entries
+    MAX_L1_COUNT = 15
 
     def __init__(
         self,
@@ -112,30 +145,52 @@ class TOCReconciliationService:
             )
             return task
 
+        # P0-02: Apply noise rejection filter to Docling headers
+        docling_headers = self._filter_noise_headers(docling_headers)
+        if not docling_headers:
+            logger.info(f"[{task.report_id}] All Docling headers filtered as noise — skipping")
+            return task
+
+        # P0-04: Promote Chapter patterns to L1
+        docling_headers = self._promote_chapters_to_l1(docling_headers)
+
         # Step 2: Get current Phase 4 TOC
         current_toc = task.scaffold.get("toc", [])
         current_quality = task.scaffold.get("toc_quality", 50)
 
-        # Step 3: Reconcile based on quality tier
-        if current_quality >= self.quality_high_threshold and current_toc:
+        # P0-02: Handle empty-TOC explicitly (separate branch)
+        if not current_toc:
+            # No Phase 4 TOC to preserve — use Docling entirely
+            emitter.emit_decision(
+                "5.5",
+                "quality_tier",
+                "empty_toc",
+                ["high", "medium", "low", "empty_toc"],
+                f"toc_empty=True, quality_score={current_quality}",
+            )
+            reconciled_toc, method = self._prefer_docling_low_quality(
+                current_toc, docling_headers, task.report_id, emitter
+            )
+        # Step 3: Reconcile based on quality tier (current_toc is non-empty here)
+        elif current_quality >= self.quality_high_threshold:
             # Trace: Quality tier decision - high
             emitter.emit_decision(
                 "5.5",
                 "quality_tier",
                 "high",
-                ["high", "medium", "low"],
+                ["high", "medium", "low", "empty_toc"],
                 f"quality_score={current_quality} >= high_threshold={self.quality_high_threshold}",
             )
             reconciled_toc, method = self._supplement_high_quality(
                 current_toc, docling_headers, task.report_id, emitter
             )
-        elif current_quality >= self.quality_medium_threshold and current_toc:
+        elif current_quality >= self.quality_medium_threshold:
             # Trace: Quality tier decision - medium
             emitter.emit_decision(
                 "5.5",
                 "quality_tier",
                 "medium",
-                ["high", "medium", "low"],
+                ["high", "medium", "low", "empty_toc"],
                 f"quality_score={current_quality}, medium_threshold={self.quality_medium_threshold}",
             )
             reconciled_toc, method = self._merge_medium_quality(
@@ -147,7 +202,7 @@ class TOCReconciliationService:
                 "5.5",
                 "quality_tier",
                 "low",
-                ["high", "medium", "low"],
+                ["high", "medium", "low", "empty_toc"],
                 f"quality_score={current_quality} < medium_threshold={self.quality_medium_threshold}",
             )
             reconciled_toc, method = self._prefer_docling_low_quality(
@@ -160,15 +215,39 @@ class TOCReconciliationService:
             heading_positions, docling_headers, reconciled_toc
         )
 
+        # P0-02: Deduplicate parents by (normalized_title, page)
+        reconciled_toc = self._deduplicate_parents(reconciled_toc)
+
+        # P0-04: L1 count sanity check
+        l1_count = sum(1 for entry in reconciled_toc if entry[0] == 1)
+        if l1_count > self.MAX_L1_COUNT:
+            emitter.emit_red_flag(
+                "5.5",
+                "l1_count_excessive",
+                {"count": l1_count, "max": self.MAX_L1_COUNT},
+            )
+            logger.warning(
+                f"[{task.report_id}] Excessive L1 entries: {l1_count} > {self.MAX_L1_COUNT}"
+            )
+
+        # P0-04: Detect orphan sections (numbered sections without L1 parent)
+        orphans = self._detect_orphan_sections(reconciled_toc, emitter)
+        if orphans:
+            logger.warning(
+                f"[{task.report_id}] Orphan sections detected: {len(orphans)} entries"
+            )
+
         # Step 5: Update scaffold
         prev_count = len(current_toc)
         task.scaffold["toc"] = reconciled_toc
         task.scaffold["heading_positions"] = heading_positions
         task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+reconciled_{method}"
 
-        # Update quality score
+        # Update quality score with P0-02 quality cap
         new_quality = self._assess_reconciled_quality(reconciled_toc, docling_headers)
-        task.scaffold["toc_quality"] = max(current_quality, new_quality)
+        # P0-02: Cap quality at 85 to allow Phase 5.7 to fire on edge cases
+        capped_quality = min(max(current_quality, new_quality), self.QUALITY_CAP)
+        task.scaffold["toc_quality"] = capped_quality
 
         # Trace: TOC mutation result
         emitter.emit_io(
@@ -256,6 +335,9 @@ class TOCReconciliationService:
 
                     if not title:
                         continue
+
+                    # P2-17: Apply OCR normalization (fixes Roman numeral corruptions)
+                    title = get_ocr_normalizer().normalize_toc_entry(title)
 
                     # Infer hierarchy level
                     level = self._infer_level_from_docling(
@@ -570,3 +652,170 @@ class TOCReconciliationService:
             score += int(overlap * 20)
 
         return min(100, score)
+
+    # ==================== P0-02: Noise Rejection and Deduplication ====================
+
+    def _filter_noise_headers(self, headers: List[Dict]) -> List[Dict]:
+        """
+        P0-02: Filter out noise entries from Docling headers.
+
+        Rejects headers matching noise patterns (paragraph references, source
+        citations, page numbers, list items) and headers with excessive
+        non-printable characters (encoded-font garbage).
+
+        Args:
+            headers: List of Docling header dicts
+
+        Returns:
+            Filtered list with noise entries removed
+        """
+        filtered = []
+        for header in headers:
+            title = header.get("title", "")
+
+            # Check against noise patterns
+            is_noise = False
+            for pattern in self.NOISE_PATTERNS:
+                if re.match(pattern, title, re.IGNORECASE):
+                    is_noise = True
+                    break
+
+            # Check for excessive non-ASCII-printable characters (>30%)
+            if not is_noise and title:
+                non_printable = sum(1 for c in title if ord(c) < 32 or ord(c) > 126)
+                if non_printable / len(title) > 0.3:
+                    is_noise = True
+
+            if not is_noise:
+                filtered.append(header)
+
+        if len(headers) != len(filtered):
+            logger.debug(
+                f"Noise filter: {len(headers)} → {len(filtered)} headers "
+                f"({len(headers) - len(filtered)} rejected)"
+            )
+
+        return filtered
+
+    def _deduplicate_parents(self, toc: List[List]) -> List[List]:
+        """
+        P0-02: Deduplicate TOC entries by (normalized_title, page).
+
+        When duplicate entries exist, keep the one with the deeper level
+        (higher level number = deeper in hierarchy).
+
+        Args:
+            toc: List of TOC entries [level, title, page]
+
+        Returns:
+            Deduplicated TOC list
+        """
+        seen = {}
+        for entry in toc:
+            level, title, page = entry[0], entry[1], entry[2]
+
+            # Normalize title for comparison
+            normalized = " ".join(title.lower().split())
+            key = (normalized, page)
+
+            if key in seen:
+                # Keep deeper level (higher number) or earlier position
+                if level > seen[key]["level"]:
+                    seen[key] = {"entry": entry, "level": level}
+            else:
+                seen[key] = {"entry": entry, "level": level}
+
+        return [item["entry"] for item in seen.values()]
+
+    # ==================== P0-04: Chapter Promotion and Orphan Detection ====================
+
+    def _promote_chapters_to_l1(self, headers: List[Dict]) -> List[Dict]:
+        """
+        P0-04: Promote Chapter/Annexure/Appendix patterns to L1.
+
+        Docling assigns levels based on font size heuristics, not semantic
+        patterns. This method ensures that chapter-level headings are always
+        promoted to L1 regardless of their detected level.
+
+        Args:
+            headers: List of Docling header dicts
+
+        Returns:
+            Headers with Chapter patterns promoted to L1
+        """
+        promoted_count = 0
+        for header in headers:
+            title = header.get("title", "")
+            current_level = header.get("level", 2)
+
+            for pattern in self.CHAPTER_PATTERNS:
+                if re.match(pattern, title, re.IGNORECASE):
+                    if current_level != 1:
+                        header["level"] = 1
+                        promoted_count += 1
+                    break
+
+        if promoted_count > 0:
+            logger.debug(f"P0-04: Promoted {promoted_count} Chapter patterns to L1")
+
+        return headers
+
+    def _detect_orphan_sections(
+        self, toc: List[List], emitter=None
+    ) -> List[Dict]:
+        """
+        P0-04: Detect numbered sections that lack a parent chapter at L1.
+
+        Algorithm:
+        1. Build set of L1 section numbers (extract leading digit from
+           "Chapter 3", "3. Introduction", etc.)
+        2. For each L2+ section, extract its chapter number (first digit
+           before first dot)
+        3. If chapter number not in L1 set, flag as orphan
+
+        Args:
+            toc: List of TOC entries [level, title, page]
+            emitter: Optional TraceEmitter for red flags
+
+        Returns:
+            List of orphan section dicts with title, level, expected_chapter
+        """
+        emitter = emitter or self._trace_emitter
+
+        # Build set of L1 chapter numbers
+        l1_chapter_numbers = set()
+        for entry in toc:
+            level, title, page = entry[0], entry[1], entry[2]
+            if level == 1:
+                # Extract chapter number from "Chapter 3", "3. Introduction", etc.
+                match = re.match(r"(?:Chapter\s+)?(\d+)", title, re.IGNORECASE)
+                if match:
+                    l1_chapter_numbers.add(int(match.group(1)))
+
+        # Detect orphan sections
+        orphans = []
+        for entry in toc:
+            level, title, page = entry[0], entry[1], entry[2]
+            if level > 1:
+                # Extract chapter number from "3.1", "3.2.1", etc.
+                match = re.match(r"(\d+)\.", title)
+                if match:
+                    chapter_num = int(match.group(1))
+                    if chapter_num not in l1_chapter_numbers:
+                        orphans.append({
+                            "title": title,
+                            "level": level,
+                            "expected_chapter": chapter_num,
+                        })
+
+        if orphans:
+            emitter.emit_red_flag(
+                "5.5",
+                "orphan_sections_detected",
+                {
+                    "count": len(orphans),
+                    "samples": orphans[:5],
+                },
+            )
+
+        return orphans

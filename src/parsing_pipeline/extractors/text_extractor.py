@@ -10,6 +10,7 @@ from typing import List, Optional
 import re
 
 from src.core.data_contracts import ExtractedContent
+from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 
 
 logger = logging.getLogger(__name__)
@@ -111,9 +112,61 @@ class TextExtractor:
         # Default for all other text elements
         return "paragraph"
 
+    def _get_page_rotation(self, page) -> int:
+        """
+        P1-11: Get effective page rotation (0, 90, 180, 270).
+
+        Args:
+            page: PyMuPDF page object.
+
+        Returns:
+            Rotation angle normalized to 0, 90, 180, or 270.
+        """
+        return page.rotation % 360
+
+    def _extract_text_with_rotation_handling(
+        self, page, clip_rect: fitz.Rect, sort: bool = True
+    ) -> str:
+        """
+        P1-11: Extract text handling rotated pages.
+
+        For 90°/270° rotated pages, use dict-based extraction to get
+        proper reading order, then filter by clip region.
+
+        Args:
+            page: PyMuPDF page object.
+            clip_rect: Clipping rectangle for extraction.
+            sort: Whether to sort text by position.
+
+        Returns:
+            Extracted text with proper reading order.
+        """
+        rotation = self._get_page_rotation(page)
+
+        if rotation == 0:
+            return page.get_text("text", clip=clip_rect, sort=sort)
+
+        if rotation in (90, 270):
+            # Use "dict" extraction which provides block/line/span structure
+            # with proper reading order regardless of rotation
+            blocks = page.get_text("dict", clip=clip_rect)["blocks"]
+
+            # Extract text from blocks in order
+            text_parts = []
+            for block in blocks:
+                if block["type"] == 0:  # Text block
+                    for line in block["lines"]:
+                        line_text = " ".join(span["text"] for span in line["spans"])
+                        text_parts.append(line_text)
+
+            return "\n".join(text_parts)
+
+        # 180° case - text order should be fine
+        return page.get_text("text", clip=clip_rect, sort=sort)
+
     def _extract_text_from_bbox(
         self, pdf_path: str, page_num: int, bbox: List[float]
-    ) -> str:
+    ) -> tuple:
         """
         Extract text precisely from within a bounding box using PyMuPDF's clip parameter.
 
@@ -123,7 +176,7 @@ class TextExtractor:
             bbox: [x0, y0, x1, y1] coordinates in PDF space.
 
         Returns:
-            Extracted text from within the bounding box.
+            Tuple of (extracted_text, rotation_angle).
 
         Raises:
             ValueError: If PDF access fails or bounding box is invalid.
@@ -141,10 +194,13 @@ class TextExtractor:
             # Create clipping rectangle from bounding box
             clip_rect = fitz.Rect(bbox)
 
-            # Extract text only within the clipping rectangle
-            text = page.get_text("text", clip=clip_rect, sort=True)
+            # P1-11: Get page rotation
+            rotation = self._get_page_rotation(page)
 
-            return text
+            # P1-11: Use rotation-aware text extraction
+            text = self._extract_text_with_rotation_handling(page, clip_rect, sort=True)
+
+            return text, rotation
 
         except Exception as e:
             doc.close()
@@ -157,11 +213,14 @@ class TextExtractor:
     ) -> Optional[ExtractedContent]:
         """Main extraction method for textual content."""
         try:
-            # Extract raw text from bounding box
-            raw_text = self._extract_text_from_bbox(pdf_path, page_num, bbox)
+            # Extract raw text from bounding box (P1-11: returns tuple with rotation)
+            raw_text, rotation = self._extract_text_from_bbox(pdf_path, page_num, bbox)
 
             # Normalize text (hyphenation, whitespace)
             normalized_text = self._normalize_text(raw_text)
+
+            # P2-17: Apply OCR header normalization (fixes Roman numeral corruptions)
+            normalized_text = get_ocr_normalizer().normalize_headers(normalized_text)
 
             # Skip if no meaningful text was extracted
             if not normalized_text or normalized_text.isspace():
@@ -171,7 +230,16 @@ class TextExtractor:
             layout_label = kwargs.get("label", "Text")
             content_type = self._classify_content_type(layout_label, normalized_text)
 
+            # P1-11: Log rotation for debugging if non-zero
+            if rotation != 0:
+                logger.debug(f"P1-11: Extracted text from rotated page {page_num} (rotation={rotation})")
+
             # Create ExtractedContent object
+            # P1-11: Include rotation in structured_data if non-zero
+            structured_data = None
+            if rotation != 0:
+                structured_data = {"page_rotation": rotation}
+
             return ExtractedContent(
                 content_type=content_type,
                 content=normalized_text,
@@ -180,6 +248,7 @@ class TextExtractor:
                 model_used="PyMuPDF-clip",
                 layout_label=layout_label,
                 layout_confidence=kwargs.get("confidence"),
+                structured_data=structured_data,
             )
 
         except Exception as e:

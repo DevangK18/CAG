@@ -5,16 +5,21 @@ Handles CAG audit reports where tables frequently continue across pages:
 - Detects continuation signals (markers, header repetition, column structure)
 - Merges table fragments into unified StructuredTable objects
 - Preserves all metadata and row classifications
+- P0-03: Improved chain iteration, missing-page detection, DLQ red flags
 
 Part of Phase 1 - P0-3: Multi-Page Table Stitching
 """
 
+import logging
 import re
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict, Any
 from collections import Counter
 
 from src.core.table_contracts import StructuredTable, TableRow, TableColumn
 from src.parsing_pipeline.config import get_config, ChunkingConfig
+from src.parsing_pipeline.instrumentation import get_noop_emitter
+
+logger = logging.getLogger(__name__)
 
 
 class MultiPageTableHandler:
@@ -27,6 +32,11 @@ class MultiPageTableHandler:
     3. Column structure match: Jaccard similarity > threshold (configured)
     4. Missing totals: First fragment has no "Total" row
     5. Position analysis: Table at bottom → content at top of next page
+
+    P0-03 improvements:
+    - Increased gap tolerance (2 → 3 pages) for chain iteration
+    - Missing-page detection with DLQ red flags
+    - Statistics tracking for quality metrics
     """
 
     # Continuation marker patterns (case-insensitive)
@@ -39,34 +49,44 @@ class MultiPageTableHandler:
         r'\bcontinues?\b',         # "continue", "continues"
     ]
 
-    def __init__(self, config: Optional[ChunkingConfig] = None):
+    # P0-03: Increased gap tolerance from 2 to 3 pages to handle chain iteration
+    # This allows merging across 1 missing page in a chain
+    MAX_PAGE_GAP = 3  # Tolerates gaps of 1-3 pages
+
+    def __init__(self, config: Optional[ChunkingConfig] = None, trace_emitter=None):
         """Initialize the multi-page table handler with configuration."""
         # Load from config if not provided
         if config is None:
             config = get_config().chunking
 
         self.column_similarity_threshold = config.multi_page_table_column_similarity_threshold
+        self._trace_emitter = trace_emitter or get_noop_emitter()
 
         self.stats = {
             "tables_processed": 0,
             "tables_merged": 0,
             "total_fragments_merged": 0,
+            "missing_pages_detected": 0,  # P0-03: Track missing pages
+            "dlq_entries": 0,  # P0-03: Track DLQ red flags
         }
 
     # ==================== MAIN DETECTION AND MERGING ====================
 
     def detect_and_merge(
-        self, tables: List[StructuredTable]
+        self, tables: List[StructuredTable], trace_emitter=None
     ) -> List[StructuredTable]:
         """
         Detect table continuations and merge fragments.
 
         Args:
             tables: List of StructuredTable objects, ordered by page number
+            trace_emitter: Optional TraceEmitter for instrumentation
 
         Returns:
             List of merged tables (fewer items than input if merges occurred)
         """
+        emitter = trace_emitter or self._trace_emitter
+
         if len(tables) < 2:
             self.stats["tables_processed"] = len(tables)
             return tables
@@ -93,6 +113,30 @@ class MultiPageTableHandler:
             # Merge if multiple fragments detected
             if len(fragments) > 1:
                 merged_table = self._merge_fragments(fragments)
+
+                # P0-03: Detect missing pages in the merged table
+                missing_pages = self._detect_missing_pages(merged_table)
+                if missing_pages:
+                    self.stats["missing_pages_detected"] += len(missing_pages)
+                    self.stats["dlq_entries"] += 1
+
+                    # Emit DLQ red flag for lost pages
+                    emitter.emit_red_flag(
+                        "7",
+                        "multi_page_table_page_lost",
+                        {
+                            "table_id": merged_table.table_id,
+                            "missing_pages": list(missing_pages),
+                            "expected_range": f"{merged_table.source_pages[0]}-{merged_table.source_pages[-1]}",
+                            "actual_pages": merged_table.source_pages,
+                            "fragment_count": len(fragments),
+                        },
+                    )
+                    logger.warning(
+                        f"[{merged_table.table_id}] Missing pages detected: {missing_pages} "
+                        f"in range {merged_table.source_pages[0]}-{merged_table.source_pages[-1]}"
+                    )
+
                 merged.append(merged_table)
                 self.stats["tables_merged"] += 1
                 self.stats["total_fragments_merged"] += len(fragments)
@@ -103,6 +147,29 @@ class MultiPageTableHandler:
 
         self.stats["tables_processed"] = len(sorted_tables)
         return merged
+
+    def _detect_missing_pages(self, merged_table: StructuredTable) -> Set[int]:
+        """
+        P0-03: Detect missing pages in a merged multi-page table.
+
+        After merging, checks for gaps in source_pages. If pages are missing,
+        they should either be recovered via tier-3 or logged to DLQ.
+
+        Args:
+            merged_table: StructuredTable after merging
+
+        Returns:
+            Set of missing page numbers (empty if none missing)
+        """
+        if not merged_table.source_pages or len(merged_table.source_pages) < 2:
+            return set()
+
+        pages = sorted(merged_table.source_pages)
+        expected = set(range(pages[0], pages[-1] + 1))
+        actual = set(pages)
+        missing = expected - actual
+
+        return missing
 
     def _should_merge(
         self, prev: StructuredTable, curr: StructuredTable
@@ -117,10 +184,10 @@ class MultiPageTableHandler:
         Returns:
             True if tables should be merged, False otherwise
         """
-        # RULE 1: Must be consecutive or near-consecutive pages
-        # Allow up to 1 page gap (for page break artifacts)
+        # P0-03: RULE 1: Allow gap of 1, 2, or 3 pages (tolerates 1-2 missing pages in chain)
+        # Increased from max gap of 2 to fix UK long-chain failure mode (11-page tables)
         page_gap = curr.source_page_physical - prev.source_page_physical
-        if page_gap < 1 or page_gap > 2:
+        if page_gap < 1 or page_gap > self.MAX_PAGE_GAP:
             return False
 
         # RULE 2: Strong signal - continuation markers
@@ -500,4 +567,6 @@ class MultiPageTableHandler:
             "tables_processed": 0,
             "tables_merged": 0,
             "total_fragments_merged": 0,
+            "missing_pages_detected": 0,  # P0-03
+            "dlq_entries": 0,  # P0-03
         }

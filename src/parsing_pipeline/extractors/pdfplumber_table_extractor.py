@@ -137,6 +137,9 @@ class PdfplumberTableExtractor:
                 layout_label=kwargs.get("label", "Table"),
                 layout_confidence=kwargs.get("confidence"),
                 structured_data=structured_data,
+                # P1-14b: Populate extraction_method for visual asset registry
+                extraction_method=f"pdfplumber-{extraction_method}",
+                extraction_confidence=confidence,
             )
 
         except Exception as e:

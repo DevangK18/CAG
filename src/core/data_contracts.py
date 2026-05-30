@@ -324,6 +324,21 @@ class SectionTypeEnum(str, Enum):
     GLOSSARY = "glossary"
     ACKNOWLEDGEMENT = "acknowledgement"
     PREFACE = "preface"
+    # P0-09: Expanded taxonomy for State/Local Body performance audits
+    FINANCIAL_MANAGEMENT = "financial_management"
+    EMPLOYMENT = "employment"
+    EXECUTION = "execution"
+    PLANNING = "planning"
+    CAPACITY_BUILDING = "capacity_building"
+    GRIEVANCE_REDRESSAL = "grievance_redressal"
+    IMPACT = "impact"
+    MONITORING_EVALUATION = "monitoring_evaluation"
+    COMPLIANCE_REVIEW = "compliance_review"
+    PERFORMANCE_AUDIT = "performance_audit"
+    INFRASTRUCTURE = "infrastructure"
+    SERVICE_DELIVERY = "service_delivery"
+    REGULATORY = "regulatory"
+    ENVIRONMENT = "environment"
     OTHER = "other"
 
 
@@ -350,6 +365,13 @@ class Finding(BaseModel):
     )
     total_amount_inr: int = Field(
         default=0, description="Sum of all monetary values (in paise)"
+    )
+    # P0-01: Single monetary value fields (max amount from monetary_values)
+    monetary_value: Optional[int] = Field(
+        default=None, description="P0-01: Max single monetary amount (in paise)"
+    )
+    monetary_value_crore: Optional[float] = Field(
+        default=None, description="P0-01: Max single monetary amount (in crore, derived from monetary_value)"
     )
     # P1-2: Enhanced semantic pattern matching fields
     confidence: float = Field(
@@ -487,6 +509,41 @@ class SemanticEnrichment(BaseModel):
     executive_summary_index: Optional[Dict[str, Any]] = Field(
         default=None,
         description="P4-4: Structured index from exec summary with paragraph citations"
+    )
+
+
+# ==================== P1-14c: VISUAL ASSET REGISTRY ====================
+
+
+class VisualAssetRegistry(BaseModel):
+    """
+    P1-14c: Registry tracking all extracted visual assets.
+
+    Used for:
+    - Counting tables/figures per report
+    - Tracking extraction methods used (pdfplumber, docling, gemini)
+    - Grouping visual assets by section for downstream processing
+    """
+
+    total_tables: int = Field(
+        default=0,
+        description="Total number of table chunks in the report"
+    )
+    total_figures: int = Field(
+        default=0,
+        description="Total number of figure/chart chunks in the report"
+    )
+    tables_by_section: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Map of parent_chunk_id -> list of table chunk_ids"
+    )
+    figures_by_section: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Map of parent_chunk_id -> list of figure chunk_ids"
+    )
+    extraction_stats: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Counts by extraction method: {'pdfplumber-lines_strict': 42, 'docling-tableformer': 15}"
     )
 
 

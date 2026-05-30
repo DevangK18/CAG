@@ -45,6 +45,48 @@ class RecommendationExtractor:
     ]
 
     # ══════════════════════════════════════════════════════════════
+    # P0-08: List-after-cue pattern ("We recommend that:\n1. ...")
+    # ══════════════════════════════════════════════════════════════
+    LIST_AFTER_CUE_PATTERN = re.compile(
+        r"(?:We|Audit)\s+recommend(?:s|ed)?\s+that\s*:?\s*\n"
+        r"((?:\s*\d+\.\s+.+\n?)+)",
+        re.IGNORECASE | re.MULTILINE
+    )
+
+    # ══════════════════════════════════════════════════════════════
+    # P0-08: Verb rejection patterns (PAC/Guideline citations)
+    # These indicate quoting rules/mandates, not making recommendations
+    # ══════════════════════════════════════════════════════════════
+    VERB_REJECTION_PATTERNS = [
+        re.compile(r"PAC\d*\s+(?:was\s+of\s+the\s+view|recommended|observed)", re.IGNORECASE),
+        re.compile(r"The\s+\w+\s+Guidelines\s+.{0,30}(?:mandate|state|require)", re.IGNORECASE),
+        re.compile(r"Paragraph\s+[\d.]+\s+(?:of|mandates|states|requires)", re.IGNORECASE),
+        re.compile(r"As\s+per\s+(?:the\s+)?\w+\s+(?:Act|Rules|Manual|Guidelines)", re.IGNORECASE),
+        re.compile(r"(?:Section|Rule|Clause)\s+\d+\s+(?:of|stipulates|provides|states)", re.IGNORECASE),
+        re.compile(r"(?:Ministry|Government)\s+(?:has\s+)?(?:issued|stated|observed)\s+that", re.IGNORECASE),
+    ]
+
+    # ══════════════════════════════════════════════════════════════
+    # P0-08: Enhanced addressee extraction patterns
+    # ══════════════════════════════════════════════════════════════
+    ADDRESSEE_PATTERNS = [
+        # Standard "Ministry/Department should..."
+        re.compile(
+            r"(?:^|\.\s+)(?:The\s+)?([A-Z][\w\s&]+?)\s+(?:may|should|shall|must|needs?\s+to)\s+",
+            re.IGNORECASE
+        ),
+        # "It is recommended that [Ministry] should..."
+        re.compile(
+            r"(?:recommend(?:ed|s)?|suggest(?:ed|s)?)\s+that\s+(?:the\s+)?([A-Z][\w\s&]+?)\s+(?:may|should|shall)",
+            re.IGNORECASE
+        ),
+        # Acronym + action verb
+        re.compile(
+            r"\b([A-Z]{2,8})\s+(?:should|may|must|needs?\s+to)\s+",
+        ),
+    ]
+
+    # ══════════════════════════════════════════════════════════════
     # Strategy 2: Structural section indicators
     # ══════════════════════════════════════════════════════════════
     REC_SECTION_PATTERNS = [
@@ -156,6 +198,16 @@ class RecommendationExtractor:
         # ──────────────────────────────────────────────────────────
         numbered_recs = self._extract_numbered(child_chunks, report_id)
         for rec in numbered_recs:
+            sig = rec.text[:80].lower()
+            if sig not in seen_texts:
+                seen_texts.add(sig)
+                all_recs.append(rec)
+
+        # ──────────────────────────────────────────────────────────
+        # P0-08: Strategy 2b: List-after-cue ("We recommend that:\n1. ...")
+        # ──────────────────────────────────────────────────────────
+        list_after_cue_recs = self._extract_list_after_cue(child_chunks, report_id)
+        for rec in list_after_cue_recs:
             sig = rec.text[:80].lower()
             if sig not in seen_texts:
                 seen_texts.add(sig)
@@ -289,6 +341,75 @@ class RecommendationExtractor:
                     ))
         return recs
 
+    def _extract_list_after_cue(
+        self, child_chunks: List[Dict], report_id: str
+    ) -> List[ExtractedRecommendation]:
+        """
+        P0-08: Extract recommendations using "We recommend that:\n1. ..." pattern.
+
+        This pattern captures numbered lists that follow recommendation cues,
+        which is common in CAG reports where recommendations are enumerated.
+
+        Args:
+            child_chunks: Content chunks to search
+            report_id: Report identifier
+
+        Returns:
+            List of ExtractedRecommendation objects
+        """
+        recs = []
+        for chunk in child_chunks:
+            content = chunk.get("content", "")
+
+            # Search for list-after-cue pattern
+            match = self.LIST_AFTER_CUE_PATTERN.search(content)
+            if match:
+                list_content = match.group(1)
+
+                # Extract each numbered item
+                items = re.findall(
+                    r"(\d+)\.\s+(.+?)(?=\n\s*\d+\.|\Z)",
+                    list_content,
+                    re.DOTALL
+                )
+
+                for num, text in items:
+                    text = text.strip()
+                    if len(text) < 20:
+                        continue
+
+                    hierarchy = chunk.get("hierarchy", {})
+                    recs.append(ExtractedRecommendation(
+                        text=text,
+                        source_chunk_id=chunk.get("chunk_id", ""),
+                        page=chunk.get("source_page_physical", 0),
+                        chapter=hierarchy.get("level_1"),
+                        section=hierarchy.get("level_2"),
+                        rec_number=f"Recommendation {num}",
+                        extraction_strategy="list_after_cue",
+                        confidence=0.90,
+                    ))
+
+        return recs
+
+    def _is_verb_false_positive(self, text: str) -> bool:
+        """
+        P0-08: Check if text matches verb rejection patterns.
+
+        These patterns identify text that uses recommendation-like language
+        but is actually quoting rules, guidelines, or PAC observations.
+
+        Args:
+            text: Text to check
+
+        Returns:
+            True if text is a false positive, False otherwise
+        """
+        for pattern in self.VERB_REJECTION_PATTERNS:
+            if pattern.search(text):
+                return True
+        return False
+
     def _extract_verb_based(
         self, child_chunks: List[Dict], report_id: str
     ) -> List[ExtractedRecommendation]:
@@ -317,6 +438,10 @@ class RecommendationExtractor:
                     # The capture group is often incomplete
                     rec_text = content.strip()
                     if len(rec_text) < 30:
+                        continue
+
+                    # P0-08: Reject PAC/Guideline citation patterns
+                    if self._is_verb_false_positive(rec_text):
                         continue
 
                     # P1 FIX: Reject chunks that are quoting official documents/acts/rules
@@ -439,11 +564,40 @@ class RecommendationExtractor:
         return citations
 
     def _extract_target(self, text: str) -> Optional[str]:
-        """Extract target entity (Ministry/Department/Organization)."""
+        """
+        Extract target entity (Ministry/Department/Organization).
+
+        P0-08: Enhanced with additional addressee patterns.
+        """
+        # First try the original patterns
         for p in self._target:
             m = p.search(text)
             if m:
-                return m.group(1).strip()
+                addressee = m.group(1).strip()
+                # Reject generic/invalid addressees
+                if addressee.lower() in ["the", "it", "this", "that", "they", "we"]:
+                    continue
+                return addressee
+
+        # P0-08: Try enhanced addressee patterns
+        for p in self.ADDRESSEE_PATTERNS:
+            m = p.search(text)
+            if m:
+                addressee = m.group(1).strip()
+                # Reject generic/invalid addressees
+                if addressee.lower() in ["the", "it", "this", "that", "they", "we"]:
+                    continue
+                # Truncate overly long matches (likely capturing too much)
+                if len(addressee) > 50:
+                    # Find a good break point
+                    for sep in [",", " and ", " or "]:
+                        if sep in addressee[:50]:
+                            addressee = addressee.split(sep)[0].strip()
+                            break
+                    else:
+                        addressee = addressee[:50].rsplit(" ", 1)[0]
+                return addressee
+
         return None
 
     def _extract_action(self, text: str) -> Optional[str]:

@@ -790,6 +790,8 @@ class GeminiVisualExtractor:
                             # Update model_used to indicate Gemini extraction
                             if "model_used" in chunk:
                                 chunk["model_used"] = f"gemini-2.5-flash-vision"
+                            # P1-14b: Set extraction_method for visual asset registry
+                            chunk["extraction_method"] = "gemini-2.5-flash-vision"
                             updated += 1
                             break
 

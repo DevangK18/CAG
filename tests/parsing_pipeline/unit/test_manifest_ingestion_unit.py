@@ -1,8 +1,8 @@
 import pytest
 import pandas as pd
 from pathlib import Path
-from ..src.modules.manifest_ingestion_service import ManifestIngestionService
-from ..src.modules.data_contracts import DocumentTask
+from src.parsing_pipeline.modules.manifest_ingestion_service import ManifestIngestionService
+from src.core.data_contracts import DocumentTask
 from unittest.mock import patch, MagicMock
 
 
@@ -173,3 +173,153 @@ async def test_download_pdf_network_error(httpx_mock, test_raw_dir):
     assert task.processing_status == "failed_download"
     assert len(task.error_log) == 1
     assert "Download failed after retries" in task.error_log[0]
+
+
+# ==================== P0-06: Report ID Generation Tests ====================
+
+
+class TestReportIdZeroPadding:
+    """P0-06: Test zero-padding normalization for report IDs."""
+
+    def test_union_report_id_zero_padding(self, tmp_path):
+        """Test Union report ID has zero-padded number."""
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+        service.government_body_type = "union"  # Set for test
+
+        row = pd.Series({
+            "SL NO": 1,
+            "Title": "Test Report",
+            "Recommended Title": "Performance Audit",
+            "Report No": "4 of 2025",
+            "Date": "2025-01-15",
+            "Report PDF": "https://example.com/report.pdf",
+        })
+
+        report_id = service._build_report_id(row)
+        # Should be 2025_04_... not 2025_4_...
+        assert "_04_" in report_id
+        assert "_4_" not in report_id.replace("_04_", "")
+
+    def test_state_report_id_zero_padding(self, tmp_path):
+        """Test State report ID has zero-padded number."""
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+        service.government_body_type = "state"  # Set for test
+
+        row = pd.Series({
+            "SL NO": 1,
+            "Title": "Test Report",
+            "Recommended Title": "Compliance Audit",
+            "Report No": "3 of 2024",
+            "State Name": "Odisha",
+            "Date": "2024-06-15",
+            "Report PDF": "https://example.com/report.pdf",
+        })
+
+        report_id = service._build_report_id(row)
+        # Should be OD_2024_03_... not OD_2024_3_...
+        assert "_03_" in report_id
+
+    def test_double_digit_unchanged(self, tmp_path):
+        """Test double-digit numbers remain unchanged."""
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+        service.government_body_type = "union"  # Set for test
+
+        row = pd.Series({
+            "SL NO": 1,
+            "Title": "Test Report",
+            "Recommended Title": "Performance Audit",
+            "Report No": "15 of 2025",
+            "Date": "2025-01-15",
+            "Report PDF": "https://example.com/report.pdf",
+        })
+
+        report_id = service._build_report_id(row)
+        # Should be 2025_15_... (15 stays as is)
+        assert "_15_" in report_id
+
+
+class TestReportIdValidation:
+    """P0-06: Test report ID format validation."""
+
+    def test_valid_union_format(self, tmp_path, caplog):
+        """Test valid Union format passes validation."""
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+        service.government_body_type = "union"  # Set for test
+
+        row = pd.Series({
+            "SL NO": 1,
+            "Title": "Test Report",
+            "Recommended Title": "Performance Audit",
+            "Report No": "4 of 2025",
+            "Date": "2025-01-15",
+            "Report PDF": "https://example.com/report.pdf",
+        })
+
+        report_id = service._build_report_id(row)
+        # Should not log warning
+        assert "P0-06" not in caplog.text
+
+    def test_valid_state_format(self, tmp_path, caplog):
+        """Test valid State format passes validation."""
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+        service.government_body_type = "state"  # Set for test
+
+        row = pd.Series({
+            "SL NO": 1,
+            "Title": "Test Report",
+            "Recommended Title": "Compliance Audit",
+            "Report No": "1 of 2024",
+            "State Name": "Kerala",
+            "Date": "2024-06-15",
+            "Report PDF": "https://example.com/report.pdf",
+        })
+
+        report_id = service._build_report_id(row)
+        # Should be KL_2024_01_... and not trigger warning
+        assert report_id.startswith("KL_2024_01_")
+
+
+class TestLegacyReportIdCheck:
+    """P0-06: Test legacy report ID fallback."""
+
+    def test_check_legacy_format(self, tmp_path):
+        """Test detection of legacy format files."""
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+
+        # Create a legacy format file
+        legacy_path = raw_dir / "2025_4_Test_Report.pdf"
+        legacy_path.write_text("test")
+
+        # Check if legacy path is found for canonical ID
+        result = service._check_legacy_report_id("2025_04_Test_Report")
+        assert result is not None
+        assert result.exists()
+        assert result.name == "2025_4_Test_Report.pdf"
+
+    def test_no_legacy_when_canonical_format(self, tmp_path):
+        """Test no legacy path when already canonical."""
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        service = ManifestIngestionService(raw_data_dir=str(raw_dir))
+
+        # No legacy file exists
+        result = service._check_legacy_report_id("2025_04_Test_Report")
+        assert result is None

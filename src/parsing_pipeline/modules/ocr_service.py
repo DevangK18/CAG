@@ -66,6 +66,14 @@ class OCRService:
         # Only process scanned documents
         if task.classification != "scanned":
             task.error_log.append("Document not classified as scanned, skipping OCR")
+
+            # P1-15: Emit success-path for native_text classification
+            emitter.emit_io(
+                "3",
+                {"classification": task.classification},
+                {"status": "skipped", "reason": "native_text - OCR not needed"},
+            )
+
             # Trace: Skip decision for native PDFs
             emitter.emit_decision(
                 "3",

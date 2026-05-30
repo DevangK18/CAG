@@ -460,6 +460,13 @@ class ScaffoldingService:
             try:
                 doc = fitz.Document(pdf_path)
 
+                # P1-15: Emit page_count at phase entry
+                trace_emitter.emit_io(
+                    "4",
+                    {"pdf_path": pdf_path, "page_count": doc.page_count},
+                    {},  # Output will be emitted at phase completion
+                )
+
                 # Phase 1: Extract ToC via bookmarks/embedded outlines
                 task = self._extract_embedded_toc(task, doc, trace_emitter=trace_emitter)
 

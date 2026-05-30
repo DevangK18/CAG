@@ -249,8 +249,12 @@ class SemanticEnrichmentService:
             )
 
         # 7. Extract temporal metadata
+        # P2-21: Pass report_year to filter future years
+        report_year = report_metadata.get("report_year")
         temporal_coverage = self._temporal_extractor.extract_temporal_metadata(
-            child_chunks, [s.model_dump() for s in section_classifications]
+            child_chunks,
+            [s.model_dump() for s in section_classifications],
+            report_year=report_year,
         )
         logger.info(
             f"  Temporal: audit_period={temporal_coverage.get('audit_period')}, "
@@ -259,8 +263,9 @@ class SemanticEnrichmentService:
 
         # Annotate findings with temporal context
         for finding in findings:
+            # P2-21: Pass report_year for future year filtering
             finding.reference_years = self._temporal_extractor.extract_reference_years(
-                finding.text
+                finding.text, report_year=report_year
             )
             if temporal_coverage.get("audit_period"):
                 finding.audit_period = temporal_coverage["audit_period"]
@@ -300,6 +305,27 @@ class SemanticEnrichmentService:
                     },
                 )
 
+            # P0-01: Check for implausibly large monetary totals (tier-specific)
+            # These thresholds are in crore - exceeding them suggests extraction errors
+            IMPLAUSIBILITY_THRESHOLDS = {
+                "union": 500_000,      # ₹5 lakh crore
+                "state": 100_000,      # ₹1 lakh crore
+                "local_body": 10_000,  # ₹10,000 crore
+            }
+            total_monetary_crore = statistics.get("findings", {}).get("total_monetary_crore", 0)
+            threshold = IMPLAUSIBILITY_THRESHOLDS.get(government_body_type, 500_000)
+            if total_monetary_crore > threshold:
+                trace_emitter.emit_red_flag(
+                    "9",
+                    "monetary_total_implausible",
+                    {
+                        "total_monetary_crore": total_monetary_crore,
+                        "threshold_crore": threshold,
+                        "government_body_type": government_body_type,
+                        "ratio_to_threshold": round(total_monetary_crore / threshold, 2),
+                    },
+                )
+
             # Tier-specific severity threshold decision
             trace_emitter.emit_decision(
                 "9",
@@ -320,6 +346,19 @@ class SemanticEnrichmentService:
                 "section_classifications",
                 [{"type": k, "count": v} for k, v in section_type_counts.items()],
             )
+
+            # P0-09: Check for high 'other' section ratio (red flag if >70%)
+            section_other_count = section_type_counts.get("other", 0)
+            if section_classifications and section_other_count / len(section_classifications) > 0.70:
+                trace_emitter.emit_red_flag(
+                    "9",
+                    "section_other_ratio_high",
+                    {
+                        "other_count": section_other_count,
+                        "total_sections": len(section_classifications),
+                        "percentage": round(section_other_count / len(section_classifications) * 100, 1),
+                    },
+                )
 
             # Box elements count
             if box_elements:

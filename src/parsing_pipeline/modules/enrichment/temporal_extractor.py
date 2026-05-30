@@ -53,12 +53,31 @@ class TemporalExtractor:
         ]
 
     def _normalize_fy_year(self, base: str, suffix: str) -> int:
-        """Convert '2019' + '20' → 2019, or '2019' + '2020' → 2019."""
+        """Convert '2019' + '20' → 2019 (start year), or '2019' + '2020' → 2019."""
         return int(base)
+
+    def _normalize_fy_year_end(self, base: str, suffix: str) -> int:
+        """
+        P2-21: Convert fiscal year to END year.
+
+        '2021' + '22' → 2022 (end year of fiscal 2021-22)
+        '2021' + '2022' → 2022
+        """
+        base_int = int(base)
+        if len(suffix) == 2:
+            # "2021-22" → 2022
+            century = str(base_int)[:2]
+            return int(century + suffix)
+        else:
+            # "2021-2022" → 2022
+            return int(suffix)
 
     def extract_audit_period(self, full_text: str) -> Optional[Dict[str, int]]:
         """
         Extract the document-level audit period from intro/scope text.
+
+        P2-21: Uses _normalize_fy_year_end() to get the correct end year
+        for fiscal year patterns like "2021-22" → end_year=2022.
 
         Returns: {"start_year": 2019, "end_year": 2023} or None
         """
@@ -67,22 +86,40 @@ class TemporalExtractor:
             if match:
                 groups = match.groups()
                 if len(groups) >= 4:
+                    # Pattern: "2019-20 to 2022-23" → start_year=2019, end_year=2023
                     start_year = int(groups[0])
-                    end_year = int(groups[2])
+                    # P2-21: Use _normalize_fy_year_end for the end year
+                    end_year = self._normalize_fy_year_end(groups[2], groups[3])
                     if 2000 <= start_year <= 2030 and 2000 <= end_year <= 2030:
                         return {"start_year": start_year, "end_year": end_year}
                 elif len(groups) == 2:
+                    # Pattern: "April 2019 to March 2023" → both are full years
                     start_year = int(groups[0])
                     end_year = int(groups[1])
                     if 2000 <= start_year <= 2030 and 2000 <= end_year <= 2030:
                         return {"start_year": start_year, "end_year": end_year}
         return None
 
-    def extract_reference_years(self, text: str) -> List[int]:
-        """Extract all years mentioned in a text block."""
+    def extract_reference_years(
+        self, text: str, report_year: Optional[int] = None
+    ) -> List[int]:
+        """
+        Extract all years mentioned in a text block.
+
+        P2-21: Optionally filter years based on report_year.
+        Future years beyond report_year+1 are filtered out to avoid
+        including publication dates or projection years.
+
+        Args:
+            text: Text content to extract years from
+            report_year: Optional report year to filter against (allows +1 for pub lag)
+
+        Returns:
+            Sorted list of years
+        """
         years = set()
 
-        # Year ranges: "2019-20" → 2019
+        # Year ranges: "2019-20" → 2019, 2020
         for match in self.YEAR_RANGE_PATTERN.finditer(text):
             base = int(match.group(1))
             if 2000 <= base <= 2030:
@@ -101,6 +138,11 @@ class TemporalExtractor:
             year = int(match.group(1))
             if 2000 <= year <= 2030:
                 years.add(year)
+
+        # P2-21: Filter future years relative to report_year
+        if report_year is not None:
+            max_allowed_year = report_year + 1  # Allow +1 for publication lag
+            years = {y for y in years if y <= max_allowed_year}
 
         return sorted(years)
 
@@ -121,12 +163,20 @@ class TemporalExtractor:
         self,
         child_chunks: List[Dict],
         section_classifications: Optional[List[Dict]] = None,
+        report_year: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Extract document-level temporal coverage.
 
         Scans introduction/scope sections first for audit period,
         then aggregates all years across all chunks.
+
+        P2-21: Added report_year parameter to filter future years.
+
+        Args:
+            child_chunks: List of child chunk dicts
+            section_classifications: Optional section classification list
+            report_year: Optional report year for filtering future years
 
         Returns: {
             "audit_period": {"start_year": 2019, "end_year": 2023} or None,
@@ -160,12 +210,12 @@ class TemporalExtractor:
             full_text = " ".join(c.get("content", "") for c in child_chunks[:50])
             audit_period = self.extract_audit_period(full_text)
 
-        # Aggregate all reference years
+        # Aggregate all reference years (P2-21: with report_year filtering)
         all_years = set()
         all_prev_refs = []
         for chunk in child_chunks:
             content = chunk.get("content", "")
-            all_years.update(self.extract_reference_years(content))
+            all_years.update(self.extract_reference_years(content, report_year=report_year))
             all_prev_refs.extend(self.extract_previous_audit_refs(content))
 
         # Deduplicate previous refs by year

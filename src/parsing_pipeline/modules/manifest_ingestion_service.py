@@ -748,6 +748,11 @@ class ManifestIngestionService:
         if not year_part:
             year_part = "0000"
 
+        # P0-06: Normalize num_part to 2-digit zero-padded format
+        # "4" -> "04", "10" -> "10", "" -> None
+        if num_part:
+            num_part = str(num_part).zfill(2)
+
         # Get Recommended Title (or fallback to Original Title)
         rec_title = row.get("Recommended Title", "")
         if pd.isna(rec_title) or str(rec_title).strip() == "":
@@ -790,7 +795,81 @@ class ManifestIngestionService:
                     sl_no = int(row.get('SL NO', 0))
                     report_id = f"{year_part}_{sl_no:02d}_{sanitized_title}"
 
+        # P0-06: Validate report_id format at emission
+        # Expected format: ([A-Z]{2}_)?{YYYY}_{NN}_... or {ST}_ATIR_{YYYY}_...
+        # Where YYYY is 4-digit year, NN is 2-digit number
+        self._validate_report_id_format(report_id)
+
         return report_id
+
+    def _validate_report_id_format(self, report_id: str) -> None:
+        """
+        P0-06: Validate report_id format.
+
+        Expected formats:
+        - Union: {YYYY}_{NN}_{title} (e.g., 2025_04_Performance_Audit)
+        - State: {ST}_{YYYY}_{NN}_{title} (e.g., OD_2025_01_Compliance_Audit)
+        - ATIR: {ST}_ATIR_{YYYY}_{title} (e.g., KL_ATIR_2024_Annual_Report)
+
+        Args:
+            report_id: The generated report ID
+
+        Raises:
+            ValueError: If report_id format is invalid
+        """
+        # Define valid patterns
+        patterns = [
+            # Union format: YYYY_NN_title
+            r"^\d{4}_\d{2}_.+$",
+            # State/Local format: ST_YYYY_NN_title or ST_YYYY_title
+            r"^[A-Z]{2}_\d{4}_(?:\d{2}_)?.+$",
+            # ATIR format: ST_ATIR_YYYY_title
+            r"^[A-Z]{2}_ATIR_\d{4}_.+$",
+            # Legacy format with Report No: e.g., 10_of_2017_title (for backward compat)
+            r"^\d+_of_\d{4}_.+$",
+        ]
+
+        is_valid = any(re.match(p, report_id) for p in patterns)
+
+        if not is_valid:
+            logger.warning(
+                f"P0-06: Report ID format validation warning: '{report_id}' "
+                f"does not match expected patterns. This may cause issues with "
+                f"downstream processing."
+            )
+            # Don't raise - just warn for now to avoid breaking existing workflows
+            # In production, this could be upgraded to an assertion
+
+    def _check_legacy_report_id(self, canonical_report_id: str) -> Optional[Path]:
+        """
+        P0-06: Check if a legacy format file exists for this report.
+
+        Legacy format uses non-zero-padded numbers (e.g., 2025_4 instead of 2025_04).
+
+        Args:
+            canonical_report_id: The canonical (zero-padded) report ID
+
+        Returns:
+            Path to legacy file if it exists, None otherwise
+        """
+        # Try to convert canonical format to legacy format
+        # Canonical: 2025_04_title or OD_2025_04_title
+        # Legacy: 2025_4_title or OD_2025_4_title
+
+        # Pattern: find _NN_ where NN starts with 0 and replace with _N_
+        legacy_id = re.sub(
+            r"_0(\d)_",  # Match _0X_ pattern
+            r"_\1_",      # Replace with _X_
+            canonical_report_id,
+            count=1       # Only replace first occurrence
+        )
+
+        if legacy_id != canonical_report_id:
+            legacy_path = self.raw_data_dir / f"{legacy_id}.pdf"
+            if legacy_path.exists():
+                return legacy_path
+
+        return None
 
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10)
@@ -840,14 +919,23 @@ class ManifestIngestionService:
             existing_pdf_path = local_path
             match_strategy = "exact"
         else:
+            # P0-06: Fallback check for legacy format (without zero-padding)
+            # e.g., 2025_4_title.pdf instead of 2025_04_title.pdf
+            legacy_path = self._check_legacy_report_id(report_id)
+            if legacy_path and legacy_path.exists():
+                existing_pdf_path = legacy_path
+                match_strategy = "legacy_format_fallback"
+                logger.info(f"  P0-06: Found PDF with legacy format: {legacy_path.name[:60]}...")
+
             # Fallback: Check for Original Title filename (for manually downloaded PDFs)
-            original_title = row.get("Title", "")  # "Title" is mapped from "Original Title"
-            if not pd.isna(original_title) and original_title:
-                original_title_path = self.raw_data_dir / f"{original_title}.pdf"
-                if original_title_path.exists():
-                    existing_pdf_path = original_title_path
-                    match_strategy = "original_title_fallback"
-                    logger.info(f"  Found PDF with Original Title: {original_title_path.name[:60]}...")
+            if not existing_pdf_path:
+                original_title = row.get("Title", "")  # "Title" is mapped from "Original Title"
+                if not pd.isna(original_title) and original_title:
+                    original_title_path = self.raw_data_dir / f"{original_title}.pdf"
+                    if original_title_path.exists():
+                        existing_pdf_path = original_title_path
+                        match_strategy = "original_title_fallback"
+                        logger.info(f"  Found PDF with Original Title: {original_title_path.name[:60]}...")
 
         if existing_pdf_path:
             # File already exists, skip download and return task
@@ -858,7 +946,7 @@ class ManifestIngestionService:
                 "1",
                 "pdf_resolution",
                 match_strategy,
-                ["exact", "original_title_fallback", "download"],
+                ["exact", "legacy_format_fallback", "original_title_fallback", "download"],
                 f"Found existing PDF at {str(existing_pdf_path)[-50:]}",
             )
 

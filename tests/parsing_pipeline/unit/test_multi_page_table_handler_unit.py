@@ -8,10 +8,16 @@ Tests P0-3 functionality:
 - Total row detection
 - Fragment merging correctness
 - Edge cases (single table, non-consecutive pages, etc.)
+
+P0-03 improvements tested:
+- Gap tolerance increase (2 → 3 pages)
+- Missing-page detection
+- DLQ red flag emission
 """
 
 import pytest
 from typing import List
+from unittest.mock import Mock
 
 from src.parsing_pipeline.modules.multi_page_table_handler import MultiPageTableHandler
 from src.core.table_contracts import (
@@ -722,3 +728,311 @@ class TestMultiPageTableHandler:
 
         similarity = handler._column_similarity(empty_table1, empty_table2)
         assert similarity == 0.0
+
+    # ==================== P0-03: GAP TOLERANCE TESTS ====================
+
+    def test_p0_03_max_page_gap_constant(self, handler):
+        """P0-03: Test MAX_PAGE_GAP constant is correctly set to 3."""
+        assert MultiPageTableHandler.MAX_PAGE_GAP == 3
+
+    def test_p0_03_should_merge_gap_of_2_pages(self, handler, sample_table_fragment_1):
+        """P0-03: Tables with 2-page gap should be considered for merging."""
+        # Create table on page 3 (gap of 2 pages from page 1)
+        page_3_table = StructuredTable(
+            table_id="table_3_100_50",
+            source_chunk_id="temp",
+            source_page_physical=3,  # Gap of 2 from page 1
+            source_bbox=[100, 50, 500, 400],
+            columns=sample_table_fragment_1.columns,  # Same columns
+            rows=[],
+            num_rows=0,
+            num_cols=3,
+            num_header_rows=1,
+            markdown_representation="",
+        )
+
+        # With Contd. marker and same columns, should merge even with gap of 2
+        assert handler._should_merge(sample_table_fragment_1, page_3_table) is True
+
+    def test_p0_03_should_merge_gap_of_3_pages(self, handler, sample_table_fragment_1):
+        """P0-03: Tables with 3-page gap should still be considered for merging."""
+        # Create table on page 4 (gap of 3 pages from page 1)
+        page_4_table = StructuredTable(
+            table_id="table_4_100_50",
+            source_chunk_id="temp",
+            source_page_physical=4,  # Gap of 3 from page 1
+            source_bbox=[100, 50, 500, 400],
+            columns=sample_table_fragment_1.columns,
+            rows=[],
+            num_rows=0,
+            num_cols=3,
+            num_header_rows=1,
+            markdown_representation="",
+        )
+
+        # With Contd. marker and same columns, should merge
+        assert handler._should_merge(sample_table_fragment_1, page_4_table) is True
+
+    def test_p0_03_should_not_merge_gap_of_4_pages(self, handler, sample_table_fragment_1):
+        """P0-03: Tables with 4+ page gap should NOT be merged."""
+        # Create table on page 5 (gap of 4 pages from page 1)
+        page_5_table = StructuredTable(
+            table_id="table_5_100_50",
+            source_chunk_id="temp",
+            source_page_physical=5,  # Gap of 4 from page 1
+            source_bbox=[100, 50, 500, 400],
+            columns=sample_table_fragment_1.columns,
+            rows=[],
+            num_rows=0,
+            num_cols=3,
+            num_header_rows=1,
+            markdown_representation="",
+        )
+
+        # Gap exceeds MAX_PAGE_GAP, should not merge
+        assert handler._should_merge(sample_table_fragment_1, page_5_table) is False
+
+    # ==================== P0-03: MISSING PAGE DETECTION TESTS ====================
+
+    def test_p0_03_detect_missing_pages_no_gap(self, handler, sample_table_fragment_1, sample_table_fragment_2):
+        """P0-03: No missing pages when table spans consecutive pages."""
+        tables = [sample_table_fragment_1, sample_table_fragment_2]
+        result = handler.detect_and_merge(tables)
+
+        assert len(result) == 1
+        merged = result[0]
+        # Pages 1 and 2 are consecutive - no missing pages
+        missing = handler._detect_missing_pages(merged)
+        assert len(missing) == 0
+
+    def test_p0_03_detect_missing_pages_with_gap(self, handler):
+        """P0-03: Detect missing pages when there's a gap in source_pages."""
+        # Create a mock merged table with source_pages = [1, 4]
+        merged_table = StructuredTable(
+            table_id="merged_test",
+            source_chunk_id="temp",
+            source_page_physical=1,
+            source_pages=[1, 4],  # Gap: pages 2 and 3 are missing
+            source_bbox=[0, 0, 100, 100],
+            columns=[],
+            rows=[],
+            num_rows=0,
+            num_cols=0,
+            num_header_rows=0,
+            is_multi_page=True,
+            markdown_representation="",
+        )
+
+        missing = handler._detect_missing_pages(merged_table)
+        assert missing == {2, 3}
+
+    def test_p0_03_detect_missing_pages_single_gap(self, handler):
+        """P0-03: Detect single missing page."""
+        merged_table = StructuredTable(
+            table_id="merged_test",
+            source_chunk_id="temp",
+            source_page_physical=5,
+            source_pages=[5, 7],  # Page 6 is missing
+            source_bbox=[0, 0, 100, 100],
+            columns=[],
+            rows=[],
+            num_rows=0,
+            num_cols=0,
+            num_header_rows=0,
+            is_multi_page=True,
+            markdown_representation="",
+        )
+
+        missing = handler._detect_missing_pages(merged_table)
+        assert missing == {6}
+
+    # ==================== P0-03: DLQ RED FLAG TESTS ====================
+
+    def test_p0_03_dlq_red_flag_emitted_on_missing_pages(self, handler):
+        """P0-03: DLQ red flag should be emitted when pages are missing."""
+        # Create tables with a gap (pages 1 and 4, matching column structure)
+        columns = [
+            TableColumn(
+                col_idx=0,
+                header_text="State",
+                header_hierarchy=["State"],
+                column_type=ColumnType.ENTITY,
+                dominant_data_type=CellDataType.TEXT,
+            ),
+        ]
+
+        header_cell = TableCell(
+            row_idx=0,
+            col_idx=0,
+            raw_text="State",
+            cleaned_text="State",
+            data_type=CellDataType.TEXT,
+            semantic_type=CellSemanticType.COLUMN_HEADER,
+            parsed_value="State",
+            unit=None,
+            normalized_value=None,
+        )
+
+        # Table 1 with Contd. marker
+        table1 = StructuredTable(
+            table_id="table_1",
+            source_chunk_id="temp",
+            source_page_physical=1,
+            source_bbox=[0, 0, 100, 100],
+            columns=columns,
+            rows=[TableRow(row_idx=0, cells=[header_cell], row_type="header")],
+            num_rows=1,
+            num_cols=1,
+            num_header_rows=1,
+            title="Test (continued)",  # Continuation marker in title
+            markdown_representation="| State |\n| --- |",
+        )
+
+        # Table 2 on page 4 (gap of 3 pages)
+        table2 = StructuredTable(
+            table_id="table_4",
+            source_chunk_id="temp",
+            source_page_physical=4,
+            source_bbox=[0, 0, 100, 100],
+            columns=columns,
+            rows=[TableRow(row_idx=0, cells=[header_cell], row_type="header")],
+            num_rows=1,
+            num_cols=1,
+            num_header_rows=1,
+            has_totals=True,  # End of table
+            markdown_representation="| State |\n| --- |",
+        )
+
+        # Create mock emitter
+        mock_emitter = Mock()
+        mock_emitter.emit_red_flag = Mock()
+
+        # Run detect_and_merge with trace_emitter
+        handler.detect_and_merge([table1, table2], trace_emitter=mock_emitter)
+
+        # Verify DLQ red flag was emitted for missing pages 2 and 3
+        mock_emitter.emit_red_flag.assert_called_once()
+        call_args = mock_emitter.emit_red_flag.call_args
+        assert call_args[0][0] == "7"  # Phase 7 (table extraction)
+        assert call_args[0][1] == "multi_page_table_page_lost"
+        assert set(call_args[0][2]["missing_pages"]) == {2, 3}
+
+    def test_p0_03_statistics_track_missing_pages(self, handler):
+        """P0-03: Statistics should track missing pages and DLQ entries."""
+        # Create tables with gap (similar to above)
+        columns = [
+            TableColumn(
+                col_idx=0,
+                header_text="State",
+                header_hierarchy=["State"],
+                column_type=ColumnType.ENTITY,
+                dominant_data_type=CellDataType.TEXT,
+            ),
+        ]
+
+        header_cell = TableCell(
+            row_idx=0,
+            col_idx=0,
+            raw_text="State",
+            cleaned_text="State",
+            data_type=CellDataType.TEXT,
+            semantic_type=CellSemanticType.COLUMN_HEADER,
+            parsed_value="State",
+            unit=None,
+            normalized_value=None,
+        )
+
+        table1 = StructuredTable(
+            table_id="table_1",
+            source_chunk_id="temp",
+            source_page_physical=1,
+            source_bbox=[0, 0, 100, 100],
+            columns=columns,
+            rows=[TableRow(row_idx=0, cells=[header_cell], row_type="header")],
+            num_rows=1,
+            num_cols=1,
+            num_header_rows=1,
+            title="Test (continued)",
+            markdown_representation="| State |\n| --- |",
+        )
+
+        table2 = StructuredTable(
+            table_id="table_3",
+            source_chunk_id="temp",
+            source_page_physical=3,  # Gap of 2 (page 2 missing)
+            source_bbox=[0, 0, 100, 100],
+            columns=columns,
+            rows=[TableRow(row_idx=0, cells=[header_cell], row_type="header")],
+            num_rows=1,
+            num_cols=1,
+            num_header_rows=1,
+            has_totals=True,
+            markdown_representation="| State |\n| --- |",
+        )
+
+        handler.reset_statistics()
+        handler.detect_and_merge([table1, table2])
+
+        stats = handler.get_statistics()
+        assert stats["missing_pages_detected"] == 1  # Page 2 is missing
+        assert stats["dlq_entries"] == 1
+
+    # ==================== P0-03: CHAIN ITERATION TESTS ====================
+
+    def test_p0_03_chain_iteration_with_11_page_table(self, handler, sample_table_fragment_1):
+        """
+        P0-03: Long chains (like UK's 11-page tables) should merge correctly.
+
+        Tests the chain iteration fix where iterating through fragments with
+        gaps should continue to find valid merges.
+        """
+        # Create 5 fragments (simulating a long table)
+        fragments = []
+        base_columns = sample_table_fragment_1.columns
+
+        for i in range(5):
+            page_num = i * 2 + 1  # Pages 1, 3, 5, 7, 9 (2-page gaps)
+            header_cells = [
+                TableCell(
+                    row_idx=0,
+                    col_idx=j,
+                    raw_text=col.header_text,
+                    cleaned_text=col.header_text,
+                    data_type=CellDataType.TEXT,
+                    semantic_type=CellSemanticType.COLUMN_HEADER,
+                    parsed_value=col.header_text,
+                    unit=None,
+                    normalized_value=None,
+                )
+                for j, col in enumerate(base_columns)
+            ]
+
+            is_last = i == 4
+            fragment = StructuredTable(
+                table_id=f"table_{page_num}",
+                source_chunk_id="temp",
+                source_page_physical=page_num,
+                source_bbox=[100, 100, 500, 600],
+                columns=base_columns,
+                rows=[TableRow(row_idx=0, cells=header_cells, row_type="header")],
+                num_rows=1,
+                num_cols=3,
+                num_header_rows=1,
+                title="Contd." if not is_last else None,  # Continuation marker
+                has_totals=is_last,  # Only last fragment has totals
+                markdown_representation="| State | 2021-22 | 2022-23 |\n| --- | --- | --- |",
+            )
+            fragments.append(fragment)
+
+        result = handler.detect_and_merge(fragments)
+
+        # All 5 fragments should be merged into 1
+        # (Pages 1, 3, 5, 7, 9 - gaps of 2 are within MAX_PAGE_GAP=3)
+        assert len(result) == 1
+        merged = result[0]
+        assert merged.is_multi_page is True
+        assert merged.source_pages == [1, 3, 5, 7, 9]
+
+        # Should detect missing pages (2, 4, 6, 8)
+        stats = handler.get_statistics()
+        assert stats["missing_pages_detected"] == 4

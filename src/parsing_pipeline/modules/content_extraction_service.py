@@ -63,6 +63,9 @@ class ContentExtractionService:
         r"\b(the|a|an|and|or|of|in|to|for|with|by|as|at|from)$",  # Ends with preposition/article
     ]
 
+    # P2-18: Threshold for blank page detection before table extraction
+    BLANK_PAGE_EXTRACTION_THRESHOLD = 50  # chars
+
     def __init__(self, trace_emitter=None):
         """Initialize extractor instances and build routing map.
 
@@ -108,6 +111,9 @@ class ContentExtractionService:
         ]
         self._incomplete_end = [re.compile(p) for p in self.INCOMPLETE_END_PATTERNS]
 
+        # P2-18: Cache for page text lengths (avoids repeated PDF opens)
+        self._page_text_cache: Dict[str, Dict[int, int]] = {}
+
         logger.info(
             f"Router configured with {len([r for r in self.router.values() if r is not None])} active extractors"
         )
@@ -127,6 +133,49 @@ class ContentExtractionService:
             return task.ocred_pdf_path
         else:
             return task.local_pdf_path
+
+    def _get_page_text_length(self, pdf_path: str, page_num: int) -> int:
+        """
+        P2-18: Get character count for a page (cached per PDF).
+
+        Used to detect blank pages before expensive table extraction.
+
+        Args:
+            pdf_path: Path to PDF document
+            page_num: Page number (0-indexed)
+
+        Returns:
+            Number of characters on the page
+        """
+        # Check cache first
+        if pdf_path not in self._page_text_cache:
+            self._page_text_cache[pdf_path] = {}
+
+        if page_num in self._page_text_cache[pdf_path]:
+            return self._page_text_cache[pdf_path][page_num]
+
+        # Extract text length using fitz (PyMuPDF)
+        try:
+            import fitz
+
+            doc = fitz.open(pdf_path)
+            if page_num >= len(doc):
+                doc.close()
+                return 0
+
+            page = doc.load_page(page_num)
+            text = page.get_text("text")
+            text_length = len(text.strip())
+            doc.close()
+
+            # Cache the result
+            self._page_text_cache[pdf_path][page_num] = text_length
+            return text_length
+
+        except Exception as e:
+            logger.warning(f"P2-18: Could not get page text length: {e}")
+            # On error, return a high value to avoid false positives
+            return 9999
 
     def _crop_block_image(
         self, pdf_path: str, page_num: int, bbox: List[float]
@@ -263,6 +312,24 @@ class ContentExtractionService:
         bbox = block.get("bbox", [])
         confidence = block.get("confidence")
         emitter = trace_emitter or self._trace_emitter
+
+        # P2-18: Pre-check for blank page (Table blocks only)
+        if label == "Table":
+            page_text_length = self._get_page_text_length(pdf_path, page_num)
+            if page_text_length < self.BLANK_PAGE_EXTRACTION_THRESHOLD:
+                logger.info(
+                    f"  P2-18: Skipping Table on blank page {page_num} "
+                    f"({page_text_length} chars < {self.BLANK_PAGE_EXTRACTION_THRESHOLD})"
+                )
+                if emitter:
+                    emitter.emit_decision(
+                        "6",
+                        "blank_page_skip",
+                        "skipped",
+                        ["extract", "skipped"],
+                        f"Page {page_num} has {page_text_length} chars < {self.BLANK_PAGE_EXTRACTION_THRESHOLD}",
+                    )
+                return None  # Skip extraction on blank page
 
         # Special routing for Table blocks (3-tier strategy)
         if label == "Table":
@@ -580,6 +647,9 @@ class ContentExtractionService:
             layout_label="Table",
             layout_confidence=confidence,
             structured_data=structured_data,
+            # P1-14b: Populate extraction_method for visual asset registry
+            extraction_method="docling-tableformer",
+            extraction_confidence=confidence,
         )
 
     def _extract_and_save_visual(
@@ -632,6 +702,8 @@ class ContentExtractionService:
             layout_label=label,
             layout_confidence=kwargs.get("confidence"),
             structured_data={"visual_subtype": visual_subtype},
+            # P1-14b: Populate extraction_method (will be updated by Phase 10b Gemini)
+            extraction_method="image-crop-for-gemini",
         )
 
     def _is_continuation_start(self, text: str) -> bool:
@@ -837,6 +909,24 @@ class ContentExtractionService:
                     extracted_elements.append(result)
                     successful_extractions += 1
 
+                    # P1-11: Check for rotated page and emit red flag
+                    if (
+                        result.structured_data
+                        and isinstance(result.structured_data, dict)
+                        and result.structured_data.get("page_rotation", 0) != 0
+                    ):
+                        rotation = result.structured_data["page_rotation"]
+                        if self._trace_emitter:
+                            self._trace_emitter.emit_red_flag(
+                                "6",
+                                "rotated_page_detected",
+                                {
+                                    "page": page_num,
+                                    "rotation": rotation,
+                                    "report_id": task.report_id,
+                                },
+                            )
+
                 # Progress indicator (every 10 blocks or major milestones)
                 if processed_blocks % 10 == 0 or processed_blocks == total_blocks:
                     if progress_callback:
@@ -897,6 +987,25 @@ class ContentExtractionService:
         emitter = self._trace_emitter
         if emitter and hasattr(emitter, "emit"):
             filtered_count = len(filtered_content) if filtered_content else 0
+
+            # P1-15: Count visual elements for emit_io
+            table_count = sum(
+                1 for c in valid_content if c.content_type == "table_markdown"
+            ) if valid_content else 0
+            figure_count = sum(
+                1 for c in valid_content if c.content_type == "image_caption"
+            ) if valid_content else 0
+
+            # P1-15: Emit I/O with visual counts
+            emitter.emit_io(
+                "6",
+                {"chunks_to_process": total_blocks},
+                {
+                    "tables_extracted": table_count,
+                    "figures_extracted": figure_count,
+                    "errors_logged": len(task.error_log),
+                },
+            )
 
             # Emit diagnostic summary for partial status
             emitter.emit(
