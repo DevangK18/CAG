@@ -1672,6 +1672,73 @@ body.is-dragging .panel-container {
     }
 }
 
+/* Agentic Progress Banner */
+.agentic-progress-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #e8f4fd 0%, #f0e6fa 100%);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.agentic-progress-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.agentic-progress-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.agentic-progress-status {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.agentic-progress-details {
+    display: flex;
+    gap: 6px;
+}
+
+.agentic-subquery {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+
+.agentic-subquery.running {
+    color: var(--accent);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.agentic-subquery.complete {
+    color: #22c55e;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .chat-empty-state {
     display: flex;
     flex-direction: column;

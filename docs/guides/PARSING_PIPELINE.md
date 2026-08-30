@@ -428,6 +428,8 @@ Used in Phase 7 to assign child chunks to correct parent when multiple sections 
 - Similarity threshold: 0.65 (for title matching)
 - Min Docling headers: 3 (to consider signal usable)
 - Confidence threshold: 0.60 (for Section-header blocks)
+- MAX_L1_COUNT: 35 (fires `l1_count_excessive` red flag if exceeded)
+- ORPHAN_RATIO_THRESHOLD: 0.75 (fires `orphan_sections_detected` if orphan ratio exceeds this)
 
 **Key Features**:
 - **Dual-signal validation**: Cross-validates heuristic TOC with AI layout model
@@ -553,13 +555,23 @@ TOC accuracy improves from ~95% to ~97%+ for tail cases.
 
 **6.3 Text Extraction** (`TextExtractor`):
 1. Use PyMuPDF's `page.get_text("text", clip=rect)` for bbox-clipped extraction
-2. Normalize text:
+2. **Rotation handling (P1-11)**:
+   - Detect page rotation via `page.rotation` (0°, 90°, 180°, 270°)
+   - For 90°/270° pages: Use dict-based extraction with sort=True for correct reading order
+   - For 180° pages: Detect reversed content and apply word-level reversal
+   - Track `page_rotation` in `structured_data` for downstream debugging
+3. **Reversed content detection (D9-FIX)**:
+   - Content-agnostic heuristic: Look for known reversed word patterns ("elbaliava", "stneduts")
+   - Structural heuristic: Detect unusual lowercase+uppercase transitions (reversed proper nouns)
+   - If detected, apply word-level reversal per block (preserves whitespace/line structure)
+   - Note: This is a best-effort recovery; some reversed text may remain (see Known Limitations)
+4. Normalize text:
    - Replace ligatures (ﬁ → fi, ﬂ → fl)
    - Remove soft hyphens and zero-width spaces
    - Rejoin hyphenated words at line breaks
    - Normalize whitespace
-3. Classify content type: `paragraph`, `header`, or `list`
-4. Return `ExtractedContent` object
+5. Classify content type: `paragraph`, `header`, or `list`
+6. Return `ExtractedContent` object with `extraction_method` and `extraction_confidence` populated
 
 **6.4 Visual Asset Extraction**:
 1. Crop image from PDF page using bbox coordinates
@@ -652,11 +664,19 @@ TOC accuracy improves from ~95% to ~97%+ for tail cases.
 **7.1 Multi-Page Table Stitching**:
 1. Extract all tables from `extracted_content` with `structured_data`
 2. Detect multi-page tables using heuristics:
-   - Sequential pages
+   - Sequential pages (gap tolerance: MAX_PAGE_GAP = 3)
    - Matching column structure (header similarity > 80%)
    - Content continuation indicators (e.g., "contd." in header)
-3. Merge table rows and update metadata (page_range, is_multi_page flag)
-4. Replace fragments with single merged table in `extracted_content`
+3. **Missing-page detection (P0-03)**:
+   - Compare extracted pages against `expected_span` from TOC/layout (true span, not min/max of fragments)
+   - For each gap, emit `multi_page_table_page_lost` red flag with reason codes:
+     - `no_fragment_extracted`: Tier-1/Tier-2 produced zero fragments for this page
+     - `interior_dropped`: Interior page detected but dropped during chain iteration
+   - DLQ entries saved to `processing_metadata.dlq_entries` for debugging
+4. Merge table rows and update metadata (page_range, is_multi_page flag)
+5. Replace fragments with single merged table in `extracted_content`
+
+**Known Limitation**: Pages where Tier-1 (pdfplumber) and Tier-2 (Docling) both fail to produce any table fragment remain unextracted. These are now flagged in DLQ rather than silently dropped, but the content is not recovered.
 
 **7.2 Parent Chunk Creation**:
 1. **Source**: ToC entries from `DocumentTask.scaffold.toc`
@@ -755,13 +775,17 @@ TOC accuracy improves from ~95% to ~97%+ for tail cases.
 - Convert `ParentChunk` Pydantic objects to dicts
 - Preserve all fields for Phase 10a summary hydration
 
-**8.3 Child Chunk Enrichment**:
+**8.3 Child Chunk Serialization** (`_serialize_child_chunks`):
 1. Convert `ChildChunk` to dict
 2. Add top-level fields for easy indexing:
    - `report_id`, `report_year`, `report_title`, `report_no`
    - `hierarchy`, `source_page_physical`, `source_page_logical`
+   - **`extraction_method`**: Propagated from extractor (e.g., "pdfplumber-lines_strict", "docling-tableformer")
+   - **`extraction_confidence`**: Composite confidence score 0.0-1.0
 3. Nest detailed metadata under `metadata.source`, `metadata.location`, `metadata.extraction`
 4. Include `structured_data` for tables (queryable JSON)
+
+**Note**: This is the serialization point where extraction provenance fields (`extraction_method`, `extraction_confidence`) reach the final JSON output. The D1 fix ensures these fields are populated at the top-level of each child_chunk.
 
 **8.4 Enrichment Features**:
 
@@ -982,6 +1006,27 @@ TOC accuracy improves from ~95% to ~97%+ for tail cases.
 - Entity extraction hardening (filters verb phrases)
 - Severity classification for findings
 
+**Red Flag Thresholds (Report-Type Aware)**:
+
+The `finding_other_ratio_high` flag fires only when the 'other' finding percentage exceeds a report-type-specific threshold:
+
+| Report Type | Threshold | Rationale |
+|------------|-----------|-----------|
+| `compliance` | 40% | Standard compliance audits |
+| `performance` | 35% | Performance audits have clear finding categories |
+| `financial` | 50% | Financial audits have many accounting misstatements |
+| `atir` | 40% | ATI reports vary widely |
+| `default` | 40% | Fallback for unknown types |
+
+**ATI Inflation Guard**: The `other_count` is clamped to `min(other_count, total_findings)` to prevent double-counting bugs from producing >100% ratios.
+
+**Monetary Total Implausibility**: The `monetary_total_implausible` flag has tier-specific thresholds:
+- Union: ₹5 lakh crore
+- State: ₹1 lakh crore
+- Local Body: ₹10,000 crore
+
+Additionally, Financial Audit reports (`audit_category="financial"`) use relaxed thresholds (10x higher) since aggregate financial statements legitimately contain very large totals.
+
 ---
 
 ### Phase 10: Batch Processing
@@ -1134,7 +1179,9 @@ The primary structured output containing all extracted and enriched content.
       "content": "...",
       "hierarchy": {...},
       "source_page_physical": 18,
-      "structured_data": null
+      "structured_data": null,
+      "extraction_method": "pdfplumber-lines_strict",
+      "extraction_confidence": 0.87
     }
   ],
   "footnote_index": {
@@ -1144,7 +1191,8 @@ The primary structured output containing all extracted and enriched content.
     "total_tables": 45,
     "total_figures": 12,
     "tables_by_section": {...},
-    "figures_by_section": {...}
+    "figures_by_section": {...},
+    "extraction_stats": {"pdfplumber-lines_strict": 30, "docling-tableformer": 15}
   },
   "semantic_enrichment": {
     "findings": [...],
@@ -1157,7 +1205,11 @@ The primary structured output containing all extracted and enriched content.
     "total_parent_chunks": 45,
     "total_child_chunks": 352,
     "table_count": 28,
-    "figure_count": 12
+    "figure_count": 12,
+    "phase_10b_complete": false
+  },
+  "processing_metadata": {
+    "dlq_entries": []
   }
 }
 ```
@@ -1820,6 +1872,19 @@ python -m src.parsing_pipeline.main "manifest.xlsx" --workers 1
 
 ---
 
+## Known Limitations
+
+The following are documented limitations in the current pipeline version (verified 2026-06-08):
+
+| ID | Limitation | User-Visible Impact | Disposition |
+|----|------------|---------------------|-------------|
+| **D3** | Multi-page table interior pages | 17 pages of table content missing across 3 stress reports (2025_04, 2023_20, UK_2025_06). DLQ flags pages but content not recovered. | Pages where Tier-1/Tier-2 produce zero fragments remain unextracted. Chain iteration bug under investigation. |
+| **D5** | Phase 10b deferred | Image captions show file paths instead of Gemini descriptions. `phase_10b_complete: false` is truthful. | Phase 10b runs as a separate final pass. NE team can run `--phase10b` separately to hydrate. |
+| **D8** | CG_2025_01 structural collapse | Heavily scanned PDF produces 1 parent chunk, no findings extracted. | Upstream Docling OCR/TOC failure on this specific PDF. Document as known limitation for CG reports. |
+| **D9** | Reversed text without rotation flags | Some paragraph content reversed ("elbaliava toN") on 2/37 reports (5%). | May be 180° rotation not detected or source PDF issue. Flagged for manual review; best-effort recovery applied. |
+
+---
+
 ## Appendix: Quick Reference
 
 ### Running the Pipeline
@@ -2009,9 +2074,12 @@ The trace system automatically flags anomalies that warrant attention:
 | Flag | Trigger | Phase |
 |------|---------|-------|
 | High TOC rejection rate | >25% of candidates rejected | Phase 4 |
+| `l1_count_excessive` | L1 entries exceed MAX_L1_COUNT (35) | Phase 5.5 |
+| `orphan_sections_detected` | Orphan ratio exceeds 0.75 | Phase 5.5 |
 | Hierarchy concentration | >50% children assigned to one parent | Phase 7.5 |
 | Docling returned 0 blocks | Layout analysis found nothing | Phase 5 |
-| High "other" finding ratio | >30% findings classified as "other" | Phase 9 |
+| `multi_page_table_page_lost` | Pages missing from multi-page table | Phase 7 |
+| `finding_other_ratio_high` | 'other' findings exceed report-type threshold | Phase 9 |
 
 ### Configuration
 

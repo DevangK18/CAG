@@ -6,7 +6,158 @@ Extracts:
 - audit_objectives: List of objectives from report
 - topics_covered: NEUTRAL topic names (not findings-focused)
 - glossary_terms: Abbreviations and definitions
+- normalized_entities: Key entities with tier context
+
+Supports tier-aware extraction for Union, State, and Local Body reports.
 """
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TIER-SPECIFIC GUIDANCE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _get_glossary_guidance(tier: str) -> str:
+    """Get tier-specific glossary term guidance."""
+    base_terms = """Common CAG/Government terms to look for:
+- CAG, PAC, FRBM, BE, RE, Actuals
+- FY (Financial Year), AY (Assessment Year)"""
+
+    if tier == "union":
+        return f"""{base_terms}
+- AO (Assessing Officer), CIT, PCIT, CBDT, CBIC
+- TDS, GST, CGST, SGST, IGST
+- Central Ministry abbreviations (MoF, MoRTH, MoHUA, etc.)
+- PSU names and abbreviations (NHAI, FCI, ONGC, etc.)
+- GFR (General Financial Rules), CVC guidelines
+- National scheme abbreviations (PMAY, MGNREGA, NHM, etc.)"""
+
+    elif tier == "state":
+        return f"""{base_terms}
+- State Government abbreviations: GoAP, GoHP, GoSK, GoUK, GoOD, GoMH, GoKL, GoAS, GoBR, GoCG
+- SPSE (State Public Sector Enterprise)
+- State department codes and abbreviations
+- AG (Accountant General) + State name
+- State Treasury/IFMS terms
+- State scheme abbreviations"""
+
+    elif tier == "local_body":
+        return f"""{base_terms}
+- PRI (Panchayati Raj Institutions), ULB (Urban Local Bodies)
+- GP (Gram Panchayat), PS (Panchayat Samiti), ZP (Zilla Parishad)
+- MC (Municipal Corporation), NP (Nagar Palika), NAC (Notified Area Council)
+- BDO (Block Development Officer), CEO (Chief Executive Officer)
+- DLFA (Director Local Fund Audit)
+- SFC (State Finance Commission), CFC (Central Finance Commission)
+- PRIASoft, PFMS, e-Gram Swaraj
+- MGNREGA, PMAY-G, SBM (Swachh Bharat Mission)
+- Gram Sabha, Ward Sabha, Standing Committee"""
+
+    return base_terms
+
+
+def _get_topic_guidance(tier: str) -> str:
+    """Get tier-specific topic naming guidance."""
+    base_guidance = """CRITICAL RULES for topics:
+- Use NEUTRAL names - describe WHAT was examined, not WHAT was found wrong
+- Topics should help a reader navigate to areas of interest
+- Create 8-15 topics covering the main themes of the report
+- Group related sub-sections under single topics
+- Include page ranges for navigation"""
+
+    if tier == "union":
+        return f"""{base_guidance}
+
+GOOD topic names for Union reports:
+- "Tax Assessment Procedures", "Revenue Collection Mechanisms"
+- "Contract Management", "Procurement Processes"
+- "Scheme Implementation", "Fund Utilization"
+- "IT Systems and Digitization", "Human Resource Management"
+
+BAD topic names (avoid):
+- "Assessment Errors", "Revenue Loss", "Irregularities", "Deficiencies" """
+
+    elif tier == "state":
+        return f"""{base_guidance}
+
+GOOD topic names for State reports:
+- "State Revenue Administration", "Treasury Operations"
+- "Department Operations", "Scheme Implementation"
+- "State PSE Performance", "Infrastructure Projects"
+- "Service Delivery", "State Budget Execution"
+
+BAD topic names (avoid):
+- "Revenue Shortfall", "Budget Violations", "Administrative Failures" """
+
+    elif tier == "local_body":
+        return f"""{base_guidance}
+
+GOOD topic names for Local Body reports:
+- "Financial Management of PRIs/ULBs", "Own Revenue Mobilization"
+- "Grant Utilization (SFC/CFC)", "Scheme Implementation at Grassroots"
+- "Institutional Functioning", "Gram Sabha/Ward Sabha Operations"
+- "Infrastructure Development", "Service Delivery"
+- "Accounting and Audit Status", "Staff and Capacity"
+
+BAD topic names (avoid):
+- "Non-compliance", "Fund Misutilization", "Audit Arrears" """
+
+    return base_guidance
+
+
+def _get_entity_guidance(tier: str) -> str:
+    """Get tier-specific entity extraction guidance."""
+    base_guidance = """Rules for normalized_entities:
+- Extract 20-50 entities per report (high-yield list, not exhaustive)
+- ONE entry per logical entity with all aliases
+- Use the LONGEST/MOST OFFICIAL form as canonical_form_in_report"""
+
+    if tier == "union":
+        return f"""{base_guidance}
+
+For Union reports, prioritize:
+- Central Ministries (Ministry of Finance, Ministry of Railways, etc.)
+- PSUs and Autonomous Bodies (NHAI, FCI, ONGC, etc.)
+- National schemes and programs (PMAY, MGNREGA, NHM, etc.)
+- Regulatory authorities (SEBI, RBI, TRAI, etc.)
+
+tier_context for Union entities:
+- Central ministries/departments → "union"
+- Central PSUs → "union"
+- National schemes → "union"
+- State implementing agencies → "state" (if mentioned)"""
+
+    elif tier == "state":
+        return f"""{base_guidance}
+
+For State reports, prioritize:
+- State Government: Use "Government of [State]" as canonical
+- State Departments (PWD, Irrigation, Health, Education, etc.)
+- State PSEs (SPSEs) with full names
+- State-level schemes and programs
+- District-level entities if named
+
+tier_context for State entities:
+- State departments/SPSEs → "state"
+- Central ministries (if funding source) → "union"
+- District offices → "state" """
+
+    elif tier == "local_body":
+        return f"""{base_guidance}
+
+For Local Body reports, prioritize:
+- Specific local bodies by name: "Aizawl Municipal Corporation" not just "AMC"
+- Types of PRIs: Gram Panchayat, Panchayat Samiti, Zilla Parishad
+- Types of ULBs: Municipal Corporation, Municipality, Nagar Panchayat
+- Block/District offices (BDO office, DRDA, etc.)
+- State government as oversight entity
+
+tier_context for Local Body entities:
+- Specific PRIs/ULBs → "local_body"
+- District/Block offices → "local_body" or "state" depending on role
+- State PR/UD Department → "state"
+- Central schemes being implemented → "union" """
+
+    return base_guidance
 
 
 def _get_government_level_label(government_body_type: str) -> str:
@@ -86,6 +237,11 @@ and Urban Local Bodies (municipal governance). They assess institutional functio
 financial management, and scheme implementation at the grassroots level.
 """
 
+    # Get tier-specific guidance
+    glossary_guidance = _get_glossary_guidance(government_body_type)
+    topic_guidance = _get_topic_guidance(government_body_type)
+    entity_guidance = _get_entity_guidance(government_body_type)
+
     return f'''You are extracting specific metadata from a CAG (Comptroller and Auditor General of India) audit report.
 
 ## CONTEXT
@@ -150,14 +306,7 @@ Create NEUTRAL topic names from the Table of Contents structure:
 ]
 ```
 
-CRITICAL RULES for topics:
-- Use NEUTRAL names - describe WHAT was examined, not WHAT was found wrong
-- Topics should help a reader navigate to areas of interest
-- ✅ GOOD: "Tax Assessment Procedures", "Revenue Collection Mechanisms", "Storage and Warehousing Operations", "Procurement Processes", "Financial Management"
-- ❌ BAD: "Assessment Errors", "Revenue Loss", "Storage Deficiencies", "Non-compliance Issues", "Irregularities"
-- Create 8-15 topics covering the main themes of the report
-- Group related sub-sections under single topics
-- Include page ranges for navigation
+{topic_guidance}
 
 ### 4. glossary_terms
 Extract abbreviations and technical terms used in the report:
@@ -171,14 +320,8 @@ Extract abbreviations and technical terms used in the report:
   }}
 ]
 ```
-Common CAG/Government terms to look for:
-- AO (Assessing Officer), AY (Assessment Year), FY (Financial Year)
-- CBDT, CIT, PCIT, TDS, GST, CGST, SGST, IGST
-- CAG, PAC, FRBM, BE, RE, Actuals
-- Ministry/Department-specific abbreviations
-- State Government abbreviations: GoAP, GoHP, GoSK, GoUK, GoOD, GoMH, GoKL, GoAS, GoBR, GoCG, SPSE
-- Local Body terms: PRI (Panchayati Raj Institutions), ULB (Urban Local Bodies), ZP (Zilla Parishad), GP (Gram Panchayat), PS (Panchayat Samiti), MC (Municipal Corporation), NP (Nagar Palika)
-- Local audit terms: DLFA (Director Local Fund Audit), SFC (State Finance Commission), CFC (Central Finance Commission), PRIASoft, PFMS
+
+{glossary_guidance}
 - Any abbreviation that appears multiple times in the report
 
 ### 5. normalized_entities
@@ -195,20 +338,13 @@ Extract every distinct organizational, scheme, geographic, and governance entity
 }}
 ```
 
-Rules for normalized_entities:
-- Extract 20-50 entities per report (this is a high-yield list, not exhaustive)
-- ONE entry per logical entity. If "Ministry of Railways", "MoR", and "Min. of Railways" all appear, produce ONE entry with all three in aliases_seen
-- Use the LONGEST/MOST OFFICIAL form as canonical_form_in_report (e.g., "National Highways Authority of India" not "NHAI")
+{entity_guidance}
+
+General rules:
 - Always include the acronym in aliases_seen if both forms appear
-- For state government entities, use "Government of [State]" as canonical (e.g., "Government of Mizoram")
-- For local bodies, be specific: "Aizawl Municipal Corporation" not "AMC" as canonical, but include "AMC" in aliases
 - entity_type uses the most specific applicable category
-- tier_context: based on the report tier and the entity's level
-  - Central ministries/PSUs/national schemes → "union"
-  - State departments/State PSEs/state schemes → "state"
-  - PRIs/ULBs/Village Councils/local schemes → "local_body"
 - DO NOT include: generic terms ("the Ministry", "the State"), single-letter abbreviations, or vague entities ("various departments")
-- DO include: specific named ministries, PSUs, schemes, autonomous bodies, named programmes, named regulators, geographic units (states, districts, specific project locations)
+- DO include: specific named entities, schemes, regulators, geographic units (states, districts, specific project locations)
 
 ## INPUT DATA
 

@@ -146,6 +146,60 @@ class TimeSeries:
         }
 
 
+@dataclass
+class SeriesContext:
+    """
+    Context for series-aware agentic queries.
+
+    Provides all information needed for temporal-aware decomposition
+    and synthesis prompts in agentic search over a time series.
+    """
+
+    series_id: str
+    series_name: str
+    description: str
+    ordered_report_ids: List[str]  # Year-ordered (oldest first)
+    years_covered: List[str]  # e.g., ["2020-21", "2021-22", "2022-23"]
+    report_year_map: Dict[str, str]  # report_id -> audit_year
+    report_title_map: Dict[str, str]  # report_id -> report_title (short)
+
+    def to_prompt_block(self) -> str:
+        """
+        Format context as a block for injection into prompts.
+
+        Returns a structured text block describing the series for LLM context.
+        """
+        lines = [
+            f"TIME SERIES CONTEXT: {self.series_name}",
+            f"Description: {self.description}",
+            f"Years covered: {', '.join(self.years_covered)}",
+            "",
+            "Reports in this series (chronological order):",
+        ]
+
+        for report_id in self.ordered_report_ids:
+            year = self.report_year_map.get(report_id, "Unknown")
+            title = self.report_title_map.get(report_id, report_id)
+            # Truncate title if too long
+            if len(title) > 80:
+                title = title[:77] + "..."
+            lines.append(f"  - [{year}] {title}")
+
+        return "\n".join(lines)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "series_id": self.series_id,
+            "series_name": self.series_name,
+            "description": self.description,
+            "ordered_report_ids": self.ordered_report_ids,
+            "years_covered": self.years_covered,
+            "report_year_map": self.report_year_map,
+            "report_title_map": self.report_title_map,
+        }
+
+
 class ReportRegistry:
     """
     Central registry for report metadata and time series.
@@ -509,3 +563,59 @@ def init_registry(processed_dir: Path) -> ReportRegistry:
     if not registry.is_loaded():
         registry.load_from_json_dir(processed_dir)
     return registry
+
+
+def build_series_context(
+    registry: ReportRegistry,
+    series_id: str,
+) -> Optional[SeriesContext]:
+    """
+    Build a SeriesContext for use in agentic queries.
+
+    Args:
+        registry: The report registry instance
+        series_id: ID of the series to build context for
+
+    Returns:
+        SeriesContext with all information needed for temporal-aware
+        decomposition and synthesis, or None if series not found.
+    """
+    series = registry.get_series(series_id)
+    if not series:
+        logger.warning(f"Series not found: {series_id}")
+        return None
+
+    reports = registry.get_reports_in_series(series_id)
+    if not reports:
+        logger.warning(f"No reports found in series: {series_id}")
+        return None
+
+    # Build ordered report IDs (already ordered by audit year from registry)
+    ordered_report_ids = [r.report_id for r in reports]
+
+    # Build years list
+    years_covered = [r.audit_year for r in reports if r.audit_year]
+
+    # Build report_id -> audit_year mapping
+    report_year_map = {r.report_id: r.audit_year for r in reports}
+
+    # Build report_id -> title mapping (use short title if possible)
+    report_title_map = {}
+    for r in reports:
+        # Try to extract a shorter title (remove common prefixes)
+        title = r.report_title
+        # Remove "Report No. X of YYYY - " prefix if present
+        title = re.sub(r"^Report\s+No\.?\s*\d+\s+of\s+\d{4}\s*[-–]\s*", "", title)
+        # Remove "Union Government" / "State Government" prefix
+        title = re.sub(r"^(Union|State)\s+Government\s*[-–]?\s*", "", title)
+        report_title_map[r.report_id] = title.strip() or r.report_title
+
+    return SeriesContext(
+        series_id=series_id,
+        series_name=series.name,
+        description=series.description,
+        ordered_report_ids=ordered_report_ids,
+        years_covered=years_covered,
+        report_year_map=report_year_map,
+        report_title_map=report_title_map,
+    )

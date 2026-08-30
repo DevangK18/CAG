@@ -12,7 +12,7 @@ import json
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, AsyncIterator, Iterator
+from typing import List, Dict, Any, Optional, AsyncIterator, Iterator, TYPE_CHECKING
 
 try:
     from ..core.config import RAGConfig, AgenticConfig, LLMProvider
@@ -21,6 +21,7 @@ try:
     from .retrieval_service import RetrievalService
     from .query_enhancer import QueryEnhancer, QueryEnhancement
     from .retrieval_utils import merge_filters, has_explicit_report_filter
+    from .report_registry import SeriesContext
 except ImportError:
     from src.core.config import RAGConfig, AgenticConfig, LLMProvider
     from models import RAGResponse, Citation, RetrievalResult
@@ -28,6 +29,7 @@ except ImportError:
     from retrieval_service import RetrievalService
     from query_enhancer import QueryEnhancer, QueryEnhancement
     from retrieval_utils import merge_filters, has_explicit_report_filter
+    from report_registry import SeriesContext
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,62 @@ If a sub-query returned no sufficient evidence, explicitly state: "The available
 
 
 # =============================================================================
+# SERIES-AWARE PROMPTS (Phase B - Temporal awareness)
+# =============================================================================
+
+SERIES_DECOMPOSITION_CONTEXT = """
+---
+IMPORTANT: This query is scoped to a TIME SERIES of related CAG audit reports.
+
+{series_context}
+
+TEMPORAL DECOMPOSITION GUIDELINES:
+1. For trend/evolution questions ("how has X changed", "what improvements", "year-over-year"):
+   - Classify as "cross_report"
+   - Generate sub-queries targeting SPECIFIC YEARS from the series
+   - Example: "FRBM compliance issues in 2021-22", "FRBM compliance issues in 2022-23"
+
+2. For comparative questions ("compare", "difference between years"):
+   - Classify as "cross_report"
+   - Generate sub-queries for each year being compared
+   - Make each sub-query mention the specific audit year explicitly
+
+3. For aggregation questions ("common findings", "recurring issues"):
+   - Classify as "cross_report"
+   - Generate sub-queries that search across all years
+   - Include year-specific variants if the series spans 3+ years
+
+4. Sub-queries MUST include the audit year (e.g., "2022-23") when targeting a specific report.
+
+5. The retrieval is already scoped to these reports — do NOT filter further by report name.
+---
+"""
+
+SERIES_SYNTHESIS_ADDITION = """
+---
+TEMPORAL SYNTHESIS GUIDELINES:
+This answer synthesizes findings across a TIME SERIES of audit reports.
+
+1. STRUCTURE chronologically: Present findings in year order (oldest to newest).
+
+2. LABEL by year: When citing findings, always indicate which audit year they come from.
+   Example: "In 2021-22, the audit found... By 2023-24, this had improved to..."
+
+3. HIGHLIGHT trends: Explicitly note:
+   - Improvements or deteriorations over time
+   - Recurring/persistent issues across years
+   - New issues that appeared in later years
+   - Issues that were resolved
+
+4. QUANTIFY changes: If monetary amounts are mentioned, compare across years.
+   Example: "Revenue loss decreased from ₹142 crore (2021-22) to ₹98 crore (2023-24)."
+
+5. If certain years lack data on a topic, explicitly note: "No findings on [X] in [year]."
+---
+"""
+
+
+# =============================================================================
 # AGENTIC SERVICE
 # =============================================================================
 
@@ -192,11 +250,22 @@ class AgenticRAGService:
         style: Optional[ResponseStyle] = None,
         client_session_id: Optional[str] = None,
         user_agent: Optional[str] = None,
+        series_context: Optional[SeriesContext] = None,
     ) -> RAGResponse:
         """
         Agentic ask. Plans, decomposes, and synthesizes multi-hop queries.
 
         For simple queries, delegates to rag.ask() unchanged.
+
+        Args:
+            question: The user's question
+            filters: Qdrant filters (e.g., {"report_id": [...]})
+            top_k: Number of chunks to retrieve
+            style: Response style preference
+            client_session_id: Session ID for logging
+            user_agent: User agent for logging
+            series_context: Optional SeriesContext for temporal-aware decomposition
+                           and synthesis (Phase B - Series × Agentic integration)
         """
         # Extract report_ids for logging
         report_ids_filter = None
@@ -226,6 +295,7 @@ class AgenticRAGService:
                 top_k=top_k,
                 style=style,
                 log_ctx=log_ctx,
+                series_context=series_context,
             )
         except Exception as e:
             if log_ctx:
@@ -242,12 +312,13 @@ class AgenticRAGService:
         top_k: int,
         style: Optional[ResponseStyle],
         log_ctx=None,
+        series_context: Optional[SeriesContext] = None,
     ) -> RAGResponse:
         """Internal implementation of agentic ask() with logging support."""
         t_start = time.time()
 
-        # Step 1: Plan / decompose
-        plan = self._decompose(question)
+        # Step 1: Plan / decompose (with series context if available)
+        plan = self._decompose(question, series_context=series_context)
         trace = AgenticTrace(
             original_query=question,
             complexity=plan["complexity"],
@@ -350,7 +421,8 @@ class AgenticRAGService:
             log_ctx.start_phase("generation")
 
         answer = self._synthesize_answer(
-            question, sub_queries, merged, style or ResponseStyle.ADAPTIVE
+            question, sub_queries, merged, style or ResponseStyle.ADAPTIVE,
+            series_context=series_context,
         )
 
         # Log generation
@@ -397,15 +469,38 @@ class AgenticRAGService:
     # Decomposition
     # -------------------------------------------------------------------------
 
-    def _decompose(self, question: str) -> Dict[str, Any]:
-        """Single LLM call to plan the query."""
+    def _decompose(
+        self,
+        question: str,
+        series_context: Optional[SeriesContext] = None,
+    ) -> Dict[str, Any]:
+        """
+        Single LLM call to plan the query.
+
+        Args:
+            question: The user's question
+            series_context: Optional SeriesContext for temporal-aware decomposition
+        """
         try:
+            # Build system prompt - add series context if available
+            system_prompt = DECOMPOSITION_SYSTEM_PROMPT
+            if series_context:
+                # Inject series context into prompt for temporal awareness
+                series_block = SERIES_DECOMPOSITION_CONTEXT.format(
+                    series_context=series_context.to_prompt_block()
+                )
+                system_prompt = system_prompt + "\n" + series_block
+                logger.info(
+                    f"Decomposing with series context: {series_context.series_id} "
+                    f"({len(series_context.years_covered)} years)"
+                )
+
             response = self.openai.chat.completions.create(
                 model=self.config.planner_model,
                 max_tokens=800,
                 temperature=0.0,
                 messages=[
-                    {"role": "system", "content": DECOMPOSITION_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f'Question: "{question}"'},
                 ],
                 response_format={"type": "json_object"},
@@ -539,8 +634,18 @@ Generate a reformulation."""
         sub_queries: List[str],
         merged: RetrievalResult,
         style: ResponseStyle,
+        series_context: Optional[SeriesContext] = None,
     ) -> str:
-        """Synthesize final answer from merged retrievals."""
+        """
+        Synthesize final answer from merged retrievals.
+
+        Args:
+            original_question: The user's original question
+            sub_queries: List of sub-queries that were executed
+            merged: Merged retrieval results
+            style: Response style preference
+            series_context: Optional SeriesContext for temporal-aware synthesis
+        """
         # Build prompt using existing rag_service machinery
         inputs = self.rag.prepare_generation_inputs(
             question=original_question,
@@ -555,6 +660,14 @@ Generate a reformulation."""
             + f"\n\n---\n\nThis question was decomposed into these sub-queries:\n{sub_q_summary}\n\n"
             + SYNTHESIS_SYSTEM_PROMPT_ADDITION
         )
+
+        # Add series-specific synthesis instructions if context is available
+        if series_context:
+            enhanced_user_prompt += "\n" + SERIES_SYNTHESIS_ADDITION
+            logger.info(
+                f"Synthesizing with series context: {series_context.series_id} "
+                f"(years: {', '.join(series_context.years_covered)})"
+            )
 
         # Dispatch to configured LLM
         if self.rag.config.llm.provider == LLMProvider.CLAUDE:

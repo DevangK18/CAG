@@ -66,6 +66,7 @@ else:
 try:
     from rag_service import RAGService, ResponseStyle as RAGResponseStyle
     from models import RAGResponse, Citation as RAGCitation, RetrievalResult
+    from report_registry import SeriesContext
 
     logging.info("RAG service modules imported successfully")
 except ImportError as e:
@@ -77,6 +78,7 @@ except ImportError as e:
     RAGResponse = None
     RAGCitation = None
     RetrievalResult = None
+    SeriesContext = None
 
 from ..models import Citation as APICitation, ChatResponse
 from .report_service import get_report_by_id
@@ -144,6 +146,10 @@ def _convert_citations(rag_citations: List) -> List[APICitation]:
                 finding_type=c.finding_type,
                 severity=c.severity,
                 amount_crore=c.amount_crore,
+                # Item 7: Enhanced semantic fields
+                entities_mentioned=c.entities_mentioned if c.entities_mentioned else None,
+                section_type=c.section_type,
+                is_recommendation=c.is_recommendation,
             )
         )
 
@@ -251,6 +257,7 @@ def generate_sync(
         sources_used=response.sources_used,
         model_used=response.model_used,
         groundedness=response.groundedness,
+        sota_features=response.sota_features,  # Item 1: SOTA RAG features
     )
 
 
@@ -426,6 +433,21 @@ async def generate_stream(
 
         yield {"type": "citation_map", "data": citation_map}
 
+        # Item 2: Emit search metadata event
+        yield {
+            "type": "metadata",
+            "data": {
+                "search_type": retrieval_result.search_type,
+                "reranker_used": retrieval_result.reranker_used,
+                "total_candidates": retrieval_result.total_candidates,
+                "total_after_rerank": retrieval_result.total_after_rerank,
+            }
+        }
+
+        # Item 3: Emit auto-applied filters event
+        if retrieval_result.filters_applied:
+            yield {"type": "filters", "data": retrieval_result.filters_applied}
+
         # Step 3: Get prepared prompts from RAG service — pass adaptive context length
         generation_inputs = await loop.run_in_executor(
             _executor,
@@ -510,10 +532,19 @@ def generate_agentic_sync(
     style: str = "adaptive",
     report_ids: Optional[List[str]] = None,
     top_k: int = 10,
+    series_context: Optional["SeriesContext"] = None,
 ) -> ChatResponse:
     """
     Synchronous agentic generation. Delegates to AgenticRAGService.ask().
     Phase 11.
+
+    Args:
+        query: The user's question
+        style: Response style preference
+        report_ids: Optional list of report IDs to scope retrieval
+        top_k: Number of chunks to retrieve
+        series_context: Optional SeriesContext for temporal-aware decomposition
+                       and synthesis (Phase B - Series × Agentic integration)
     """
     rag = get_rag_service()
     if not rag:
@@ -536,6 +567,7 @@ def generate_agentic_sync(
         filters=filters if filters else None,
         top_k=top_k,
         style=style_enum,
+        series_context=series_context,
     )
 
     citations = _convert_citations(response.citations)
@@ -547,6 +579,7 @@ def generate_agentic_sync(
         model_used=response.model_used,
         groundedness=response.groundedness,
         agentic_trace=response.agentic_trace,
+        sota_features=response.sota_features,  # Item 1: SOTA RAG features
     )
 
 
@@ -557,6 +590,7 @@ async def generate_agentic_stream(
     top_k: int = 10,
     client_session_id: Optional[str] = None,
     user_agent: Optional[str] = None,
+    series_context: Optional["SeriesContext"] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Agentic streaming. Emits same event types as generate_stream() plus:
@@ -567,6 +601,16 @@ async def generate_agentic_stream(
     - "synthesizing"   — final answer generation starting
 
     Phase 11.
+
+    Args:
+        query: The user's question
+        style: Response style preference
+        report_ids: Optional list of report IDs to scope retrieval
+        top_k: Number of chunks to retrieve
+        client_session_id: Session ID for logging
+        user_agent: User agent for logging
+        series_context: Optional SeriesContext for temporal-aware decomposition
+                       and synthesis (Phase B - Series × Agentic integration)
     """
     rag = get_rag_service()
     if not rag:
@@ -608,9 +652,10 @@ async def generate_agentic_stream(
             log_ctx.start_phase("enhancement")
 
         # Step 1: Plan (in thread pool — single LLM call)
+        # Pass series_context for temporal-aware decomposition
         plan = await loop.run_in_executor(
             _executor,
-            lambda: rag.agentic_service._decompose(query),
+            lambda: rag.agentic_service._decompose(query, series_context=series_context),
         )
 
         # Log enhancement phase
@@ -731,6 +776,21 @@ async def generate_agentic_stream(
         citation_map = _build_citation_map(api_citations)
         yield {"type": "citation_map", "data": citation_map}
 
+        # Item 2: Emit search metadata event
+        yield {
+            "type": "metadata",
+            "data": {
+                "search_type": merged.search_type,
+                "reranker_used": merged.reranker_used,
+                "total_candidates": merged.total_candidates,
+                "total_after_rerank": merged.total_after_rerank,
+            }
+        }
+
+        # Item 3: Emit auto-applied filters event
+        if merged.filters_applied:
+            yield {"type": "filters", "data": merged.filters_applied}
+
         yield {"type": "synthesizing", "data": None}
 
         # Step 6: Build the synthesis prompt by calling existing rag_service helpers
@@ -745,14 +805,22 @@ async def generate_agentic_stream(
         )
 
         sub_q_summary = "\n".join([f"- {sq}" for sq in sub_queries])
-        # Import the synthesis addendum prompt
-        from agentic_service import SYNTHESIS_SYSTEM_PROMPT_ADDITION
+        # Import the synthesis addendum prompts
+        from agentic_service import SYNTHESIS_SYSTEM_PROMPT_ADDITION, SERIES_SYNTHESIS_ADDITION
 
         enhanced_user_prompt = (
             generation_inputs["user_prompt"]
             + f"\n\n---\n\nThis question was decomposed into these sub-queries:\n{sub_q_summary}\n\n"
             + SYNTHESIS_SYSTEM_PROMPT_ADDITION
         )
+
+        # Add series-specific synthesis instructions if context is available
+        if series_context:
+            enhanced_user_prompt += "\n" + SERIES_SYNTHESIS_ADDITION
+            logger.info(
+                f"Streaming synthesis with series context: {series_context.series_id}"
+            )
+
         system_prompt = generation_inputs["system_prompt"]
 
         # Step 7: Stream tokens (REUSE existing helpers from this module)

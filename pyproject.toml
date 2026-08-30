@@ -50,7 +50,8 @@ rapidfuzz = "^3.0"  # Fast fuzzy string matching for home page search
 [tool.poetry.group.parsing.dependencies]
 
 # PDF extraction & OCR
-docling = "^2.54.0"
+docling = "^2.60.0"  # Heron layout model (23.5% mAP improvement)
+pdfmux = {version = "^1.0.0", extras = ["tables", "ocr"]}  # Smart routing + 0.911 TEDS + OCR for scanned
 pymupdf = "^1.24.1"
 ocrmypdf = "^16.1.1"
 pdfplumber = "^0.11.9"

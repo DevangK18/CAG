@@ -23,6 +23,15 @@ _initialized: bool = False
 _total_charts: int = 0
 _total_tables: int = 0
 
+# Item 4: Findings cache for filter aggregation
+_findings_cache: Dict[str, List[Dict]] = {}  # report_id → [findings]
+
+# Item 5: Availability and distribution caches
+_has_summaries_cache: Dict[str, bool] = {}  # report_id → has_summaries
+_has_overview_llm_cache: Dict[str, bool] = {}  # report_id → has_overview_llm
+_severity_distribution_cache: Dict[str, Dict[str, int]] = {}  # report_id → {severity: count}
+_finding_type_distribution_cache: Dict[str, Dict[str, int]] = {}  # report_id → {finding_type: count}
+
 # Ministry canonicalization bridge (Phase A.5)
 # Maps ReportInfo.ministry string → entity_id from entity graph
 _ministry_bridge: Dict[str, int] = {}
@@ -185,14 +194,24 @@ def _build_executive_summary(metadata: dict, semantic: dict) -> str:
 
 def _load_reports():
     """Load all report metadata from processed JSON files."""
-    global _reports_cache, _initialized, _total_charts, _total_tables
+    global _reports_cache, _initialized, _total_charts, _total_tables, _findings_cache
+    global _has_summaries_cache, _has_overview_llm_cache
+    global _severity_distribution_cache, _finding_type_distribution_cache
 
     if _initialized:
         return
 
     _reports_cache = {}
+    _findings_cache = {}
+    _has_summaries_cache = {}
+    _has_overview_llm_cache = {}
+    _severity_distribution_cache = {}
+    _finding_type_distribution_cache = {}
     _total_charts = 0
     _total_tables = 0
+
+    # Batch jobs directory for checking summary existence
+    BATCH_JOBS_DIR = settings.BASE_DIR / "data" / "batch_jobs"
     
     if not settings.PROCESSED_DIR.exists():
         logger.warning(f"Processed directory not found: {settings.PROCESSED_DIR}")
@@ -229,6 +248,31 @@ def _load_reports():
                 desc = f.get("description", f.get("text", ""))
                 if desc:
                     key_findings.append(desc[:500])
+
+            # Item 4: Cache full findings for filter aggregation
+            _findings_cache[report_id] = findings_raw
+
+            # Item 5: Compute distributions
+            severity_dist = {}
+            finding_type_dist = {}
+            for f in findings_raw:
+                sev = f.get("severity")
+                if sev:
+                    severity_dist[sev] = severity_dist.get(sev, 0) + 1
+                ft = f.get("finding_type")
+                if ft:
+                    finding_type_dist[ft] = finding_type_dist.get(ft, 0) + 1
+            _severity_distribution_cache[report_id] = severity_dist if severity_dist else None
+            _finding_type_distribution_cache[report_id] = finding_type_dist if finding_type_dist else None
+
+            # Item 5: Check for summary and overview file existence
+            summaries_path = BATCH_JOBS_DIR / "summaries" / f"{report_id}_summaries.json"
+            _has_summaries_cache[report_id] = summaries_path.exists()
+
+            # Get tier directory for overview_llm check
+            tier_dir = json_file.parent
+            overview_llm_path = tier_dir / f"{report_id}_overview_llm.json"
+            _has_overview_llm_cache[report_id] = overview_llm_path.exists()
 
             # Extract recommendations (first 10)
             recs_raw = semantic.get("recommendations", [])
@@ -340,7 +384,12 @@ def get_all_reports() -> List[ReportSummary]:
             government_body_type=r.government_body_type,
             state_name=r.state_name,
             department=r.department,
-            audit_category=r.audit_category
+            audit_category=r.audit_category,
+            # Item 5: Availability flags and distributions
+            has_summaries=_has_summaries_cache.get(r.id, False),
+            has_overview_llm=_has_overview_llm_cache.get(r.id, False),
+            severity_distribution=_severity_distribution_cache.get(r.id),
+            finding_type_distribution=_finding_type_distribution_cache.get(r.id),
         )
         for r in _reports_cache.values()
     ]
@@ -635,6 +684,31 @@ def get_recent_reports() -> List[ReportSummary]:
     """Get top 20 recent reports (by year DESC)."""
     _load_reports()
     return _recent_reports
+
+
+def get_findings_for_report(report_id: str) -> List[Dict]:
+    """
+    Get findings for a specific report (Item 4).
+
+    Returns:
+        List of finding dicts with finding_type, severity, etc.
+    """
+    _load_reports()
+    return _findings_cache.get(report_id, [])
+
+
+def get_all_findings() -> List[Dict]:
+    """
+    Get all findings across all reports (Item 4).
+
+    Returns:
+        Flat list of all findings with finding_type, severity, etc.
+    """
+    _load_reports()
+    all_findings = []
+    for findings in _findings_cache.values():
+        all_findings.extend(findings)
+    return all_findings
 
 
 # ============================================================================

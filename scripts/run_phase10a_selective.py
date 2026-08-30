@@ -3,21 +3,35 @@ Run Phase 10a (Overview & Summary Generation) on specific reports.
 
 This script submits only the specified reports to the Claude Batch API
 for overview extraction and summary generation (5 variants).
+
+Phase 10a consists of three batch jobs:
+1. Overview extraction (always)
+2. Summary variants - 5 styles (always)
+3. Hierarchical summaries - RAPTOR chapter/section (optional, for efficient RAG)
+
+Usage:
+    python scripts/run_phase10a_selective.py
+    python scripts/run_phase10a_selective.py --include-hierarchical
+    python scripts/run_phase10a_selective.py --report-ids "2025_04,2025_08" --include-hierarchical
 """
 
+import argparse
 from pathlib import Path
 from src.batch_pipeline.batch_service import BatchService
 
 
-def run_phase10a_for_reports(report_ids: list[str]):
+def run_phase10a_for_reports(report_ids: list[str], include_hierarchical: bool = False):
     """
     Run Phase 10a for specific reports.
 
     Args:
         report_ids: List of report IDs to process
+        include_hierarchical: Include RAPTOR hierarchical summaries (chapter/section level)
     """
     print("=" * 70)
     print("PHASE 10a: OVERVIEW & SUMMARY GENERATION (Selective)")
+    if include_hierarchical:
+        print("         + RAPTOR HIERARCHICAL SUMMARIES")
     print("=" * 70)
     print()
 
@@ -25,13 +39,24 @@ def run_phase10a_for_reports(report_ids: list[str]):
     json_files = []
     processed_dir = Path("data/processed")
 
+    # Search in tier subdirectories
     for report_id in report_ids:
-        json_path = processed_dir / f"{report_id}_chunks.json"
-        if json_path.exists():
-            json_files.append(json_path)
-            print(f"✓ Found: {report_id}")
-        else:
-            print(f"✗ Missing: {report_id}")
+        found = False
+        for tier in ["union", "state", "local_body"]:
+            json_path = processed_dir / tier / f"{report_id}_chunks.json"
+            if json_path.exists():
+                json_files.append(json_path)
+                print(f"✓ Found: {report_id} ({tier})")
+                found = True
+                break
+        if not found:
+            # Try flat structure
+            json_path = processed_dir / f"{report_id}_chunks.json"
+            if json_path.exists():
+                json_files.append(json_path)
+                print(f"✓ Found: {report_id}")
+            else:
+                print(f"✗ Missing: {report_id}")
 
     print()
     print(f"Total reports to process: {len(json_files)}")
@@ -47,7 +72,9 @@ def run_phase10a_for_reports(report_ids: list[str]):
     # Submit batches
     print("Submitting to Claude Batch API...")
     print("  - Overview extraction (executive summaries)")
-    print("  - 5 summary variants (concise, detailed, executive, technical, analytical)")
+    print("  - 5 summary variants (executive, journalist, deep_dive, simple, policy)")
+    if include_hierarchical:
+        print("  - Hierarchical summaries (chapter + section level for RAPTOR)")
     print()
 
     try:
@@ -65,12 +92,19 @@ def run_phase10a_for_reports(report_ids: list[str]):
         summary_batch_id = service.submit_summary_batch(json_files, job_timestamp=job_timestamp)
         print(f"✓ Summary Batch ID:  {summary_batch_id}")
 
-        # Create job tracker (will use service._current_job_timestamp which is already set)
+        # Submit hierarchical batch (optional)
+        hierarchical_batch_id = None
+        if include_hierarchical:
+            hierarchical_batch_id = service.submit_hierarchical_batch(json_files, job_timestamp=job_timestamp)
+            print(f"✓ Hierarchical Batch ID: {hierarchical_batch_id}")
+
+        # Create job tracker
         report_ids_list = [f.stem.replace("_chunks", "") for f in json_files]
         tracker_path = service.create_job_tracker(
             overview_batch_id=overview_batch_id,
             summary_batch_id=summary_batch_id,
             report_ids=report_ids_list,
+            hierarchical_batch_id=hierarchical_batch_id,
         )
 
         print()
@@ -94,13 +128,37 @@ def run_phase10a_for_reports(report_ids: list[str]):
 
 
 if __name__ == "__main__":
-    # The 5 new reports missing summaries
-    reports_to_process = [
-        "2025_08_Compliance_Audit_on_on__the_Activities_of_Indian_National_Centre_for_Ocean_Infor",
-        "2025_20_Performance_Audit_on_on_Skill_Development_under_Pradhan_Mantri_Kaushal_Vikas_Yoj",
-        "2025_26_Compliance_Audit_on_on_Development_of_MultiFunctional_Complexes_and_Commercial_s",
-        "2025_35_Performance_Audit_on_Operational_Performance_of_NLC_India_Limited_Ministry_of_Co",
-        "2025_38_Performance_Audit_of_Blast_Furnace_in_Steel_Authority_of_India_Limited",
-    ]
+    parser = argparse.ArgumentParser(
+        description="Run Phase 10a (Overview & Summary Generation) on specific reports"
+    )
+    parser.add_argument(
+        "--report-ids",
+        type=str,
+        default=None,
+        help="Comma-separated list of report IDs to process",
+    )
+    parser.add_argument(
+        "--include-hierarchical",
+        action="store_true",
+        help="Include RAPTOR hierarchical summaries (chapter/section level)",
+    )
 
-    run_phase10a_for_reports(reports_to_process)
+    args = parser.parse_args()
+
+    # Default reports if none specified
+    if args.report_ids:
+        reports_to_process = [r.strip() for r in args.report_ids.split(",")]
+    else:
+        # The 5 new reports missing summaries (default)
+        reports_to_process = [
+            "2025_08_Compliance_Audit_on_on__the_Activities_of_Indian_National_Centre_for_Ocean_Infor",
+            "2025_20_Performance_Audit_on_on_Skill_Development_under_Pradhan_Mantri_Kaushal_Vikas_Yoj",
+            "2025_26_Compliance_Audit_on_on_Development_of_MultiFunctional_Complexes_and_Commercial_s",
+            "2025_35_Performance_Audit_on_Operational_Performance_of_NLC_India_Limited_Ministry_of_Co",
+            "2025_38_Performance_Audit_of_Blast_Furnace_in_Steel_Authority_of_India_Limited",
+        ]
+
+    run_phase10a_for_reports(
+        reports_to_process,
+        include_hierarchical=args.include_hierarchical,
+    )

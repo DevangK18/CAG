@@ -2,11 +2,13 @@
 LLM-based TOC Validator (Phase 5.7)
 
 For reports where Phase 4 + Phase 5.5 still produce low-quality TOCs
-(quality < 50), uses Claude Haiku to validate and correct the TOC
+(quality < 50), uses Google Gemini to validate and correct the TOC
 by analyzing the first ~15 pages of raw text.
 
 This is a LAST RESORT — only called for ~10-20% of reports.
-Cost: ~$0.01-0.02 per report via Claude Haiku.
+Cost: ~$0.015 per report via Gemini 3.6 Flash.
+
+Uses the google-genai SDK (not the deprecated google-generativeai).
 """
 
 import json
@@ -31,11 +33,11 @@ logger = logging.getLogger(__name__)
 
 class TOCLLMValidator:
     """
-    Uses Claude Haiku to validate/correct low-quality TOCs.
+    Uses Google Gemini to validate/correct low-quality TOCs.
 
     Strategy:
     - Extract raw text from first 15 pages
-    - Send existing TOC (if any) + raw text to Claude Haiku
+    - Send existing TOC (if any) + raw text to Gemini
     - Ask it to return a corrected TOC in structured format
     - Parse response and use as validated TOC
     """
@@ -87,7 +89,7 @@ Return ONLY the JSON array, no explanations."""
     ):
         """
         Args:
-            model: Claude model to use (overrides config)
+            model: Gemini model to use (overrides config)
             max_input_chars: Max chars of document text to send (overrides config)
             quality_threshold: Only validate TOCs with quality below this (overrides config)
             config: LLMValidationConfig instance (default: load from global config)
@@ -112,13 +114,17 @@ Return ONLY the JSON array, no explanations."""
         self._trace_emitter = trace_emitter or get_noop_emitter()
 
     def _get_client(self):
-        """Lazy-initialize Anthropic client."""
+        """Lazy-initialize Google Gemini client using google-genai SDK."""
         if self._client is None:
             try:
-                from anthropic import Anthropic
-                self._client = Anthropic()  # Uses ANTHROPIC_API_KEY env var
+                from google import genai
+                # Client automatically uses GOOGLE_API_KEY env var
+                self._client = genai.Client()
+                logger.debug(f"Gemini client initialized for TOC validation (model: {self.model})")
             except ImportError:
-                raise ImportError("Install anthropic: pip install anthropic")
+                raise ImportError(
+                    "google-genai package required. Install: pip install google-genai"
+                )
         return self._client
 
     def should_validate(self, task, trace_emitter=None) -> bool:
@@ -183,7 +189,7 @@ Return ONLY the JSON array, no explanations."""
 
     def validate_toc(self, task, trace_emitter=None) -> dict:
         """
-        Validate and potentially correct the TOC using Claude Haiku.
+        Validate and potentially correct the TOC using Google Gemini.
 
         Args:
             task: DocumentTask with scaffold and PDF path
@@ -220,18 +226,22 @@ Return ONLY the JSON array, no explanations."""
 
         prev_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
 
-        # Call Claude Haiku
+        # Call Google Gemini using google-genai SDK
         try:
+            from google.genai import types
+
             client = self._get_client()
-            response = client.messages.create(
+            response = client.models.generate_content(
                 model=self.model,
-                max_tokens=2000,
-                temperature=0,
-                system=self.SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=self.SYSTEM_PROMPT,
+                    max_output_tokens=2000,
+                    temperature=0,
+                ),
             )
 
-            response_text = response.content[0].text.strip()
+            response_text = response.text.strip()
 
             # Parse JSON response
             llm_toc = self._parse_llm_response(response_text, task.report_id)
@@ -297,9 +307,9 @@ Return ONLY the JSON array, no explanations."""
                 return task.scaffold
 
         except Exception as e:
-            # Trace: Error in LLM call
-            emitter.emit_error("5.7", "llm_api_error", str(e)[:200])
-            logger.error(f"[{task.report_id}] LLM validation failed: {e}")
+            # Trace: Error in Gemini LLM call
+            emitter.emit_error("5.7", "gemini_api_error", {"message": str(e)[:200]})
+            logger.error(f"[{task.report_id}] Gemini LLM validation failed: {e}")
             return task.scaffold
 
     def _extract_early_pages_text(self, task) -> str:

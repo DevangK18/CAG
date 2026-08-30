@@ -67,7 +67,9 @@ class TOCReconciliationService:
     QUALITY_CAP = 85
 
     # P0-04: Maximum expected L1 entries
-    MAX_L1_COUNT = 15
+    # C2 fix: Re-tuned from 15 to 35 based on 37-report corpus distribution
+    # 15 flagged 67% of corpus; 35 flags only 9% (4 reports with complex structures)
+    MAX_L1_COUNT = 35
 
     def __init__(
         self,
@@ -808,14 +810,28 @@ class TOCReconciliationService:
                             "expected_chapter": chapter_num,
                         })
 
-        if orphans:
+        # D7: Calculate orphan ratio (data-derived threshold: 0.75 → ~13.5% firing)
+        ORPHAN_RATIO_THRESHOLD = 0.75
+
+        total_sections = sum(1 for entry in toc if entry[0] >= 2)  # L2+ entries
+        orphan_ratio = len(orphans) / total_sections if total_sections > 0 else 0
+
+        if orphan_ratio > ORPHAN_RATIO_THRESHOLD:
             emitter.emit_red_flag(
                 "5.5",
                 "orphan_sections_detected",
                 {
                     "count": len(orphans),
+                    "total_sections": total_sections,
+                    "ratio": round(orphan_ratio, 3),
+                    "threshold": ORPHAN_RATIO_THRESHOLD,
                     "samples": orphans[:5],
                 },
+            )
+        elif orphans:
+            logger.info(
+                f"[{emitter.report_id}] {len(orphans)} orphan sections "
+                f"(ratio {orphan_ratio:.1%}, below threshold)"
             )
 
         return orphans

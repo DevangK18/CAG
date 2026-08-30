@@ -243,6 +243,11 @@ class Citation:
     filename: str = ""
     audit_year: str = ""  # e.g., "2023-24"
 
+    # Item 7: Enhanced semantic fields
+    entities_mentioned: List[str] = field(default_factory=list)
+    section_type: Optional[str] = None
+    is_recommendation: bool = False
+
     def format(self) -> str:
         """Format citation for display."""
         base = f"[{self.id}] {self.report_id} - {self.section} (p.{self.page})"
@@ -280,6 +285,9 @@ class RAGResponse:
 
     groundedness: Optional[Dict[str, Any]] = None  # GroundednessReport.to_dict()
     agentic_trace: Optional[Dict[str, Any]] = None
+
+    # SOTA RAG Features metadata
+    sota_features: Optional[Dict[str, Any]] = None  # Routing, Self-RAG, Corrective info
 
     def format_with_citations(self) -> str:
         """Format answer with citations at the bottom."""
@@ -319,4 +327,5 @@ class RAGResponse:
             },
             "groundedness": self.groundedness,
             "agentic_trace": self.agentic_trace,
+            "sota_features": self.sota_features,
         }

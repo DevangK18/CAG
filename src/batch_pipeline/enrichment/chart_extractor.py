@@ -45,7 +45,7 @@ class ChartExtractorService:
         self,
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
-        model: str = "claude-sonnet-4-5-20250929",
+        model: str = "claude-sonnet-5",
         max_tokens: int = 3000,
         confidence_threshold: float = 0.5,
     ):

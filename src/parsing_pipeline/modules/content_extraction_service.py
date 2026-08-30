@@ -8,6 +8,11 @@ PHASE 2 FIXES IMPLEMENTED:
 
 PHASE 3 FIXES IMPLEMENTED:
 - Cross-page paragraph merging for split paragraphs
+
+OPTION D ENHANCEMENT (2026):
+- pdfmux intelligent routing for table extraction (0.911 TEDS accuracy)
+- Docling Heron model integration (23.5% mAP improvement)
+- Self-healing extraction with automatic fallback
 """
 
 import sys
@@ -24,6 +29,11 @@ from src.core.data_contracts import DocumentTask, ExtractedContent
 from src.parsing_pipeline.extractors.pdfplumber_table_extractor import PdfplumberTableExtractor
 from src.parsing_pipeline.extractors.text_extractor import TextExtractor
 from src.parsing_pipeline.modules.chunk_filter_service import ChunkFilterService
+from src.parsing_pipeline.extractors.pdfmux_router import (
+    PdfmuxRouter,
+    create_pdfmux_router,
+    PdfmuxTableResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +76,14 @@ class ContentExtractionService:
     # P2-18: Threshold for blank page detection before table extraction
     BLANK_PAGE_EXTRACTION_THRESHOLD = 50  # chars
 
-    def __init__(self, trace_emitter=None):
+    def __init__(self, trace_emitter=None, pdfmux_config: Optional[Dict] = None):
         """Initialize extractor instances and build routing map.
 
         Args:
             trace_emitter: Optional TraceEmitter for instrumentation. If None,
                           tracing calls are no-ops.
+            pdfmux_config: Optional pdfmux configuration dict. If None, loads from
+                          parsing_config.yaml. Set to {"enabled": False} to disable.
         """
         logger.info("Initializing ContentExtractionService...")
 
@@ -86,6 +98,11 @@ class ContentExtractionService:
         # V2: Cache structured table extractor (used by Docling Tier 2 and pdfplumber)
         from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
         self.structured_table_extractor = StructuredTableExtractor()
+
+        # Option D: Initialize pdfmux router for intelligent table extraction
+        self._pdfmux_router: Optional[PdfmuxRouter] = None
+        self._pdfmux_enabled = False
+        self._init_pdfmux_router(pdfmux_config)
 
         # Build router map: layout label → extraction function
         self.router: Dict[str, Callable] = {
@@ -117,7 +134,51 @@ class ContentExtractionService:
         logger.info(
             f"Router configured with {len([r for r in self.router.values() if r is not None])} active extractors"
         )
+        if self._pdfmux_enabled:
+            logger.info("Option D: pdfmux intelligent routing ENABLED")
         logger.info("ContentExtractionService ready!")
+
+    def _init_pdfmux_router(self, pdfmux_config: Optional[Dict] = None):
+        """
+        Initialize pdfmux router from config.
+
+        Option D Enhancement: pdfmux provides 0.911 TEDS table accuracy
+        (vs 0.887 for Docling alone) through intelligent routing.
+
+        Args:
+            pdfmux_config: Configuration dict or None to load from file
+        """
+        if pdfmux_config is None:
+            # Load from parsing_config.yaml
+            try:
+                import yaml
+                config_path = Path(__file__).parent.parent.parent.parent / "parsing_config.yaml"
+                if config_path.exists():
+                    with open(config_path) as f:
+                        config = yaml.safe_load(f)
+                    pdfmux_config = config.get("content_extraction", {}).get("pdfmux", {})
+                else:
+                    pdfmux_config = {}
+            except Exception as e:
+                logger.warning(f"Could not load pdfmux config: {e}")
+                pdfmux_config = {}
+
+        # Create router if enabled
+        if pdfmux_config.get("enabled", False):
+            self._pdfmux_router = create_pdfmux_router(
+                pdfmux_config,
+                trace_emitter=self._trace_emitter,
+            )
+            if self._pdfmux_router and self._pdfmux_router.is_available():
+                self._pdfmux_enabled = True
+                logger.info(
+                    f"pdfmux router initialized: quality={pdfmux_config.get('quality', 'standard')}, "
+                    f"min_confidence={pdfmux_config.get('min_confidence', 0.85)}"
+                )
+            else:
+                logger.warning("pdfmux enabled in config but not available (not installed?)")
+        else:
+            logger.info("pdfmux routing disabled in config")
 
     def _select_pdf_source(self, task: DocumentTask) -> str:
         """
@@ -313,8 +374,9 @@ class ContentExtractionService:
         confidence = block.get("confidence")
         emitter = trace_emitter or self._trace_emitter
 
-        # P2-18: Pre-check for blank page (Table blocks only)
-        if label == "Table":
+        # P2-18: Pre-check for blank page (Table blocks only, native PDFs only)
+        # For scanned PDFs, native text is always 0/low but Docling can still detect tables
+        if label == "Table" and not is_scanned:
             page_text_length = self._get_page_text_length(pdf_path, page_num)
             if page_text_length < self.BLANK_PAGE_EXTRACTION_THRESHOLD:
                 logger.info(
@@ -331,8 +393,58 @@ class ContentExtractionService:
                     )
                 return None  # Skip extraction on blank page
 
-        # Special routing for Table blocks (3-tier strategy)
+        # Special routing for Table blocks (3-tier strategy with Option D pdfmux enhancement)
         if label == "Table":
+            # Option D: Try pdfmux intelligent routing first (if enabled)
+            if self._pdfmux_enabled and self._pdfmux_router:
+                pdfmux_result = self._pdfmux_router.extract_table(
+                    pdf_path=pdf_path,
+                    page_num=page_num,
+                    bbox=bbox,
+                    is_scanned=is_scanned,
+                    docling_markdown=block.get("docling_table_markdown"),
+                    report_id=report_id,
+                )
+
+                if pdfmux_result:
+                    # pdfmux succeeded - convert to ExtractedContent
+                    logger.info(
+                        f"  pdfmux: Table extracted (page {page_num}) - "
+                        f"method={pdfmux_result.extraction_method}, "
+                        f"confidence={pdfmux_result.confidence:.2f}"
+                    )
+
+                    # Generate structured table data
+                    try:
+                        table_id = f"table_{page_num}_{int(bbox[0])}_{int(bbox[1])}"
+                        structured_table = self.structured_table_extractor.extract(
+                            markdown_table=pdfmux_result.markdown,
+                            table_id=table_id,
+                            source_chunk_id="temp",
+                            source_page_physical=page_num,
+                            source_bbox=bbox,
+                        )
+                        structured_data = structured_table.model_dump() if structured_table else None
+                    except Exception as e:
+                        logger.warning(f"  pdfmux: Structured extraction failed: {e}")
+                        structured_data = None
+
+                    return ExtractedContent(
+                        content_type="table_markdown",
+                        content=pdfmux_result.markdown,
+                        source_page_physical=page_num,
+                        source_bbox=bbox,
+                        model_used=pdfmux_result.extraction_method,
+                        layout_label="Table",
+                        layout_confidence=pdfmux_result.confidence,
+                        structured_data=structured_data,
+                        extraction_method=pdfmux_result.extraction_method,
+                        extraction_confidence=pdfmux_result.confidence,
+                    )
+                # pdfmux returned None - fall through to legacy 3-tier extraction
+                logger.debug(f"  pdfmux: No result for page {page_num}, using legacy extraction")
+
+            # Legacy 3-tier extraction (or pdfmux fallback)
             if is_scanned:
                 # SCANNED PDFs: Tier 2 → Tier 3 (skip pdfplumber)
                 if block.get("docling_table_markdown"):
@@ -343,7 +455,7 @@ class ContentExtractionService:
                             "6",
                             "table_extraction_tier",
                             "tier2_docling",
-                            ["tier1_pdfplumber", "tier2_docling", "tier3_gemini"],
+                            ["pdfmux", "tier1_pdfplumber", "tier2_docling", "tier3_gemini"],
                             f"Scanned PDF skips Tier 1, Docling markdown available (page {page_num})",
                         )
                     return self._use_docling_table(
@@ -391,7 +503,7 @@ class ContentExtractionService:
                                 "6",
                                 "table_extraction_tier",
                                 "tier1_pdfplumber",
-                                ["tier1_pdfplumber", "tier2_docling", "tier3_gemini"],
+                                ["pdfmux", "tier1_pdfplumber", "tier2_docling", "tier3_gemini"],
                                 f"Native PDF, pdfplumber extraction successful (page {page_num})",
                             )
                         return result  # Tier 1 success
@@ -810,6 +922,9 @@ class ContentExtractionService:
                             content.layout_confidence or 1.0,
                             next_content.layout_confidence or 1.0,
                         ),
+                        # REMEDIATION §3.3: Propagate extraction_method from original content
+                        extraction_method=content.extraction_method,
+                        extraction_confidence=content.extraction_confidence,
                     )
 
                     merged.append(merged_content)

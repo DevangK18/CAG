@@ -83,6 +83,10 @@ class Citation(BaseModel):
     finding_type: Optional[str] = None
     severity: Optional[str] = None
     amount_crore: Optional[float] = None
+    # Item 7: Enhanced citation fields
+    entities_mentioned: Optional[List[str]] = None
+    section_type: Optional[str] = None
+    is_recommendation: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -94,6 +98,8 @@ class ChatResponse(BaseModel):
     model_used: str
     groundedness: Optional[Dict[str, Any]] = None
     agentic_trace: Optional[Dict[str, Any]] = None
+    # Item 1: SOTA RAG features (routing, self-RAG, corrective)
+    sota_features: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================
@@ -120,6 +126,11 @@ class ReportSummary(BaseModel):
     department: Optional[str] = None
     audit_category: str = "compliance"
     ingested_at: Optional[str] = None
+    # Item 5: Availability flags and distributions
+    has_summaries: bool = False
+    has_overview_llm: bool = False
+    severity_distribution: Optional[Dict[str, int]] = None
+    finding_type_distribution: Optional[Dict[str, int]] = None
 
 
 class ReportDetail(BaseModel):
@@ -447,3 +458,26 @@ class EntitySummary(BaseModel):
     mention_count: int
     finding_count: int
     report_count: int
+
+
+# ============================================================================
+# RESPONSE MODELS - Hierarchical Summaries (Item 6)
+# ============================================================================
+
+
+class HierarchicalSummary(BaseModel):
+    """A hierarchical (RAPTOR) summary of a chapter or section."""
+
+    chunk_id: str
+    title: str
+    summary: str
+    level: int  # 1=section, 2=chapter
+    parent_chunk_id: Optional[str] = None
+
+
+class HierarchicalResponse(BaseModel):
+    """Response for GET /reports/{id}/hierarchical."""
+
+    report_id: str
+    summaries: List[HierarchicalSummary]
+    total: int

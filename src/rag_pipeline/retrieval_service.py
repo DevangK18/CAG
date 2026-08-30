@@ -747,10 +747,21 @@ class RetrievalService:
         )
 
     def _embed_query_dense(self, query: str) -> List[float]:
-        """Generate dense embedding for query."""
+        """Generate dense embedding for query.
+
+        OPT-4: Prepends instruction prefix for better retrieval alignment.
+        """
+        # OPT-4: Add query instruction prefix if enabled
+        retrieval_config = self.config.retrieval
+        if getattr(retrieval_config, 'enable_query_prefix', False):
+            prefix = getattr(retrieval_config, 'query_prefix', 'Retrieve audit finding: ')
+            query_text = f"{prefix}{query}"
+        else:
+            query_text = query
+
         response = self.openai_client.embeddings.create(
             model=self.config.embedding.model,
-            input=query,
+            input=query_text,
             dimensions=self.config.embedding.dimensions,
         )
         return response.data[0].embedding

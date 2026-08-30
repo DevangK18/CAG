@@ -96,6 +96,8 @@ class RecommendationExtractor:
         r"^significant\s+audit\s+findings?\s+and\s+recommendations?$",
         r"^chapter\s+[ivxIVX\d]+[\s:]+recommendations?",
         r"^compliance\s+(?:of|with)\s+earlier\s+(?:reports?|recommendations?)",
+        # P0-08.C: Match numbered section headers like "2.4 Recommendations", "5.11 Recommendation"
+        r"^\d+(?:\.\d+)*\s+recommendations?$",
     ]
 
     # ══════════════════════════════════════════════════════════════

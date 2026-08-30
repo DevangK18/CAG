@@ -66,6 +66,14 @@ from src.parsing_pipeline.modules.enrichment.executive_summary_parser import (
 # Evidence linker (in parent directory)
 from src.parsing_pipeline.modules import evidence_linker
 
+# LLM Validator for hybrid validation (P3)
+from src.parsing_pipeline.modules.enrichment.llm_validator import (
+    LLMValidator,
+    ValidationVerdict,
+    create_finding_validation_request,
+)
+from src.parsing_pipeline.modules.enrichment.pattern_loader import get_pattern_loader
+
 
 class SemanticEnrichmentService:
     """
@@ -96,13 +104,25 @@ class SemanticEnrichmentService:
         self._xref_resolver = CrossReferenceResolver()
         self._evidence_linker = evidence_linker.EvidenceLinker()
 
+        # P3: LLM Validator for hybrid validation
+        self._llm_validator: Optional[LLMValidator] = None
+        self._llm_validation_enabled = False
+        try:
+            llm_config = get_pattern_loader().get_llm_validation_config()
+            self._llm_validation_enabled = llm_config.get("enabled", False)
+            if self._llm_validation_enabled:
+                self._llm_validator = LLMValidator()
+                logger.info("LLM validation enabled for low-confidence findings")
+        except Exception as e:
+            logger.debug(f"LLM validation not configured: {e}")
+
         # Current report type (set per document)
         self._current_report_type = "general"
 
         logger.info(
             "SemanticEnrichmentService initialized with focused extractors, "
             "evidence linking, temporal extraction, annexure linking, "
-            "and cross-reference resolution."
+            f"cross-reference resolution, llm_validation={self._llm_validation_enabled}."
         )
 
     def enrich_document(
@@ -144,140 +164,219 @@ class SemanticEnrichmentService:
             )
         logger.info(f"  Detected report type: {self._current_report_type}")
 
-        # 1. Classify sections
-        section_classifications = self._section_classifier.classify_sections(
-            parent_chunks
-        )
-        logger.info(f"  Classified {len(section_classifications)} sections")
+        # 1. Classify sections (with error handling - P1-A)
+        try:
+            section_classifications = self._section_classifier.classify_sections(
+                parent_chunks
+            )
+            logger.info(f"  Classified {len(section_classifications)} sections")
+        except Exception as e:
+            logger.warning(f"  Section classification failed: {e}")
+            section_classifications = []
+            trace_emitter.emit_red_flag(
+                "9", "section_classifier_failed",
+                {"error": str(e), "report_id": report_id}
+            )
 
         # 2. Extract findings (report-type aware with tier-specific severity)
         government_body_type = report_metadata.get("government_body_type", "union")
-        self._finding_extractor.set_report_type(self._current_report_type)
-        findings = self._finding_extractor.extract_findings(
-            report_id, child_chunks, government_body_type
-        )
-
-        # Populate entities_mentioned for each finding
-        for finding in findings:
-            finding.entities_mentioned = self._entity_extractor.extract_entities_from_text(
-                finding.text
+        try:
+            self._finding_extractor.set_report_type(self._current_report_type)
+            # P1-13: Pass parent_chunks for source attribution (section from toc_entry)
+            findings = self._finding_extractor.extract_findings(
+                report_id, child_chunks, government_body_type, parent_chunks
             )
 
-        logger.info(f"  Extracted {len(findings)} findings")
+            # Populate entities_mentioned for each finding
+            for finding in findings:
+                try:
+                    finding.entities_mentioned = self._entity_extractor.extract_entities_from_text(
+                        finding.text
+                    )
+                except Exception as entity_err:
+                    logger.warning(f"  Entity extraction for finding failed: {entity_err}")
+                    finding.entities_mentioned = []
 
-        # 3. Extract recommendations with multi-strategy extractor
-        raw_recs = self._rec_extractor.extract_all(
-            report_id,
-            parent_chunks,
-            child_chunks,
-            [s.model_dump() for s in section_classifications],
-        )
+            logger.info(f"  Extracted {len(findings)} findings")
 
-        # Convert to Recommendation data contracts
-        recommendations = []
-        for i, raw in enumerate(raw_recs):
-            recommendations.append(
-                Recommendation(
-                    recommendation_id=f"{report_id}_rec_{i+1:03d}",
-                    report_id=report_id,
-                    text=raw.text,
-                    summary=raw.text[:200],
-                    target_entity=raw.target_entity,
-                    action_required=raw.action_required,
-                    chapter=raw.chapter,
-                    section=raw.section,
-                    page=raw.page,
-                    source_chunk_id=raw.source_chunk_id,
-                    status="pending",
-                    extraction_strategy=raw.extraction_strategy,
-                    rec_number=raw.rec_number,
-                    paragraph_citations=raw.paragraph_citations,
+            # P3: LLM validation for low-confidence findings
+            if self._llm_validation_enabled and self._llm_validator and findings:
+                findings = self._validate_findings_with_llm(
+                    findings, child_chunks, report_id, trace_emitter
                 )
+
+        except Exception as e:
+            logger.warning(f"  Finding extraction failed: {e}")
+            findings = []
+            trace_emitter.emit_red_flag(
+                "9", "finding_extractor_failed",
+                {"error": str(e), "report_id": report_id}
             )
 
-        # Print extraction strategy breakdown
-        structural_count = sum(
-            1 for r in raw_recs if r.extraction_strategy == "structural"
-        )
-        numbered_count = sum(
-            1 for r in raw_recs if r.extraction_strategy == "numbered"
-        )
-        verb_count = sum(1 for r in raw_recs if r.extraction_strategy == "verb")
-        logger.info(
-            f"  Extracted {len(recommendations)} recommendations "
-            f"(structural={structural_count}, numbered={numbered_count}, verb={verb_count})"
-        )
+        # 3. Extract recommendations with multi-strategy extractor (with error handling - P1-A)
+        try:
+            raw_recs = self._rec_extractor.extract_all(
+                report_id,
+                parent_chunks,
+                child_chunks,
+                [s.model_dump() for s in section_classifications],
+            )
 
-        # 4. Link findings to recommendations
-        self._link_findings_to_recommendations(findings, recommendations)
+            # Convert to Recommendation data contracts
+            recommendations = []
+            for i, raw in enumerate(raw_recs):
+                recommendations.append(
+                    Recommendation(
+                        recommendation_id=f"{report_id}_rec_{i+1:03d}",
+                        report_id=report_id,
+                        text=raw.text,
+                        summary=raw.text[:200],
+                        target_entity=raw.target_entity,
+                        action_required=raw.action_required,
+                        chapter=raw.chapter,
+                        section=raw.section,
+                        page=raw.page,
+                        source_chunk_id=raw.source_chunk_id,
+                        status="pending",
+                        extraction_strategy=raw.extraction_strategy,
+                        rec_number=raw.rec_number,
+                        paragraph_citations=raw.paragraph_citations,
+                    )
+                )
 
-        # 5. Create evidence links for findings
-        evidence_links_map = self._link_evidence_to_findings(findings, child_chunks)
-        logger.info(f"  Created evidence links for {len(evidence_links_map)} findings")
-
-        # 5b. Link findings to annexures
-        annexure_links = self._annexure_linker.link_annexures(
-            child_chunks,
-            parent_chunks,
-            [f.model_dump() for f in findings],
-        )
-        resolved = sum(1 for link in annexure_links if link["resolved"])
-        logger.info(f"  Annexure links: {len(annexure_links)} references, {resolved} resolved")
-
-        # 6. Extract entities
-        entities = self._entity_extractor.extract_entities(child_chunks)
-        logger.info(
-            f"  Extracted entities: {', '.join(f'{k}={len(v)}' for k, v in entities.items())}"
-        )
-
-        # 6b. Detect box elements
-        box_elements = self._box_extractor.detect_box_elements(child_chunks)
-        if box_elements:
-            logger.info(f"  Detected {len(box_elements)} box elements")
-
-        # 6c. Parse executive summary
-        exec_parser = ExecutiveSummaryParser()
-        exec_summary_index = exec_parser.parse_executive_summary(
-            parent_chunks,
-            child_chunks,
-            [s.model_dump() for s in section_classifications],
-        )
-        if exec_summary_index:
+            # Print extraction strategy breakdown
+            structural_count = sum(
+                1 for r in raw_recs if r.extraction_strategy == "structural"
+            )
+            numbered_count = sum(
+                1 for r in raw_recs if r.extraction_strategy == "numbered"
+            )
+            verb_count = sum(1 for r in raw_recs if r.extraction_strategy == "verb")
             logger.info(
-                f"  Exec summary: {exec_summary_index['total_items']} items, "
-                f"{exec_summary_index['resolution_rate']*100:.0f}% citations resolved"
+                f"  Extracted {len(recommendations)} recommendations "
+                f"(structural={structural_count}, numbered={numbered_count}, verb={verb_count})"
+            )
+        except Exception as e:
+            logger.warning(f"  Recommendation extraction failed: {e}")
+            recommendations = []
+            raw_recs = []
+            trace_emitter.emit_red_flag(
+                "9", "recommendation_extractor_failed",
+                {"error": str(e), "report_id": report_id}
             )
 
-        # 7. Extract temporal metadata
+        # 4. Link findings to recommendations (with error handling - P1-A)
+        try:
+            self._link_findings_to_recommendations(findings, recommendations)
+        except Exception as e:
+            logger.warning(f"  Finding-recommendation linking failed: {e}")
+
+        # 5. Create evidence links for findings (with error handling - P1-A)
+        try:
+            evidence_links_map = self._link_evidence_to_findings(findings, child_chunks)
+            logger.info(f"  Created evidence links for {len(evidence_links_map)} findings")
+        except Exception as e:
+            logger.warning(f"  Evidence linking failed: {e}")
+            evidence_links_map = {}
+
+        # 5b. Link findings to annexures (with error handling - P1-A)
+        try:
+            annexure_links = self._annexure_linker.link_annexures(
+                child_chunks,
+                parent_chunks,
+                [f.model_dump() for f in findings],
+            )
+            resolved = sum(1 for link in annexure_links if link["resolved"])
+            logger.info(f"  Annexure links: {len(annexure_links)} references, {resolved} resolved")
+        except Exception as e:
+            logger.warning(f"  Annexure linking failed: {e}")
+            annexure_links = []
+
+        # 6. Extract entities (with error handling - P1-A)
+        try:
+            entities = self._entity_extractor.extract_entities(child_chunks)
+            logger.info(
+                f"  Extracted entities: {', '.join(f'{k}={len(v)}' for k, v in entities.items())}"
+            )
+        except Exception as e:
+            logger.warning(f"  Entity extraction failed: {e}")
+            entities = {"schemes": [], "ministries": [], "organizations": []}
+            trace_emitter.emit_red_flag(
+                "9", "entity_extractor_failed",
+                {"error": str(e), "report_id": report_id}
+            )
+
+        # 6b. Detect box elements (with error handling - P1-A)
+        try:
+            box_elements = self._box_extractor.detect_box_elements(child_chunks)
+            if box_elements:
+                logger.info(f"  Detected {len(box_elements)} box elements")
+        except Exception as e:
+            logger.warning(f"  Box element detection failed: {e}")
+            box_elements = []
+
+        # 6c. Parse executive summary (with error handling - P1-A)
+        try:
+            exec_parser = ExecutiveSummaryParser()
+            exec_summary_index = exec_parser.parse_executive_summary(
+                parent_chunks,
+                child_chunks,
+                [s.model_dump() for s in section_classifications],
+            )
+            if exec_summary_index:
+                logger.info(
+                    f"  Exec summary: {exec_summary_index['total_items']} items, "
+                    f"{exec_summary_index['resolution_rate']*100:.0f}% citations resolved"
+                )
+        except Exception as e:
+            logger.warning(f"  Executive summary parsing failed: {e}")
+            exec_summary_index = None
+
+        # 7. Extract temporal metadata (with error handling - P1-A)
         # P2-21: Pass report_year to filter future years
         report_year = report_metadata.get("report_year")
-        temporal_coverage = self._temporal_extractor.extract_temporal_metadata(
-            child_chunks,
-            [s.model_dump() for s in section_classifications],
-            report_year=report_year,
-        )
-        logger.info(
-            f"  Temporal: audit_period={temporal_coverage.get('audit_period')}, "
-            f"ref_years={len(temporal_coverage.get('reference_years', []))}"
-        )
-
-        # Annotate findings with temporal context
-        for finding in findings:
-            # P2-21: Pass report_year for future year filtering
-            finding.reference_years = self._temporal_extractor.extract_reference_years(
-                finding.text, report_year=report_year
+        try:
+            temporal_coverage = self._temporal_extractor.extract_temporal_metadata(
+                child_chunks,
+                [s.model_dump() for s in section_classifications],
+                report_year=report_year,
             )
-            if temporal_coverage.get("audit_period"):
-                finding.audit_period = temporal_coverage["audit_period"]
+            logger.info(
+                f"  Temporal: audit_period={temporal_coverage.get('audit_period')}, "
+                f"ref_years={len(temporal_coverage.get('reference_years', []))}"
+            )
 
-        # 8. Resolve cross-chunk references
-        cross_references = self._xref_resolver.resolve_references(
-            child_chunks, parent_chunks
-        )
-        resolved_xrefs = sum(1 for x in cross_references if x["resolved"])
-        logger.info(
-            f"  Cross-references: {len(cross_references)} found, {resolved_xrefs} resolved"
-        )
+            # Annotate findings with temporal context
+            for finding in findings:
+                try:
+                    # P2-21: Pass report_year for future year filtering
+                    finding.reference_years = self._temporal_extractor.extract_reference_years(
+                        finding.text, report_year=report_year
+                    )
+                    if temporal_coverage.get("audit_period"):
+                        finding.audit_period = temporal_coverage["audit_period"]
+                except Exception as temp_err:
+                    logger.warning(f"  Temporal annotation for finding failed: {temp_err}")
+        except Exception as e:
+            logger.warning(f"  Temporal extraction failed: {e}")
+            temporal_coverage = {"audit_period": None, "reference_years": [], "previous_audit_refs": []}
+            trace_emitter.emit_red_flag(
+                "9", "temporal_extractor_failed",
+                {"error": str(e), "report_id": report_id}
+            )
+
+        # 8. Resolve cross-chunk references (with error handling - P1-A)
+        try:
+            cross_references = self._xref_resolver.resolve_references(
+                child_chunks, parent_chunks
+            )
+            resolved_xrefs = sum(1 for x in cross_references if x["resolved"])
+            logger.info(
+                f"  Cross-references: {len(cross_references)} found, {resolved_xrefs} resolved"
+            )
+        except Exception as e:
+            logger.warning(f"  Cross-reference resolution failed: {e}")
+            cross_references = []
 
         # 9. Calculate statistics (includes report type)
         statistics = self._calculate_statistics(
@@ -294,26 +393,78 @@ class SemanticEnrichmentService:
 
             # Check for high "other" findings (red flag if >30%)
             other_count = finding_type_dist.get("other", 0)
-            if findings and other_count / len(findings) > 0.30:
+
+            # C1 fix: Guard against impossible other_count > total_findings
+            # This would indicate a counting bug in finding_extractor
+            if other_count > len(findings):
                 trace_emitter.emit_red_flag(
                     "9",
-                    "High 'other' finding ratio",
+                    "finding_other_count_inflation",
                     {
                         "other_count": other_count,
                         "total_findings": len(findings),
-                        "percentage": round(other_count / len(findings) * 100, 1),
+                        "note": "Bug: other_count exceeds total findings - check finding_extractor",
+                    },
+                )
+                # Cap to prevent >100% calculation
+                other_count = len(findings)
+
+            # D6: Report-type-aware thresholds
+            OTHER_RATIO_THRESHOLDS = {
+                "compliance": 0.30,
+                "performance": 0.30,
+                "financial": 0.50,      # Financial audits have many accounting misstatements
+                "atir": 0.40,
+                "state_commercial": 0.35,
+                "state_performance": 0.30,
+                "general": 0.40,
+            }
+
+            # D6: Minimum finding count (small samples are noise)
+            MIN_FINDINGS_FOR_RATIO_CHECK = 10
+
+            threshold = OTHER_RATIO_THRESHOLDS.get(self._current_report_type, 0.40)
+
+            if (findings
+                and len(findings) >= MIN_FINDINGS_FOR_RATIO_CHECK
+                and other_count / len(findings) > threshold):
+                trace_emitter.emit_red_flag(
+                    "9",
+                    "finding_other_ratio_high",
+                    {
+                        "other_count": other_count,
+                        "total_findings": len(findings),
+                        "ratio": round(other_count / len(findings), 3),
+                        "threshold": threshold,
+                        "report_type": self._current_report_type,
                     },
                 )
 
-            # P0-01: Check for implausibly large monetary totals (tier-specific)
-            # These thresholds are in crore - exceeding them suggests extraction errors
-            IMPLAUSIBILITY_THRESHOLDS = {
+            # P0-01: Check for implausibly large monetary totals
+            # C3 fix: Report-type thresholds first, then tier-based fallback
+            # Aggregate report types (financial, compliance) cover many transactions
+            REPORT_TYPE_THRESHOLDS = {
+                "financial": 10_000_000,   # ₹100 lakh crore - State Finance aggregates
+                "compliance": 5_000_000,   # ₹50 lakh crore - broad transaction audits
+                "revenue": 5_000_000,      # ₹50 lakh crore - tax/revenue collection audits
+            }
+            # Tier-specific fallback thresholds (for performance, commercial, etc.)
+            TIER_THRESHOLDS = {
                 "union": 500_000,      # ₹5 lakh crore
                 "state": 100_000,      # ₹1 lakh crore
                 "local_body": 10_000,  # ₹10,000 crore
             }
             total_monetary_crore = statistics.get("findings", {}).get("total_monetary_crore", 0)
-            threshold = IMPLAUSIBILITY_THRESHOLDS.get(government_body_type, 500_000)
+            detected_report_type = self._current_report_type
+
+            # C3 fix: Use report-type threshold if available, else tier-based
+            if detected_report_type in REPORT_TYPE_THRESHOLDS:
+                threshold = REPORT_TYPE_THRESHOLDS[detected_report_type]
+                threshold_source = f"report_type:{detected_report_type}"
+            else:
+                threshold = TIER_THRESHOLDS.get(government_body_type, 500_000)
+                threshold_source = f"tier:{government_body_type}"
+
             if total_monetary_crore > threshold:
                 trace_emitter.emit_red_flag(
                     "9",
@@ -321,6 +472,8 @@ class SemanticEnrichmentService:
                     {
                         "total_monetary_crore": total_monetary_crore,
                         "threshold_crore": threshold,
+                        "threshold_source": threshold_source,  # C3: report_type:X or tier:Y
+                        "detected_report_type": detected_report_type,
                         "government_body_type": government_body_type,
                         "ratio_to_threshold": round(total_monetary_crore / threshold, 2),
                     },
@@ -452,6 +605,109 @@ class SemanticEnrichmentService:
             executive_summary_index=exec_summary_index,
         )
 
+    def _validate_findings_with_llm(
+        self,
+        findings: List[Finding],
+        child_chunks: List[Dict],
+        report_id: str,
+        trace_emitter: "TraceEmitter",
+    ) -> List[Finding]:
+        """
+        P3: Validate low-confidence findings using LLM.
+
+        Filters out findings that the LLM determines are invalid (false positives).
+        Collects data on invalid findings for pattern refinement.
+
+        Args:
+            findings: List of extracted findings
+            child_chunks: Child chunks for text lookup
+            report_id: Report ID for tracking
+            trace_emitter: Trace emitter for instrumentation
+
+        Returns:
+            Filtered list of findings (invalid ones removed)
+        """
+        if not self._llm_validator:
+            return findings
+
+        # Build chunk lookup for text retrieval
+        chunk_lookup = {c.get("chunk_id"): c.get("content", "") for c in child_chunks}
+
+        # Identify findings needing validation
+        to_validate = []
+        for finding in findings:
+            confidence = getattr(finding, "confidence", 0.5)
+            if self._llm_validator.needs_validation(confidence):
+                to_validate.append(finding)
+
+        if not to_validate:
+            logger.info("  No findings need LLM validation")
+            return findings
+
+        logger.info(f"  Validating {len(to_validate)} low-confidence findings via LLM...")
+
+        # Validate each finding
+        validated_findings = []
+        invalid_count = 0
+        valid_count = 0
+
+        for finding in findings:
+            confidence = getattr(finding, "confidence", 0.5)
+
+            if not self._llm_validator.needs_validation(confidence):
+                # High confidence or below threshold - keep as-is
+                validated_findings.append(finding)
+                continue
+
+            # Get chunk text
+            chunk_text = chunk_lookup.get(finding.source_chunk_id, finding.text)
+
+            # Create validation request
+            request = create_finding_validation_request(
+                finding=finding.model_dump(),
+                chunk_text=chunk_text,
+                parent_section=finding.chapter,
+            )
+
+            # Validate with data collection
+            try:
+                result = self._llm_validator.validate_and_collect(
+                    request, report_id=report_id
+                )
+
+                if result.verdict == ValidationVerdict.INVALID:
+                    invalid_count += 1
+                    logger.debug(f"    Invalid finding filtered: {finding.finding_id} - {result.reasoning[:100]}")
+                    # Don't add to validated_findings - this filters it out
+                else:
+                    valid_count += 1
+                    validated_findings.append(finding)
+
+            except Exception as e:
+                logger.warning(f"    LLM validation error for {finding.finding_id}: {e}")
+                # On error, keep the finding (fail-open)
+                validated_findings.append(finding)
+
+        # Emit trace data
+        trace_emitter.emit_io(
+            "9",
+            {"llm_validation_input": len(to_validate)},
+            {
+                "llm_validated": len(to_validate),
+                "llm_valid": valid_count,
+                "llm_invalid": invalid_count,
+                "findings_after_validation": len(validated_findings),
+            },
+        )
+
+        if invalid_count > 0:
+            logger.info(
+                f"  LLM validation: {invalid_count} invalid findings filtered, "
+                f"{valid_count} validated, {len(validated_findings)} total remaining"
+            )
+
+        return validated_findings
+
     def _link_findings_to_recommendations(
         self,
         findings: List[Finding],
@@ -505,6 +761,106 @@ class SemanticEnrichmentService:
 
         return evidence_links_map
 
+    def _deduplicate_cross_finding_amounts(
+        self, findings: List[Finding], tolerance: float = 0.01, page_gap: int = 15
+    ) -> tuple[List[Finding], Dict[str, Any]]:
+        """
+        R3: Deduplicate monetary amounts appearing in multiple findings.
+
+        When the same audit finding amount appears multiple times (e.g., in
+        executive summary and detailed chapter), marks later occurrences as
+        duplicates to avoid inflating totals.
+
+        Strategy:
+        - Group by similar amounts (within tolerance)
+        - Check page proximity (within page_gap pages)
+        - Mark later occurrences (by page number) as duplicates
+        - First occurrence keeps is_duplicate=False
+
+        Args:
+            findings: List of Finding objects
+            tolerance: Tolerance for amount matching (default 1%)
+            page_gap: Maximum page distance to consider as duplicate (default 15)
+
+        Returns:
+            Tuple of (modified findings list, dedup statistics dict)
+        """
+        from collections import defaultdict
+
+        if not findings:
+            return findings, {"groups": 0, "duplicates_found": 0, "total_examined": 0}
+
+        # Build list of (amount, page, finding) for comparison
+        findings_with_amounts: List[tuple[int, int, Finding]] = []
+
+        for f in findings:
+            # Use total_amount_inr for comparison
+            if hasattr(f, 'total_amount_inr') and f.total_amount_inr and f.total_amount_inr > 0:
+                finding_page = f.page if hasattr(f, 'page') and f.page else 0
+                findings_with_amounts.append((f.total_amount_inr, finding_page, f))
+
+        # Group by similar amounts using pairwise comparison
+        # Two amounts are "similar" if they're within tolerance of each other
+        processed: set[str] = set()  # Track which findings have been processed
+
+        dedup_stats = {
+            "groups": 0,
+            "duplicates_found": 0,
+            "total_examined": len(findings),
+        }
+
+        # Sort by page to ensure first occurrence is earliest
+        findings_with_amounts.sort(key=lambda x: x[1])
+
+        for i, (amount_i, page_i, finding_i) in enumerate(findings_with_amounts):
+            if finding_i.finding_id in processed:
+                continue
+
+            # Find all other findings with similar amounts
+            similar_group = [(amount_i, page_i, finding_i)]
+            processed.add(finding_i.finding_id)
+
+            for j, (amount_j, page_j, finding_j) in enumerate(findings_with_amounts):
+                if i == j or finding_j.finding_id in processed:
+                    continue
+
+                # Check if amounts are within tolerance
+                max_amount = max(amount_i, amount_j)
+                min_amount = min(amount_i, amount_j)
+                if max_amount > 0 and (max_amount - min_amount) / max_amount <= tolerance:
+                    similar_group.append((amount_j, page_j, finding_j))
+                    processed.add(finding_j.finding_id)
+
+            # If we have multiple similar findings, mark duplicates
+            if len(similar_group) > 1:
+                # First (by page) is original, rest are duplicates if within page_gap
+                # Sort is already done, so first item is earliest
+                first_page = similar_group[0][1]
+                group_id = f"dedup_{amount_i}_{i}"
+
+                for k in range(1, len(similar_group)):
+                    _, current_page, current_finding = similar_group[k]
+
+                    # If within page_gap of first occurrence, mark as duplicate
+                    if current_page - first_page <= page_gap:
+                        current_finding.is_duplicate = True
+                        current_finding.dedup_group_id = group_id
+                        dedup_stats["duplicates_found"] += 1
+
+                # Count as a group if we marked any duplicates in this group
+                group_has_dups = any(
+                    similar_group[k][2].is_duplicate for k in range(1, len(similar_group))
+                )
+                if group_has_dups:
+                    dedup_stats["groups"] += 1
+
+        logger.info(
+            f"  R3 Dedup: {dedup_stats['duplicates_found']} duplicates found in "
+            f"{dedup_stats['groups']} groups (examined {dedup_stats['total_examined']} findings)"
+        )
+
+        return findings, dedup_stats
+
     def _calculate_statistics(
         self,
         report_metadata: Dict,
@@ -513,13 +869,40 @@ class SemanticEnrichmentService:
         sections: List[SectionClassification],
     ) -> Dict[str, Any]:
         """Calculate aggregate statistics for the report."""
-        # Monetary statistics
-        total_monetary = sum(f.total_amount_inr for f in findings)
+        # R3: Deduplicate findings before calculating totals
+        findings, dedup_stats = self._deduplicate_cross_finding_amounts(findings)
+
+        # R3 + R4: Filter out duplicates and exec summary for primary totals
+        primary_findings = [
+            f for f in findings
+            if not getattr(f, 'is_duplicate', False)
+            and not getattr(f, 'is_executive_summary', False)
+        ]
+
+        # Calculate monetary totals (excluding duplicates and exec summary)
+        total_monetary = sum(f.total_amount_inr for f in primary_findings)
         total_monetary_crore = total_monetary / 10_000_000_00
 
-        # Finding statistics by type
+        # Also track raw totals for transparency
+        raw_total_monetary = sum(f.total_amount_inr for f in findings)
+        raw_total_monetary_crore = raw_total_monetary / 10_000_000_00
+
+        # R4: Track executive summary totals separately
+        exec_summary_findings = [
+            f for f in findings if getattr(f, 'is_executive_summary', False)
+        ]
+        exec_summary_total = sum(f.total_amount_inr for f in exec_summary_findings)
+        exec_summary_total_crore = exec_summary_total / 10_000_000_00
+
+        # R3: Track duplicate totals
+        duplicate_findings = [
+            f for f in findings if getattr(f, 'is_duplicate', False)
+        ]
+        duplicate_total = sum(f.total_amount_inr for f in duplicate_findings)
+
+        # Finding statistics by type (using primary findings only)
         findings_by_type: Dict[str, Dict] = {}
-        for f in findings:
+        for f in primary_findings:
             ft = f.finding_type
             if ft not in findings_by_type:
                 findings_by_type[ft] = {"count": 0, "total_inr": 0}
@@ -562,10 +945,21 @@ class SemanticEnrichmentService:
             },
             "findings": {
                 "total_count": len(findings),
-                "total_monetary_inr": total_monetary,
+                "primary_count": len(primary_findings),  # R3+R4: Non-duplicate, non-exec-summary
+                "total_monetary_inr": total_monetary,  # R3+R4: Primary findings only
                 "total_monetary_crore": round(total_monetary_crore, 2),
+                "raw_total_monetary_inr": raw_total_monetary,  # R3: Before dedup
+                "raw_total_monetary_crore": round(raw_total_monetary_crore, 2),
                 "by_type": findings_by_type,
                 "by_severity": severity_counts,
+                # R3: Deduplication stats
+                "dedup_stats": dedup_stats,
+                "duplicate_count": len(duplicate_findings),
+                "duplicate_total_inr": duplicate_total,
+                # R4: Executive summary breakdown
+                "exec_summary_count": len(exec_summary_findings),
+                "exec_summary_total_inr": exec_summary_total,
+                "exec_summary_total_crore": round(exec_summary_total_crore, 2),
             },
             "recommendations": {
                 "total_count": len(recommendations),

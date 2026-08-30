@@ -176,6 +176,11 @@ class PdfplumberTableExtractor:
 
             page = pdf.pages[page_num]
 
+            # B3 fix: Get page rotation for text reversal handling
+            rotation = page.rotation % 360
+            if rotation != 0:
+                logger.debug(f"B3: Table on rotated page {page_num} (rotation={rotation}°)")
+
             # Crop to Docling's bounding box
             # pdfplumber uses (x0, top, x1, bottom) — same as our [x0, y0, x1, y1]
             cropped = page.crop(
@@ -193,7 +198,7 @@ class PdfplumberTableExtractor:
             if tables:
                 raw = tables[0].extract()
                 if raw and self._has_meaningful_data(raw):
-                    return self._clean_raw_table(raw), "lines_strict"
+                    return self._clean_raw_table(raw, rotation), "lines_strict"
 
             # Attempt 2: text-based fallback (for borderless tables)
             tables_fb = cropped.find_tables(
@@ -203,7 +208,7 @@ class PdfplumberTableExtractor:
             if tables_fb:
                 raw = tables_fb[0].extract()
                 if raw and self._has_meaningful_data(raw):
-                    return self._clean_raw_table(raw), "text_fallback"
+                    return self._clean_raw_table(raw, rotation), "text_fallback"
 
             # Attempt 3: Extract ALL text as single-column if table was detected
             # by Docling but pdfplumber can't parse structure
@@ -217,20 +222,102 @@ class PdfplumberTableExtractor:
 
             return None, ""
 
+    # D9-FIX: Reversed word patterns for content-baked reversal detection
+    # These are common English words reversed - their reversed forms are rare/invalid
+    REVERSED_PATTERNS = {
+        "eht", "dna", "rof", "htiw", "morf", "evah", "siht", "taht", "erew", "neeb",
+        "elbaliava", "tegduB", "troper", "tidua", "hkal", "erorc",
+        "tnemnrevoG", "tnemtrapeD", "yrtsinim", "detroper", "devresbo", "dehsilbuP", "toN",
+    }
+
+    def _detect_cell_reversal(self, text: str) -> bool:
+        """
+        D9-FIX: Detect if cell text is reversed (content-baked reversal).
+
+        Checks for known reversed patterns in the text.
+
+        Args:
+            text: Cell text to check
+
+        Returns:
+            True if text appears to be reversed
+        """
+        if not text or len(text) < 3:
+            return False
+
+        text_lower = text.lower()
+        # Check for any known reversed pattern
+        for pattern in self.REVERSED_PATTERNS:
+            if pattern.lower() in text_lower:
+                return True
+        return False
+
+    def _reverse_cell_text(self, text: str) -> str:
+        """
+        D9-FIX: Reverse each word in cell text to recover original.
+
+        Preserves punctuation and spacing while reversing word characters.
+
+        Args:
+            text: Reversed cell text
+
+        Returns:
+            Corrected text with each word reversed back
+        """
+        words = text.split()
+        corrected = []
+        for word in words:
+            # Preserve leading/trailing punctuation
+            leading = ""
+            trailing = ""
+            while word and not word[0].isalnum():
+                leading += word[0]
+                word = word[1:]
+            while word and not word[-1].isalnum():
+                trailing = word[-1] + trailing
+                word = word[:-1]
+            # Reverse the core word
+            corrected.append(leading + word[::-1] + trailing)
+        return " ".join(corrected)
+
     def _clean_raw_table(
-        self, raw: List[List[Optional[str]]]
+        self, raw: List[List[Optional[str]]], rotation: int = 0
     ) -> List[List[str]]:
         """
         Clean pdfplumber's raw extraction output.
 
         Handles None cells, normalizes whitespace, strips artifacts.
+        B3 fix: Handles rotated pages by reversing cell text.
+        D9-FIX: Detects and corrects content-baked reversal (no rotation metadata).
 
         Args:
             raw: pdfplumber's extract() output (may contain None)
+            rotation: Page rotation angle (0, 90, 180, 270)
 
         Returns:
             Cleaned 2D list of strings
         """
+        # D9-FIX: First pass - detect if table has reversed content (check sample cells)
+        # Sample a few non-empty cells to check for reversal
+        sample_texts = []
+        for row in raw[:min(5, len(raw))]:
+            for cell in row:
+                if cell and len(cell.strip()) > 5:
+                    sample_texts.append(cell)
+                    if len(sample_texts) >= 10:
+                        break
+            if len(sample_texts) >= 10:
+                break
+
+        # Check if any sample cells have reversed patterns
+        needs_reversal = rotation == 270 or rotation == 180
+        if not needs_reversal and sample_texts:
+            for sample in sample_texts:
+                if self._detect_cell_reversal(sample):
+                    needs_reversal = True
+                    logger.debug("D9-FIX: Detected content-baked reversal in table")
+                    break
+
         cleaned = []
         for row in raw:
             cleaned_row = []
@@ -242,6 +329,9 @@ class PdfplumberTableExtractor:
                     text = " ".join(cell.split())
                     # Strip common artifacts
                     text = text.strip("| \t")
+                    # B3 fix: For rotated pages or D9 content-baked reversal
+                    if needs_reversal and text:
+                        text = self._reverse_cell_text(text)
                     cleaned_row.append(text)
             cleaned.append(cleaned_row)
         return cleaned

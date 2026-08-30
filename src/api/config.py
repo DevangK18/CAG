@@ -27,11 +27,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     COHERE_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
 
     # LLM Settings
-    LLM_PROVIDER: str = "openai"
+    LLM_PROVIDER: str = "gemini"
     OPENAI_MODEL: str = "gpt-4o"
-    CLAUDE_MODEL: str = "claude-sonnet-4-20250514"
+    CLAUDE_MODEL: str = "claude-sonnet-5"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     @computed_field
     @property

@@ -980,8 +980,88 @@ class RAGService:
             self.auto_filter_extractor = AutoFilterExtractor(self.config.auto_filter)
             logger.info("Auto-Filter extraction enabled")
 
+        # ===== SOTA RAG Features Initialization =====
+
+        # Query Router (SOTA Feature 2)
+        self.query_router = None
+        if self.config.query_routing.enabled:
+            try:
+                try:
+                    from .query_router import QueryRouter
+                except ImportError:
+                    from query_router import QueryRouter
+
+                self.query_router = QueryRouter(
+                    config=self.config.query_routing,
+                    openai_client=self.openai,
+                )
+                logger.info("Query Routing enabled (SOTA Feature 2)")
+            except ImportError as e:
+                logger.warning(f"Could not import QueryRouter: {e}")
+                self.config.query_routing.enabled = False
+
+        # Self-RAG / Retrieval Decider (SOTA Feature 3)
+        self.retrieval_decider = None
+        self.parametric_responder = None
+        if self.config.self_rag.enabled:
+            try:
+                try:
+                    from .retrieval_decider import RetrievalDecider, ParametricResponder
+                except ImportError:
+                    from retrieval_decider import RetrievalDecider, ParametricResponder
+
+                self.retrieval_decider = RetrievalDecider(self.config.self_rag)
+                self.parametric_responder = ParametricResponder(
+                    llm_client=self.openai,
+                    model="gpt-4o-mini",
+                )
+                logger.info("Self-RAG enabled (SOTA Feature 3)")
+            except ImportError as e:
+                logger.warning(f"Could not import RetrievalDecider: {e}")
+                self.config.self_rag.enabled = False
+
+        # Corrective RAG (SOTA Feature 4)
+        self.corrective_service = None
+        if self.config.corrective_rag.enabled:
+            try:
+                try:
+                    from .corrective_rag import CorrectiveRAGService
+                except ImportError:
+                    from corrective_rag import CorrectiveRAGService
+
+                self.corrective_service = CorrectiveRAGService(
+                    config=self.config.corrective_rag,
+                    openai_client=self.openai,
+                )
+                logger.info("Corrective RAG enabled (SOTA Feature 4)")
+            except ImportError as e:
+                logger.warning(f"Could not import CorrectiveRAGService: {e}")
+                self.config.corrective_rag.enabled = False
+
+        # Hierarchical Retriever (SOTA Feature 1 - RAPTOR)
+        self.hierarchical_retriever = None
+        if self.config.hierarchical.enabled:
+            try:
+                try:
+                    from .hierarchical_retriever import HierarchicalRetriever
+                except ImportError:
+                    from hierarchical_retriever import HierarchicalRetriever
+
+                # Note: HierarchicalRetriever requires qdrant_service and embedding_service
+                # which are initialized in RetrievalService. We'll initialize it lazily.
+                logger.info("Hierarchical Retrieval enabled (SOTA Feature 1 - RAPTOR)")
+            except ImportError as e:
+                logger.warning(f"Could not import HierarchicalRetriever: {e}")
+                self.config.hierarchical.enabled = False
+
         logger.info(
-            f"RAG Service v3.2 initialized with {self.config.llm.provider.value}"
+            f"RAG Service v3.3 initialized with {self.config.llm.provider.value}"
+        )
+        logger.info(
+            f"SOTA Features: Routing={self.config.query_routing.enabled}, "
+            f"Self-RAG={self.config.self_rag.enabled}, "
+            f"Corrective={self.config.corrective_rag.enabled}, "
+            f"Hierarchical={self.config.hierarchical.enabled}"
         )
 
     def ask(
@@ -1049,6 +1129,71 @@ class RAGService:
         log_ctx=None,
     ) -> RAGResponse:
         """Internal implementation of ask() with logging support."""
+
+        # ===== SOTA: Self-RAG Check (Feature 3) =====
+        # Check if retrieval is needed - skip for definitional queries
+        if self.retrieval_decider:
+            try:
+                from .retrieval_decider import RetrievalDecision
+            except ImportError:
+                from retrieval_decider import RetrievalDecision
+
+            decision = self.retrieval_decider.decide(question)
+
+            if decision.decision == RetrievalDecision.SKIP:
+                logger.info(f"Self-RAG: Skipping retrieval - {decision.reasoning}")
+
+                # Generate parametric response without retrieval
+                parametric_answer = decision.parametric_answer
+                if not parametric_answer and self.parametric_responder:
+                    parametric_answer = self.parametric_responder.respond(question)
+
+                if parametric_answer:
+                    return RAGResponse(
+                        query=question,
+                        answer=parametric_answer,
+                        citations=[],
+                        sources_used=0,
+                        context_length=0,
+                        reranker_used="none",
+                        search_type="parametric",
+                        model_used="parametric",
+                        sota_features={
+                            "self_rag": "skip",
+                            "routing": "none",
+                            "corrective": False,
+                        }
+                    )
+
+            elif decision.decision == RetrievalDecision.MULTI_RETRIEVE:
+                # Use agentic service for complex queries
+                if self.agentic_service:
+                    logger.info("Self-RAG: Routing to agentic retrieval")
+                    return self.agentic_service.ask(
+                        question=question,
+                        filters=filters,
+                        style=style,
+                    )
+
+        # ===== SOTA: Query Routing (Feature 2) =====
+        routing_decision = None
+        if self.query_router:
+            routing_decision = self.query_router.route(question)
+            logger.info(
+                f"Query Routing: {routing_decision.route.value} "
+                f"(confidence: {routing_decision.confidence:.2f})"
+            )
+
+            # Apply routing-suggested filters
+            if routing_decision.filters_suggested:
+                if filters is None:
+                    filters = {}
+                # Routing filters have lower priority than explicit filters
+                for key, value in routing_decision.filters_suggested.items():
+                    if key not in filters and value is not None:
+                        filters[key] = value
+                        logger.info(f"Routing added filter: {key}={value}")
+
         # ===== Tier context lookup for query enhancement =====
         tier_context_for_enhancer = None
         if filters and "report_id" in filters:
@@ -1134,13 +1279,74 @@ class RAGService:
             log_ctx.record_auto_filters(auto_filters)
             log_ctx.record_merged_filters(filters)
 
-        # ===== Retrieval (now with multi-query + auto-filters) =====
-        retrieval_result = self.retrieval.retrieve(
-            question,
-            top_k=adjusted_top_k,
-            filters=filters,
-            enhancement=enhancement,  # NEW parameter
-        )
+        # ===== SOTA: Route-based Retrieval =====
+        # Check if we should use hierarchical retrieval (RAPTOR)
+        use_hierarchical = False
+        if routing_decision:
+            try:
+                from .query_router import QueryRoute
+            except ImportError:
+                from query_router import QueryRoute
+
+            if routing_decision.route == QueryRoute.SUMMARY_ONLY:
+                use_hierarchical = True
+                logger.info(
+                    f"Routing to hierarchical retrieval (L{routing_decision.hierarchy_level or 2})"
+                )
+
+        # Hierarchical retrieval for summary queries
+        if use_hierarchical and self.config.hierarchical.enabled:
+            # Lazy initialization of hierarchical retriever
+            if self.hierarchical_retriever is None:
+                try:
+                    from .hierarchical_retriever import HierarchicalRetriever
+                except ImportError:
+                    from hierarchical_retriever import HierarchicalRetriever
+
+                self.hierarchical_retriever = HierarchicalRetriever(
+                    qdrant_service=self.retrieval.qdrant,
+                    embedding_service=self.retrieval.embedding,
+                    config=self.config,
+                )
+
+            retrieval_result = self.hierarchical_retriever.retrieve(
+                query=question,
+                level=routing_decision.hierarchy_level if routing_decision else 2,
+                report_id=filters.get("report_id") if filters else None,
+                top_k=adjusted_top_k,
+            )
+        else:
+            # Standard retrieval (now with multi-query + auto-filters)
+            retrieval_result = self.retrieval.retrieve(
+                question,
+                top_k=adjusted_top_k,
+                filters=filters,
+                enhancement=enhancement,
+            )
+
+        # ===== SOTA: Corrective RAG - Relevance Check (Feature 4) =====
+        correction_info = None
+        if self.corrective_service and retrieval_result.total_after_rerank > 0:
+            # Define re-retrieve function for corrective flow
+            def retrieve_fn(reformulated_query):
+                return self.retrieval.retrieve(
+                    reformulated_query,
+                    top_k=adjusted_top_k,
+                    filters=filters,
+                    enhancement=None,  # Don't re-enhance reformulated query
+                )
+
+            retrieval_result, correction_info = self.corrective_service.check_and_correct_retrieval(
+                query=question,
+                retrieval_result=retrieval_result,
+                retrieve_fn=retrieve_fn,
+            )
+
+            if correction_info.get("retrieval_attempts", 1) > 1:
+                logger.info(
+                    f"Corrective RAG: {correction_info['retrieval_attempts']} retrieval attempts, "
+                    f"final assessment: {correction_info.get('final_assessment', {}).get('suggestion', 'unknown')}"
+                )
 
         # Log retrieval results
         if log_ctx:
@@ -1213,6 +1419,19 @@ class RAGService:
         # Generate
         answer = self._generate_answer(question, context, style, question_type)
 
+        # ===== SOTA: Corrective RAG - Citation Validation (Feature 4) =====
+        citation_validation = None
+        if self.corrective_service and self.config.corrective_rag.validate_citations:
+            answer, citation_validation = self.corrective_service.validate_and_clean_answer(
+                answer=answer,
+                retrieval_result=retrieval_result,
+            )
+            if citation_validation and not citation_validation.all_valid:
+                logger.info(
+                    f"Citation validation: {len(citation_validation.valid_citations)} valid, "
+                    f"{len(citation_validation.invalid_citations)} invalid (stripped)"
+                )
+
         # Log generation
         if log_ctx:
             log_ctx.end_phase("generation")
@@ -1258,6 +1477,20 @@ class RAGService:
         # Build citations
         citations = self.build_citations(retrieval_result)
 
+        # Build SOTA features summary
+        sota_features = {}
+        if routing_decision:
+            sota_features["routing"] = routing_decision.route.value
+            sota_features["routing_confidence"] = routing_decision.confidence
+        if correction_info:
+            sota_features["corrective_attempts"] = correction_info.get("retrieval_attempts", 1)
+            sota_features["corrective_reformulations"] = len(correction_info.get("reformulations", []))
+        if citation_validation:
+            sota_features["citation_valid"] = len(citation_validation.valid_citations)
+            sota_features["citation_invalid"] = len(citation_validation.invalid_citations)
+        if use_hierarchical:
+            sota_features["hierarchical_level"] = routing_decision.hierarchy_level if routing_decision else 2
+
         return RAGResponse(
             query=question,
             answer=answer,
@@ -1268,6 +1501,7 @@ class RAGService:
             search_type=retrieval_result.search_type,
             model_used=self._get_model_name(),
             groundedness=groundedness_dict,
+            sota_features=sota_features if sota_features else None,
         )
 
     # =========================================================================
@@ -1862,6 +2096,10 @@ class RAGService:
                         report_title=report_info.report_title if report_info else "",
                         filename=report_info.filename if report_info else "",
                         audit_year=report_info.audit_year if report_info else "",
+                        # Item 7: Enhanced semantic fields
+                        entities_mentioned=child.entities_mentioned or [],
+                        section_type=child.section_type,
+                        is_recommendation=child.is_recommendation,
                     )
                 )
                 num += 1

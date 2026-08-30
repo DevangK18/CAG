@@ -58,6 +58,14 @@ class EmbeddingConfig:
     enable_hierarchy_prefix: bool = True
     enable_semantic_enrichment: bool = True
 
+    # OPT-1: Context augmentation (pseudo-contextual embeddings)
+    enable_context_augmentation: bool = True
+    include_report_title_in_prefix: bool = True
+    include_parent_context: bool = True
+
+    # OPT-5: Content type signal in embedding
+    enable_content_type_signal: bool = True
+
 
 @dataclass
 class QdrantConfig:
@@ -92,6 +100,17 @@ class RetrievalConfig:
     enable_reranking: bool = True
     enable_neighbor_chunks: bool = True
     neighbor_window: int = 1  # ±1 chunks
+
+    # OPT-2: BM25 weight tuning (sparse gets more candidates for higher influence in RRF)
+    # dense_candidates + sparse_candidates should roughly equal initial_candidates * 2
+    dense_candidates: int = 40  # 40% weight
+    sparse_candidates: int = 60  # 60% weight (favors exact term matching for audit docs)
+
+    # OPT-4: Query instruction prefix for better retrieval
+    # Note: Evaluation showed this causes regression (-6% MRR) when document embeddings
+    # don't use matching prefixes. Disabled by default.
+    enable_query_prefix: bool = False
+    query_prefix: str = "Retrieve audit finding: "
 
     # Reranker settings
     reranker_type: RerankerType = RerankerType.COHERE
@@ -136,7 +155,7 @@ class LLMConfig:
         # Load models from environment or use defaults
         if self.claude_model is None:
             self.claude_model = os.getenv(
-                "LLM_CLAUDE_MODEL", "claude-sonnet-4-20250514"
+                "LLM_CLAUDE_MODEL", "claude-sonnet-5"
             )
         if self.openai_model is None:
             self.openai_model = os.getenv("LLM_OPENAI_MODEL", "gpt-4o")
@@ -183,11 +202,11 @@ class GroundednessConfig:
     )
 
     # Provider selection (independent of main LLM)
-    # Keep Haiku/mini default for speed + cost
-    provider: LLMProvider = LLMProvider.OPENAI
+    # Default to Gemini for speed + cost
+    provider: LLMProvider = LLMProvider.GEMINI
     openai_model: str = "gpt-4o-mini"
     claude_model: str = "claude-haiku-4-5-20251001"
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-2.0-flash"
 
     max_tokens: int = 1500
     min_groundedness_score: float = 0.75  # Fraction of claims that must be grounded
@@ -322,6 +341,114 @@ class HomeConfig:
     trending_window_days: int = 7
 
 
+# =============================================================================
+# SOTA RAG FEATURES CONFIGURATION
+# =============================================================================
+
+
+@dataclass
+class HierarchicalConfig:
+    """Configuration for RAPTOR/Hierarchical Retrieval (SOTA Feature 1).
+
+    RAPTOR creates a hierarchical tree of summaries:
+    - Level 3: Report-level summary (existing in Phase 10a)
+    - Level 2: Chapter-level summaries (NEW)
+    - Level 1: Section-level summaries (NEW)
+    - Level 0: Original chunks
+    """
+
+    enabled: bool = True
+
+    # Models for summary generation (cost-efficient Haiku)
+    chapter_model: str = "claude-haiku-4-5-20251001"
+    section_model: str = "claude-haiku-4-5-20251001"
+
+    # Max tokens for summaries
+    chapter_max_tokens: int = 500  # 3-5 sentences
+    section_max_tokens: int = 200  # 1-2 sentences
+
+    # Retrieval settings
+    drill_down_threshold: float = 0.85  # If top result below this, drill down
+    default_level: int = 2  # Default to chapter level
+
+    # Collection settings (uses same collection as child chunks)
+    index_collection: str = "cag_child_chunks"
+
+
+@dataclass
+class QueryRoutingConfig:
+    """Configuration for Query Routing (SOTA Feature 2).
+
+    Routes queries to optimal retrieval strategy:
+    - standard_rag: Default hybrid search
+    - temporal: Cross-year comparisons
+    - entity_graph: Entity-based comparisons
+    - filtered: Strong filter signal
+    - summary: High-level overview → RAPTOR summaries
+    """
+
+    enabled: bool = True
+
+    # Classification model
+    model: str = "gpt-4o-mini"
+    max_tokens: int = 200
+    temperature: float = 0.0
+
+    # Routing behavior
+    min_confidence: float = 0.7
+    fallback_on_low_confidence: bool = True
+    fallback_on_error: bool = True
+
+
+@dataclass
+class SelfRAGConfig:
+    """Configuration for Self-RAG / Adaptive Retrieval (SOTA Feature 3).
+
+    Decides whether retrieval is needed:
+    - SKIP: Answer from parametric knowledge (definitional queries)
+    - RETRIEVE: Standard retrieval
+    - MULTI_RETRIEVE: Multiple retrieval rounds (agentic)
+    """
+
+    enabled: bool = True
+
+    # Use LLM for classification (False = rule-based only)
+    use_llm_classifier: bool = False
+
+    # Regex patterns for queries that DON'T need retrieval
+    skip_patterns: List[str] = field(default_factory=lambda: [
+        r"^what (?:is|are) (?:CAG|FRBM|PMAY|NHAI|FCI|GST|ITC)\??$",
+        r"^how (?:does|do) (?:the\s)?(?:CAG|audit) work\??$",
+        r"^what does .+ stand for\??$",
+        r"^define (?:CAG|FRBM|compliance|audit)\??$",
+    ])
+
+
+@dataclass
+class CorrectiveRAGConfig:
+    """Configuration for Corrective RAG (SOTA Feature 4).
+
+    Detects and fixes retrieval/generation failures:
+    1. Check relevance of retrieved docs
+    2. If low relevance: reformulate query and re-retrieve
+    3. Validate citations in generated answer
+    """
+
+    enabled: bool = True
+
+    # Relevance checking
+    min_relevance_score: float = 0.25
+    min_relevant_chunks: int = 3
+
+    # Query reformulation
+    max_reformulations: int = 2
+    reformulation_model: str = "gpt-4o-mini"
+
+    # Citation validation
+    validate_citations: bool = True
+    strip_invalid_citations: bool = True
+
+
 @dataclass
 class SearchConfig:
     """Configuration for search functionality."""
@@ -351,6 +478,12 @@ class RAGConfig:
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     home: HomeConfig = field(default_factory=HomeConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+
+    # SOTA RAG Features
+    hierarchical: HierarchicalConfig = field(default_factory=HierarchicalConfig)
+    query_routing: QueryRoutingConfig = field(default_factory=QueryRoutingConfig)
+    self_rag: SelfRAGConfig = field(default_factory=SelfRAGConfig)
+    corrective_rag: CorrectiveRAGConfig = field(default_factory=CorrectiveRAGConfig)
 
     # API Keys (loaded from environment)
     openai_api_key: Optional[str] = None

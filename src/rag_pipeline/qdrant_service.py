@@ -282,6 +282,47 @@ class QdrantService:
 
         return len(points)
 
+    def upsert_hierarchical_summaries(
+        self,
+        points_data: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Index hierarchical summaries (RAPTOR chapter/section summaries).
+
+        These are stored in the child collection with dense vectors only
+        (no sparse vectors needed for summaries).
+
+        Args:
+            points_data: List of dicts with 'id', 'vector', 'payload' keys
+
+        Returns:
+            Number of points upserted
+        """
+        points = []
+
+        for data in points_data:
+            # Construct vectors dict - dense only for hierarchical summaries
+            vectors = {"dense": data["vector"]}
+
+            points.append(
+                PointStruct(
+                    id=data["id"],
+                    vector=vectors,
+                    payload=data["payload"],
+                )
+            )
+
+        # Upsert in batches
+        batch_size = 100
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            self.client.upsert(
+                collection_name=self.child_collection,
+                points=batch,
+            )
+
+        return len(points)
+
     # =========================================================================
     # SEARCH
     # =========================================================================
@@ -296,6 +337,9 @@ class QdrantService:
         """
         Hybrid search using dense + sparse vectors with RRF fusion.
 
+        OPT-2: Uses configurable dense/sparse candidate ratios.
+        Default 40/60 favors BM25 for exact term matching in audit docs.
+
         Args:
             dense_vector: Dense embedding
             sparse_vector: Sparse vector {"indices": [], "values": []}
@@ -307,6 +351,12 @@ class QdrantService:
         """
         query_filter = self._build_filter(filters)
 
+        # OPT-2: Configurable dense/sparse candidate counts
+        # Higher sparse_candidates gives BM25 more influence in RRF fusion
+        retrieval_config = self.config.retrieval
+        dense_candidates = getattr(retrieval_config, 'dense_candidates', limit)
+        sparse_candidates = getattr(retrieval_config, 'sparse_candidates', limit)
+
         try:
             results = self.client.query_points(
                 collection_name=self.child_collection,
@@ -314,7 +364,7 @@ class QdrantService:
                     Prefetch(
                         query=dense_vector,
                         using="dense",
-                        limit=limit,
+                        limit=dense_candidates,
                         filter=query_filter,
                     ),
                     Prefetch(
@@ -323,7 +373,7 @@ class QdrantService:
                             values=sparse_vector.get("values", []),
                         ),
                         using="sparse",
-                        limit=limit,
+                        limit=sparse_candidates,
                         filter=query_filter,
                     ),
                 ],
@@ -501,6 +551,39 @@ class QdrantService:
             pass
 
         return None
+
+    def scroll_by_filter(
+        self,
+        filters: Dict[str, Any],
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Scroll through points matching filter conditions (no vector query).
+        Returns raw payloads.
+
+        Item 6: Used for hierarchical summaries endpoint.
+
+        Args:
+            filters: Filter conditions to match
+            limit: Maximum number of points to return
+
+        Returns:
+            List of payload dictionaries
+        """
+        query_filter = self._build_filter(filters)
+
+        try:
+            results, _ = self.client.scroll(
+                collection_name=self.child_collection,
+                scroll_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            return [point.payload for point in results]
+        except Exception as e:
+            logger.warning(f"scroll_by_filter failed: {e}")
+            return []
 
     def count_filtered(self, filters: Optional[Dict[str, Any]] = None) -> int:
         """

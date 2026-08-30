@@ -164,11 +164,21 @@ class VisualPostProcessor:
         Returns:
             Per-file statistics
         """
+        emitter = trace_emitter or self._trace_emitter
+
         with open(json_path) as f:
             data = json.load(f)
 
         report_id = data.get("report_metadata", {}).get("report_id", "unknown")
         chunks = data.get("child_chunks", [])
+
+        # Per-file trace: processing started
+        if emitter:
+            emitter.emit_io(
+                "10c",
+                {"file": json_path.name, "report_id": report_id},
+                {"chunks_to_process": len(chunks)},
+            )
 
         modified = False
         file_stats = {"filtered": 0, "hydrated": 0, "titles": 0}
@@ -246,6 +256,19 @@ class VisualPostProcessor:
                 f"{file_stats['hydrated']} hydrated, "
                 f"{file_stats['titles']} titles enriched"
             )
+
+            # Per-file trace: processing complete with stats
+            if emitter:
+                emitter.emit_io(
+                    "10c",
+                    {"file": json_path.name, "report_id": report_id},
+                    {
+                        "filtered": file_stats["filtered"],
+                        "hydrated": file_stats["hydrated"],
+                        "titles": file_stats["titles"],
+                        "modified": True,
+                    },
+                )
 
         return file_stats
 
@@ -450,7 +473,7 @@ class VisualPostProcessor:
             bbox = chunk.get("source_bbox", [0, 0, 100, 100])
 
             # Map chart type
-            chart_type_str = gemini_data.get("chart_type", "unknown").lower()
+            chart_type_str = (gemini_data.get("chart_type") or "unknown").lower()
             chart_type_map = {
                 "bar": ChartType.BAR,
                 "line": ChartType.LINE,
@@ -463,19 +486,24 @@ class VisualPostProcessor:
 
             # Build series
             series_list = []
-            raw_series = gemini_data.get("series", [])
+            raw_series = gemini_data.get("series") or []
             for i, s in enumerate(raw_series):
                 data_points = []
-                for dp in s.get("data_points", []):
+                for dp in s.get("data_points") or []:
+                    # Safely parse value - handle None, percentages, and non-numeric strings
+                    raw_value = dp.get("value")
+                    parsed_value = self._safe_parse_float(raw_value)
+                    if parsed_value is None:
+                        continue  # Skip data points with unparseable values
                     data_points.append(DataPoint(
-                        category=str(dp.get("category", "")),
-                        value=float(dp.get("value", 0)),
-                        series=s.get("name", f"Series {i+1}"),
+                        category=str(dp.get("category") or ""),
+                        value=parsed_value,
+                        series=s.get("name") or f"Series {i+1}",
                     ))
 
                 series_list.append(ChartSeries(
                     series_id=f"series_{i}",
-                    series_name=s.get("name", f"Series {i+1}"),
+                    series_name=s.get("name") or f"Series {i+1}",
                     data_points=data_points,
                 ))
 
@@ -493,17 +521,17 @@ class VisualPostProcessor:
                 source_page_physical=page,
                 source_bbox=bbox,
                 image_path=chunk.get("content", ""),
-                title=gemini_data.get("title", "Untitled Chart"),
+                title=gemini_data.get("title") or "Untitled Chart",
                 chart_type=chart_type,
                 description=gemini_data.get("description"),
                 x_axis=ChartAxisConfig(
                     axis_id="x_axis",
-                    axis_label=gemini_data.get("x_axis_label", ""),
+                    axis_label=gemini_data.get("x_axis_label") or "",  # Handle None
                     axis_type=x_type,
                 ),
                 y_axis=ChartAxisConfig(
                     axis_id="y_axis",
-                    axis_label=gemini_data.get("y_axis_label", ""),
+                    axis_label=gemini_data.get("y_axis_label") or "",  # Handle None
                     axis_type=AxisType.NUMERIC,
                     unit=gemini_data.get("monetary_unit"),
                 ),
@@ -512,7 +540,7 @@ class VisualPostProcessor:
                 extraction_method="gemini-2.5-flash-vision",
                 has_structured_data=len(series_list) > 0,
                 confidence=self._score_chart_confidence(gemini_data),
-                extraction_notes=gemini_data.get("extraction_notes", []),
+                extraction_notes=gemini_data.get("extraction_notes") or [],
             )
 
             # Extract time periods and entities from data
@@ -529,6 +557,46 @@ class VisualPostProcessor:
             import traceback
             traceback.print_exc()
             return None
+
+    # ========== HELPER METHODS ==========
+
+    def _safe_parse_float(self, value: Any) -> Optional[float]:
+        """
+        Safely parse a value to float, handling None, percentages, and invalid strings.
+
+        Args:
+            value: Raw value from Gemini response (could be None, str, int, float)
+
+        Returns:
+            Parsed float or None if unparseable
+        """
+        if value is None:
+            return None
+
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        if isinstance(value, str):
+            # Strip whitespace
+            value = value.strip()
+            if not value:
+                return None
+
+            # Handle percentages: "55%" -> 55.0
+            if value.endswith('%'):
+                try:
+                    return float(value[:-1])
+                except ValueError:
+                    return None
+
+            # Try direct float conversion
+            try:
+                return float(value)
+            except ValueError:
+                # Value is non-numeric text like "Total", "N/A", etc.
+                return None
+
+        return None
 
     # ========== CONFIDENCE SCORING ==========
 
@@ -587,12 +655,12 @@ class VisualPostProcessor:
         """
         score = 0.7
 
-        series = gemini_data.get("series", [])
+        series = gemini_data.get("series") or []
         if not series:
             return 0.2
 
         # More data points = more confident
-        total_points = sum(len(s.get("data_points", [])) for s in series)
+        total_points = sum(len(s.get("data_points") or []) for s in series)
         if total_points > 5:
             score += 0.1
         if total_points > 15:
@@ -605,7 +673,7 @@ class VisualPostProcessor:
             score += 0.05
 
         # Penalize for extraction notes
-        notes = gemini_data.get("extraction_notes", [])
+        notes = gemini_data.get("extraction_notes") or []
         score -= 0.05 * len(notes)
 
         return max(0.0, min(1.0, score))

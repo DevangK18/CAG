@@ -25,7 +25,7 @@ from pathlib import Path
 from slowapi.errors import RateLimitExceeded
 
 from .config import settings
-from .routes import health, reports, chat, assets, series, overview, summaries, entities, home, search
+from .routes import health, reports, chat, assets, series, overview, summaries, entities, home, search, hierarchical
 from .services.streaming_wrapper import initialize_rag_service, get_rag_service
 from .services.report_service import initialize as initialize_reports
 from .rate_limit import limiter, get_real_ip
@@ -377,6 +377,9 @@ app.include_router(entities.router, prefix="/api/entities", tags=["Entities"])
 # Home page redesign (Phase A+)
 app.include_router(home.router, prefix="/api/home", tags=["Home"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
+
+# Item 6: Hierarchical summaries
+app.include_router(hierarchical.router, prefix="/api", tags=["Hierarchical"])
 
 
 # Root endpoint - only in non-production (so "/" falls through to static mount in production)

@@ -23,6 +23,7 @@ import { useTables } from './hooks/useTables';
 import { useSeries } from './hooks/useSeries';
 import { useChatStream } from './hooks/useChatStream';
 import { useSeriesChat } from './hooks/useSeriesChat';
+import { getAgenticStatusMessage } from './hooks/useAgenticEvents';
 import { useOverview } from './hooks/useOverview';
 import { useSummaries } from './hooks/useSummaries';
 import { useFetchFilters } from './hooks/useFetchFilters';
@@ -357,7 +358,7 @@ function App() {
     });
     const { report: selectedReport, pdfUrl, isLoading: reportLoading } = useReport(currentReportId);
     const { sendMessage, isStreaming } = useChatStream();
-    const { sendSeriesMessage, isStreaming: isSeriesStreaming } = useSeriesChat();
+    const { sendSeriesMessage, isStreaming: isSeriesStreaming, agenticProgress, isAgenticMode } = useSeriesChat();
     const { charts, total: chartsTotal, isLoading: chartsLoading, error: chartsError } = useCharts(currentReportId);
     const { tables, total: tablesTotal, isLoading: tablesLoading, error: tablesError } = useTables(currentReportId);
     const { series: allSeries, total: seriesTotal, isLoading: seriesLoading, error: seriesError } = useSeries();
@@ -1314,6 +1315,24 @@ function App() {
                                     <div className="caveat-icon">⚠️</div>
                                     <div className="caveat-message">
                                         <strong>Limited relevance:</strong> The available reports may not contain specific information to fully answer this question. Results shown are the closest matches found.
+                                    </div>
+                                </div>
+                            )}
+                            {/* Agentic progress indicator for series chat */}
+                            {isSeries && isAgenticMode && agenticProgress.phase !== 'idle' && agenticProgress.phase !== 'done' && (
+                                <div className="agentic-progress-banner">
+                                    <div className="agentic-progress-spinner" />
+                                    <div className="agentic-progress-content">
+                                        <span className="agentic-progress-status">{getAgenticStatusMessage(agenticProgress)}</span>
+                                        {agenticProgress.subQueries.length > 0 && (
+                                            <div className="agentic-progress-details">
+                                                {agenticProgress.subQueries.map((sq, idx) => (
+                                                    <span key={idx} className={`agentic-subquery ${sq.status}`}>
+                                                        {sq.status === 'complete' ? '✓' : sq.status === 'running' ? '◌' : '○'}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

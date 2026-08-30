@@ -9,7 +9,8 @@ from ..services.report_service import (
     get_all_reports,
     get_report_by_id,
     get_reports_by_sector,
-    get_reports_by_year
+    get_reports_by_year,
+    get_findings_for_report,
 )
 
 router = APIRouter()
@@ -62,6 +63,8 @@ async def get_report_filters():
     - government_body_types (union, state, local_body)
     - states (alphabetically sorted)
     - audit_categories (sorted by count descending)
+    - finding_types (Item 4: sorted by count descending)
+    - severities (Item 4: sorted by severity order)
     """
     reports = get_all_reports()
 
@@ -69,6 +72,8 @@ async def get_report_filters():
     body_type_counts = {}
     state_counts = {}
     category_counts = {}
+    finding_type_counts = {}
+    severity_counts = {}
 
     for report in reports:
         # Count government body types
@@ -83,6 +88,16 @@ async def get_report_filters():
         # Count audit categories
         category = report.audit_category
         category_counts[category] = category_counts.get(category, 0) + 1
+
+        # Item 4: Count finding_types and severities from findings
+        findings = get_findings_for_report(report.id)
+        for f in findings:
+            ft = f.get("finding_type")
+            if ft:
+                finding_type_counts[ft] = finding_type_counts.get(ft, 0) + 1
+            sev = f.get("severity")
+            if sev:
+                severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
     # Format government body types with labels
     body_type_labels = {
@@ -112,10 +127,56 @@ async def get_report_filters():
         for category, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
     ]
 
+    # Item 4: Format finding types with labels (sorted by count descending)
+    finding_type_labels = {
+        "non_compliance": "Non-Compliance",
+        "loss_of_revenue": "Loss of Revenue",
+        "wasteful_expenditure": "Wasteful Expenditure",
+        "irregular_expenditure": "Irregular Expenditure",
+        "system_deficiency": "System Deficiency",
+        "performance_shortfall": "Performance Shortfall",
+        "fraud_misappropriation": "Fraud/Misappropriation",
+        "procedural_lapse": "Procedural Lapse",
+        "accounting_irregularity": "Accounting Irregularity",
+        "other": "Other",
+    }
+
+    finding_types = [
+        {
+            "value": ft,
+            "label": finding_type_labels.get(ft, ft.replace("_", " ").title()),
+            "count": count
+        }
+        for ft, count in sorted(finding_type_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    # Item 4: Format severities (sorted by severity order: critical, high, medium, low)
+    severity_labels = {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+    }
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+    severities = [
+        {
+            "value": sev,
+            "label": severity_labels.get(sev, sev.title()),
+            "count": count
+        }
+        for sev, count in sorted(
+            severity_counts.items(),
+            key=lambda x: severity_order.get(x[0], 99)
+        )
+    ]
+
     return {
         "government_body_types": government_body_types,
         "states": states,
-        "audit_categories": audit_categories
+        "audit_categories": audit_categories,
+        "finding_types": finding_types,
+        "severities": severities,
     }
 
 

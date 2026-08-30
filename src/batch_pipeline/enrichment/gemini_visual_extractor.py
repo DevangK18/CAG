@@ -671,8 +671,15 @@ class GeminiVisualExtractor:
 
             # TABLES: extract if no structured_data or low-quality extraction
             if content_type == "table_markdown":
-                has_data = chunk.get("structured_data") is not None
-                if skip_existing and has_data:
+                # C1 fix: Check for Gemini-specific hydration, not just presence of structured_data
+                # Phase 6 may set structured_data with visual_subtype, but that's not Gemini hydration
+                structured = chunk.get("structured_data") or {}
+                is_gemini_hydrated = (
+                    chunk.get("extraction_method") == "gemini-2.5-flash-vision"
+                    or structured.get("gemini_extracted", False)
+                    or "rows" in structured  # Gemini table extraction includes rows
+                )
+                if skip_existing and is_gemini_hydrated:
                     continue
 
                 # Need to crop image from PDF
@@ -695,10 +702,29 @@ class GeminiVisualExtractor:
                             "context": self._build_context(chunk),
                         })
 
-            # CHARTS: extract if no structured_data
+            # CHARTS: extract if not yet hydrated by Gemini
             elif content_type in ("chart_data_path", "image_caption"):
-                has_data = chunk.get("structured_data") is not None
-                if skip_existing and has_data:
+                # C1 fix: Check for actual Gemini hydration, not just presence of structured_data
+                # Phase 6 sets structured_data={"visual_subtype": ...} which should NOT skip hydration
+                structured = chunk.get("structured_data") or {}
+                content = chunk.get("content", "")
+
+                # Check if already hydrated by Gemini:
+                # 1. extraction_method indicates Gemini processing
+                # 2. structured_data has Gemini-specific fields (description)
+                # 3. content is NOT a file path (has been replaced with description)
+                is_file_path = (
+                    content.startswith("data/extraction_images/")
+                    or content.startswith("/")
+                    or content.endswith(".png")
+                    or content.endswith(".jpg")
+                )
+                is_gemini_hydrated = (
+                    chunk.get("extraction_method") == "gemini-2.5-flash-vision"
+                    or structured.get("description") is not None
+                    or (not is_file_path and len(content) > 50)  # Description text, not path
+                )
+                if skip_existing and is_gemini_hydrated:
                     continue
 
                 # Check if image exists at the content path
@@ -778,24 +804,64 @@ class GeminiVisualExtractor:
                     data = json.load(f)
 
                 updated = 0
+                # REMEDIATION §3.2: Track failed and unmatched results for debugging
+                failed_results = 0
+                unmatched_chunks = []
+
                 for result in file_results:
                     if not result.get("success", False):
+                        # REMEDIATION §3.2: Log failed results
+                        failed_results += 1
+                        logger.warning(f"  Skipping failed result for chunk_id={result.get('chunk_id', '?')}: {result.get('error', 'unknown error')}")
                         continue
 
                     chunk_id = result["chunk_id"]
+                    result_data = result.get("data", {})
+
+                    # REMEDIATION §3.2: Log what keys we got from Gemini
+                    logger.debug(f"  Applying result for chunk_id={chunk_id}, data_keys={list(result_data.keys())}")
+
+                    matched = False
                     for chunk in data.get("child_chunks", []):
                         if chunk.get("chunk_id") == chunk_id:
+                            matched = True
                             # Store the Gemini extraction result as structured_data
-                            chunk["structured_data"] = result.get("data", {})
+                            chunk["structured_data"] = result_data
                             # Update model_used to indicate Gemini extraction
                             if "model_used" in chunk:
                                 chunk["model_used"] = f"gemini-2.5-flash-vision"
                             # P1-14b: Set extraction_method for visual asset registry
                             chunk["extraction_method"] = "gemini-2.5-flash-vision"
+
+                            # P1-14a: Hydrate image_caption content with description
+                            # Replace file path (data/extraction_images/...) with description
+                            if chunk.get("content_type") == "image_caption":
+                                description = result_data.get("description", "")
+                                old_content = chunk.get("content", "")[:50]
+                                if description:
+                                    chunk["content"] = description
+                                    logger.info(f"  Hydrated {chunk_id}: '{old_content}...' -> '{description[:50]}...'")
+                                else:
+                                    # REMEDIATION §3.2: Log when description is missing
+                                    logger.warning(f"  No description for image_caption {chunk_id}, data_keys={list(result_data.keys())}")
+
                             updated += 1
                             break
 
+                    # REMEDIATION §3.2: Track chunks that weren't found
+                    if not matched:
+                        unmatched_chunks.append(chunk_id)
+
+                # REMEDIATION §3.2: Log summary of issues
+                if failed_results > 0:
+                    logger.warning(f"  {Path(json_file).name}: {failed_results} failed results skipped")
+                if unmatched_chunks:
+                    logger.warning(f"  {Path(json_file).name}: {len(unmatched_chunks)} chunks not found: {unmatched_chunks[:5]}{'...' if len(unmatched_chunks) > 5 else ''}")
+
                 if updated > 0:
+                    # B5 fix: Set phase_10b_complete flag truthfully
+                    if "processing_stats" in data:
+                        data["processing_stats"]["phase_10b_complete"] = True
                     with open(json_file, "w") as f:
                         json.dump(data, f, indent=2, ensure_ascii=False)
                     files_updated += 1
@@ -832,8 +898,10 @@ class GeminiVisualExtractor:
                 cleaned = "\n".join(lines)
 
             parsed = json.loads(cleaned)
+            # Copy pure Gemini response before adding metadata
+            data_copy = parsed.copy()
             parsed["success"] = True
-            parsed["data"] = parsed.copy()  # Keep full data for storage
+            parsed["data"] = data_copy  # data contains only Gemini fields
             return parsed
 
         except json.JSONDecodeError as e:

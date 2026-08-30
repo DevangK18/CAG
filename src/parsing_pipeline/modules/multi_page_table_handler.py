@@ -12,7 +12,7 @@ Part of Phase 1 - P0-3: Multi-Page Table Stitching
 
 import logging
 import re
-from typing import List, Optional, Set, Dict, Any
+from typing import List, Optional, Set, Dict, Any, Tuple
 from collections import Counter
 
 from src.core.table_contracts import StructuredTable, TableRow, TableColumn
@@ -20,6 +20,40 @@ from src.parsing_pipeline.config import get_config, ChunkingConfig
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 
 logger = logging.getLogger(__name__)
+
+
+# REMEDIATION §5.1: UnionFind for transitive table grouping
+class UnionFind:
+    """
+    Union-Find (Disjoint Set Union) data structure for efficient connected components.
+
+    Used to transitively group table fragments: if A merges with B, and B merges with C,
+    then A, B, C form one connected component even if A doesn't directly merge with C.
+    """
+
+    def __init__(self, n: int):
+        """Initialize n elements, each in its own set."""
+        self.parent = list(range(n))
+        self.rank = [0] * n
+
+    def find(self, x: int) -> int:
+        """Find root of x with path compression."""
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+
+    def union(self, x: int, y: int) -> bool:
+        """Unite sets containing x and y. Returns True if they were separate."""
+        px, py = self.find(x), self.find(y)
+        if px == py:
+            return False
+        # Union by rank
+        if self.rank[px] < self.rank[py]:
+            px, py = py, px
+        self.parent[py] = px
+        if self.rank[px] == self.rank[py]:
+            self.rank[px] += 1
+        return True
 
 
 class MultiPageTableHandler:
@@ -69,23 +103,35 @@ class MultiPageTableHandler:
             "missing_pages_detected": 0,  # P0-03: Track missing pages
             "dlq_entries": 0,  # P0-03: Track DLQ red flags
         }
+        # M2-FIX: Store actual DLQ entries for processing_metadata output
+        self.dlq_entry_list: List[Dict[str, Any]] = []
 
     # ==================== MAIN DETECTION AND MERGING ====================
 
     def detect_and_merge(
-        self, tables: List[StructuredTable], trace_emitter=None
+        self,
+        tables: List[StructuredTable],
+        trace_emitter=None,
+        section_page_ranges: Optional[Dict[str, Tuple[int, int]]] = None,
     ) -> List[StructuredTable]:
         """
-        Detect table continuations and merge fragments.
+        Detect table continuations and merge fragments using graph-based transitive closure.
+
+        REMEDIATION §5.1: Replaced greedy left-to-right chain building with UnionFind
+        algorithm to handle transitive merging. If A merges with B and B merges with C,
+        all three form one group even if A doesn't directly merge with C.
 
         Args:
             tables: List of StructuredTable objects, ordered by page number
             trace_emitter: Optional TraceEmitter for instrumentation
+            section_page_ranges: M1 fix - Optional mapping of source_chunk_id to (start_page, end_page)
+                                 for accurate missing page detection at section boundaries
 
         Returns:
             List of merged tables (fewer items than input if merges occurred)
         """
         emitter = trace_emitter or self._trace_emitter
+        self._section_page_ranges = section_page_ranges or {}
 
         if len(tables) < 2:
             self.stats["tables_processed"] = len(tables)
@@ -93,29 +139,62 @@ class MultiPageTableHandler:
 
         # Sort tables by page number to ensure correct order
         sorted_tables = sorted(tables, key=lambda t: t.source_page_physical)
+        n = len(sorted_tables)
 
+        # REMEDIATION §5.1 Phase 1: Build merge graph using Union-Find
+        # Check ALL pairs within MAX_PAGE_GAP, not just sequential neighbors
+        uf = UnionFind(n)
+        merge_decisions = []  # For debugging
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                page_gap = sorted_tables[j].source_page_physical - sorted_tables[i].source_page_physical
+                if page_gap > self.MAX_PAGE_GAP:
+                    break  # No point checking further - tables are too far apart
+
+                # Check bidirectional merge (either direction should work)
+                should_merge_ij = self._should_merge(sorted_tables[i], sorted_tables[j])
+                should_merge_ji = self._should_merge(sorted_tables[j], sorted_tables[i])
+
+                if should_merge_ij or should_merge_ji:
+                    uf.union(i, j)
+                    merge_decisions.append((
+                        sorted_tables[i].source_page_physical,
+                        sorted_tables[j].source_page_physical,
+                        "forward" if should_merge_ij else "backward"
+                    ))
+
+        # REMEDIATION §5.1 Phase 2: Group tables by connected component
+        components: Dict[int, List[int]] = {}
+        for i in range(n):
+            root = uf.find(i)
+            components.setdefault(root, []).append(i)
+
+        # Log component formation for debugging
+        if len(components) < n:
+            logger.debug(f"§5.1: Formed {len(components)} components from {n} tables via {len(merge_decisions)} merges")
+
+        # REMEDIATION §5.1 Phase 3: Merge each component
         merged = []
-        i = 0
+        for root, indices in components.items():
+            # Sort indices by page number within component
+            indices.sort(key=lambda i: sorted_tables[i].source_page_physical)
 
-        while i < len(sorted_tables):
-            current = sorted_tables[i]
-
-            # Look for continuation on subsequent pages
-            fragments = [current]
-            j = i + 1
-
-            while j < len(sorted_tables) and self._should_merge(
-                fragments[-1], sorted_tables[j]
-            ):
-                fragments.append(sorted_tables[j])
-                j += 1
-
-            # Merge if multiple fragments detected
-            if len(fragments) > 1:
+            if len(indices) == 1:
+                # No merge needed - single table
+                merged.append(sorted_tables[indices[0]])
+            else:
+                # Merge all fragments in this component
+                fragments = [sorted_tables[i] for i in indices]
                 merged_table = self._merge_fragments(fragments)
 
-                # P0-03: Detect missing pages in the merged table
-                missing_pages = self._detect_missing_pages(merged_table)
+                # P0-03 + M1 fix: Detect missing pages using section page range if available
+                expected_span = None
+                source_chunk_id = merged_table.source_chunk_id
+                if source_chunk_id and source_chunk_id in self._section_page_ranges:
+                    expected_span = self._section_page_ranges[source_chunk_id]
+
+                missing_pages = self._detect_missing_pages(merged_table, expected_span)
                 if missing_pages:
                     self.stats["missing_pages_detected"] += len(missing_pages)
                     self.stats["dlq_entries"] += 1
@@ -140,23 +219,43 @@ class MultiPageTableHandler:
                 merged.append(merged_table)
                 self.stats["tables_merged"] += 1
                 self.stats["total_fragments_merged"] += len(fragments)
-            else:
-                merged.append(current)
 
-            i = j  # Skip processed fragments
+        self.stats["tables_processed"] = n
 
-        self.stats["tables_processed"] = len(sorted_tables)
+        # M2-FIX: After all merges, detect gaps between consecutive tables
+        # This catches boundary pages that have no fragments at all
+        sequence_gaps = self._detect_table_sequence_gaps(merged)
+        if sequence_gaps:
+            self.dlq_entry_list.extend(sequence_gaps)
+            self.stats["missing_pages_detected"] += len(sequence_gaps)
+            self.stats["dlq_entries"] += len(sequence_gaps)
+
+            # Emit red flags for sequence gap pages
+            for entry in sequence_gaps:
+                emitter.emit_red_flag(
+                    "7",
+                    "multi_page_table_page_lost",
+                    {
+                        "page": entry["page"],
+                        "reason": entry["reason"],
+                        "context": entry["context"],
+                    },
+                )
+
         return merged
 
-    def _detect_missing_pages(self, merged_table: StructuredTable) -> Set[int]:
+    def _detect_missing_pages(
+        self, merged_table: StructuredTable, expected_span: Optional[Tuple[int, int]] = None
+    ) -> Set[int]:
         """
-        P0-03: Detect missing pages in a merged multi-page table.
+        D3: Detect missing pages using true expected span (not just extracted min/max).
 
         After merging, checks for gaps in source_pages. If pages are missing,
         they should either be recovered via tier-3 or logged to DLQ.
 
         Args:
             merged_table: StructuredTable after merging
+            expected_span: (start_page, end_page) from TOC/layout, or None to use extracted range
 
         Returns:
             Set of missing page numbers (empty if none missing)
@@ -165,11 +264,72 @@ class MultiPageTableHandler:
             return set()
 
         pages = sorted(merged_table.source_pages)
-        expected = set(range(pages[0], pages[-1] + 1))
+
+        # D3: Use expected_span if provided, else fall back to extracted range
+        if expected_span:
+            start, end = expected_span
+        else:
+            # Fallback: use extracted range (can miss boundary pages)
+            start, end = pages[0], pages[-1]
+
+        expected = set(range(start, end + 1))
         actual = set(pages)
         missing = expected - actual
 
         return missing
+
+    def _detect_table_sequence_gaps(
+        self, merged_tables: List[StructuredTable]
+    ) -> List[Dict[str, Any]]:
+        """
+        M2-FIX: Detect gaps between consecutive tables that indicate missing pages.
+
+        After all merges, scans for page gaps between tables in the same section.
+        Flags pages that likely had tables but failed extraction.
+
+        Args:
+            merged_tables: List of merged/standalone tables, sorted by page
+
+        Returns:
+            List of DLQ entries for pages in gaps
+        """
+        if len(merged_tables) < 2:
+            return []
+
+        dlq_entries = []
+        sorted_tables = sorted(merged_tables, key=lambda t: t.source_page_physical)
+
+        for i in range(len(sorted_tables) - 1):
+            prev_table = sorted_tables[i]
+            curr_table = sorted_tables[i + 1]
+
+            # Get the end page of prev table (last page in source_pages or source_page_physical)
+            prev_end = max(prev_table.source_pages) if prev_table.source_pages else prev_table.source_page_physical
+            curr_start = curr_table.source_page_physical
+
+            # Check for gap > 1 page between consecutive tables
+            gap_size = curr_start - prev_end - 1
+            if gap_size > 0 and gap_size <= 5:  # Only flag small gaps (likely same table run)
+                # Check if tables are in the same section (same source_chunk_id)
+                same_section = prev_table.source_chunk_id == curr_table.source_chunk_id
+
+                for missing_page in range(prev_end + 1, curr_start):
+                    dlq_entries.append({
+                        "page": missing_page,
+                        "reason": "no_fragment_extracted",
+                        "context": {
+                            "prev_table_page": prev_end,
+                            "next_table_page": curr_start,
+                            "same_section": same_section,
+                            "section_id": prev_table.source_chunk_id if same_section else None,
+                        },
+                    })
+                    logger.warning(
+                        f"M2-DLQ: Page {missing_page} has no table fragment "
+                        f"(gap between p{prev_end} and p{curr_start})"
+                    )
+
+        return dlq_entries
 
     def _should_merge(
         self, prev: StructuredTable, curr: StructuredTable
@@ -189,6 +349,18 @@ class MultiPageTableHandler:
         page_gap = curr.source_page_physical - prev.source_page_physical
         if page_gap < 1 or page_gap > self.MAX_PAGE_GAP:
             return False
+
+        # M1-FIX: RULE 1a: For CONSECUTIVE pages (gap=1), be very lenient
+        # OCR artifacts cause column count variations - if pages are consecutive
+        # and column counts are close (within ±3), always merge
+        # REMEDIATION §5.1: Increased tolerance from ±2 to ±3 to reduce chain breaks
+        # This prevents chain breaks due to minor extraction differences
+        if page_gap == 1 and abs(prev.num_cols - curr.num_cols) <= 3:
+            logger.debug(
+                f"M1: Merging consecutive pages {prev.source_page_physical}->{curr.source_page_physical} "
+                f"(cols {prev.num_cols}->{curr.num_cols})"
+            )
+            return True
 
         # RULE 2: Strong signal - continuation markers
         if self._has_continuation_marker(prev):
@@ -557,9 +729,12 @@ class MultiPageTableHandler:
         Get statistics about processed and merged tables.
 
         Returns:
-            Dictionary with processing statistics
+            Dictionary with processing statistics including dlq_entry_list
         """
-        return self.stats.copy()
+        result = self.stats.copy()
+        # M2-FIX: Include actual DLQ entries (not just count)
+        result["dlq_entry_list"] = list(self.dlq_entry_list)
+        return result
 
     def reset_statistics(self):
         """Reset statistics counters."""
@@ -570,3 +745,5 @@ class MultiPageTableHandler:
             "missing_pages_detected": 0,  # P0-03
             "dlq_entries": 0,  # P0-03
         }
+        # M2-FIX: Clear DLQ entry list
+        self.dlq_entry_list = []

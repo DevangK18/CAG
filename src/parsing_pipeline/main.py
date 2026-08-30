@@ -89,7 +89,10 @@ from src.parsing_pipeline.modules.content_extraction_service import (
     ContentExtractionService,
 )
 from src.parsing_pipeline.modules.chunking_service import ChunkingService
-from src.parsing_pipeline.modules.assembly_service import AssemblyService
+from src.parsing_pipeline.modules.assembly_service import (
+    AssemblyService,
+    propagate_semantic_enrichment_to_chunks,
+)
 from src.parsing_pipeline.modules.validation_service import ValidationService
 from src.parsing_pipeline.modules.semantic_enrichment_service import (
     SemanticEnrichmentService,
@@ -436,10 +439,12 @@ class PipelineOrchestrator:
         task.classification = classification
 
         if classification == "scanned":
-            # Check if OCR'd PDF exists
-            ocred_path = task.local_pdf_path.replace(".pdf", "_ocred.pdf")
-            if Path(ocred_path).exists():
-                task.ocred_pdf_path = ocred_path
+            # Check if OCR'd PDF exists - use the correct path pattern
+            # OCR service saves to: data/processed/ocred/{report_id}_ocred.pdf
+            ocr_output_dir = Path("data/processed/ocred")
+            ocred_path = ocr_output_dir / f"{task.report_id}_ocred.pdf"
+            if ocred_path.exists():
+                task.ocred_pdf_path = str(ocred_path)
             task.processing_status = "ocr_complete"
         else:
             task.processing_status = "triage_complete"
@@ -763,8 +768,8 @@ class PipelineOrchestrator:
         self._phase_header("5.7", "LLM TOC VALIDATION (LOW-QUALITY ONLY)")
         emitter = self.state.trace_emitter
 
-        # Check if ANTHROPIC_API_KEY is available
-        if os.environ.get("ANTHROPIC_API_KEY"):
+        # Check if GOOGLE_API_KEY is available (for Gemini LLM validation)
+        if os.environ.get("GOOGLE_API_KEY"):
             llm_validator = TOCLLMValidator(trace_emitter=emitter)
             llm_validated_count = 0
             llm_skipped_count = 0
@@ -816,9 +821,9 @@ class PipelineOrchestrator:
                 force=True,
             )
         else:
-            self._log("⚠ SKIPPED: ANTHROPIC_API_KEY not set", force=True)
+            self._log("⚠ SKIPPED: GOOGLE_API_KEY not set", force=True)
             self._log(
-                "  Set ANTHROPIC_API_KEY to enable LLM validation for low-quality TOCs"
+                "  Set GOOGLE_API_KEY to enable Gemini LLM validation for low-quality TOCs"
             )
             # Emit skipped status for all reports
             for task in self.state.layout_complete:
@@ -830,7 +835,7 @@ class PipelineOrchestrator:
                     "llm_validation",
                     "skipped",
                     ["validated", "skipped"],
-                    "ANTHROPIC_API_KEY not set",
+                    "GOOGLE_API_KEY not set",
                 )
                 emitter.set_phase_status("5.7", "skipped")
 
@@ -1268,6 +1273,14 @@ class PipelineOrchestrator:
                 # Add enrichment to data
                 assembled_data["semantic_enrichment"] = enrichment.model_dump()
 
+                # Propagate semantic enrichment to child chunks for Qdrant indexing
+                # This ensures finding_type, severity, is_recommendation, etc. are
+                # available at chunk level for filtered retrieval
+                findings_count, recs_count, entities_count = propagate_semantic_enrichment_to_chunks(
+                    assembled_data["child_chunks"],
+                    assembled_data["semantic_enrichment"],
+                )
+
                 # Save enriched output (overwrite the original)
                 with open(task.assembled_output_path, "w", encoding="utf-8") as f:
                     json.dump(assembled_data, f, indent=2, ensure_ascii=False)
@@ -1427,7 +1440,7 @@ class PipelineOrchestrator:
                 )
                 self._log("   To enable Overview & Summary generation:")
                 self._log("   1. Copy batch_pipeline/ to services/batch_pipeline/")
-                self._log("   2. Ensure anthropic package is installed")
+                self._log("   2. Ensure google-genai package is installed")
             except Exception as e:
                 self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
                 self._log("   Pipeline completed through Phase 9.")

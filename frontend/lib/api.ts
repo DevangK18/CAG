@@ -33,6 +33,10 @@ export interface APICitation {
   severity?: string;
   amount_crore?: number;
   audit_year?: string;
+  // Item 7: Enhanced semantic fields
+  entities_mentioned?: string[];
+  section_type?: string;
+  is_recommendation?: boolean;
 }
 
 export interface APIReportSummary {
@@ -51,6 +55,11 @@ export interface APIReportSummary {
   state_name?: string | null;
   department?: string | null;
   audit_category: string;
+  // Item 5: Availability flags and distributions
+  has_summaries?: boolean;
+  has_overview_llm?: boolean;
+  severity_distribution?: Record<string, number>;
+  finding_type_distribution?: Record<string, number>;
 }
 
 export interface APIReportDetail {
@@ -360,6 +369,9 @@ export interface ReportFiltersResponse {
   government_body_types: FilterOption[];
   states: FilterOption[];
   audit_categories: FilterOption[];
+  // Item 4: Semantic filter options
+  finding_types: FilterOption[];
+  severities: FilterOption[];
 }
 
 export async function fetchReportFilters(): Promise<ReportFiltersResponse> {
@@ -693,7 +705,11 @@ export interface StreamEvent {
     | 'iteration'
     | 'reformulation'
     | 'synthesizing'
-    | 'agentic_trace';
+    | 'agentic_trace'
+    // Items 1-3: SOTA features, metadata, filters
+    | 'metadata'
+    | 'filters'
+    | 'sota_features';
   data: any;
 }
 
@@ -867,6 +883,75 @@ export async function* streamSeriesChat(
     reader.releaseLock();
   }
 }
+
+/**
+ * Stream agentic chat for a time series.
+ *
+ * Uses the AgenticRAGService for multi-hop and cross-report queries
+ * scoped to the series, with temporal-aware decomposition and synthesis.
+ *
+ * Emits additional event types:
+ * - "series_info"    — Series metadata at start
+ * - "planning"       — Decomposition result (complexity, sub-queries)
+ * - "sub_query"      — Each sub-query starting
+ * - "iteration"      — Each retrieval iteration
+ * - "reformulation"  — When a query is rewritten
+ * - "synthesizing"   — Final answer generation starting
+ * - "agentic_trace"  — Full trace at end
+ */
+export async function* streamSeriesChatAgentic(
+  seriesId: string,
+  params: {
+    query: string;
+    style?: string;
+    compare_years?: boolean;
+    top_k_per_report?: number;
+  }
+): AsyncGenerator<StreamEvent> {
+  const response = await fetch(`${API_URL}/series/${seriesId}/query/agentic/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: params.query,
+      style: params.style || 'adaptive',
+      compare_years: params.compare_years ?? true,
+      top_k_per_report: params.top_k_per_report || 5,
+    }),
+  });
+
+  if (!response.ok) {
+    yield { type: 'error', data: 'Series agentic stream request failed' };
+    return;
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          yield data as StreamEvent;
+        } catch (e) {
+          console.error('Failed to parse SSE event:', line);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 // ============================================================================
 // Home Page API Functions (Phase A - Stubs)
 // ============================================================================
@@ -1081,4 +1166,56 @@ export async function getEntityMentions(
   }
   const data = await response.json();
   return data.mentions || [];
+}
+
+// ============================================================================
+// Hierarchical Summaries (Item 6: RAPTOR summaries)
+// ============================================================================
+
+export interface HierarchicalSummary {
+  chunk_id: string;
+  title: string;
+  summary: string;
+  level: number; // 1=section, 2=chapter
+  parent_chunk_id?: string;
+}
+
+export interface HierarchicalResponse {
+  report_id: string;
+  summaries: HierarchicalSummary[];
+  total: number;
+}
+
+/**
+ * Fetch hierarchical (RAPTOR) summaries for a report.
+ * These are pre-computed chapter and section-level summaries.
+ *
+ * @param reportId - The report identifier
+ * @param level - Optional filter by hierarchy level (1=section, 2=chapter)
+ * @param limit - Maximum number of summaries to return (default: 20, max: 50)
+ */
+export async function fetchHierarchicalSummaries(
+  reportId: string,
+  options?: { level?: number; limit?: number }
+): Promise<HierarchicalResponse> {
+  const params = new URLSearchParams();
+  if (options?.level) {
+    params.set('level', options.level.toString());
+  }
+  if (options?.limit) {
+    params.set('limit', options.limit.toString());
+  }
+
+  const queryString = params.toString();
+  const url = `${API_URL}/reports/${reportId}/hierarchical${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 503) {
+      throw new Error('Qdrant service not available');
+    }
+    throw new Error(`Failed to fetch hierarchical summaries: ${response.statusText}`);
+  }
+
+  return response.json();
 }

@@ -127,11 +127,11 @@ toc_reconciliation:
 # ==============================================================================
 llm_validation:
   # Enable LLM validation for low-quality TOCs
-  # Set to false to skip (saves ~$0.01-0.02 per report)
+  # Set to false to skip (saves ~$0.005-0.01 per report)
   enabled: true
 
-  # Claude model: 'claude-haiku-4-5-20251001' (cost-efficient)
-  model: "claude-haiku-4-5-20251001"
+  # Gemini model: 'gemini-3.6-flash' (cost-efficient, 1M context)
+  model: "gemini-3.6-flash"
 
   # Max chars of document text to send to LLM
   # 8000 chars covers first ~15 pages
@@ -149,7 +149,36 @@ llm_validation:
 # PHASE 6: CONTENT EXTRACTION (TABLES, TEXT, IMAGES)
 # ==============================================================================
 content_extraction:
-  # pdfplumber table settings (Tier 1 extraction for native PDFs)
+  # ============================================================================
+  # PDFMUX INTELLIGENT ROUTING (Option D Hybrid Approach)
+  # ============================================================================
+  # Enable pdfmux for smart PDF routing and self-healing extraction
+  # pdfmux benchmarks: 0.911 TEDS (table accuracy) vs Docling 0.887
+  pdfmux:
+    enabled: false  # Disabled: Legacy 3-tier pipeline extracts more tables
+
+    # Quality level: "fast", "standard", "high"
+    # standard: Best balance of speed and accuracy for CAG reports
+    quality: "standard"
+
+    # Minimum confidence to accept extraction without re-routing
+    # Lower = more permissive, Higher = stricter quality gate
+    min_confidence: 0.85
+
+    # Action when confidence is below threshold
+    # "reroute": Try alternative extractor, "flag": Accept but flag for review
+    on_low_confidence: "reroute"
+
+    # Use pdfmux for table extraction routing (replaces manual tier logic)
+    use_for_tables: true
+
+    # Use pdfmux for full document processing (text + tables + layout)
+    # When false, only uses pdfmux table routing; text extraction uses PyMuPDF
+    use_for_full_document: false
+
+  # ============================================================================
+  # PDFPLUMBER TABLE SETTINGS (Tier 1 - still used by pdfmux internally)
+  # ============================================================================
   pdfplumber_snap_tolerance: 5
   pdfplumber_join_tolerance: 5
 
@@ -208,7 +237,8 @@ semantic_enrichment:
       low: 0
 
   # Minimum confidence to classify chunk as audit finding
-  finding_confidence_threshold: 0.4
+  # P3: Raised from 0.4 to 0.5 - lower confidence findings go to LLM validation
+  finding_confidence_threshold: 0.5
 
   # Minimum monetary value for high severity (₹1 lakh in paise)
   min_monetary_value_for_high_severity: 10000000

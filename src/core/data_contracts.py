@@ -385,12 +385,21 @@ class Finding(BaseModel):
         default_factory=list, description="P1-3: Links to supporting evidence (tables, paragraphs, etc.)"
     )
     chapter: Optional[str] = Field(None, description="Chapter heading")
-    section: Optional[str] = Field(None, description="Section heading")
+    section: Optional[str] = Field(
+        None,
+        description="Section heading from parent chunk's toc_entry. Also accessible as source_section property."
+    )
     page: int = Field(default=0, description="Source page number")
     source_chunk_id: str = Field(default="", description="Source chunk ID")
     entities_mentioned: List[str] = Field(
         default_factory=list, description="Schemes, programs, etc."
     )
+
+    # M2 fix: Alias for section field for clarity (source_section is more descriptive)
+    @property
+    def source_section(self) -> Optional[str]:
+        """Alias for section field - returns the source section from parent chunk's TOC entry."""
+        return self.section
 
     # P3-3: Temporal context for the finding
     audit_period: Optional[Dict[str, int]] = Field(
@@ -400,6 +409,28 @@ class Finding(BaseModel):
     reference_years: List[int] = Field(
         default_factory=list,
         description="All years explicitly mentioned in the finding text"
+    )
+
+    # R3: Cross-finding deduplication fields
+    is_duplicate: bool = Field(
+        default=False,
+        description="R3: True if this finding duplicates another (same amount on nearby pages)"
+    )
+    dedup_group_id: Optional[str] = Field(
+        default=None,
+        description="R3: Group identifier for duplicate findings (e.g., 'dedup_10000000000')"
+    )
+
+    # R4: Executive summary section flagging
+    is_executive_summary: bool = Field(
+        default=False,
+        description="R4: True if finding is from executive summary/overview section"
+    )
+
+    # R5: Monetary context classification
+    monetary_context: Optional[str] = Field(
+        default=None,
+        description="R5: Context of primary monetary value (finding_impact, budget_allocation, etc.)"
     )
 
 
@@ -450,6 +481,11 @@ class SectionClassification(BaseModel):
     section_title: str = Field(..., description="Section title from TOC")
     section_type: str = Field(..., description="SectionType enum value")
     confidence: float = Field(..., description="Classification confidence 0.0-1.0")
+    # P1-C: Flag for low-confidence extractions needing LLM validation
+    is_low_confidence: bool = Field(
+        default=False,
+        description="True if confidence below threshold, candidate for LLM validation"
+    )
 
 
 class SemanticEnrichmentStats(BaseModel):
@@ -577,6 +613,8 @@ class DocumentTask(BaseModel):
     # Added by ChunkingService
     parent_chunks: Optional[List[ParentChunk]] = None
     child_chunks: Optional[List[ChildChunk]] = None
+    # M2-FIX: DLQ entries from multi-page table handler
+    dlq_entries: Optional[List[Dict[str, Any]]] = None
 
     # Added by AssemblyService
     assembled_output_path: Optional[str] = None

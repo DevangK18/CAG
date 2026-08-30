@@ -281,7 +281,7 @@ class EnrichmentService:
                 {
                     "custom_id": req["custom_id"],
                     "params": {
-                        "model": "claude-sonnet-4-20250514",
+                        "model": "claude-sonnet-5",
                         "max_tokens": 2000,
                         "messages": req["messages"],
                     },
