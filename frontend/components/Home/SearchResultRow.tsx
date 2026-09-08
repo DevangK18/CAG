@@ -31,12 +31,12 @@ interface SearchResultRowProps {
     extraCount?: number; // For glossary "+N more" affordance
 }
 
-export const SearchResultRow: React.FC<SearchResultRowProps> = ({
+export const SearchResultRow = React.memo<SearchResultRowProps>(function SearchResultRow({
     result,
     isSelected,
     onClick,
     extraCount,
-}) => {
+}) {
     const className = `home-search-result-row ${isSelected ? 'selected' : ''}`;
 
     switch (result.kind) {
@@ -53,7 +53,9 @@ export const SearchResultRow: React.FC<SearchResultRowProps> = ({
         default:
             return null;
     }
-};
+});
+
+SearchResultRow.displayName = 'SearchResultRow';
 
 // Icon components
 const ReportIcon = () => (

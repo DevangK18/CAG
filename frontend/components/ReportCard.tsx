@@ -18,7 +18,7 @@ interface ReportCardProps {
   onClick: () => void;
 }
 
-export function ReportCard({ report, viewMode, onClick }: ReportCardProps) {
+export const ReportCard = React.memo<ReportCardProps>(function ReportCard({ report, viewMode, onClick }) {
   const sectorColor = getSectorColor(report.sector);
   const sanitizedTitle = sanitizeReportTitle(report.title);
 
@@ -170,4 +170,6 @@ export function ReportCard({ report, viewMode, onClick }: ReportCardProps) {
       </div>
     </div>
   );
-}
+});
+
+ReportCard.displayName = 'ReportCard';

@@ -9,14 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^0.7.0",
     "mermaid": "^11.12.3",
-    "pdfjs-dist": "^5.4.530",
     "posthog-js": "^1.357.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "react-pdf": "^10.3.0",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "zustand": "^5.0.9"

@@ -93,8 +93,16 @@ export const SmartSearchBar: React.FC<SmartSearchBarProps> = ({
     const { results, isLoading, isLoadingByChannel, error, topHit } = useSmartSearch(query, activeChannel);
 
     // Sync external query (e.g., from trending searches click)
+    // Note: We track the last synced external query to avoid re-syncing when user types
+    const lastSyncedExternalQuery = useRef<string | undefined>(undefined);
+
     useEffect(() => {
-        if (externalQuery !== undefined && externalQuery !== query) {
+        // Only sync if external query changed AND is different from what we last synced
+        if (
+            externalQuery !== undefined &&
+            externalQuery !== lastSyncedExternalQuery.current
+        ) {
+            lastSyncedExternalQuery.current = externalQuery;
             setQuery(externalQuery);
             // Focus the input when external query is set
             inputRef.current?.focus();

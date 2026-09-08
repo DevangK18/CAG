@@ -1,10 +1,36 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
+ *
  * TypeScript type definitions for CAG Gateway
- * v6: Added Phase 10 Overview & Summaries types
+ * v7: Consolidated API type re-exports
+ *
+ * Note: Many types are defined in lib/api.ts as the canonical source.
+ * This file re-exports them for convenience and backward compatibility.
+ * For new code, prefer importing directly from lib/api.ts for API-related types.
  */
+
+// ============================================================================
+// Re-exports from lib/api.ts (canonical API types)
+// ============================================================================
+export type {
+  AuditScope as APIAuditScope,
+  TopicCovered as APITopicCovered,
+  GlossaryTerm as APIGlossaryTerm,
+  TOCEntry as APITOCEntry,
+  FindingSummaryData as APIFindingSummaryData,
+  FindingItem as APIFindingItem,
+  RecommendationItem as APIRecommendationItem,
+  OverviewResponse,
+  // Note: SummaryVariant and SummaryVariantInfo are defined locally in this file
+  // for use with SUMMARY_VARIANT_CONFIG
+  SummariesListResponse,
+  SummaryContentResponse,
+  TimeSeriesInfo,
+  ChartItem,
+  TableItem,
+  CitationMap,
+} from './lib/api';
 
 // View states
 export type ViewState = 'home' | 'directory' | 'report' | 'time-series' | 'series-chat' | 'entity' | 'how-it-works' | 'corpus-chat';

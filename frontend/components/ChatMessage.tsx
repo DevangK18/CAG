@@ -8,7 +8,7 @@
  * v5.2: Fixed loading animation + simplified streaming approach
  */
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -407,12 +407,24 @@ function GroundednessBadge({ report }: GroundednessBadgeProps) {
 // COMPONENT
 // =============================================================================
 
-export function ChatMessage({ role, content, isStreaming, isWaitingForResponse, groundednessReport }: ChatMessageProps) {
+export const ChatMessage = React.memo<ChatMessageProps>(function ChatMessage({ role, content, isStreaming, isWaitingForResponse, groundednessReport }) {
   const { normalizedCitationMap, navigateToCitation } = useAppStore();
 
+  // Store navigateToCitation in a ref to create a stable callback reference
+  // This prevents unnecessary re-renders of markdown components when the store updates
+  const navigateToCitationRef = useRef(navigateToCitation);
+  useEffect(() => {
+    navigateToCitationRef.current = navigateToCitation;
+  });
+
+  // Create a stable callback that uses the ref
+  const stableNavigateToCitation = useCallback((citation: any) => {
+    navigateToCitationRef.current(citation);
+  }, []);
+
   const markdownComponents = useMemo(
-    () => createMarkdownComponents(normalizedCitationMap, navigateToCitation),
-    [normalizedCitationMap, navigateToCitation]
+    () => createMarkdownComponents(normalizedCitationMap, stableNavigateToCitation),
+    [normalizedCitationMap, stableNavigateToCitation]
   );
 
   if (role === 'user') {
@@ -464,6 +476,8 @@ export function ChatMessage({ role, content, isStreaming, isWaitingForResponse, 
       </div>
     </div>
   );
-}
+});
+
+ChatMessage.displayName = 'ChatMessage';
 
 export default ChatMessage;

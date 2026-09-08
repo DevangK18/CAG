@@ -10,10 +10,11 @@
  * - Professional Markdown rendering for summaries
  */
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 
 import { ViewState, AuditReport, TabState, SummaryVariant, SUMMARY_VARIANT_CONFIG } from './types';
+import { SuspenseWrapper, ErrorBoundary } from './components/common';
 
 // API Integration imports
 import { useReports } from './hooks/useReports';
@@ -32,6 +33,7 @@ import { PDFViewer } from './components/PDFViewer';
 import { TablePreview } from './components/TablePreview';
 import { ChatMessage } from './components/ChatMessage';
 import { lookupCitation } from './lib/citationUtils';
+import { renderMarkdown } from './lib/markdown';
 import { ChartItem, TableItem, TimeSeriesInfo, getPdfUrl, TopicCovered, GlossaryTerm } from './lib/api';
 
 import {
@@ -46,117 +48,39 @@ import {
     CheckCircleIcon,
     SwapIcon,
     LayoutGridIcon,
-    ListIcon
+    ListIcon,
+    ChatIcon,
+    CloseIcon,
+    SparkleIcon,
+    ChartIcon,
+    TableIcon,
+    LocationIcon,
+    CalendarIcon,
+    TrendingIcon,
+    BookIcon,
+    TargetIcon,
+    ShuffleIcon,
+    LoadingSpinner,
 } from './components/Icons';
 import { ReportCard } from './components/ReportCard';
 import { TierSelector } from './components/TierSelector';
 // DemoReportCard is no longer used - all tiers use real API data
 // import { DemoReportCard } from './components/DemoReportCard';
-import { HowItWorks } from './components/HowItWorks/HowItWorks';
-import { DirectoryPage } from './components/Directory/DirectoryPage';
-import { TimeSeriesPage } from './components/TimeSeries/TimeSeriesPage';
+
+// Lazy loaded components (code splitting for performance)
+const HowItWorks = lazy(() => import('./components/HowItWorks/HowItWorks').then(m => ({ default: m.HowItWorks })));
+const DirectoryPage = lazy(() => import('./components/Directory/DirectoryPage').then(m => ({ default: m.DirectoryPage })));
+const TimeSeriesPage = lazy(() => import('./components/TimeSeries/TimeSeriesPage').then(m => ({ default: m.TimeSeriesPage })));
+const EntityPage = lazy(() => import('./components/Entity/EntityPage').then(m => ({ default: m.EntityPage })));
+
+// Non-lazy imports
 import { HomePage } from './components/Home/HomePage';
-import { EntityPage } from './components/Entity/EntityPage';
 import { HomePDFPanel } from './components/Home/HomePDFPanel';
 import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
 import './index.css';
 import './how-it-works.css';
-
-// Icons
-const ChatIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-);
-
-const CloseIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-);
-
-const SparkleIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-    </svg>
-);
-
-const ChartIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10"/>
-        <line x1="12" y1="20" x2="12" y2="4"/>
-        <line x1="6" y1="20" x2="6" y2="14"/>
-    </svg>
-);
-
-const TableIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-        <line x1="3" y1="9" x2="21" y2="9"/>
-        <line x1="3" y1="15" x2="21" y2="15"/>
-        <line x1="9" y1="3" x2="9" y2="21"/>
-    </svg>
-);
-
-const LocationIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="10" r="3"/>
-        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 6.9 8 11.7z"/>
-    </svg>
-);
-
-const CalendarIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-        <line x1="16" y1="2" x2="16" y2="6"/>
-        <line x1="8" y1="2" x2="8" y2="6"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-    </svg>
-);
-
-const TrendingIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-        <polyline points="17 6 23 6 23 12"/>
-    </svg>
-);
-
-const BookIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-    </svg>
-);
-
-const TargetIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <circle cx="12" cy="12" r="6"/>
-        <circle cx="12" cy="12" r="2"/>
-    </svg>
-);
-
-// ListIcon is now imported from './components/Icons'
-
-const ShuffleIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="16 3 21 3 21 8"/>
-        <line x1="4" y1="20" x2="21" y2="3"/>
-        <polyline points="21 16 21 21 16 21"/>
-        <line x1="15" y1="15" x2="21" y2="21"/>
-        <line x1="4" y1="4" x2="9" y2="9"/>
-    </svg>
-);
-
-const LoadingSpinner = () => (
-    <div className="tab-loading">
-        <div className="tab-spinner"></div>
-        <span>Loading...</span>
-    </div>
-);
 
 // Response style type
 type ResponseStyle = 'executive' | 'concise' | 'detailed' | 'technical' | 'comparative' | 'adaptive';
@@ -179,115 +103,6 @@ const AUDIT_TYPES = [
 
 const CHART_TYPE_LABELS: Record<string, string> = {
     bar: 'BAR', line: 'LINE', pie: 'PIE', area: 'AREA', table_chart: 'TABLE', unknown: 'CHART'
-};
-
-// Simple Markdown renderer for summaries
-const renderMarkdown = (content: string): React.ReactNode => {
-    if (!content) return null;
-    
-    // Split into lines
-    const lines = content.split('\n');
-    const elements: React.ReactNode[] = [];
-    let currentList: string[] = [];
-    let listType: 'ul' | 'ol' | null = null;
-    let key = 0;
-    
-    const flushList = () => {
-        if (currentList.length > 0) {
-            if (listType === 'ol') {
-                elements.push(
-                    <ol key={key++} className="summary-list ordered">
-                        {currentList.map((item, i) => <li key={i}>{renderInlineFormatting(item)}</li>)}
-                    </ol>
-                );
-            } else {
-                elements.push(
-                    <ul key={key++} className="summary-list">
-                        {currentList.map((item, i) => <li key={i}>{renderInlineFormatting(item)}</li>)}
-                    </ul>
-                );
-            }
-            currentList = [];
-            listType = null;
-        }
-    };
-    
-    const renderInlineFormatting = (text: string): React.ReactNode => {
-        // Handle bold: **text** or __text__
-        let result: React.ReactNode[] = [];
-        const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
-        
-        parts.forEach((part, i) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-                result.push(<strong key={i}>{part.slice(2, -2)}</strong>);
-            } else if (part.startsWith('__') && part.endsWith('__')) {
-                result.push(<strong key={i}>{part.slice(2, -2)}</strong>);
-            } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
-                result.push(<em key={i}>{part.slice(1, -1)}</em>);
-            } else {
-                result.push(part);
-            }
-        });
-        
-        return result;
-    };
-    
-    lines.forEach((line, lineIndex) => {
-        const trimmed = line.trim();
-        
-        // Headers
-        if (trimmed.startsWith('# ')) {
-            flushList();
-            elements.push(<h1 key={key++} className="summary-h1">{trimmed.slice(2)}</h1>);
-        } else if (trimmed.startsWith('## ')) {
-            flushList();
-            elements.push(<h2 key={key++} className="summary-h2">{trimmed.slice(3)}</h2>);
-        } else if (trimmed.startsWith('### ')) {
-            flushList();
-            elements.push(<h3 key={key++} className="summary-h3">{trimmed.slice(4)}</h3>);
-        } else if (trimmed.startsWith('#### ')) {
-            flushList();
-            elements.push(<h4 key={key++} className="summary-h4">{trimmed.slice(5)}</h4>);
-        }
-        // Horizontal rule
-        else if (trimmed === '---' || trimmed === '***') {
-            flushList();
-            elements.push(<hr key={key++} className="summary-hr" />);
-        }
-        // Ordered list
-        else if (/^\d+\.\s/.test(trimmed)) {
-            if (listType !== 'ol') {
-                flushList();
-                listType = 'ol';
-            }
-            currentList.push(trimmed.replace(/^\d+\.\s/, ''));
-        }
-        // Unordered list
-        else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ')) {
-            if (listType !== 'ul') {
-                flushList();
-                listType = 'ul';
-            }
-            currentList.push(trimmed.slice(2));
-        }
-        // Blockquote
-        else if (trimmed.startsWith('> ')) {
-            flushList();
-            elements.push(<blockquote key={key++} className="summary-blockquote">{renderInlineFormatting(trimmed.slice(2))}</blockquote>);
-        }
-        // Empty line
-        else if (trimmed === '') {
-            flushList();
-        }
-        // Regular paragraph
-        else {
-            flushList();
-            elements.push(<p key={key++} className="summary-paragraph">{renderInlineFormatting(trimmed)}</p>);
-        }
-    });
-    
-    flushList();
-    return elements;
 };
 
 function App() {
@@ -637,15 +452,7 @@ function App() {
         }
     };
 
-    // Drag logic
-    const startDrag = (e: React.MouseEvent) => {
-        isDragging.current = true;
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-        document.body.style.userSelect = 'none';
-        document.body.classList.add('is-dragging');
-    };
-
+    // Drag logic - with proper cleanup to prevent memory leaks
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isDragging.current || !splitContainerRef.current) return;
         const containerRect = splitContainerRef.current.getBoundingClientRect();
@@ -655,7 +462,7 @@ function App() {
         setSplitRatio(newRatio);
     }, []);
 
-    const handleMouseUp = () => {
+    const handleMouseUp = useCallback(() => {
         isDragging.current = false;
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -663,7 +470,29 @@ function App() {
         document.body.classList.remove('is-dragging');
         // Trigger PDF reload after resize completes
         setResizeKey(prev => prev + 1);
-    };
+    }, [handleMouseMove]);
+
+    const startDrag = useCallback((e: React.MouseEvent) => {
+        isDragging.current = true;
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.body.style.userSelect = 'none';
+        document.body.classList.add('is-dragging');
+    }, [handleMouseMove, handleMouseUp]);
+
+    // Cleanup drag listeners on unmount to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            // Reset body styles if component unmounts during drag
+            if (isDragging.current) {
+                document.body.style.userSelect = 'auto';
+                document.body.classList.remove('is-dragging');
+                isDragging.current = false;
+            }
+        };
+    }, [handleMouseMove, handleMouseUp]);
 
     // Toggle handler for audit type pills
     const toggleAuditType = (type: string) => {
@@ -893,18 +722,19 @@ function App() {
                     </div>
                 </div>
 
-                {/* 1. Overview Summary */}
-                {overview?.executive_summary && (
+                {/* 1. AI Summaries Available Prompt */}
+                {overview?._metadata?.summaries_available && (
                     <section className="collapsible-section">
                         <button className="section-header" onClick={() => toggleSection('summary')}>
-                            <span className="section-icon"><FileTextIcon /></span>
-                            <span className="section-title">Overview Summary</span>
+                            <span className="section-icon"><SparkleIcon /></span>
+                            <span className="section-title">AI-Generated Summaries</span>
+                            <span className="section-count">5 styles</span>
                             <span className={`expand-icon ${expandedSections.summary ? 'expanded' : ''}`}>▼</span>
                         </button>
                         {expandedSections.summary && (
                             <div className="section-content">
                                 <p style={{ fontSize: '14px', lineHeight: '1.7', color: '#475569', margin: 0 }}>
-                                    {overview.executive_summary}
+                                    This report has AI-generated summaries available in 5 different styles, tailored for different audiences: Executive Brief, Journalist's Take, Deep Dive, Simple Explainer, and Policy Brief.
                                 </p>
                                 <button
                                     onClick={() => {
@@ -925,7 +755,7 @@ function App() {
                                         padding: 0
                                     }}
                                 >
-                                    Read full summary <span>→</span>
+                                    View summaries <span>→</span>
                                 </button>
                             </div>
                         )}
@@ -1571,7 +1401,7 @@ function App() {
                 <HomePage
                     setView={setView}
                     setCurrentSeriesId={(id: string) => {
-                        setSelectedSeries(allSeries.find(s => s.id === id) || null);
+                        setSelectedSeries(allSeries.find(s => s.series_id === id) || null);
                     }}
                     openChatDrawer={() => {
                         setChatMode('agentic');
@@ -1589,53 +1419,65 @@ function App() {
             )}
 
             {view === 'entity' && (
-                <EntityPage onNavigateToReport={handleSelectReport} />
+                <ErrorBoundary>
+                    <SuspenseWrapper>
+                        <EntityPage onNavigateToReport={handleSelectReport} />
+                    </SuspenseWrapper>
+                </ErrorBoundary>
             )}
 
             {view === 'directory' && (
-                <DirectoryPage
-                    activeTier={activeTier}
-                    setActiveTier={setActiveTier}
-                    selectedState={selectedState}
-                    setSelectedState={setSelectedState}
-                    tierCounts={tierCounts}
-                    availableStates={availableStates}
-                    enhancedStats={enhancedStats}
-                    reportsLoading={reportsLoading}
-                    searchTerm={searchTerm}
-                    setSearchTerm={setSearchTerm}
-                    sectors={sectors}
-                    filterSector={filterSector}
-                    setFilterSector={setFilterSector}
-                    ministries={ministries}
-                    filterMinistry={filterMinistry}
-                    setFilterMinistry={setFilterMinistry}
-                    years={years}
-                    filterYear={filterYear}
-                    setFilterYear={setFilterYear}
-                    filterAuditType={filterAuditType}
-                    toggleAuditType={toggleAuditType}
-                    auditTypes={AUDIT_TYPES}
-                    viewMode={viewMode}
-                    setViewMode={setViewMode}
-                    activeFilterCount={activeFilterCount}
-                    filteredReports={filteredReports}
-                    currentReports={currentReports}
-                    reports={reports}
-                    hasActiveFilters={hasActiveFilters}
-                    clearAllFilters={clearAllFilters}
-                    handleReportClick={handleReportClick}
-                    setView={setView}
-                />
+                <ErrorBoundary>
+                    <SuspenseWrapper>
+                        <DirectoryPage
+                            activeTier={activeTier}
+                            setActiveTier={setActiveTier}
+                            selectedState={selectedState}
+                            setSelectedState={setSelectedState}
+                            tierCounts={tierCounts}
+                            availableStates={availableStates}
+                            enhancedStats={enhancedStats}
+                            reportsLoading={reportsLoading}
+                            searchTerm={searchTerm}
+                            setSearchTerm={setSearchTerm}
+                            sectors={sectors}
+                            filterSector={filterSector}
+                            setFilterSector={setFilterSector}
+                            ministries={ministries}
+                            filterMinistry={filterMinistry}
+                            setFilterMinistry={setFilterMinistry}
+                            years={years}
+                            filterYear={filterYear}
+                            setFilterYear={setFilterYear}
+                            filterAuditType={filterAuditType}
+                            toggleAuditType={toggleAuditType}
+                            auditTypes={AUDIT_TYPES}
+                            viewMode={viewMode}
+                            setViewMode={setViewMode}
+                            activeFilterCount={activeFilterCount}
+                            filteredReports={filteredReports}
+                            currentReports={currentReports}
+                            reports={reports}
+                            hasActiveFilters={hasActiveFilters}
+                            clearAllFilters={clearAllFilters}
+                            handleReportClick={handleReportClick}
+                            setView={setView}
+                        />
+                    </SuspenseWrapper>
+                </ErrorBoundary>
             )}
 
             {view === 'time-series' && (
-                <TimeSeriesPage
-                    allSeries={allSeries}
-                    seriesLoading={seriesLoading}
-                    seriesError={seriesError}
-                    handleSeriesClick={handleSeriesClick}
-                />
+                <ErrorBoundary>
+                    <SuspenseWrapper>
+                        <TimeSeriesPage
+                            allSeries={allSeries}
+                            seriesLoading={seriesLoading}
+                            seriesError={seriesError}
+                            handleSeriesClick={handleSeriesClick}
+                        />
+                    </SuspenseWrapper>
+                </ErrorBoundary>
             )}
 
             {(view === 'report' || view === 'series-chat') && (
@@ -1700,7 +1542,11 @@ function App() {
 
             {view === 'how-it-works' && (
                 <main className="how-it-works-main">
-                    <HowItWorks />
+                    <ErrorBoundary>
+                        <SuspenseWrapper>
+                            <HowItWorks />
+                        </SuspenseWrapper>
+                    </ErrorBoundary>
                 </main>
             )}
 
@@ -1764,7 +1610,7 @@ function App() {
                                     <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>
                                         Start a conversation
                                     </h3>
-                                    <p>Ask about findings, trends, recommendations across all 37 reports</p>
+                                    <p>Ask about findings, trends, recommendations across all {enhancedStats?.totalReports || reports.length || 'available'} reports</p>
                                     <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                                         {['Key findings on toll collection?', 'Revenue loss trends across states', 'NHAI compliance issues'].map(q => (
                                             <button

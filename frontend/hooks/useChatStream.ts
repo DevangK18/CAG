@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import { streamChat, streamChatAgentic } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { trackEvent } from '../lib/posthog';
+import { debug } from '../lib/debug';
 
 export type ChatMode = 'regular' | 'agentic';
 
@@ -72,7 +73,7 @@ export function useChatStream(): UseChatStreamResult {
         switch (event.type) {
           case 'citation_map':
             // Store citation map FIRST before any tokens
-            console.log('Received citation_map event with keys:', Object.keys(event.data || {}));
+            debug.tagged('chat', 'Received citation_map event with keys:', Object.keys(event.data || {}));
             setCitationMap(event.data);
             break;
 
@@ -111,12 +112,12 @@ export function useChatStream(): UseChatStreamResult {
           case 'reformulation':
           case 'synthesizing':
           case 'agentic_trace':
-            console.log(`[agentic:${event.type}]`, event.data);
+            debug.tagged(`agentic:${event.type}`, event.data);
             break;
 
           // Phase D: groundedness event - wire to store
           case 'groundedness':
-            console.log('[groundedness]', event.data);
+            debug.tagged('groundedness', event.data);
             setLastMessageGroundedness(event.data);
             break;
         }

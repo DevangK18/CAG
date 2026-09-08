@@ -1,14 +1,20 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
+ *
  * Zustand Store for CAG Gateway
  */
 
 import { create } from 'zustand';
 import { CitationMap } from '../lib/api';
 import { buildNormalizedCitationMap } from '../lib/citationUtils';
+import { setManagedTimeout, clearManagedTimeout } from '../lib/timerManager';
+import { generateId } from '../utils';
+import { debug } from '../lib/debug';
 import { GroundednessReport, ViewState } from '../types';
+
+// Key for the highlight auto-dismiss timer
+const HIGHLIGHT_TIMER_KEY = 'pdf-highlight-dismiss';
 
 export interface Message {
   id: string;
@@ -34,6 +40,21 @@ export interface HomePdfPanelState {
   page?: number;
   highlight?: { label: string; page: number; type: string };
 }
+
+/**
+ * Centralized loading states for consistent tracking across the app.
+ * Each key represents a different data-fetching operation.
+ */
+export interface LoadingStates {
+  overview: boolean;
+  summaries: boolean;
+  charts: boolean;
+  tables: boolean;
+  chat: boolean;
+  search: boolean;
+}
+
+export type LoadingStateKey = keyof LoadingStates;
 
 export interface AppState {
   // Current report
@@ -71,6 +92,9 @@ export interface AppState {
   // Home PDF Panel state
   homePdfPanel: HomePdfPanelState | null;
 
+  // Centralized loading states
+  loadingStates: LoadingStates;
+
   // Actions
   setCurrentReportId: (id: string | null) => void;
   setPdfPage: (page: number) => void;
@@ -107,6 +131,10 @@ export interface AppState {
 
   // Navigation helper
   navigateToCitation: (citation: CitationMap[string]) => void;
+
+  // Loading state actions
+  setLoading: (key: LoadingStateKey, isLoading: boolean) => void;
+  resetAllLoading: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -132,14 +160,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Home PDF Panel initial state
   homePdfPanel: null,
 
+  // Centralized loading states
+  loadingStates: {
+    overview: false,
+    summaries: false,
+    charts: false,
+    tables: false,
+    chat: false,
+    search: false,
+  },
+
   // View actions
-  setCurrentReportId: (id) => set({ 
-    currentReportId: id,
-    pdfPage: 1,
-    messages: [],
-    citationMap: {},
-    normalizedCitationMap: new Map(),
-  }),
+  setCurrentReportId: (id) => {
+    // Cancel any pending highlight timer when switching reports
+    clearManagedTimeout(HIGHLIGHT_TIMER_KEY);
+    set({
+      currentReportId: id,
+      pdfPage: 1,
+      pdfHighlight: null,
+      messages: [],
+      citationMap: {},
+      normalizedCitationMap: new Map(),
+      chatMode: 'agentic', // Reset to default mode (Issue #11)
+    });
+  },
   
   // PDF actions
   setPdfPage: (page) => set({ pdfPage: page }),
@@ -153,7 +197,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addMessage: (message) => set((state) => ({
     messages: [
       ...state.messages,
-      { ...message, id: Date.now().toString() }
+      { ...message, id: generateId() } // Use collision-resistant ID (Issue #15)
     ],
   })),
   
@@ -170,14 +214,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   }),
   
   appendToLastMessage: (token) => set((state) => {
-    const messages = [...state.messages];
-    if (messages.length > 0) {
-      messages[messages.length - 1] = {
-        ...messages[messages.length - 1],
-        content: messages[messages.length - 1].content + token,
-      };
-    }
-    return { messages };
+    if (state.messages.length === 0) return state;
+
+    const lastIdx = state.messages.length - 1;
+    const lastMessage = state.messages[lastIdx];
+
+    // Create new array with only the last message updated (more efficient)
+    const newMessages = state.messages.slice(0, -1);
+    newMessages.push({
+      ...lastMessage,
+      content: lastMessage.content + token,
+    });
+
+    return { messages: newMessages };
   }),
   
   setLastMessageStreaming: (isStreaming) => set((state) => {
@@ -254,7 +303,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   goBack: () => {
     const prev = get().previousView;
-    console.log('[goBack] previousView:', prev, 'current view:', get().view);
+    debug.tagged('goBack', 'previousView:', prev, 'current view:', get().view);
     set({ view: prev || 'home', previousView: null });
   },
 
@@ -270,10 +319,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Navigate to citation
   navigateToCitation: (citation) => {
     const targetPage = citation.page_physical + 1;
-    set({ pdfPage: targetPage });
 
-    // Set PDF highlight for citation
+    // Set page and highlight in one update
     set({
+      pdfPage: targetPage,
       pdfHighlight: {
         page: targetPage,
         type: 'citation',
@@ -282,11 +331,34 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     });
 
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      set({ pdfHighlight: null });
-    }, 5000);
+    // Auto-dismiss after 5 seconds using managed timeout
+    // This cancels any previous timer before setting a new one,
+    // preventing stale closures from clearing the wrong highlight
+    setManagedTimeout(
+      HIGHLIGHT_TIMER_KEY,
+      () => set({ pdfHighlight: null }),
+      5000
+    );
   },
+
+  // Loading state actions
+  setLoading: (key, isLoading) => set((state) => ({
+    loadingStates: {
+      ...state.loadingStates,
+      [key]: isLoading,
+    },
+  })),
+
+  resetAllLoading: () => set({
+    loadingStates: {
+      overview: false,
+      summaries: false,
+      charts: false,
+      tables: false,
+      chat: false,
+      search: false,
+    },
+  }),
 }));
 
 export default useAppStore;

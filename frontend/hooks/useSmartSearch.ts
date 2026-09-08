@@ -51,10 +51,13 @@ export function useSmartSearch(
     const [isLoadingByChannel, setIsLoadingByChannel] = useState<Record<SearchChannel, boolean>>(emptyLoadingState);
     const [error, setError] = useState<string | null>(null);
 
-    // Refs for debounce timers and abort controller
+    // Refs for debounce timers and separate abort controllers
+    // Using separate controllers prevents race condition where findings fetch
+    // accidentally aborts the main search
     const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const findingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const abortControllerRef = useRef<AbortController | null>(null);
+    const mainAbortRef = useRef<AbortController | null>(null);
+    const findingsAbortRef = useRef<AbortController | null>(null);
 
     // Track if findings have been fetched for current query
     const findingsFetchedRef = useRef<string | null>(null);
@@ -118,12 +121,12 @@ export function useSmartSearch(
             return;
         }
 
-        // Abort previous request before starting new one
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+        // Abort previous main search request before starting new one
+        if (mainAbortRef.current) {
+            mainAbortRef.current.abort();
         }
         const controller = new AbortController();
-        abortControllerRef.current = controller;
+        mainAbortRef.current = controller;
 
         try {
             if (includeFindingsOnly) {
@@ -203,12 +206,12 @@ export function useSmartSearch(
             return;
         }
 
-        // Abort previous request before starting new one
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+        // Abort previous findings request only (don't affect main search)
+        if (findingsAbortRef.current) {
+            findingsAbortRef.current.abort();
         }
         const controller = new AbortController();
-        abortControllerRef.current = controller;
+        findingsAbortRef.current = controller;
 
         setIsLoadingByChannel(prev => ({ ...prev, findings: true }));
 
@@ -252,8 +255,12 @@ export function useSmartSearch(
 
         // Reset state on empty query
         if (!trimmedQuery) {
-            if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
+            // Abort both main search and findings requests
+            if (mainAbortRef.current) {
+                mainAbortRef.current.abort();
+            }
+            if (findingsAbortRef.current) {
+                findingsAbortRef.current.abort();
             }
             setResults(null);
             setError(null);
@@ -292,9 +299,14 @@ export function useSmartSearch(
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
+            // Abort both controllers
+            if (mainAbortRef.current) {
+                mainAbortRef.current.abort();
             }
+            if (findingsAbortRef.current) {
+                findingsAbortRef.current.abort();
+            }
+            // Clear timers
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }

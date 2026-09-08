@@ -32,9 +32,16 @@ export function PDFViewer({ url, initialPage, onPageChange, containerKey }: PDFV
 
   // Use initialPage prop if provided, otherwise use store
   const currentPage = initialPage !== undefined ? initialPage : storePdfPage;
-  
+
   // Track previous page to detect changes
   const prevPageRef = useRef(currentPage);
+
+  // Store callback in ref to avoid dependency array issues
+  // This prevents infinite loops when parent doesn't memoize onPageChange
+  const onPageChangeRef = useRef(onPageChange);
+  useEffect(() => {
+    onPageChangeRef.current = onPageChange;
+  });
 
   useEffect(() => {
     if (url) {
@@ -48,13 +55,11 @@ export function PDFViewer({ url, initialPage, onPageChange, containerKey }: PDFV
     if (url && currentPage && currentPage !== prevPageRef.current) {
       setKey(prev => prev + 1);
       prevPageRef.current = currentPage;
-      
-      // Notify parent of page change
-      if (onPageChange) {
-        onPageChange(currentPage);
-      }
+
+      // Notify parent of page change via ref (prevents infinite loop)
+      onPageChangeRef.current?.(currentPage);
     }
-  }, [currentPage, url, onPageChange]);
+  }, [currentPage, url]); // Removed onPageChange from deps
 
   // Also trigger on URL change (for series switching)
   useEffect(() => {

@@ -3,7 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-export const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
+/**
+ * Generate a unique ID that is collision-resistant even when called
+ * multiple times in the same millisecond.
+ *
+ * Format: {timestamp}-{random1}-{random2}
+ * Example: "lz5kv2x-abc123-xyz789"
+ *
+ * @returns A unique string identifier
+ */
+export const generateId = (): string => {
+  const timestamp = Date.now().toString(36);
+  const random1 = Math.random().toString(36).substring(2, 9);
+  const random2 = Math.random().toString(36).substring(2, 6);
+  return `${timestamp}-${random1}-${random2}`;
+};
 
 /**
  * Sanitize report titles for display in cards and lists.
