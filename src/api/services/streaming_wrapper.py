@@ -920,23 +920,55 @@ async def _stream_openai(
 async def _stream_anthropic(
     rag, prompt: str, system_prompt: str
 ) -> AsyncGenerator[str, None]:
-    """Stream tokens from Anthropic."""
+    """Stream tokens from Anthropic (direct API or Vertex AI)."""
+    # Check if Vertex AI is enabled
     try:
-        from anthropic import AsyncAnthropic
+        from src.core.vertex_client import (
+            is_vertex_ai_enabled,
+            get_async_anthropic_client,
+            get_vertex_model_name,
+        )
+
+        use_vertex = is_vertex_ai_enabled()
     except ImportError:
-        yield "[Error: anthropic package not installed for async streaming]"
-        return
+        use_vertex = False
 
-    client = AsyncAnthropic(api_key=rag.config.anthropic_api_key)
+    if use_vertex:
+        # Use Vertex AI Claude
+        try:
+            client = get_async_anthropic_client()
+            model = get_vertex_model_name(rag.config.llm.claude_model)
+            logger.info(f"Streaming via Vertex AI Claude: {model}")
 
-    async with client.messages.stream(
-        model=rag.config.llm.claude_model,
-        max_tokens=rag.config.llm.max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        async for text in stream.text_stream:
-            yield text
+            async with client.messages.stream(
+                model=model,
+                max_tokens=rag.config.llm.max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+        except Exception as e:
+            logger.error(f"Vertex AI Claude streaming error: {e}")
+            yield f"[Error: Vertex AI Claude streaming failed: {e}]"
+    else:
+        # Direct Anthropic API
+        try:
+            from anthropic import AsyncAnthropic
+        except ImportError:
+            yield "[Error: anthropic package not installed for async streaming]"
+            return
+
+        client = AsyncAnthropic(api_key=rag.config.anthropic_api_key)
+
+        async with client.messages.stream(
+            model=rag.config.llm.claude_model,
+            max_tokens=rag.config.llm.max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
 
 
 async def _stream_gemini(

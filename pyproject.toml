@@ -21,9 +21,10 @@ httpx = ">=0.28.1,<1.0.0"
 
 # LLM providers
 openai = "^1.0.0"
-anthropic = "^0.77.0"
+anthropic = {version = "^0.77.0", extras = ["vertex"]}  # vertex extra for GCP Model Garden
 cohere = "^4.0.0"
 google-genai = "^1.64.0"
+google-cloud-aiplatform = "^1.60.0"  # Vertex AI SDK for embeddings and Gemini
 
 # Vector database
 qdrant-client = "^1.17.0"

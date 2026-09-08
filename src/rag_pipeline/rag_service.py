@@ -31,10 +31,31 @@ try:
 except ImportError:
     from report_registry import get_registry, init_registry
 
+# Anthropic client - uses Vertex AI wrapper when USE_VERTEX_AI=true
 try:
-    from anthropic import Anthropic
+    from src.core.vertex_client import (
+        get_anthropic_client,
+        is_vertex_ai_enabled,
+        get_vertex_model_name,
+    )
+
+    _use_vertex_ai = is_vertex_ai_enabled()
 except ImportError:
-    Anthropic = None
+    # Fallback to direct import if vertex_client not available
+    from anthropic import Anthropic as _DirectAnthropic
+
+    def get_anthropic_client():
+        import os
+
+        return _DirectAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    def is_vertex_ai_enabled():
+        return False
+
+    def get_vertex_model_name(model):
+        return model
+
+    _use_vertex_ai = False
 
 try:
     from openai import OpenAI
@@ -899,9 +920,10 @@ class RAGService:
 
         # Initialize LLM clients
         if self.config.llm.provider == LLMProvider.CLAUDE:
-            if Anthropic is None:
-                raise ImportError("Install anthropic: pip install anthropic")
-            self.anthropic = Anthropic(api_key=self.config.anthropic_api_key)
+            # Use Vertex AI wrapper when enabled, else direct API
+            self.anthropic = get_anthropic_client()
+            if _use_vertex_ai:
+                logger.info("Using Claude via Vertex AI")
             self.openai = OpenAI(
                 api_key=self.config.openai_api_key
             )  # Still need OpenAI for QueryEnhancer
@@ -2014,9 +2036,14 @@ class RAGService:
             return self._generate_openai(prompt, system_prompt)
 
     def _generate_claude(self, prompt: str, system_prompt: str) -> str:
-        """Generate using Claude."""
+        """Generate using Claude (via Vertex AI when enabled)."""
+        # Map model name for Vertex AI if enabled
+        model_name = self.config.llm.claude_model
+        if _use_vertex_ai:
+            model_name = get_vertex_model_name(model_name)
+
         response = self.anthropic.messages.create(
-            model=self.config.llm.claude_model,
+            model=model_name,
             max_tokens=self.config.llm.max_tokens,
             temperature=self.config.llm.temperature,
             system=system_prompt,

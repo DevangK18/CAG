@@ -53,6 +53,7 @@ pytest --cov=src
 
 ## Configuration
 
+### Standard Mode (Direct API Keys)
 ```bash
 OPENAI_API_KEY=...        # Embeddings (required)
 ANTHROPIC_API_KEY=...     # Claude for batch summaries
@@ -60,6 +61,27 @@ COHERE_API_KEY=...        # Reranking
 GOOGLE_API_KEY=...        # Gemini for visual extraction
 QDRANT_URL=http://localhost:6333
 ```
+
+### Google Cloud Mode (Vertex AI)
+Route all LLM calls through GCP to use cloud credits:
+```bash
+# Enable Vertex AI routing
+USE_VERTEX_AI=true              # Route Claude through Vertex AI Model Garden
+USE_VERTEX_EMBEDDINGS=true      # Use Vertex AI text-embedding-005
+
+# GCP Configuration
+GOOGLE_CLOUD_PROJECT=your-project-id
+VERTEX_AI_REGION=us-central1    # or europe-west4, asia-northeast1
+
+# Still needed (for services not yet on Vertex AI)
+COHERE_API_KEY=...              # Reranking
+GOOGLE_API_KEY=...              # Gemini parsing pipeline
+OPENAI_API_KEY=...              # QueryEnhancer fallback
+```
+
+**Cost Comparison (Vertex AI vs Direct):**
+- Claude: Same pricing, consolidated GCP billing
+- Embeddings: $0.00625/1M tokens (Vertex) vs $0.13/1M (OpenAI) = **20x cheaper**
 
 ## Multi-Tier Architecture
 

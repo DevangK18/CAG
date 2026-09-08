@@ -546,19 +546,74 @@ class SemanticPayloadExtractor:
 
 class DenseEmbeddingService:
     """
-    Generates dense embeddings using OpenAI.
+    Generates dense embeddings using OpenAI or Vertex AI.
+
+    When USE_VERTEX_EMBEDDINGS=true:
+        Uses Vertex AI text-embedding-005 ($0.00625/1M tokens) - 20x cheaper!
+    Otherwise:
+        Uses OpenAI text-embedding-3-large ($0.13/1M tokens)
     """
 
     def __init__(self, config: EmbeddingConfig, api_key: str):
         self.config = config
-        self.client = OpenAI(api_key=api_key)
         self.total_tokens = 0
+
+        # Check if Vertex AI embeddings are enabled
+        try:
+            from src.core.vertex_client import (
+                is_vertex_embeddings_enabled,
+                VertexEmbeddingService,
+            )
+
+            self.use_vertex = is_vertex_embeddings_enabled()
+        except ImportError:
+            self.use_vertex = False
+
+        if self.use_vertex:
+            # Use Vertex AI embeddings
+            from src.core.vertex_client import VertexEmbeddingService
+
+            # Vertex AI text-embedding-005 max dimensions is 768
+            vertex_dims = min(config.dimensions, 768) if config.dimensions else 768
+            self.vertex_service = VertexEmbeddingService(
+                model="text-embedding-005",
+                dimensions=vertex_dims,
+            )
+            self.client = None
+            logger.info(f"DenseEmbeddingService using Vertex AI (dims={vertex_dims})")
+        else:
+            # Use OpenAI embeddings
+            self.vertex_service = None
+            self.client = OpenAI(api_key=api_key)
+            logger.info(f"DenseEmbeddingService using OpenAI ({config.model})")
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of texts."""
         if not texts:
             return []
 
+        if self.use_vertex:
+            return self._embed_vertex(texts)
+        else:
+            return self._embed_openai(texts)
+
+    def _embed_vertex(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings using Vertex AI."""
+        # Truncate overly long texts
+        truncated = []
+        for text in texts:
+            max_chars = self.config.max_chunk_tokens * 4
+            if len(text) > max_chars:
+                text = text[:max_chars]
+            truncated.append(text)
+
+        embeddings = self.vertex_service.embed_texts(truncated)
+        self.total_tokens = self.vertex_service.total_tokens
+
+        return embeddings
+
+    def _embed_openai(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings using OpenAI."""
         # Truncate overly long texts
         truncated = []
         for text in texts:
@@ -594,7 +649,8 @@ class DenseEmbeddingService:
             for i in range(0, len(texts), self.config.batch_size)
         ]
 
-        iterator = tqdm(batches, desc="Embedding") if show_progress else batches
+        desc = "Embedding (Vertex AI)" if self.use_vertex else "Embedding (OpenAI)"
+        iterator = tqdm(batches, desc=desc) if show_progress else batches
 
         for batch in iterator:
             embeddings = self.embed_texts(batch)
@@ -604,8 +660,12 @@ class DenseEmbeddingService:
 
     def get_cost_estimate(self) -> float:
         """Get estimated cost in USD."""
-        # text-embedding-3-large: $0.13 per 1M tokens
-        return (self.total_tokens / 1_000_000) * 0.13
+        if self.use_vertex:
+            # text-embedding-005: $0.00625 per 1M tokens (20x cheaper!)
+            return (self.total_tokens / 1_000_000) * 0.00625
+        else:
+            # text-embedding-3-large: $0.13 per 1M tokens
+            return (self.total_tokens / 1_000_000) * 0.13
 
 
 # =============================================================================
