@@ -1,0 +1,341 @@
+# Enrichment Patterns Configuration
+# =================================
+# Externalized patterns for semantic enrichment extractors.
+# Edit this file to add/modify patterns without code changes.
+#
+# P1-B: Implements pattern externalization for maintainability.
+
+# ═══════════════════════════════════════════════════════════════════════
+# FINDING TYPE PATTERNS
+# ═══════════════════════════════════════════════════════════════════════
+# Maps finding types to regex patterns and deficiency keywords.
+# confidence: 0.0-1.0 weight for pattern matching
+
+finding_types:
+  irregular_expenditure:
+    patterns:
+      - pattern: "irregular\\s+expenditure"
+        confidence: 0.95
+      - pattern: "irregularly\\s+(spent|incurred|paid)"
+        confidence: 0.90
+      - pattern: "expenditure\\s+.{0,30}in\\s+violation"
+        confidence: 0.85
+    keywords: ["irregular"]
+    tier_allowed: [union, state, local_body]
+
+  loss_of_revenue:
+    patterns:
+      - pattern: "loss\\s+of\\s+revenue"
+        confidence: 0.95
+      - pattern: "short\\s+(levy|collection|realization)"
+        confidence: 0.90
+      - pattern: "non[\\s-]?levy"
+        confidence: 0.85
+      - pattern: "escaped\\s+assessment"
+        confidence: 0.90
+      - pattern: "under[\\s-]?assessment"
+        confidence: 0.85
+    keywords: ["loss", "under-assessment", "under assessment", "under-recovery", "under recovery", "non-deduction", "non deduction", "non-imposition", "non imposition"]
+    tier_allowed: [union, state, local_body]
+
+  wasteful_expenditure:
+    patterns:
+      - pattern: "wasteful\\s+expenditure"
+        confidence: 0.95
+      - pattern: "(avoidable|unwarranted|unjustified)\\s+expenditure"
+        confidence: 0.90
+      - pattern: "infructuous\\s+expenditure"
+        confidence: 0.95
+      - pattern: "blocking\\s+of\\s+funds"
+        confidence: 0.85
+    keywords: ["avoidable", "excess", "unwarranted", "unjustified", "infructuous", "extra expenditure", "overpayment"]
+    tier_allowed: [union, state, local_body]
+
+  non_compliance:
+    patterns:
+      - pattern: "non[\\s-]?compliance\\s+(?:with|of)"
+        confidence: 0.95
+      - pattern: "violation\\s+of\\s+(?:rules?|provisions?)"
+        confidence: 0.90
+      - pattern: "contrary\\s+to\\s+(?:rules?|provisions?|guidelines?)"
+        confidence: 0.85
+      - pattern: "contravention\\s+of"
+        confidence: 0.90
+    keywords: ["non-compliance", "non compliance", "noncompliance", "violation", "contravention", "not adhered", "contrary to", "in violation", "despite"]
+    tier_allowed: [union, state, local_body]
+
+  system_deficiency:
+    patterns:
+      - pattern: "(weak|inadequate|deficient)\\s+(internal\\s+)?control"
+        confidence: 0.85
+      - pattern: "absence\\s+of\\s+(mechanism|system|procedure)"
+        confidence: 0.80
+      - pattern: "lack\\s+of\\s+(monitoring|oversight|supervision)"
+        confidence: 0.80
+    keywords: ["deficient", "inadequate", "not established", "not functioning", "without adequate"]
+    tier_allowed: [union, state, local_body]
+
+  performance_shortfall:
+    patterns:
+      - pattern: "target\\s+(?:not|were\\s+not)\\s+(?:achieved|met)"
+        confidence: 0.90
+      - pattern: "shortfall\\s+(?:in|of)\\s+(?:achievement|target)"
+        confidence: 0.90
+      - pattern: "utilization\\s+(?:was|were)\\s+(?:only|merely)"
+        confidence: 0.80
+    keywords: ["shortfall", "failed", "not done", "resulted in", "led to", "delayed", "inordinate delay", "short"]
+    tier_allowed: [union, state, local_body]
+
+  procedural_lapse:
+    patterns:
+      - pattern: "without\\s+(proper|required|necessary)\\s+(?:approval|sanction)"
+        confidence: 0.90
+      - pattern: "procedural\\s+(lapse|irregularity)"
+        confidence: 0.95
+      - pattern: "records?\\s+(?:were|was)\\s+not\\s+(?:maintained|available)"
+        confidence: 0.85
+    keywords: ["without proper"]
+    tier_allowed: [union, state, local_body]
+
+  fraud_misappropriation:
+    patterns:
+      - pattern: "fraud|embezzlement|misappropriation"
+        confidence: 0.95
+      - pattern: "fictitious\\s+(?:bills?|vouchers?|claims?)"
+        confidence: 0.95
+      - pattern: "misuse\\s+of\\s+(?:funds?|resources?)"
+        confidence: 0.85
+    keywords: ["misuse", "undue benefit"]
+    tier_allowed: [union, state, local_body]
+
+  idle_assets:
+    patterns:
+      - pattern: "(idle|lying\\s+idle|unutilized)\\s+(?:assets?|equipment|machinery)"
+        confidence: 0.90
+      - pattern: "(?:equipment|machinery)\\s+.{0,20}(?:not\\s+(?:in\\s+use|operational)|lying\\s+idle)"
+        confidence: 0.85
+    keywords: ["not operational"]
+    tier_allowed: [state, local_body]
+
+  non_realization_of_dues:
+    patterns:
+      - pattern: "non[\\s-]?realiz?ation\\s+of\\s+(?:dues|revenue|rent)"
+        confidence: 0.95
+      - pattern: "(outstanding|unrealized|unrecovered)\\s+dues"
+        confidence: 0.90
+      - pattern: "arrears\\s+(?:of\\s+revenue|amounting)"
+        confidence: 0.85
+    keywords: ["not recovered", "not collected", "pending", "outstanding", "non-realization", "non realization"]
+    tier_allowed: [union, state, local_body]
+
+  incomplete_infrastructure:
+    patterns:
+      - pattern: "work\\s+(?:was|were)\\s+(?:incomplete|abandoned|stopped)"
+        confidence: 0.90
+      - pattern: "(?:project|construction)\\s+.{0,20}(?:incomplete|abandoned)"
+        confidence: 0.85
+      - pattern: "(?:time|cost)\\s+overrun"
+        confidence: 0.80
+    keywords: []
+    tier_allowed: [union, state, local_body]
+
+  accounting_irregularity:
+    patterns:
+      - pattern: "(?:accounting|accounts)\\s+(?:irregularity|irregularities)"
+        confidence: 0.95
+      - pattern: "misstatement\\s+(?:of|in)\\s+(?:accounts?|financial)"
+        confidence: 0.90
+      - pattern: "unreconciled\\s+(?:balances?|differences?)"
+        confidence: 0.85
+    keywords: ["not maintained", "not prepared", "irregularity", "discrepancy"]
+    tier_allowed: [union, state, local_body]
+
+  fund_utilization_failure:
+    patterns:
+      - pattern: "funds?\\s+(?:remained|lying)\\s+(?:unspent|unutilized)"
+        confidence: 0.90
+      - pattern: "(?:low|poor)\\s+utiliz?ation\\s+of\\s+funds?"
+        confidence: 0.85
+      - pattern: "diversion\\s+of\\s+funds?"
+        confidence: 0.90
+    keywords: ["not utilized", "unspent", "unutilized", "diversion", "lapsed"]
+    tier_allowed: [union, state, local_body]
+
+# ═══════════════════════════════════════════════════════════════════════
+# NON-FINDING REJECTION PATTERNS
+# ═══════════════════════════════════════════════════════════════════════
+# Patterns that indicate text is NOT a finding (statistical data, citations, etc.)
+
+non_finding_patterns:
+  # Statistical/Reference patterns
+  - pattern: "^\\s*Brief\\s+Snapshot\\b"
+    reason: "Statistical summary header"
+  - pattern: "^\\s*Table\\s+[\\d.]+[\\s:]+"
+    reason: "Table reference"
+  - pattern: "^\\s*(?:Figure|Chart|Graph)\\s+[\\d.]+"
+    reason: "Figure/chart reference"
+  - pattern: "^\\s*(?:Source|Note|Reference)\\s*:"
+    reason: "Source attribution"
+  - pattern: "^\\s*\\(Paragraph\\s+[\\d.]+"
+    reason: "Paragraph citation"
+  - pattern: "^\\s*\\*\\s*(?:Figures|Data|Information)"
+    reason: "Footnote/asterisk note"
+
+  # Document structure patterns
+  - pattern: "^\\s*Chapter\\s+[IVX\\d]+"
+    reason: "Chapter header"
+  - pattern: "^\\s*Annexure\\s+[A-Z\\d]"
+    reason: "Annexure reference"
+  - pattern: "^\\s*(?:Audit|CAG)\\s+(?:Report|Certificate)"
+    reason: "Report title/header"
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION CLASSIFICATION PATTERNS
+# ═══════════════════════════════════════════════════════════════════════
+# Patterns for classifying document sections by semantic type.
+# Used by SectionClassifier.
+
+section_patterns:
+  executive_summary:
+    patterns:
+      - "^executive\\s+summary"
+      - "^highlights"
+      - "^overview"
+      - "^key\\s+findings"
+    confidence: 0.9
+
+  introduction:
+    patterns:
+      - "^introduction"
+      - "^chapter\\s+[i1][\\s:]+introduction"
+      - "^background"
+    confidence: 0.9
+
+  audit_objectives:
+    patterns:
+      - "audit\\s+objective"
+      - "objective(?:s)?\\s+of\\s+(?:the\\s+)?audit"
+    confidence: 0.9
+
+  audit_scope:
+    patterns:
+      - "scope\\s+of\\s+audit"
+      - "audit\\s+scope"
+      - "scope\\s+and\\s+coverage"
+    confidence: 0.9
+
+  findings:
+    patterns:
+      - "audit\\s+findings"
+      - "detailed\\s+findings"
+      - "chapter\\s+[iIvV234]+[\\s:]+audit\\s+findings"
+      - "observations"
+    confidence: 0.9
+
+  recommendations:
+    patterns:
+      - "^recommendations"
+      - "audit\\s+recommendations"
+      - "summary\\s+of\\s+recommendations"
+    confidence: 0.9
+
+  conclusion:
+    patterns:
+      - "^conclusion"
+      - "^concluding\\s+remarks"
+      - "^summary\\s+and\\s+conclusion"
+    confidence: 0.9
+
+  annexure:
+    patterns:
+      - "^annexure"
+      - "^appendix"
+      - "^annex\\s+"
+    confidence: 0.9
+
+  # P0-09: Expanded section types for State/Local reports
+  financial_management:
+    patterns:
+      - "financial\\s+management"
+      - "fund\\s+(?:management|utilization|utili[sz]ation)"
+      - "budgetary\\s+(?:control|management)"
+    confidence: 0.85
+
+  monitoring_evaluation:
+    patterns:
+      - "monitoring\\s+(?:and\\s+)?(?:evaluation|review)"
+      - "oversight\\s+(?:mechanism|system|framework)"
+      - "internal\\s+(?:audit|control)"
+    confidence: 0.85
+
+# ═══════════════════════════════════════════════════════════════════════
+# ENTITY ALIASES
+# ═══════════════════════════════════════════════════════════════════════
+# Maps common abbreviations/variants to canonical entity names.
+# Used for entity normalization (P2-A future enhancement).
+
+entity_aliases:
+  ministries:
+    "Ministry of Finance":
+      - "MoF"
+      - "Finance Ministry"
+      - "Department of Economic Affairs"
+      - "DEA"
+    "Ministry of Railways":
+      - "MoR"
+      - "Railway Ministry"
+      - "Railways"
+    "Ministry of Road Transport and Highways":
+      - "MoRTH"
+      - "Road Transport Ministry"
+    "Ministry of Defence":
+      - "MoD"
+      - "Defence Ministry"
+    "Ministry of Health and Family Welfare":
+      - "MoHFW"
+      - "Health Ministry"
+    "Ministry of Agriculture":
+      - "MoA"
+      - "Agriculture Ministry"
+
+  organizations:
+    "National Highway Authority of India":
+      - "NHAI"
+      - "National Highways Authority"
+    "Food Corporation of India":
+      - "FCI"
+    "Central Board of Direct Taxes":
+      - "CBDT"
+    "Airports Authority of India":
+      - "AAI"
+    "Indian Railways":
+      - "Railways"
+      - "Railway Board"
+
+# ═══════════════════════════════════════════════════════════════════════
+# TEMPORAL PATTERNS
+# ═══════════════════════════════════════════════════════════════════════
+# Year bounds for temporal extraction validation.
+
+temporal:
+  min_valid_year: 2000
+  max_valid_year: 2035  # Updated from 2030 for future-proofing
+  fiscal_year_pattern: "(\\d{4})[-–—](\\d{2,4})"
+
+# ═══════════════════════════════════════════════════════════════════════
+# CONFIDENCE THRESHOLDS
+# ═══════════════════════════════════════════════════════════════════════
+# P1-C: Thresholds for low-confidence extraction flagging.
+
+confidence_thresholds:
+  section_classification: 0.5  # Below this, classify as "other"
+  finding_extraction: 0.5      # Minimum to accept as finding (raised from 0.4)
+  llm_validation_lower: 0.5    # Send to LLM if confidence >= this (raised from 0.4)
+  llm_validation_upper: 0.7    # Don't send to LLM if confidence >= this
+
+# LLM Validation Configuration
+llm_validation:
+  enabled: true
+  model: "gpt-4o-mini"
+  collect_refinement_data: true  # Log invalid findings for pattern refinement
+  refinement_data_path: "logs/pattern_refinement/"
