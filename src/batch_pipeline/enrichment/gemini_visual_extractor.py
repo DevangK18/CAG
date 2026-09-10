@@ -225,7 +225,7 @@ class GeminiVisualExtractor:
 
     def __init__(
         self,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.5-flash",  # Updated for GCP credit billing
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
         images_dir: str = "data/extraction_images",

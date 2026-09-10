@@ -12,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Pricing per million tokens (as of Q1 2025)
+# Pricing per million tokens (as of Q3 2026)
 # Format: (provider, model) -> {"prompt": rate, "completion": rate}
 PRICING: dict[Tuple[str, str], dict[str, float]] = {
     # OpenAI
@@ -27,11 +27,15 @@ PRICING: dict[Tuple[str, str], dict[str, float]] = {
     ("anthropic", "claude-3-5-sonnet-20241022"): {"prompt": 3.00, "completion": 15.00},
     ("anthropic", "claude-haiku-4-5-20251001"): {"prompt": 1.00, "completion": 5.00},
     ("anthropic", "claude-3-5-haiku-20241022"): {"prompt": 1.00, "completion": 5.00},
-    # Google Gemini
+    # Google Gemini - Latest models (GCP credit billing)
+    ("google", "gemini-3.6-flash"): {"prompt": 1.50, "completion": 7.50},
+    ("google", "gemini-3.5-flash"): {"prompt": 0.50, "completion": 3.00},
+    ("google", "gemini-3.5-flash-lite"): {"prompt": 0.30, "completion": 2.50},
+    ("google", "gemini-3.1-pro-preview"): {"prompt": 2.00, "completion": 12.00},
+    # Google Gemini - Legacy models
     ("google", "gemini-2.5-pro"): {"prompt": 1.25, "completion": 10.00},
     ("google", "gemini-2.5-flash"): {"prompt": 0.075, "completion": 0.30},
-    ("google", "gemini-3.6-flash"): {"prompt": 0.75, "completion": 3.75},  # Introductory pricing through Dec 2026
-    ("google", "gemini-2.0-flash"): {"prompt": 0.10, "completion": 0.40},  # Deprecated
+    ("google", "gemini-2.0-flash"): {"prompt": 0.10, "completion": 0.40},  # Deprecated June 2026
     ("google", "gemini-1.5-pro"): {"prompt": 1.25, "completion": 5.00},
     ("google", "gemini-1.5-flash"): {"prompt": 0.075, "completion": 0.30},
     # Cohere (for reranking cost tracking - per 1k searches, not tokens)
@@ -41,9 +45,13 @@ PRICING: dict[Tuple[str, str], dict[str, float]] = {
 
 # Embedding costs (per million tokens)
 EMBEDDING_PRICING: dict[Tuple[str, str], float] = {
+    # OpenAI embeddings
     ("openai", "text-embedding-3-large"): 0.13,
     ("openai", "text-embedding-3-small"): 0.02,
     ("openai", "text-embedding-ada-002"): 0.10,
+    # Vertex AI embeddings (GCP credit billing - 20x cheaper)
+    ("google", "text-embedding-005"): 0.00625,
+    ("google", "text-embedding-004"): 0.00625,
 }
 
 # Cohere rerank cost: $1 per 1000 searches

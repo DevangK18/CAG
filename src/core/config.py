@@ -145,12 +145,13 @@ class LLMConfig:
 
     def __post_init__(self):
         # Load provider from environment or use default
+        # Default to Gemini for GCP credit billing
         if self.provider is None:
-            provider_str = os.getenv("LLM_PROVIDER", "openai").lower()
+            provider_str = os.getenv("LLM_PROVIDER", "gemini").lower()
             try:
                 self.provider = LLMProvider(provider_str)
             except ValueError:
-                self.provider = LLMProvider.OPENAI
+                self.provider = LLMProvider.GEMINI
 
         # Load models from environment or use defaults
         if self.claude_model is None:
@@ -160,7 +161,7 @@ class LLMConfig:
         if self.openai_model is None:
             self.openai_model = os.getenv("LLM_OPENAI_MODEL", "gpt-4o")
         if self.gemini_model is None:
-            self.gemini_model = os.getenv("LLM_GEMINI_MODEL", "gemini-2.5-flash")
+            self.gemini_model = os.getenv("LLM_GEMINI_MODEL", "gemini-3.5-flash")
 
 
 @dataclass
@@ -174,9 +175,10 @@ class QueryEnhancementConfig:
     enable_sufficiency_check: bool = True
 
     # Provider and model (shared single call)
-    provider: LLMProvider = LLMProvider.OPENAI  # OpenAI or Gemini supported
-    model: str = "gpt-4o-mini"  # OpenAI model
-    gemini_model: str = "gemini-2.5-flash"  # Gemini model
+    # Default to Gemini for GCP credit billing
+    provider: LLMProvider = LLMProvider.GEMINI
+    model: str = "gemini-3.5-flash-lite"  # Gemini model (cost-effective)
+    gemini_model: str = "gemini-3.5-flash-lite"  # Gemini model
     max_tokens: int = 300
     temperature: float = 0.0
 
@@ -202,11 +204,11 @@ class GroundednessConfig:
     )
 
     # Provider selection (independent of main LLM)
-    # Default to Gemini for speed + cost
+    # Default to Gemini for speed + cost + GCP credit billing
     provider: LLMProvider = LLMProvider.GEMINI
     openai_model: str = "gpt-4o-mini"
     claude_model: str = "claude-haiku-4-5-20251001"
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"  # Updated from deprecated 2.0-flash
 
     max_tokens: int = 1500
     min_groundedness_score: float = 0.75  # Fraction of claims that must be grounded
@@ -218,8 +220,8 @@ class AgenticConfig:
 
     enabled: bool = True  # OFF by default; exposed via /chat/agentic endpoint
 
-    # Planner (query decomposer) upgraded to gpt-4o for better query understanding
-    planner_model: str = "gpt-4o"  # OpenAI only for now
+    # Planner (query decomposer) - Gemini for GCP credit billing
+    planner_model: str = "gemini-3.5-flash"  # Gemini for GCP billing
 
     # Loop bounds
     max_sub_queries: int = 4
@@ -264,8 +266,8 @@ class EntityGraphConfig:
             "ENTITY_GRAPH_DSN not set. Required for entity graph operations."
         )
 
-    # Canonicalization model (cross-corpus dedup)
-    canonicalization_model: str = "gpt-4o-mini"
+    # Canonicalization model (cross-corpus dedup) - Gemini for GCP billing
+    canonicalization_model: str = "gemini-3.5-flash-lite"
     canonicalization_batch_size: int = 80  # entities per LLM call
 
     # Auto-index on chunk indexing? If True, indexer.py also writes to entity graph
@@ -281,7 +283,7 @@ class EntityGraphConfig:
     # Only triggers pass 2 if raw record count exceeds this threshold
     two_pass_threshold: int = 1000
     pass2_batch_size: int = 250
-    pass2_model: str = "gpt-4o-mini"
+    pass2_model: str = "gemini-3.5-flash-lite"  # Gemini for GCP billing
 
     def __post_init__(self):
         self.dsn = os.getenv("ENTITY_GRAPH_DSN", self.dsn)
@@ -359,9 +361,9 @@ class HierarchicalConfig:
 
     enabled: bool = True
 
-    # Models for summary generation (cost-efficient Haiku)
-    chapter_model: str = "claude-haiku-4-5-20251001"
-    section_model: str = "claude-haiku-4-5-20251001"
+    # Models for summary generation - Gemini for GCP credit billing
+    chapter_model: str = "gemini-3.5-flash-lite"
+    section_model: str = "gemini-3.5-flash-lite"
 
     # Max tokens for summaries
     chapter_max_tokens: int = 500  # 3-5 sentences
@@ -389,8 +391,8 @@ class QueryRoutingConfig:
 
     enabled: bool = True
 
-    # Classification model
-    model: str = "gpt-4o-mini"
+    # Classification model - Gemini for GCP credit billing
+    model: str = "gemini-3.5-flash-lite"
     max_tokens: int = 200
     temperature: float = 0.0
 
@@ -440,9 +442,9 @@ class CorrectiveRAGConfig:
     min_relevance_score: float = 0.25
     min_relevant_chunks: int = 3
 
-    # Query reformulation
+    # Query reformulation - Gemini for GCP credit billing
     max_reformulations: int = 2
-    reformulation_model: str = "gpt-4o-mini"
+    reformulation_model: str = "gemini-3.5-flash-lite"
 
     # Citation validation
     validate_citations: bool = True
@@ -501,8 +503,10 @@ class RAGConfig:
         """Validate configuration and return list of errors."""
         errors = []
 
-        if not self.openai_api_key:
-            errors.append("OPENAI_API_KEY not set (required for embeddings)")
+        # Check embedding requirements based on Vertex AI settings
+        use_vertex_embeddings = os.getenv("USE_VERTEX_EMBEDDINGS", "false").lower() == "true"
+        if not use_vertex_embeddings and not self.openai_api_key:
+            errors.append("OPENAI_API_KEY not set (required for OpenAI embeddings). Set USE_VERTEX_EMBEDDINGS=true to use Vertex AI instead.")
 
         if self.llm.provider == LLMProvider.CLAUDE and not self.anthropic_api_key:
             errors.append("ANTHROPIC_API_KEY not set (required for Claude)")

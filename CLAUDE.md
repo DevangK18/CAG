@@ -14,7 +14,7 @@ All backend systems implemented, tested, and verified:
 |-----------|--------|-------|
 | Parsing Pipeline | ✅ Complete | 188 tests (P0) + 113 tests (P1) + 64 tests (P2) |
 | RAG Pipeline | ✅ Complete | Hybrid search, reranking, agentic RAG |
-| Embedding Service | ✅ Complete | OpenAI text-embedding-3-small |
+| Embedding Service | ✅ Complete | Vertex AI text-embedding-005 (GCP) |
 | API Layer | ✅ Complete | 48 endpoints, full backend value exposed |
 
 **Metrics:** 97% TOC accuracy, 95% citation match rate, 300+ tests passing.
@@ -25,7 +25,7 @@ All backend systems implemented, tested, and verified:
 src/
 ├── parsing_pipeline/   # 10-phase PDF→JSON pipeline
 ├── rag_pipeline/       # Hybrid search, Qdrant, reranking
-├── batch_pipeline/     # Claude Batch API, Gemini visual
+├── batch_pipeline/     # Gemini batch processing (GCP), Claude fallback
 ├── api/                # FastAPI REST + SSE streaming
 └── core/               # Config, data contracts
 
@@ -53,35 +53,51 @@ pytest --cov=src
 
 ## Configuration
 
-### Standard Mode (Direct API Keys)
+### Google-Native Mode (Default - GCP Credit Billing)
+All AI operations use Google Gemini models on Vertex AI for GCP credit billing:
 ```bash
-OPENAI_API_KEY=...        # Embeddings (required)
-ANTHROPIC_API_KEY=...     # Claude for batch summaries
-COHERE_API_KEY=...        # Reranking
-GOOGLE_API_KEY=...        # Gemini for visual extraction
+# GCP Configuration (required)
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_API_KEY=...              # For Gemini API access
+VERTEX_AI_REGION=us-central1    # Optional, defaults to us-central1
+
+# Enable Vertex AI Embeddings (optional, 20x cheaper than OpenAI)
+USE_VERTEX_EMBEDDINGS=true      # Use Vertex AI text-embedding-005
+
+# Reranking (external service, kept for quality)
+COHERE_API_KEY=...              # Reranking (not migrated to Google)
+
+# Qdrant
 QDRANT_URL=http://localhost:6333
 ```
 
-### Google Cloud Mode (Vertex AI)
-Route all LLM calls through GCP to use cloud credits:
+**Default Gemini Models:**
+| Component | Model | Cost per 1M tokens |
+|-----------|-------|-------------------|
+| Chat/RAG | gemini-3.5-flash | $0.50/$3.00 |
+| Query Enhancement | gemini-3.5-flash-lite | $0.30/$2.50 |
+| Batch Summaries | gemini-3.5-flash | $0.50/$3.00 |
+| TOC Validation | gemini-3.6-flash | $1.50/$7.50 |
+| Visual Extraction | gemini-3.5-flash | $0.50/$3.00 |
+| Embeddings | text-embedding-005 | $0.00625 |
+
+**Estimated Cost for 700 Reports:** ~$150 (leaves ~$150 for embeddings + chat)
+
+### Claude Batch Mode (Optional)
+Set `USE_CLAUDE_BATCH=true` to use Claude Batch API with Extended Thinking:
 ```bash
-# Enable Vertex AI routing
-USE_VERTEX_AI=true              # Route Claude through Vertex AI Model Garden
-USE_VERTEX_EMBEDDINGS=true      # Use Vertex AI text-embedding-005
-
-# GCP Configuration
-GOOGLE_CLOUD_PROJECT=your-project-id
-VERTEX_AI_REGION=us-central1    # or europe-west4, asia-northeast1
-
-# Still needed (for services not yet on Vertex AI)
-COHERE_API_KEY=...              # Reranking
-GOOGLE_API_KEY=...              # Gemini parsing pipeline
-OPENAI_API_KEY=...              # QueryEnhancer fallback
+USE_CLAUDE_BATCH=true           # Use Claude for batch summaries
+ANTHROPIC_API_KEY=...           # Required for Claude
 ```
 
-**Cost Comparison (Vertex AI vs Direct):**
-- Claude: Same pricing, consolidated GCP billing
-- Embeddings: $0.00625/1M tokens (Vertex) vs $0.13/1M (OpenAI) = **20x cheaper**
+### Legacy Mode (Direct API Keys)
+For backwards compatibility or A/B testing:
+```bash
+# Override LLM provider
+LLM_PROVIDER=openai             # or "claude", "gemini" (default)
+OPENAI_API_KEY=...              # Required if provider=openai
+ANTHROPIC_API_KEY=...           # Required if provider=claude
+```
 
 ## Multi-Tier Architecture
 

@@ -2,8 +2,11 @@
 Cross-corpus canonicalization (Phase 12).
 
 Reads per-report `normalized_entities` from each *_overview_llm.json,
-batches them through gpt-4o-mini, and produces a global canonical
+batches them through LLM, and produces a global canonical
 entity dictionary loaded into Postgres.
+
+Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+Set model parameter to use OpenAI models instead.
 
 Run via:
     python -m src.entity_graph.cli canonicalize --overviews-dir data/batch_jobs/overviews
@@ -16,12 +19,20 @@ from pathlib import Path
 from typing import Dict, List, Set, Optional, Any, Tuple
 from collections import defaultdict
 
-from openai import OpenAI
-
 from .db import session_scope, init_db
 from .models import Entity
 
 logger = logging.getLogger(__name__)
+
+
+def _get_llm_client(model: str):
+    """Get appropriate LLM client based on model name."""
+    if model.startswith("gemini-"):
+        from google import genai
+        return genai.Client(), "gemini"
+    else:
+        from openai import OpenAI
+        return OpenAI(), "openai"
 
 
 # =============================================================================
@@ -371,8 +382,8 @@ def collapse_buckets(buckets: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str,
 # LLM cross-bucket canonicalization
 # =============================================================================
 
-def _stream_json_response(
-    client: OpenAI,
+def _stream_json_response_openai(
+    client,
     model: str,
     messages: List[Dict[str, str]],
     max_tokens: int,
@@ -418,6 +429,97 @@ def _stream_json_response(
         return None, False
 
 
+def _json_response_gemini(
+    client,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    temperature: float = 0.0,
+) -> Tuple[Optional[Dict[str, Any]], bool]:
+    """
+    Get JSON response from Gemini.
+
+    Returns:
+        (parsed_json, was_truncated)
+    """
+    from google.genai import types
+
+    try:
+        combined_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}\n\nRespond with ONLY valid JSON."
+
+        response = client.models.generate_content(
+            model=model,
+            contents=[types.Part.from_text(text=combined_prompt)],
+            config=types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                response_mime_type="application/json",
+            ),
+        )
+
+        content = response.text.strip()
+
+        # Check for truncation (Gemini uses finish_reason differently)
+        was_truncated = False
+        if hasattr(response, 'candidates') and response.candidates:
+            finish_reason = getattr(response.candidates[0], 'finish_reason', None)
+            was_truncated = finish_reason == "MAX_TOKENS"
+
+        # Try to parse JSON
+        parsed = json.loads(content)
+        return parsed, was_truncated
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON decode error (Gemini): {e}")
+        return None, True
+    except Exception as e:
+        logger.warning(f"Gemini error: {e}")
+        return None, False
+
+
+def _stream_json_response(
+    client,
+    model: str,
+    messages: List[Dict[str, str]],
+    max_tokens: int,
+    temperature: float = 0.0,
+    client_type: str = "openai",
+) -> Tuple[Optional[Dict[str, Any]], bool]:
+    """
+    Get JSON response from LLM (auto-detects client type).
+
+    Returns:
+        (parsed_json, was_truncated)
+    """
+    if client_type == "gemini" or model.startswith("gemini-"):
+        # Extract system and user prompts from messages
+        system_prompt = ""
+        user_prompt = ""
+        for msg in messages:
+            if msg["role"] == "system":
+                system_prompt = msg["content"]
+            elif msg["role"] == "user":
+                user_prompt = msg["content"]
+
+        return _json_response_gemini(
+            client=client,
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+    else:
+        return _stream_json_response_openai(
+            client=client,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+
 def _local_passthrough_conversion(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Local fallback: convert input records to canonical format without LLM.
@@ -450,7 +552,7 @@ def _local_passthrough_conversion(records: List[Dict[str, Any]]) -> List[Dict[st
 
 def canonicalize_via_llm(
     consolidated: List[Dict[str, Any]],
-    model: str = "gpt-4o-mini",
+    model: str = "gemini-3.5-flash-lite",
     batch_size: int = 40,
 ) -> List[Dict[str, Any]]:
     """
@@ -458,6 +560,8 @@ def canonicalize_via_llm(
 
     Within a single batch, the LLM merges 'NHAI' and 'National Highways Authority of India'
     even if they ended up in different buckets (because of casing/spelling).
+
+    Default: Gemini 3.5 Flash-Lite for GCP credit billing.
 
     Features:
     - Streaming JSON parsing with truncation detection
@@ -467,7 +571,7 @@ def canonicalize_via_llm(
 
     Returns canonical entities ready to load into Postgres.
     """
-    client = OpenAI()
+    client, client_type = _get_llm_client(model)
     canonical: List[Dict[str, Any]] = []
     dropped_entities: List[Dict[str, Any]] = []  # Track dropped entities
 
@@ -515,6 +619,7 @@ def canonicalize_via_llm(
                     messages=messages,
                     max_tokens=current_max_tokens,
                     temperature=current_temperature,
+                    client_type=client_type,
                 )
 
                 if parsed:
@@ -546,6 +651,7 @@ def canonicalize_via_llm(
                                 messages=fallback_messages,
                                 max_tokens=current_max_tokens,
                                 temperature=0.2,
+                                client_type=client_type,
                             )
 
                             if fallback_parsed and isinstance(fallback_parsed, dict):
@@ -878,11 +984,13 @@ def _apply_pass2_merges(
 
 def pass2_dedup_via_llm(
     canonicals: List[Dict[str, Any]],
-    model: str = "gpt-4o-mini",
+    model: str = "gemini-3.5-flash-lite",
     batch_size: int = 250,
 ) -> List[Dict[str, Any]]:
     """
     Second-pass LLM deduplication for large corpora.
+
+    Default: Gemini 3.5 Flash-Lite for GCP credit billing.
 
     Sorts entities by (entity_type, primary_tier, canonical_name) to group
     similar entities together, then batches through LLM for conservative
@@ -890,7 +998,7 @@ def pass2_dedup_via_llm(
 
     Returns deduplicated canonical list.
     """
-    client = OpenAI()
+    client, client_type = _get_llm_client(model)
 
     # Sort for better LLM context: similar entities together
     sorted_canonicals = sorted(
@@ -942,6 +1050,7 @@ def pass2_dedup_via_llm(
                 messages=messages,
                 max_tokens=4000,
                 temperature=0.0,
+                client_type=client_type,
             )
 
             if parsed:
@@ -1021,11 +1130,11 @@ def load_canonical_to_db(canonical_entities: List[Dict[str, Any]]) -> int:
 def canonicalize_all(
     overviews_dir: Path,
     output_path: Optional[Path] = None,
-    model: str = "gpt-4o-mini",
+    model: str = "gemini-3.5-flash-lite",
     batch_size: int = 40,
     two_pass_threshold: int = 1000,
     pass2_batch_size: int = 250,
-    pass2_model: str = "gpt-4o-mini",
+    pass2_model: str = "gemini-3.5-flash-lite",
 ) -> List[Dict[str, Any]]:
     """
     End-to-end canonicalization pipeline.

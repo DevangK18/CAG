@@ -1,0 +1,159 @@
+# =============================================================================
+# Run Parsing Pipeline
+# =============================================================================
+# Manually triggered workflow to run the parsing pipeline on GCP.
+# Starts the parsing VM, runs the pipeline, and uploads results to GCS.
+
+name: Run Parsing Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: 'Manifest file name (in gs://bucket/manifests/)'
+        required: true
+        default: 'CAG_Union_Reports.xlsx'
+        type: string
+      skip_phases:
+        description: 'Phases to skip (comma-separated, e.g., 10a,10b,10c)'
+        required: false
+        type: string
+        default: ''
+      reports:
+        description: 'Specific report IDs (space-separated, leave empty for all)'
+        required: false
+        type: string
+        default: ''
+      keep_vm_running:
+        description: 'Keep VM running after completion (for debugging)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  ZONE: us-central1-a
+  VM_NAME: cag-parsing-vm
+
+jobs:
+  run-parsing:
+    name: Run Parsing Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Start Parsing VM
+        run: |
+          echo "Starting VM: ${{ env.VM_NAME }}"
+          gcloud compute instances start ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} || true
+
+          echo "Waiting for VM to be ready..."
+          sleep 60
+
+      - name: Wait for VM SSH
+        run: |
+          for i in {1..10}; do
+            if gcloud compute ssh ${{ env.VM_NAME }} \
+              --zone=${{ env.ZONE }} \
+              --project=${{ env.PROJECT_ID }} \
+              --command="echo 'VM is ready'" 2>/dev/null; then
+              echo "VM SSH is ready"
+              exit 0
+            fi
+            echo "Attempt $i: waiting for SSH..."
+            sleep 30
+          done
+          echo "Failed to connect to VM"
+          exit 1
+
+      - name: Run Parsing Pipeline
+        run: |
+          # Build the command
+          SKIP_PHASES="${{ inputs.skip_phases }}"
+          REPORTS="${{ inputs.reports }}"
+
+          SKIP_ARG=""
+          if [ -n "$SKIP_PHASES" ]; then
+            SKIP_ARG="--skip $SKIP_PHASES"
+          fi
+
+          REPORTS_ARG=""
+          if [ -n "$REPORTS" ]; then
+            REPORTS_ARG="--reports $REPORTS"
+          fi
+
+          echo "Running parsing pipeline..."
+          echo "  Manifest: ${{ inputs.manifest }}"
+          echo "  Skip phases: $SKIP_PHASES"
+          echo "  Reports: $REPORTS"
+
+          # Run on VM
+          gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command="
+              set -e
+              cd /app
+
+              # Get bucket name from metadata
+              export DATA_BUCKET=\$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/attributes/DATA_BUCKET -H 'Metadata-Flavor: Google' || echo 'cag-data-${{ env.PROJECT_ID }}')
+
+              # Download manifest from GCS
+              echo 'Downloading manifest...'
+              gsutil cp gs://\${DATA_BUCKET}/manifests/${{ inputs.manifest }} ./manifest.xlsx
+
+              # Pull latest parsing image
+              echo 'Pulling latest parsing image...'
+              docker pull us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing:latest || true
+
+              # Run parsing pipeline
+              echo 'Starting parsing pipeline...'
+              docker run --rm \
+                -v /app/data:/app/data \
+                -v /app/manifest.xlsx:/app/manifest.xlsx \
+                -e DATA_BUCKET=\${DATA_BUCKET} \
+                -e GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }} \
+                -e USE_VERTEX_AI=true \
+                -e USE_VERTEX_EMBEDDINGS=true \
+                -e LLM_PROVIDER=gemini \
+                us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing:latest \
+                manifest.xlsx $SKIP_ARG $REPORTS_ARG
+
+              # Upload results to GCS
+              echo 'Uploading results to GCS...'
+              gsutil -m rsync -r /app/data/processed gs://\${DATA_BUCKET}/processed/
+
+              echo 'Parsing pipeline complete!'
+            "
+
+      - name: Stop Parsing VM
+        if: ${{ !inputs.keep_vm_running && always() }}
+        run: |
+          echo "Stopping VM to save costs..."
+          gcloud compute instances stop ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} || true
+
+      - name: Summary
+        run: |
+          echo "## Parsing Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** ${{ inputs.manifest }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Skipped Phases:** ${{ inputs.skip_phases || 'None' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reports:** ${{ inputs.reports || 'All' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**VM Kept Running:** ${{ inputs.keep_vm_running }}" >> $GITHUB_STEP_SUMMARY

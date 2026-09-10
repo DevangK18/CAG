@@ -224,6 +224,8 @@ class AgenticRAGService:
     Bridge C additions:
     - Query observability logging via QueryLogger
     - Sub-queries logged with parent_query_id linkage
+
+    Default: Gemini 3.5 Flash for GCP credit billing.
     """
 
     def __init__(self, rag_service: RAGService, config: Optional[AgenticConfig] = None):
@@ -234,6 +236,10 @@ class AgenticRAGService:
         self.openai = rag_service.openai
         self.anthropic = rag_service.anthropic
         self.gemini = rag_service.gemini
+        self._gemini_client = None  # Lazy-initialized for standalone Gemini calls
+
+        # Check if planner uses Gemini
+        self._use_gemini_planner = self.config.planner_model.startswith("gemini-")
 
         # Query logger (shared with RAG service)
         self.query_logger = getattr(rag_service, "query_logger", None)
@@ -469,6 +475,17 @@ class AgenticRAGService:
     # Decomposition
     # -------------------------------------------------------------------------
 
+    @property
+    def gemini_client(self):
+        """Lazy-initialize standalone Gemini client."""
+        if self._gemini_client is None:
+            try:
+                from google import genai
+                self._gemini_client = genai.Client()
+            except ImportError:
+                raise ImportError("Install google-genai: pip install google-genai")
+        return self._gemini_client
+
     def _decompose(
         self,
         question: str,
@@ -495,17 +512,10 @@ class AgenticRAGService:
                     f"({len(series_context.years_covered)} years)"
                 )
 
-            response = self.openai.chat.completions.create(
-                model=self.config.planner_model,
-                max_tokens=800,
-                temperature=0.0,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f'Question: "{question}"'},
-                ],
-                response_format={"type": "json_object"},
-            )
-            return json.loads(response.choices[0].message.content.strip())
+            if self._use_gemini_planner:
+                return self._decompose_with_gemini(question, system_prompt)
+            else:
+                return self._decompose_with_openai(question, system_prompt)
         except Exception as e:
             logger.warning(f"Decomposition failed: {e}; falling back to simple")
             return {
@@ -514,6 +524,37 @@ class AgenticRAGService:
                 "sub_queries": None,
                 "report_filter_hint": None,
             }
+
+    def _decompose_with_gemini(self, question: str, system_prompt: str) -> Dict[str, Any]:
+        """Use Gemini for query decomposition (GCP credit billing)."""
+        from google.genai import types
+
+        combined_prompt = f"{system_prompt}\n\n---\n\nQuestion: \"{question}\"\n\nRespond with ONLY valid JSON."
+
+        response = self.gemini_client.models.generate_content(
+            model=self.config.planner_model,
+            contents=[types.Part.from_text(text=combined_prompt)],
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=800,
+                response_mime_type="application/json",
+            ),
+        )
+        return json.loads(response.text.strip())
+
+    def _decompose_with_openai(self, question: str, system_prompt: str) -> Dict[str, Any]:
+        """Use OpenAI for query decomposition (fallback)."""
+        response = self.openai.chat.completions.create(
+            model=self.config.planner_model,
+            max_tokens=800,
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f'Question: "{question}"'},
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(response.choices[0].message.content.strip())
 
     # -------------------------------------------------------------------------
     # Sub-query loop
@@ -603,6 +644,31 @@ Reason for failure: sufficiency score below threshold.
 
 Generate a reformulation."""
 
+        if self._use_gemini_planner:
+            return self._reformulate_with_gemini(user_prompt)
+        else:
+            return self._reformulate_with_openai(user_prompt)
+
+    def _reformulate_with_gemini(self, user_prompt: str) -> str:
+        """Use Gemini for reformulation (GCP credit billing)."""
+        from google.genai import types
+
+        combined_prompt = f"{REFORMULATION_SYSTEM_PROMPT}\n\n---\n\n{user_prompt}\n\nRespond with ONLY valid JSON."
+
+        response = self.gemini_client.models.generate_content(
+            model=self.config.planner_model,
+            contents=[types.Part.from_text(text=combined_prompt)],
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=200,
+                response_mime_type="application/json",
+            ),
+        )
+        parsed = json.loads(response.text.strip())
+        return parsed.get("reformulation", "")
+
+    def _reformulate_with_openai(self, user_prompt: str) -> str:
+        """Use OpenAI for reformulation (fallback)."""
         response = self.openai.chat.completions.create(
             model=self.config.planner_model,
             max_tokens=200,
@@ -614,7 +680,7 @@ Generate a reformulation."""
             response_format={"type": "json_object"},
         )
         parsed = json.loads(response.choices[0].message.content.strip())
-        return parsed.get("reformulation", original_sub_query)
+        return parsed.get("reformulation", "")
 
     # -------------------------------------------------------------------------
     # Merge & synthesize

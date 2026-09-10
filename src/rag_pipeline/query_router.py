@@ -118,7 +118,7 @@ class QueryRouter:
     """
     Routes queries to optimal retrieval strategy.
 
-    Uses a lightweight LLM classifier (GPT-4o-mini) for intelligent routing,
+    Uses a lightweight LLM classifier (Gemini 3.5 Flash-Lite) for intelligent routing,
     with rule-based fallbacks for common patterns.
     """
 
@@ -129,6 +129,10 @@ class QueryRouter:
     ):
         self.config = config
         self.openai = openai_client
+        self._gemini_client = None  # Lazy-initialized
+
+        # Check if model is Gemini-based (use Gemini API)
+        self._use_gemini = self.config.model.startswith("gemini-")
 
         # Rule-based patterns for fast routing (no LLM call needed)
         self._temporal_patterns = [
@@ -198,9 +202,12 @@ class QueryRouter:
             return rule_result
 
         # Fall back to LLM routing
-        if self.openai:
+        if self._use_gemini or self.openai:
             try:
-                llm_result = self._route_by_llm(query)
+                if self._use_gemini:
+                    llm_result = self._route_by_gemini(query)
+                else:
+                    llm_result = self._route_by_llm(query)
                 if llm_result:
                     logger.info(f"LLM routing: {llm_result.route.value} ({llm_result.confidence:.2f})")
                     return llm_result
@@ -267,8 +274,53 @@ class QueryRouter:
 
         return None
 
+    @property
+    def gemini_client(self):
+        """Lazy-initialize Gemini client."""
+        if self._gemini_client is None:
+            try:
+                from google import genai
+                self._gemini_client = genai.Client()
+            except ImportError:
+                raise ImportError("Install google-genai: pip install google-genai")
+        return self._gemini_client
+
+    def _route_by_gemini(self, query: str) -> Optional[RoutingDecision]:
+        """Use Gemini for intelligent routing (GCP credit billing)."""
+        import json
+        from google.genai import types
+
+        combined_prompt = f"{ROUTING_PROMPT}\n\n---\n\nQuery: {query}\n\nRespond with ONLY valid JSON."
+
+        response = self.gemini_client.models.generate_content(
+            model=self.config.model,
+            contents=[types.Part.from_text(text=combined_prompt)],
+            config=types.GenerateContentConfig(
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+                response_mime_type="application/json",
+            ),
+        )
+
+        content = response.text.strip()
+        result = json.loads(content)
+
+        route_str = result.get("route", "standard_rag")
+        try:
+            route = QueryRoute(route_str)
+        except ValueError:
+            route = QueryRoute.STANDARD_RAG
+
+        return RoutingDecision(
+            route=route,
+            confidence=result.get("confidence", 0.7),
+            filters_suggested=result.get("filters", {}),
+            reasoning=result.get("reasoning", "Gemini classification"),
+            hierarchy_level=result.get("hierarchy_level"),
+        )
+
     def _route_by_llm(self, query: str) -> Optional[RoutingDecision]:
-        """Use LLM for intelligent routing."""
+        """Use OpenAI LLM for intelligent routing (fallback)."""
         import json
 
         response = self.openai.chat.completions.create(

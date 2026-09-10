@@ -174,6 +174,8 @@ class QueryReformulator:
     - Original query
     - What was retrieved (to avoid similar terms)
     - Domain knowledge of CAG terminology
+
+    Default: Gemini 3.5 Flash-Lite for GCP credit billing.
     """
 
     def __init__(
@@ -184,6 +186,19 @@ class QueryReformulator:
         self.config = config
         self.openai = openai_client
         self.model = config.reformulation_model
+        self._gemini_client = None  # Lazy-initialized
+        self._use_gemini = self.model.startswith("gemini-")
+
+    @property
+    def gemini_client(self):
+        """Lazy-initialize Gemini client."""
+        if self._gemini_client is None:
+            try:
+                from google import genai
+                self._gemini_client = genai.Client()
+            except ImportError:
+                raise ImportError("Install google-genai: pip install google-genai")
+        return self._gemini_client
 
     def reformulate(
         self,
@@ -200,8 +215,8 @@ class QueryReformulator:
         Returns:
             Reformulated query string
         """
-        # If no LLM, use rule-based reformulation
-        if not self.openai:
+        # If no LLM available, use rule-based reformulation
+        if not self._use_gemini and not self.openai:
             return self._rule_based_reformulation(original_query)
 
         # Build context hints from failed results
@@ -213,20 +228,41 @@ class QueryReformulator:
                 context_hints=context_hints,
             )
 
-            response = self.openai.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
-                temperature=0.7,  # Some creativity for alternatives
-            )
+            if self._use_gemini:
+                reformulated = self._reformulate_with_gemini(prompt)
+            else:
+                reformulated = self._reformulate_with_openai(prompt)
 
-            reformulated = response.choices[0].message.content.strip()
             logger.info(f"Query reformulated: '{original_query}' → '{reformulated}'")
             return reformulated
 
         except Exception as e:
             logger.warning(f"Query reformulation failed: {e}")
             return self._rule_based_reformulation(original_query)
+
+    def _reformulate_with_gemini(self, prompt: str) -> str:
+        """Use Gemini for query reformulation (GCP credit billing)."""
+        from google.genai import types
+
+        response = self.gemini_client.models.generate_content(
+            model=self.model,
+            contents=[types.Part.from_text(text=prompt)],
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=100,
+            ),
+        )
+        return response.text.strip()
+
+    def _reformulate_with_openai(self, prompt: str) -> str:
+        """Use OpenAI for query reformulation (fallback)."""
+        response = self.openai.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
 
     def _build_context_hints(self, results: RetrievalResult) -> str:
         """Build context hints from failed retrieval results."""

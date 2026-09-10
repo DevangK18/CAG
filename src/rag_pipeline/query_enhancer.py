@@ -7,8 +7,8 @@ Single LLM call that provides:
 3. Filter suggestions (report_id hints, finding_type, temporal scope)
 4. Retrieval parameter recommendations (top_k, context_limit)
 
-IMPORTANT: This is ONE call to GPT-4o-mini per query (~$0.0002).
-Cost: ~$0.0002/query (single GPT-4o-mini call) + zero-cost algorithmic improvements
+Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+Cost: ~$0.0001/query (Gemini) - minimal cost for query enhancement
 """
 
 import json

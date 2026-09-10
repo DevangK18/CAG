@@ -49,6 +49,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.docker.txt ./
 RUN pip install --no-cache-dir -r requirements.docker.txt
 
+# Install GCS dependencies for Cloud Run
+RUN pip install --no-cache-dir google-cloud-storage
+
 # Copy ONLY runtime source code
 # Do NOT copy src/parsing_pipeline/ or src/batch_pipeline/
 COPY src/api/ ./src/api/
@@ -63,12 +66,17 @@ COPY --from=frontend-build /app/frontend/dist ./static/
 # Tell the app where static files live
 ENV STATIC_DIR=/app/static
 
-# Data directory is volume-mounted at runtime
+# Data directory (synced from GCS on Cloud Run startup)
 ENV DATA_DIR=/app/data
 
-EXPOSE 8000
+# Cloud Run uses PORT env var (default 8080)
+ENV PORT=8080
 
+EXPOSE 8080
+
+# Health check (Cloud Run handles this, but useful for local testing)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Use shell form to expand PORT variable
+CMD uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT} --workers 2

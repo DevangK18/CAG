@@ -83,6 +83,19 @@ async def lifespan(app: FastAPI):
     logger.info(f"Base directory: {settings.BASE_DIR}")
     logger.info(f"PDF directory: {settings.PDF_DIR}")
     logger.info(f"Processed directory: {settings.PROCESSED_DIR}")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"GCS bucket: {settings.DATA_BUCKET or '(local mode)'}")
+
+    # Sync data from GCS on Cloud Run startup
+    if settings.is_cloud_run:
+        logger.info("Cloud Run detected - syncing data from GCS...")
+        try:
+            from .gcs_sync import sync_from_gcs
+            downloaded = sync_from_gcs()
+            logger.info(f"GCS sync complete: {downloaded} files downloaded")
+        except Exception as e:
+            logger.error(f"GCS sync failed: {e}")
+            # Continue startup - data might be cached from previous instance
 
     # Initialize report metadata
     logger.info("Loading report metadata...")
