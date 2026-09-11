@@ -45,6 +45,22 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Import trace emitter utilities
+try:
+    from src.parsing_pipeline.instrumentation import get_noop_emitter
+except ImportError:
+    # Fallback if instrumentation module not available
+    def get_noop_emitter():
+        class NoopEmitter:
+            enabled = False
+            def emit_decision(self, *args, **kwargs): pass
+            def emit_io(self, *args, **kwargs): pass
+            def emit_red_flag(self, *args, **kwargs): pass
+            def emit_error(self, *args, **kwargs): pass
+            def emit_sample(self, *args, **kwargs): pass
+            def set_phase_status(self, *args, **kwargs): pass
+        return NoopEmitter()
+
 # Feature flag for batch processing mode
 USE_CLAUDE_BATCH = os.getenv("USE_CLAUDE_BATCH", "false").lower() == "true"
 
@@ -103,8 +119,19 @@ class BatchService:
         self,
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
+        trace_emitter=None,
     ):
+        """
+        Initialize BatchService with optional trace instrumentation.
+
+        Args:
+            batch_jobs_dir: Directory for batch job tracking files
+            processed_dir: Directory with processed report JSONs
+            trace_emitter: Optional TraceEmitter for Phase 10a instrumentation.
+                          If None, uses noop emitter (no overhead).
+        """
         self.use_claude = USE_CLAUDE_BATCH
+        self._trace_emitter = trace_emitter or get_noop_emitter()
 
         # Initialize clients based on mode
         if self.use_claude:
@@ -117,6 +144,15 @@ class BatchService:
             self._gemini_client = genai.Client()
             self.client = None  # No Anthropic client needed
             logger.info("BatchService initialized with Gemini (GCP billing)")
+
+        # Trace: Emit client mode selection decision
+        self._trace_emitter.emit_decision(
+            "10a",
+            "batch_client_mode",
+            "claude" if self.use_claude else "gemini",
+            ["claude", "gemini"],
+            f"USE_CLAUDE_BATCH={USE_CLAUDE_BATCH}",
+        )
 
         # Base directories
         self.batch_jobs_dir = Path(batch_jobs_dir)
@@ -264,6 +300,7 @@ class BatchService:
     ) -> list[dict]:
         """Process multiple requests concurrently with Gemini."""
         results = []
+        emitter = self._trace_emitter
 
         print(f"🚀 Processing {len(requests)} {description} requests with Gemini...")
 
@@ -288,7 +325,25 @@ class BatchService:
                     print(f"   Progress: {completed}/{len(requests)}")
 
         success = sum(1 for r in results if r["error"] is None)
+        failed = len(results) - success
         print(f"✅ {description} complete: {success}/{len(results)} succeeded")
+
+        # Trace: Emit batch processing summary
+        emitter.emit_io(
+            "10a",
+            {"requests": len(requests), "batch_type": description},
+            {"success": success, "failed": failed},
+        )
+
+        # Red flag for high failure rate
+        if failed > 0 and len(results) > 0:
+            failure_rate = failed / len(results)
+            if failure_rate > 0.1:  # More than 10% failures
+                emitter.emit_red_flag(
+                    "10a",
+                    f"High {description} batch failure rate ({failure_rate*100:.1f}%)",
+                    {"failed": failed, "total": len(results)},
+                )
 
         return results
 
@@ -356,17 +411,42 @@ class BatchService:
         # Save ID mapping
         self._save_id_mapping(id_mapping, job_timestamp)
 
+        # Trace: Emit overview batch submission
+        emitter = self._trace_emitter
+        emitter.emit_io(
+            "10a",
+            {"json_files": len(json_files)},
+            {"overview_requests": len(requests), "model": self.models["overview"]},
+        )
+
         if self.use_claude:
             # Submit batch using messages.batches API (SDK v0.77.0+)
             batch = self.client.messages.batches.create(requests=requests)
             print(f"✅ Overview batch submitted: {batch.id}")
             print(f"   Reports: {len(requests)}")
+
+            emitter.emit_decision(
+                "10a",
+                "overview_batch_submission",
+                "submitted",
+                ["submitted", "failed"],
+                f"Claude batch {batch.id}",
+            )
             return batch.id
         else:
             # Process synchronously with Gemini
             results = self._process_batch_gemini(requests, "overview")
             # Save results immediately
             self._save_overview_results(results, id_mapping)
+
+            success = sum(1 for r in results if r["error"] is None)
+            emitter.emit_decision(
+                "10a",
+                "overview_batch_submission",
+                "completed" if success == len(results) else "partial",
+                ["completed", "partial", "failed"],
+                f"Gemini sync: {success}/{len(results)} succeeded",
+            )
             return f"gemini_sync_{self._current_job_timestamp}"
 
     def _save_overview_results(self, results: list[dict], id_mapping: dict):
@@ -475,18 +555,43 @@ class BatchService:
         # Save ID mapping
         self._save_id_mapping(id_mapping, job_timestamp)
 
+        # Trace: Emit summary batch submission
+        emitter = self._trace_emitter
+        emitter.emit_io(
+            "10a",
+            {"json_files": len(json_files), "variants": 5},
+            {"summary_requests": len(requests)},
+        )
+
         if self.use_claude:
             # Submit batch using messages.batches API (SDK v0.77.0+)
             batch = self.client.messages.batches.create(requests=requests)
             print(f"✅ Summary batch submitted: {batch.id}")
             print(f"   Reports: {len(json_files)}")
             print(f"   Total requests: {len(requests)} ({len(json_files)} × 5 variants)")
+
+            emitter.emit_decision(
+                "10a",
+                "summary_batch_submission",
+                "submitted",
+                ["submitted", "failed"],
+                f"Claude batch {batch.id} ({len(requests)} requests)",
+            )
             return batch.id
         else:
             # Process synchronously with Gemini
             results = self._process_batch_gemini(requests, "summary")
             # Save results
             self._save_summary_results(results, id_mapping)
+
+            success = sum(1 for r in results if r["error"] is None)
+            emitter.emit_decision(
+                "10a",
+                "summary_batch_submission",
+                "completed" if success == len(results) else "partial",
+                ["completed", "partial", "failed"],
+                f"Gemini sync: {success}/{len(results)} succeeded",
+            )
             return f"gemini_sync_{self._current_job_timestamp}"
 
     def _save_summary_results(self, results: list[dict], id_mapping: dict):
@@ -805,6 +910,20 @@ class BatchService:
         if hierarchical_batch_id:
             print(f"   Hierarchical batch: {hierarchical_batch_id}")
         print(f"   Tracker: {tracker_path}")
+
+        # Trace: Emit Phase 10a completion summary
+        emitter = self._trace_emitter
+        emitter.emit_io(
+            "10a",
+            {"reports": len(report_ids), "include_hierarchical": include_hierarchical},
+            {
+                "overview_batch_id": overview_batch_id,
+                "summary_batch_id": summary_batch_id,
+                "hierarchical_batch_id": hierarchical_batch_id,
+                "tracker_path": str(tracker_path),
+            },
+        )
+        emitter.set_phase_status("10a", "submitted")
 
         return overview_batch_id, summary_batch_id, hierarchical_batch_id, tracker_path
 
@@ -1138,10 +1257,31 @@ class BatchService:
 
         if not requests:
             print("⚠️  No hierarchical summaries to generate")
+            # Trace: Emit skipped status
+            emitter = self._trace_emitter
+            emitter.emit_decision(
+                "10a",
+                "hierarchical_batch_submission",
+                "skipped",
+                ["submitted", "skipped", "failed"],
+                "No hierarchical summaries to generate",
+            )
             return "N/A"
 
         # Save ID mapping
         self._save_id_mapping(id_mapping, job_timestamp)
+
+        # Trace: Emit hierarchical batch submission info
+        emitter = self._trace_emitter
+        emitter.emit_io(
+            "10a",
+            {"json_files": len(json_files)},
+            {
+                "chapter_summaries": chapter_count,
+                "section_summaries": section_count,
+                "total_requests": len(requests),
+            },
+        )
 
         # Submit batch using messages.batches API
         batch = self.client.messages.batches.create(requests=requests)
@@ -1151,6 +1291,14 @@ class BatchService:
         print(f"   Chapter summaries (L2): {chapter_count}")
         print(f"   Section summaries (L1): {section_count}")
         print(f"   Total requests: {len(requests)}")
+
+        emitter.emit_decision(
+            "10a",
+            "hierarchical_batch_submission",
+            "submitted",
+            ["submitted", "skipped", "failed"],
+            f"Claude batch {batch.id}",
+        )
 
         return batch.id
 

@@ -1411,7 +1411,8 @@ class PipelineOrchestrator:
                         "  (Overview extraction + 5 summary variants via Claude Batch API)"
                     )
 
-                    service = BatchService()
+                    emitter = self.state.trace_emitter
+                    service = BatchService(trace_emitter=emitter)
 
                     # Submit batches (async - returns immediately)
                     overview_batch_id = service.submit_overview_batch(json_files)
