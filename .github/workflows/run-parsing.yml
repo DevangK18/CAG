@@ -113,6 +113,24 @@ jobs:
               # Get bucket name from metadata
               export DATA_BUCKET=\$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/attributes/DATA_BUCKET -H 'Metadata-Flavor: Google' || echo 'cag-data-${{ env.PROJECT_ID }}')
 
+              # =================================================================
+              # PRE-RUN: Sync existing data from GCS to local (for incremental runs)
+              # =================================================================
+              echo 'Syncing existing data from GCS...'
+
+              # Create all required directories
+              mkdir -p /app/data/{raw,processed,batch_jobs,extraction_images,entity_graph}/{union,state,local_body} 2>/dev/null || true
+              mkdir -p /app/data/processed/ocred
+              mkdir -p /app/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
+              mkdir -p /app/data/extraction_images/{tables,charts}
+              mkdir -p /app/logs/traces/{union,state,local_body}
+
+              # Sync raw PDFs (to avoid re-downloading)
+              gsutil -m rsync -r gs://\${DATA_BUCKET}/raw/ /app/data/raw/ 2>/dev/null || true
+
+              # Sync processed files (for incremental processing)
+              gsutil -m rsync -r gs://\${DATA_BUCKET}/processed/ /app/data/processed/ 2>/dev/null || true
+
               # Download manifest from GCS
               echo 'Downloading manifest...'
               gsutil cp gs://\${DATA_BUCKET}/manifests/${{ inputs.manifest }} ./manifest.xlsx
@@ -121,10 +139,13 @@ jobs:
               echo 'Pulling latest parsing image...'
               docker pull us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing:latest || true
 
-              # Run parsing pipeline
+              # =================================================================
+              # RUN: Execute parsing pipeline
+              # =================================================================
               echo 'Starting parsing pipeline...'
               docker run --rm \
                 -v /app/data:/app/data \
+                -v /app/logs:/app/logs \
                 -v /app/manifest.xlsx:/app/manifest.xlsx \
                 -e DATA_BUCKET=\${DATA_BUCKET} \
                 -e GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }} \
@@ -134,11 +155,46 @@ jobs:
                 us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing:latest \
                 manifest.xlsx $SKIP_ARG $REPORTS_ARG
 
-              # Upload results to GCS
-              echo 'Uploading results to GCS...'
+              # =================================================================
+              # POST-RUN: Sync ALL outputs to GCS
+              # =================================================================
+              echo 'Uploading ALL results to GCS...'
+
+              # P0: Core outputs (required for API/frontend)
+              echo '  → Syncing processed files (chunks, manifests, OCRd PDFs)...'
               gsutil -m rsync -r /app/data/processed gs://\${DATA_BUCKET}/processed/
 
+              echo '  → Syncing raw PDFs...'
+              gsutil -m rsync -r /app/data/raw gs://\${DATA_BUCKET}/raw/
+
+              echo '  → Syncing batch job outputs (overviews, summaries, hierarchical)...'
+              gsutil -m rsync -r /app/data/batch_jobs gs://\${DATA_BUCKET}/batch_jobs/
+
+              # P1: Supporting outputs
+              echo '  → Syncing extraction images (tables, charts)...'
+              gsutil -m rsync -r /app/data/extraction_images gs://\${DATA_BUCKET}/extraction_images/ 2>/dev/null || true
+
+              echo '  → Syncing entity graph data...'
+              gsutil -m rsync -r /app/data/entity_graph gs://\${DATA_BUCKET}/entity_graph/ 2>/dev/null || true
+
+              # P2: Logs and traces (for debugging/observability)
+              echo '  → Syncing trace logs...'
+              gsutil -m rsync -r /app/logs/traces gs://\${DATA_BUCKET}/traces/ 2>/dev/null || true
+
+              echo '  → Syncing pipeline logs...'
+              gsutil -m cp /app/logs/*.log gs://\${DATA_BUCKET}/logs/ 2>/dev/null || true
+
+              echo ''
+              echo '============================================='
               echo 'Parsing pipeline complete!'
+              echo '============================================='
+              echo 'Outputs synced to GCS:'
+              echo '  gs://'\${DATA_BUCKET}'/processed/     - Chunk JSONs, OCRd PDFs'
+              echo '  gs://'\${DATA_BUCKET}'/raw/           - Original PDFs'
+              echo '  gs://'\${DATA_BUCKET}'/batch_jobs/    - Overviews, summaries, visual extraction'
+              echo '  gs://'\${DATA_BUCKET}'/extraction_images/ - Table/chart images'
+              echo '  gs://'\${DATA_BUCKET}'/traces/        - Trace instrumentation logs'
+              echo '  gs://'\${DATA_BUCKET}'/logs/          - Pipeline execution logs'
             "
 
       - name: Stop Parsing VM

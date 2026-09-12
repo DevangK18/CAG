@@ -68,9 +68,13 @@ ENV PYTHONPATH=/app
 # Data directory (can be mounted or synced from GCS)
 ENV DATA_DIR=/app/data
 
-# Create data directories
+# Create all required data directories
 RUN mkdir -p /app/data/{raw,processed}/{union,state,local_body} \
-    && mkdir -p /app/logs/traces
+    && mkdir -p /app/data/processed/ocred \
+    && mkdir -p /app/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction} \
+    && mkdir -p /app/data/extraction_images/{tables,charts} \
+    && mkdir -p /app/data/entity_graph \
+    && mkdir -p /app/logs/traces/{union,state,local_body}
 
 # Default entrypoint runs the parsing pipeline
 ENTRYPOINT ["python", "-m", "src.parsing_pipeline.main"]
