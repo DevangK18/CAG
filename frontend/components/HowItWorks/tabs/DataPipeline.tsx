@@ -167,7 +167,7 @@ graph TB
     F --> G[Docling Layout Analysis]
     G --> H[TOC Reconciliation 5.5]
     H --> I{Quality < 50?}
-    I -->|Yes| J[Claude Haiku Validation]
+    I -->|Yes| J[Gemini 3.6 Flash Validation]
     I -->|No| K[Content Extraction]
     J --> K
     K --> L[Hierarchical Chunking]
@@ -193,7 +193,7 @@ graph TB
 graph LR
     P4[Phase 4: Heuristic TOC] -->|~90% accuracy| P55[Phase 5.5: Docling Reconciliation]
     P55 -->|~95% accuracy| Check{Quality < 50?}
-    Check -->|Yes ~15%| P57[Phase 5.7: Claude Haiku]
+    Check -->|Yes ~15%| P57[Phase 5.7: Gemini 3.6 Flash]
     Check -->|No ~85%| Done[Final TOC]
     P57 -->|~97% accuracy| Done
 
@@ -285,7 +285,7 @@ graph LR
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '120px' }}>LLM / Vision</span>
-                        <TechBadge name="Claude Haiku" category="ai" />
+                        <TechBadge name="Gemini 3.6 Flash" category="ai" />
                         <TechBadge name="Claude Batch API" category="ai" />
                         <TechBadge name="Gemini 2.5 Flash" category="ai" />
                     </div>
@@ -370,7 +370,7 @@ graph LR
                     <DiagramCard title="TOC Accuracy Cascade">
                         <MermaidDiagram
                             chart={tocCascade}
-                            caption="Phase 5.5 cross-validates heuristic TOC against Docling's AI-detected section headers. Phase 5.7 uses Claude Haiku as a last resort for the ~15% of reports with quality scores below 50. Total LLM cost for the entire corpus: ~$2–4."
+                            caption="Phase 5.5 cross-validates heuristic TOC against Docling's AI-detected section headers. Phase 5.7 uses Gemini 3.6 Flash as a last resort for the ~15% of reports with quality scores below 50. Total LLM cost for the entire corpus: ~$2–4."
                         />
                     </DiagramCard>
 
@@ -408,7 +408,7 @@ graph LR
                         </p>
                         <p style={{ lineHeight: 1.7, color: '#475569', marginTop: '12px' }}>
                             <strong>Phase 5.7 (LLM Validation)</strong> fires only for reports with quality below 50 — roughly 15% of the corpus.
-                            It sends the first 15 pages of raw text to Claude Haiku, which returns a corrected TOC as a JSON array.
+                            It sends the first 15 pages of raw text to Gemini 3.6 Flash, which returns a corrected TOC as a JSON array.
                             Logical page numbers from the response are converted to physical (0-indexed) pages using the scaffold's page map.
                             The quality score is capped at 85 — LLM output is never treated as ground truth.
                         </p>

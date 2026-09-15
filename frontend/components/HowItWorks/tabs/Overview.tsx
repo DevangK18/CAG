@@ -49,7 +49,7 @@ export const Overview: React.FC = () => {
     const architectureDiagram = `
 graph TB
     subgraph "Offline · Document Processing"
-        PDF[PDF Reports<br/>Union · State · Local Body] --> Parse[12-Phase Pipeline<br/>OCR · Tables · Structure]
+        PDF[PDF Reports<br/>Union · State · Local Body] --> Parse[10-Phase Pipeline<br/>OCR · Tables · Structure]
         Parse --> Enrich[Semantic Enrichment<br/>Findings · Entities · Severity]
         Enrich --> Index[Hybrid Indexing<br/>Dense + BM25 Sparse]
         Index --> Qdrant[(Qdrant Vector DB<br/>15,000+ chunks)]
@@ -216,7 +216,7 @@ graph TB
                     <ImpactStat value="25k" label="Entity Mentions" sublabel="Cross-report links indexed" accent="#8b5cf6" />
                     <ImpactStat value="185" label="AI Summaries" sublabel="5 variants × 37 reports" accent="#7c3aed" />
                     <ImpactStat value="3" label="Government Tiers" sublabel="Union · State · Local Bodies" accent="#059669" />
-                    <ImpactStat value="700+" label="Target Scale" sublabel="Designed for full corpus" accent="#64748b" />
+                    <ImpactStat value="1,297" label="Target Scale" sublabel="Full CAG corpus" accent="#64748b" />
                 </div>
             </DocSection>
 
@@ -230,7 +230,7 @@ graph TB
                 <DiagramCard title="End-to-End Data Flow">
                     <MermaidDiagram
                         chart={architectureDiagram}
-                        caption="Reports are parsed through a 12-phase pipeline, semantically enriched, and indexed into a hybrid vector database with entity graph. User queries go through enhancement, hybrid search (with optional agentic decomposition), neural reranking, LLM generation with groundedness verification, and streaming response with citations."
+                        caption="Reports are parsed through a 10-phase pipeline, semantically enriched, and indexed into a hybrid vector database with entity graph. User queries go through enhancement, hybrid search (with optional agentic decomposition), neural reranking, LLM generation with groundedness verification, and streaming response with citations."
                     />
                 </DiagramCard>
 
@@ -250,13 +250,13 @@ graph TB
             >
                 <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
                     <CapabilityCard
-                        title="Hybrid Search"
-                        description="Dense vector embeddings + BM25 sparse vectors with CAG-specific pattern boosting. Legal references, entity acronyms, and monetary terms get weighted to improve retrieval for audit-specific queries."
+                        title="Hybrid + Hierarchical Search"
+                        description="Dense vector embeddings + BM25 sparse vectors with CAG-specific pattern boosting. RAPTOR-style hierarchical retrieval for multi-level context. Query routing directs simple vs. complex queries to appropriate paths."
                         accent="#3b82f6"
                     />
                     <CapabilityCard
                         title="Agentic Retrieval"
-                        description="Complex queries are decomposed into 2–4 sub-queries, each retrieved iteratively with sufficiency checks. Reformulates and retries up to 3x per sub-query. Simple queries short-circuit to the standard path."
+                        description="Complex queries are decomposed into sub-queries with Self-RAG (iterative sufficiency checks) and Corrective RAG (failure detection). Reformulates and retries up to 3x per sub-query. Simple queries short-circuit to the standard path."
                         accent="#f59e0b"
                     />
                     <CapabilityCard
@@ -297,9 +297,9 @@ graph TB
                     }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Data Pipeline</div>
                         <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
-                            How raw PDF reports become structured, enriched data. 12 processing phases covering ingestion,
-                            OCR, layout analysis, table extraction (3-tier strategy for native and scanned PDFs),
-                            document structuring, semantic enrichment, and batch AI processing. <strong>Entity Graph pipeline:</strong> per-report
+                            How raw PDF reports become structured, enriched data. 10 processing phases (with 2 sub-phases for TOC) covering ingestion,
+                            OCR, 3-layer TOC validation, layout analysis, 3-tier table extraction strategy,
+                            hierarchical chunking, semantic enrichment, and batch AI processing. <strong>Entity Graph pipeline:</strong> per-report
                             normalization → cross-corpus canonicalization → mention indexing with Aho-Corasick scanning.
                         </div>
                     </div>
@@ -312,8 +312,8 @@ graph TB
                         <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>RAG & Search</div>
                         <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
                             How questions become answers. Hybrid retrieval combining dense vector search with
-                            custom BM25 built for audit documents. Query enhancement with expansion and classification.
-                            Cohere neural reranking. <strong>Agentic path</strong> for complex multi-hop queries.
+                            custom BM25 built for audit documents. <strong>SOTA features:</strong> Hierarchical (RAPTOR) retrieval,
+                            Query Routing, Self-RAG, Corrective RAG. Cohere neural reranking. <strong>Agentic path</strong> for complex multi-hop queries.
                             <strong> Groundedness verification</strong> for answer accuracy. End-to-end latency: 2–3s standard, 5–12s agentic.
                         </div>
                     </div>
@@ -325,8 +325,8 @@ graph TB
                     }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>AI Features</div>
                         <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.6 }}>
-                            Multi-provider LLM orchestration (Claude, GPT-4, Gemini) across offline and real-time workloads.
-                            6 response styles. <strong>Agentic retrieval</strong> with query decomposition and iterative refinement.
+                            GCP-native AI with Gemini 3.5 Flash as primary model and Vertex AI embeddings.
+                            Claude/GPT-4 as optional batch providers. 6 response styles. <strong>Agentic retrieval</strong> with query decomposition and iterative refinement.
                             <strong> Entity graph</strong> for cross-report reasoning. <strong>Groundedness verification</strong> for
                             hallucination detection. Auto-filtering and full query observability.
                         </div>
@@ -357,10 +357,9 @@ graph TB
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>AI / LLM</span>
-                        <TechBadge name="Claude (Opus/Sonnet)" category="ai" />
-                        <TechBadge name="GPT-4o-mini" category="ai" />
-                        <TechBadge name="Gemini 2.5 Flash" category="ai" />
-                        <TechBadge name="OpenAI Embeddings" category="ai" />
+                        <TechBadge name="Gemini 3.5 Flash" category="ai" />
+                        <TechBadge name="Vertex AI Embeddings" category="ai" />
+                        <TechBadge name="Claude (Batch)" category="ai" />
                         <TechBadge name="Cohere Rerank" category="ai" />
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
@@ -378,9 +377,10 @@ graph TB
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', width: '100px' }}>Infrastructure</span>
+                        <TechBadge name="GCP Cloud Run" category="infrastructure" />
+                        <TechBadge name="Cloud Storage" category="infrastructure" />
                         <TechBadge name="Docker" category="infrastructure" />
-                        <TechBadge name="Hetzner Cloud" category="infrastructure" />
-                        <TechBadge name="Caddy" category="infrastructure" />
+                        <TechBadge name="Terraform" category="infrastructure" />
                     </div>
                 </div>
             </DocSection>

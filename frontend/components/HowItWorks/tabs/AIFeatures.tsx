@@ -106,11 +106,11 @@ graph LR
     const modelOrchestrationDiagram = `
 graph TB
     subgraph "Offline · Batch Processing"
-        A[Phase 5.7<br/>TOC Validation] --> H4[Claude Haiku 4.5]
+        A[Phase 5.7<br/>TOC Validation] --> GF36[Gemini 3.6 Flash]
         B[Phase 10a<br/>Overviews] --> S4[Claude Sonnet 4]
         C[Phase 10a<br/>Summaries 3/5] --> S4
         D[Phase 10a<br/>Summaries 2/5] --> O4[Claude Opus 4]
-        E[Phase 10b<br/>Visual Extraction] --> GF[Gemini 2.5 Flash]
+        E[Phase 10b<br/>Visual Extraction] --> GF25[Gemini 2.5 Flash]
         F[Indexing<br/>Table Summaries] --> GM[GPT-4o-mini]
         EG[Phase 12<br/>Entity Canonicalization] --> GM
     end
@@ -118,17 +118,18 @@ graph TB
     subgraph "Online · Per-Query"
         G[Query Enhancement] --> GM
         AP[Agentic Planner<br/>Phase 11] --> GM
-        I[RAG Generation] --> S4
+        I[RAG Generation] --> GF35[Gemini 3.5 Flash]
         GND[Groundedness<br/>Phase 13] --> GM
-        J[Dense Embeddings] --> TE[text-embedding-3-large]
+        J[Dense Embeddings] --> VE[Vertex AI<br/>text-embedding-005]
     end
 
-    style H4 fill:#dbeafe,stroke:#1a365d
+    style GF36 fill:#e8f5e9,stroke:#4caf50
     style S4 fill:#fae8ff,stroke:#d946ef
     style O4 fill:#fef2f2,stroke:#ef4444
-    style GF fill:#fff7ed,stroke:#f97316
+    style GF25 fill:#fff7ed,stroke:#f97316
+    style GF35 fill:#e8f5e9,stroke:#4caf50
     style GM fill:#dcfce7,stroke:#22c55e
-    style TE fill:#f1f5f9,stroke:#94a3b8
+    style VE fill:#e3f2fd,stroke:#2196f3
     style AP fill:#fff7ed,stroke:#ea580c
     style GND fill:#f0fdf4,stroke:#22c55e
     style EG fill:#f0f9ff,stroke:#0ea5e9
@@ -140,17 +141,17 @@ graph TB
             <p className="page-subtitle">
                 Beyond basic RAG: agentic retrieval for complex queries, entity graph for cross-report reasoning,
                 groundedness verification for accuracy, and intelligent auto-filtering.
-                6 AI models orchestrated across offline batch processing and real-time serving,
+                GCP-native stack with Gemini 3.5 Flash as primary model. 7 AI models orchestrated across offline batch processing and real-time serving,
                 each chosen for a specific cost/quality tradeoff.
             </p>
 
             {/* ── Hero Stats ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', margin: '0 0 56px 0' }}>
-                <Stat value="6" label="AI Models" />
+                <Stat value="7" label="AI Models" />
                 <Stat value="390" label="Canonical Entities" accent="#0ea5e9" />
                 <Stat value="3" label="Advanced Phases" accent="#ea580c" />
                 <Stat value="50%" label="Batch API Savings" accent="#059669" />
-                <Stat value="~$0.005" label="Avg Query Cost" accent="#d97706" />
+                <Stat value="~$0.004" label="Avg Query Cost" accent="#4caf50" />
                 <Stat value="6" label="Response Styles" accent="#dc2626" />
             </div>
 
@@ -251,6 +252,22 @@ graph TB
 
                 <div style={{ display: 'grid', gap: '12px', marginTop: '20px' }}>
                     <ModelCard
+                        name="Gemini 3.5 Flash"
+                        provider="Google (GCP)"
+                        tasks="Primary chat/RAG generation. GCP-native billing via Vertex AI. Fast, cost-effective for real-time serving."
+                        cost="$0.50/$3.00 per 1M tokens"
+                        color="#4caf50"
+                        why="Default model for online generation. 20× cheaper than Claude with comparable quality for RAG tasks. Uses GCP credits."
+                    />
+                    <ModelCard
+                        name="Gemini 3.6 Flash"
+                        provider="Google (GCP)"
+                        tasks="TOC validation (Phase 5.7) — fires only for ~15% of reports where heuristic TOC quality is below 50."
+                        cost="$1.50/$7.50 per 1M tokens"
+                        color="#4caf50"
+                        why="Stronger reasoning for complex TOC structures. Still cost-effective for the ~15% of reports that need it."
+                    />
+                    <ModelCard
                         name="Claude Opus 4"
                         provider="Anthropic"
                         tasks="Deep Dive & Journalist summaries — the two variants requiring creative writing and deep analytical reasoning over 100+ page reports."
@@ -261,26 +278,18 @@ graph TB
                     <ModelCard
                         name="Claude Sonnet 4"
                         provider="Anthropic"
-                        tasks="Overview extraction, 3 summary variants (Executive, Simple, Policy), RAG chat generation. The workhorse model."
+                        tasks="Overview extraction, 3 summary variants (Executive, Simple, Policy). Batch processing for offline tasks."
                         cost="$3/$15 per 1M tokens (batch: 50% off)"
                         color="#d946ef"
-                        why="Best cost/quality balance for tasks requiring reasoning. Handles most offline and all online generation."
-                    />
-                    <ModelCard
-                        name="Claude Haiku 4.5"
-                        provider="Anthropic"
-                        tasks="TOC validation (Phase 5.7) — fires only for ~15% of reports where heuristic TOC quality is below 50."
-                        cost="$0.25/$1.25 per 1M tokens"
-                        color="#1a365d"
-                        why="Fastest, cheapest Claude. Structured extraction from semi-structured text doesn't need reasoning depth."
+                        why="Best cost/quality balance for tasks requiring reasoning. Handles most offline AI processing."
                     />
                     <ModelCard
                         name="GPT-4o-mini"
                         provider="OpenAI"
-                        tasks="Table summaries during indexing, query enhancement per search, fallback RAG generation."
+                        tasks="Table summaries during indexing, query enhancement per search, agentic planner, groundedness verification."
                         cost="$0.15/$0.60 per 1M tokens"
                         color="#22c55e"
-                        why="20× cheaper than Sonnet. Table summarization and query rewriting are simple tasks that don't benefit from stronger models."
+                        why="20× cheaper than Sonnet. Commodity tasks that don't benefit from stronger models."
                     />
                     <ModelCard
                         name="Gemini 2.5 Flash"
@@ -291,12 +300,12 @@ graph TB
                         why="Best vision model for structured data extraction from document images. Generous rate limits for batch processing."
                     />
                     <ModelCard
-                        name="text-embedding-3-large"
-                        provider="OpenAI"
-                        tasks="Dense embeddings for all 15,669 chunks at 1,536 dimensions (reduced from 3,072)."
-                        cost="$0.13 per 1M tokens"
-                        color="#94a3b8"
-                        why="High-quality embeddings. Dimension reduction cuts storage 50% with <1% quality loss."
+                        name="Vertex AI text-embedding-005"
+                        provider="Google (GCP)"
+                        tasks="Dense embeddings for all chunks at 768 dimensions. Native GCP integration via Vertex AI."
+                        cost="$0.00625 per 1M tokens"
+                        color="#2196f3"
+                        why="20× cheaper than OpenAI embeddings. Native GCP billing. Excellent quality for semantic search."
                     />
                 </div>
             </DocSection>
@@ -815,8 +824,8 @@ Outline for the ministry's formal Action Taken Note:
                     tabs={[
                         {
                             label: 'TOC Validation',
-                            subtitle: 'Claude Haiku 4.5 · Phase 5.7 · Only fires when TOC quality < 50 (~15% of reports)',
-                            color: '#ec4899',
+                            subtitle: 'Gemini 3.6 Flash · Phase 5.7 · Only fires when TOC quality < 50 (~15% of reports)',
+                            color: '#4caf50',
                             meta: 'src/parsing_pipeline/modules/toc_llm_validator.py',
                             content: `SYSTEM:
 You are a document structure analyzer specializing in Indian government
@@ -1480,9 +1489,9 @@ A structured, formal document suitable for official use.
                         <div style={{ display: 'grid', gap: '8px', fontSize: '14px' }}>
                             {[
                                 ['Query Enhancement (GPT-4o-mini)', '~$0.0002'],
-                                ['Query Embedding', '~$0.0001'],
+                                ['Query Embedding (Vertex AI)', '~$0.00001'],
                                 ['Cohere Reranking', '~$0.002'],
-                                ['RAG Generation (Claude Sonnet)', '~$0.005-0.01'],
+                                ['RAG Generation (Gemini 3.5 Flash)', '~$0.002-0.004'],
                             ].map(([item, cost]) => (
                                 <div key={item} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                                     <span style={{ color: '#475569' }}>{item}</span>
@@ -1490,12 +1499,12 @@ A structured, formal document suitable for official use.
                                 </div>
                             ))}
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #e2e8f0', marginTop: '4px' }}>
-                                <span style={{ fontWeight: 700, color: '#1e293b' }}>Total per query (Claude)</span>
-                                <span style={{ fontWeight: 700, color: '#1a365d' }}>~$0.008-0.015</span>
+                                <span style={{ fontWeight: 700, color: '#1e293b' }}>Total per query (Gemini)</span>
+                                <span style={{ fontWeight: 700, color: '#4caf50' }}>~$0.004-0.007</span>
                             </div>
                         </div>
                         <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>
-                            With GPT-4o-mini RAG: ~$0.003-0.006/query
+                            GCP-native stack = ~50% cheaper than Claude-based RAG
                         </div>
                     </div>
                 </div>
@@ -1511,20 +1520,20 @@ A structured, formal document suitable for official use.
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                         <thead>
                             <tr style={{ borderBottom: '2px solid #cbd5e1' }}>
-                                {['Query Volume', 'Claude RAG', 'GPT-4o-mini RAG'].map((h) => (
+                                {['Query Volume', 'Gemini RAG (Default)', 'GPT-4o-mini RAG'].map((h) => (
                                     <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {[
-                                ['1,000/month', '~$10-15', '~$4-6'],
-                                ['10,000/month', '~$100-150', '~$40-60'],
-                                ['100,000/month', '~$1,000-1,500', '~$400-600'],
-                            ].map(([vol, claude, gpt]) => (
+                                ['1,000/month', '~$5-7', '~$3-5'],
+                                ['10,000/month', '~$50-70', '~$30-50'],
+                                ['100,000/month', '~$500-700', '~$300-500'],
+                            ].map(([vol, gemini, gpt]) => (
                                 <tr key={vol} style={{ borderBottom: '1px solid #e2e8f0' }}>
                                     <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b' }}>{vol}</td>
-                                    <td style={{ padding: '10px 14px', color: '#d946ef', fontWeight: 600 }}>{claude}</td>
+                                    <td style={{ padding: '10px 14px', color: '#4caf50', fontWeight: 600 }}>{gemini}</td>
                                     <td style={{ padding: '10px 14px', color: '#22c55e', fontWeight: 600 }}>{gpt}</td>
                                 </tr>
                             ))}

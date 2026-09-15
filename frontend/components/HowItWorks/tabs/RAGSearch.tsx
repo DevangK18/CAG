@@ -190,7 +190,7 @@ export const RAGSearch: React.FC = () => {
 graph TB
     subgraph "Offline: Indexing Pipeline"
         A[JSON Files<br/>from Parsing] --> B[EmbeddingService]
-        B --> C1[Dense Vectors<br/>OpenAI 1536-dim]
+        B --> C1[Dense Vectors<br/>Vertex AI 768-dim]
         B --> C2[Sparse Vectors<br/>Custom BM25]
         B --> C3[Table Summaries<br/>GPT-4o-mini]
         B --> C4[Semantic Payloads<br/>Findings · Severity]
@@ -214,7 +214,7 @@ graph TB
         SC --> K[Parent Grouping<br/>+ Context Assembly]
         L[ReportRegistry] --> K
         K --> TC[Tier Context<br/>Injection]
-        TC --> M[LLM Generation<br/>Claude / GPT-4]
+        TC --> M[LLM Generation<br/>Gemini 3.5 Flash]
         M --> GND[Groundedness<br/>Verification]
         GND --> N[RAGResponse<br/>Answer + Citations]
     end
@@ -959,7 +959,7 @@ Terminology: 'PRI' (Panchayati Raj),
 
                 <CalloutBox type="success" style={{ marginTop: '20px' }}>
                     <strong>Entity Graph cost:</strong> $0 per query (DB lookup only). Canonicalization is a one-time cost:
-                    ~$0.50-1.00 for 37 reports, ~$10-15 for 700+ reports.
+                    ~$0.50-1.00 for 37 reports, ~$15-25 for 1,297 reports.
                 </CalloutBox>
             </DocSection>
         </div>

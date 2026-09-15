@@ -14,23 +14,28 @@ Comprehensive reference for all AI/LLM usage across the CAG Gateway project. Thi
 
 ## Multi-Model Strategy
 
-The CAG Gateway uses 6 different AI models, each selected for specific tasks based on cost, capability, and latency requirements:
+The CAG Gateway uses a multi-model strategy optimized for GCP credit billing. Gemini is the default provider, with Claude available for batch processing.
 
 | Model | Provider | Tasks | Why Chosen |
 |-------|----------|-------|------------|
-| **Claude Haiku 4.5** | Anthropic | TOC Validation | Fast, cheap ($0.25/$1.25 per 1M tokens), good at structured extraction |
-| **Claude Sonnet 4** | Anthropic | Overview Extraction, Summaries, RAG Chat | Balanced cost/quality, Extended Thinking support |
+| **Gemini 3.5 Flash** | Google | RAG Chat, Query Routing, Agentic Planning (default) | GCP credits, fast, 1M context, good reasoning |
+| **Gemini 3.5 Flash Lite** | Google | Query Enhancement, Groundedness, Reformulation | Ultra-low cost ($0.01/1M), fast routing |
+| **Gemini 3.6 Flash** | Google | TOC Validation | 1M context, cost-efficient structured extraction |
+| **Claude Sonnet 4** | Anthropic | Overview Extraction, Summaries (Batch API) | Extended Thinking, high-quality analysis |
 | **Claude Opus 4** | Anthropic | Deep Dive & Journalist Summaries | Highest quality for long-form content |
-| **GPT-4o-mini** | OpenAI | Table Summaries, Query Enhancement, RAG Chat | Very cheap ($0.15/$0.60 per 1M), fast, good for simple tasks |
-| **Gemini 2.5 Flash** | Google | Visual Extraction (Tables/Charts), RAG Chat | Vision capability, generous rate limits |
-| **text-embedding-3-large** | OpenAI | Dense Embeddings | High-quality embeddings at reduced dimensionality |
+| **Gemini 2.5 Flash** | Google | Visual Extraction (Tables/Charts) | Vision capability, handles complex tables |
+| **text-embedding-005** | Vertex AI | Dense Embeddings (default) | 20x cheaper than OpenAI, native GCP |
+| **text-embedding-3-large** | OpenAI | Dense Embeddings (fallback) | High-quality, when Vertex AI unavailable |
+| **GPT-4o-mini** | OpenAI | Table Summaries | Cheap, good for simple summarization |
 
 ### Cost Optimization Strategy
 
-1. **Batch API (50% savings)**: All offline processing uses Claude/OpenAI Batch APIs
-2. **Model Tiering**: Expensive models (Opus) only for quality-critical tasks
-3. **Caching**: Query enhancement results cached per session
-4. **Sparse + Dense**: BM25 built-in (no fastembed dependency, zero cost)
+1. **GCP-Native Mode**: Default to Vertex AI embeddings + Gemini LLM (bills to GCP credits)
+2. **Batch API (50% savings)**: Offline processing uses Claude Batch API
+3. **Model Tiering**: Expensive models (Opus) only for quality-critical tasks
+4. **Caching**: Query enhancement results cached per session
+5. **Sparse + Dense**: BM25 built-in (no fastembed dependency, zero cost)
+6. **SOTA Optimization**: Self-RAG skips retrieval for ~5% of queries (saves latency + cost)
 
 ---
 
@@ -40,7 +45,7 @@ The CAG Gateway uses 6 different AI models, each selected for specific tasks bas
 
 | Model | Task | Cost per Call | Corpus Cost (1,297 reports) |
 |-------|------|---------------|----------------------------|
-| Claude Haiku 4.5 | TOC Validation | ~$0.01-0.02 | ~$1-3 (15% of reports) |
+| Gemini 3.6 Flash | TOC Validation | ~$0.005-0.01 | ~$1-2 (15% of reports) |
 | Claude Sonnet 4 | Overview Extraction | ~$0.02-0.05 | ~$25-65 |
 | Claude Sonnet 4 | Executive/Simple/Policy Summaries | ~$0.03-0.08 | ~$40-100 |
 | Claude Opus 4 | Deep Dive/Journalist Summaries | ~$0.10-0.25 | ~$130-325 |
@@ -51,9 +56,12 @@ The CAG Gateway uses 6 different AI models, each selected for specific tasks bas
 
 | Model | Task | Cost per Query | Monthly (1K queries) |
 |-------|------|----------------|---------------------|
-| GPT-4o-mini | Query Enhancement | ~$0.0002 | ~$0.20 |
-| Claude Sonnet 4 / GPT-4o-mini | RAG Chat | ~$0.002-0.01 | ~$2-10 |
-| text-embedding-3-large | Query Embedding | ~$0.0001 | ~$0.10 |
+| Gemini 3.5 Flash Lite | Query Enhancement | ~$0.0001 | ~$0.10 |
+| Gemini 3.5 Flash | RAG Chat (default) | ~$0.001-0.005 | ~$1-5 |
+| Gemini 3.5 Flash Lite | Query Routing, Self-RAG | ~$0.00005 | ~$0.05 |
+| Gemini 3.5 Flash Lite | Groundedness Check | ~$0.0005 | ~$0.50 |
+| text-embedding-005 | Query Embedding (Vertex AI) | ~$0.00001 | ~$0.01 |
+| text-embedding-3-large | Query Embedding (OpenAI fallback) | ~$0.0001 | ~$0.10 |
 
 ---
 
@@ -63,7 +71,7 @@ The CAG Gateway uses 6 different AI models, each selected for specific tasks bas
 
 **Location:** `src/parsing_pipeline/modules/toc_llm_validator.py`
 
-**Model:** `claude-haiku-4-5-20251001`
+**Model:** `gemini-3.6-flash`
 
 **When:** Offline — fires only when TOC quality < 50 (~15% of reports)
 
@@ -71,9 +79,9 @@ The CAG Gateway uses 6 different AI models, each selected for specific tasks bas
 
 **Output:** JSON array of TOC entries `[[level, "title", page], ...]`
 
-**Cost:** ~$0.01-0.02 per report
+**Cost:** ~$0.005-0.01 per report
 
-**Why Claude Haiku:** Fastest and cheapest Claude model, excellent for structured extraction from semi-structured text.
+**Why Gemini 3.6 Flash:** Cost-efficient with 1M token context window. Excellent at structured extraction from semi-structured text. Uses GCP credits.
 
 **Fallback:** Returns original scaffold if LLM call fails.
 

@@ -212,6 +212,114 @@ At 700 reports (~11k records): pass 2 ACTIVATES, ~$10–15 cost
 
 ---
 
+## SOTA RAG Features
+
+The RAG pipeline implements four state-of-the-art retrieval techniques for improved accuracy and efficiency.
+
+### SOTA 1: Hierarchical (RAPTOR) Retrieval
+
+**Purpose:** Enable multi-level document navigation with pre-computed summaries at chapter and section levels.
+
+**Architecture:**
+- **Level 3 (Report):** Full report summary with key findings
+- **Level 2 (Chapter):** Chapter summaries (~500 words each)
+- **Level 1 (Section):** Section summaries (~200 words each)
+
+**How it works:**
+1. During indexing, generate summaries at each hierarchy level
+2. For high-level queries ("What does this report cover?"), return L3/L2 summaries directly
+3. For specific queries, use drill-down when top results score below threshold (0.85)
+4. Reduces LLM token usage by 60-80% for overview queries
+
+**Configuration:** `hierarchical` section in config
+- `chapter_model`: `gemini-3.5-flash-lite` (cost-efficient summaries)
+- `section_model`: `gemini-3.5-flash-lite`
+- `drill_down_threshold`: 0.85
+
+**Endpoint:** `GET /reports/{report_id}/hierarchical?level=1-2&limit=20`
+
+**Files:** `src/rag_pipeline/hierarchical_retriever.py`, `src/api/routes/hierarchical.py`
+
+### SOTA 2: Query Routing
+
+**Purpose:** Route queries to optimal retrieval strategies based on intent classification.
+
+**Routes:**
+
+| Strategy | Trigger | Description |
+|----------|---------|-------------|
+| `standard_rag` | Default | Hybrid search + reranking |
+| `temporal` | Year comparisons, trends | Cross-year retrieval with date filters |
+| `entity_graph` | Entity comparisons | Use Phase 12 entity graph for narrowing |
+| `filtered_search` | Strong filter signals | Apply payload filters first |
+| `summary_only` | Overview queries | Route to RAPTOR summaries |
+
+**Implementation:**
+1. LLM classifier analyzes query (gemini-3.5-flash-lite)
+2. Returns route + confidence score
+3. Falls back to `standard_rag` if confidence < 0.7
+4. No additional latency (classifier runs in parallel with embedding)
+
+**Configuration:** `query_routing` section
+- `model`: `gemini-3.5-flash-lite`
+- `confidence_threshold`: 0.7
+- `enabled`: true
+
+**Files:** `src/rag_pipeline/query_router.py`
+
+### SOTA 3: Self-RAG (Adaptive Retrieval Decider)
+
+**Purpose:** Decide whether retrieval is necessary for a given query, reducing latency for simple questions.
+
+**Decisions:**
+
+| Decision | Meaning | Example |
+|----------|---------|---------|
+| `SKIP` | Use parametric knowledge only | "What is CAG?" |
+| `RETRIEVE` | Standard retrieval | "What are the findings on NHAI?" |
+| `MULTI_RETRIEVE` | Agentic multi-hop | "Compare 2022 and 2023 findings" |
+
+**Implementation:**
+- Currently uses regex pattern matching (no LLM call)
+- Skip patterns: definitional queries, greetings, help requests
+- Saves ~200ms latency for ~5% of queries
+
+**Configuration:** `self_rag` section
+- `use_llm_classifier`: false (regex only)
+- `skip_patterns`: list of regex patterns
+
+**Files:** `src/rag_pipeline/retrieval_decider.py`
+
+### SOTA 4: Corrective RAG
+
+**Purpose:** Detect and correct low-quality retrievals through iterative refinement.
+
+**Components:**
+
+1. **RelevanceChecker:** Scores retrieved chunks for relevance
+   - Minimum score: 0.25
+   - Minimum relevant chunks: 3
+   - If below threshold, triggers reformulation
+
+2. **QueryReformulator:** Rewrites queries when retrieval quality is low
+   - Max reformulations: 2
+   - Model: `gemini-3.5-flash-lite`
+   - Strategies: add specificity, remove ambiguity, synonym expansion
+
+3. **CitationValidator:** Validates citations in generated answers
+   - Strips ungrounded citations
+   - Flags answers with high ungrounded ratio
+
+**Configuration:** `corrective_rag` section
+- `enabled`: true
+- `min_relevance_score`: 0.25
+- `min_relevant_chunks`: 3
+- `max_reformulations`: 2
+
+**Files:** `src/rag_pipeline/corrective_rag.py`
+
+---
+
 ## Two-Pipeline Architecture
 
 The RAG system operates as two distinct pipelines with different runtime characteristics:
@@ -326,12 +434,15 @@ graph TB
 
 | Library | Purpose |
 |---------|---------|
-| **OpenAI** | Dense embeddings (`text-embedding-3-large`), LLM generation (`gpt-4o-mini`), Query enhancement |
-| **Anthropic** | LLM generation (`claude-sonnet-4-20250514`) |
-| **Google GenAI** | LLM generation (`gemini-2.5-flash`) |
+| **Google GenAI** | Default LLM provider: `gemini-3.5-flash` (chat), `gemini-3.5-flash-lite` (routing, enhancement, verification) |
+| **Google Vertex AI** | Dense embeddings (`text-embedding-005`) when `USE_VERTEX_EMBEDDINGS=true` |
+| **OpenAI** | Alternative embeddings (`text-embedding-3-large`), LLM generation (`gpt-4o`), Table summaries (`gpt-4o-mini`) |
+| **Anthropic** | Alternative LLM generation (`claude-sonnet-5`, `claude-haiku-4-5-20251001`) |
 | **Qdrant Client** | Vector database operations (hybrid search, indexing) |
 | **Cohere** | Cross-encoder reranking (`rerank-english-v3.0`) |
 | **sentence-transformers** | BGE cross-encoder reranker (local fallback) |
+
+**Note:** Gemini is the default provider for GCP credit billing. Set `LLM_PROVIDER=claude` or `LLM_PROVIDER=openai` to use alternative providers.
 
 ### Built-in Components
 
@@ -428,15 +539,20 @@ class ReportInfo:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `OPENAI_API_KEY` | Yes | Embeddings, GPT-4, Query enhancement, Agentic planner, Groundedness |
-| `ANTHROPIC_API_KEY` | Optional | Claude generation |
-| `GOOGLE_API_KEY` | Optional | Gemini generation |
+| `GOOGLE_API_KEY` | Yes* | Gemini generation (default provider) |
+| `GOOGLE_CLOUD_PROJECT` | Yes* | GCP project for Vertex AI embeddings |
+| `VERTEX_AI_REGION` | Optional | Vertex AI region (default: `us-central1`) |
+| `USE_VERTEX_EMBEDDINGS` | Optional | Use Vertex AI `text-embedding-005` (default: `true`) |
+| `OPENAI_API_KEY` | Conditional | Required if `USE_VERTEX_EMBEDDINGS=false` or `LLM_PROVIDER=openai` |
+| `ANTHROPIC_API_KEY` | Optional | Required if `LLM_PROVIDER=claude` |
 | `COHERE_API_KEY` | Optional | Cohere reranking |
 | `QDRANT_URL` | Yes | Qdrant connection (default: `http://localhost:6333`) |
 | `QDRANT_API_KEY` | Optional | Qdrant Cloud authentication |
-| `LLM_PROVIDER` | Optional | Provider selection: `openai`, `claude`, or `gemini` (default: `openai`) |
+| `LLM_PROVIDER` | Optional | Provider selection: `gemini` (default), `claude`, or `openai` |
 | `ENTITY_GRAPH_DSN` | Optional | PostgreSQL connection for entity graph + observability |
 | `APP_ENV` | Optional | `dev` or `prod` — controls observability detail level |
+
+*For GCP deployments, use service account credentials instead of API keys.
 
 ---
 

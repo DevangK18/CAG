@@ -105,7 +105,7 @@ graph TB
 | **PyMuPDF (fitz)** | Latest | PDF page rendering, text extraction with bbox clipping | Phase 3 (OCR pre-check), Phase 6 (text extraction) |
 | **Gemini 2.5 Flash** | Google API | Vision-based table/chart extraction (fallback) | Tier 3 extraction (Phase 10b), chart descriptions |
 | **Claude Batch API + Extended Thinking** | Anthropic API | Overview extraction, 5 summary variants | Phase 10a (overview + summaries) |
-| **Claude Haiku** | Anthropic API | TOC validation for low-quality documents | Phase 5.7 (tail cases only) |
+| **Gemini 3.6 Flash** | Google API | TOC validation for low-quality documents | Phase 5.7 (tail cases only) |
 | **Pydantic** | v2.x | Data validation and serialization | All phases (data contracts) |
 | **openpyxl** | Latest | Excel manifest parsing | Phase 1 (Manifest Ingestion) |
 | **Pillow (PIL)** | Latest | Image cropping for visual extraction | Phase 6 (visual asset extraction) |
@@ -443,10 +443,10 @@ TOC accuracy improves from ~90% to ~95% by correcting heuristic errors through D
 
 ### Phase 5.7: LLM TOC Validation
 
-**Purpose**: Last resort validation for low-quality TOCs (quality < 50) using Claude Haiku to analyze raw document text and extract/correct TOC structure.
+**Purpose**: Last resort validation for low-quality TOCs (quality < 50) using Gemini 3.6 Flash to analyze raw document text and extract/correct TOC structure.
 
 **Files**:
-- `modules/toc_llm_validator.py` — LLM-based TOC validator using Claude Haiku
+- `modules/toc_llm_validator.py` — LLM-based TOC validator using Gemini Flash
 
 **Logic**:
 
@@ -466,7 +466,7 @@ TOC accuracy improves from ~90% to ~95% by correcting heuristic errors through D
    - System prompt: Expert document structure analyzer instructions
    - User prompt: Existing TOC (if any) + raw document text
    - Request: Return corrected TOC as JSON array `[[level, title, page], ...]`
-2. Call Claude Haiku API with structured output
+2. Call Gemini 3.6 Flash API with structured output
 3. Parse response as JSON array
 
 **5.7.4 Page Number Conversion**:
@@ -486,18 +486,18 @@ TOC accuracy improves from ~90% to ~95% by correcting heuristic errors through D
 **Output**: `DocumentTask.scaffold` with validated TOC and updated quality score
 
 **Cost Analysis**:
-- Model: Claude Haiku (cost-efficient)
-- Per-report cost: $0.01-0.02
-- Corpus cost (1,297 reports × 15% eligibility): ~$2-4 total
+- Model: Gemini 3.6 Flash (cost-efficient, 1M context)
+- Per-report cost: $0.005-0.01
+- Corpus cost (1,297 reports × 15% eligibility): ~$1-2 total
 - Triggered only for ~10-20% of corpus (low-quality TOCs)
 
 **Graceful Fallback**:
-- If `ANTHROPIC_API_KEY` not set, skips validation silently
+- If `GOOGLE_API_KEY` not set, skips validation silently
 - If API call fails, keeps existing TOC (no crash)
 - If JSON parsing fails, falls back to existing TOC
 
 **Key Features**:
-- **Cost-effective**: Uses Haiku (cheapest Claude model), only for tail cases
+- **Cost-effective**: Uses Gemini Flash (cheap, 1M context), only for tail cases
 - **Smart eligibility**: Only validates when Phase 4 + Phase 5.5 insufficient
 - **Page mapping integration**: Handles logical → physical conversion
 - **Conservative scoring**: Never claims perfection (caps at 85)
@@ -1758,7 +1758,7 @@ Examples:
 | 4 | 30-60s | Table-based ToC extraction | Caching |
 | 5 | 3-5 min | Docling model inference | CPU-bound, minimal optimization |
 | 5.5 | 5-10s | Text extraction from Docling bboxes | Minimal |
-| 5.7 | 2-5s | Claude Haiku API call (only ~10-20% of reports) | Async, cost-optimized |
+| 5.7 | 2-5s | Gemini Flash API call (only ~10-20% of reports) | Async, cost-optimized |
 | 6 | 2-3 min | pdfplumber table extraction | Parallel block processing possible |
 | 7 | 10-20s | Hierarchy assignment | Minimal |
 | 8 | 5-10s | JSON serialization | Minimal |
@@ -1781,7 +1781,7 @@ Examples:
 | Phase | Cost per Report | Reasoning |
 |-------|----------------|-----------|
 | 1-5 | $0.00 | Algorithmic only (no API calls) |
-| 5.7 | $0.01-0.02 | Claude Haiku for low-quality TOC validation (only ~10-20% of reports) |
+| 5.7 | $0.005-0.01 | Gemini Flash for low-quality TOC validation (only ~10-20% of reports) |
 | 6-9 | $0.00 | Algorithmic only (no API calls) |
 | 10a (Overview) | $0.10-0.20 | Claude Sonnet via Batch API for overview extraction |
 | 10a (Summaries) | $0.50-1.50 | Claude Sonnet/Opus via Batch API for 5 variants with Extended Thinking |
@@ -1945,7 +1945,7 @@ All pipeline thresholds and parameters are centralized in the configuration syst
 | **Phase 5.5: TOC Reconciliation** | Similarity threshold | 0.65 | `toc_reconciliation.similarity_threshold` |
 | | Min Docling headers | 3 | `toc_reconciliation.min_docling_headers` |
 | **Phase 5.7: LLM Validation** | Quality threshold | 50 | `llm_validation.quality_threshold` |
-| | Model | claude-haiku-4-5 | `llm_validation.model` |
+| | Model | gemini-3.6-flash | `llm_validation.model` |
 | **Phase 6: Content Extraction** | pdfplumber snap tolerance | 5 | `content_extraction.pdfplumber_snap_tolerance` |
 | | Table min confidence | 0.2 | `content_extraction.table_min_confidence` |
 | **Phase 7: Chunking** | Column similarity | 0.8 | `chunking.multi_page_table_column_similarity_threshold` |

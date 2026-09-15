@@ -61,8 +61,8 @@ graph TB
         <div className="tab-page">
             <h1 className="page-title">Infrastructure</h1>
             <p className="page-subtitle">
-                Two databases (Qdrant for vectors, PostgreSQL for entity graph), multi-provider LLM orchestration,
-                feature flag system, and Docker deployment with Caddy reverse proxy.
+                Two databases (Qdrant for vectors, PostgreSQL for entity graph), GCP-native multi-provider LLM orchestration,
+                feature flag system, and GCP Cloud Run deployment with Terraform IaC.
             </p>
 
             {/* Database Architecture */}
@@ -82,7 +82,7 @@ graph TB
                         <div style={{ fontSize: '13px', color: '#15803d', lineHeight: 1.6, marginBottom: '12px' }}>
                             <strong>Two collections:</strong>
                             <ul style={{ paddingLeft: '16px', marginTop: '6px' }}>
-                                <li><code>cag_child_chunks</code> — 15,669 chunks with hybrid vectors (dense 1536-dim + BM25 sparse)</li>
+                                <li><code>cag_child_chunks</code> — 15,669 chunks with hybrid vectors (dense 768-dim Vertex AI + BM25 sparse)</li>
                                 <li><code>cag_parent_chunks</code> — 2,792 parent sections (metadata-only, no vectors)</li>
                             </ul>
                         </div>
@@ -138,13 +138,14 @@ graph TB
                         </thead>
                         <tbody>
                             {[
-                                ['RAG Generation', 'LLM_PROVIDER setting', 'GPT-4o-mini', 'Claude, GPT-4, or Gemini based on env'],
-                                ['Embeddings', 'OpenAI', 'None', 'text-embedding-3-large (required)'],
+                                ['RAG Generation', 'Gemini 3.5 Flash', 'GPT-4o-mini', 'GCP-native default via Vertex AI'],
+                                ['Embeddings', 'Vertex AI', 'OpenAI', 'text-embedding-005 (768-dim, 20× cheaper)'],
+                                ['TOC Validation', 'Gemini 3.6 Flash', 'None', 'Phase 5.7, fires for ~15% of reports'],
                                 ['Query Enhancement', 'OpenAI', 'None', 'gpt-4o-mini (required)'],
                                 ['Agentic Planner', 'OpenAI', 'None', 'gpt-4o-mini (required for agentic)'],
                                 ['Groundedness', 'OpenAI', 'None', 'gpt-4o-mini (required)'],
                                 ['Reranking', 'Cohere', 'BGE Local', 'rerank-english-v3.0 → bge-reranker-v2-m3'],
-                                ['Batch Summaries', 'Anthropic', 'OpenAI', 'Claude Opus/Sonnet via Batch API'],
+                                ['Batch Summaries', 'Anthropic', 'None', 'Claude Opus/Sonnet via Batch API'],
                                 ['Visual Extraction', 'Google', 'None', 'Gemini 2.5 Flash'],
                             ].map(([task, primary, fallback, notes]) => (
                                 <tr key={task} style={{ borderBottom: '1px solid #e2e8f0' }}>
@@ -158,10 +159,10 @@ graph TB
                     </table>
                 </div>
 
-                <CalloutBox type="warning">
-                    <strong>OPENAI_API_KEY is required</strong> even if you set <code>LLM_PROVIDER=anthropic</code> or <code>google</code>.
-                    Embeddings, query enhancement, agentic planner, and groundedness verification all use OpenAI models
-                    because they offer the best cost/latency for these specific tasks.
+                <CalloutBox type="success">
+                    <strong>GCP-native stack:</strong> Gemini 3.5 Flash + Vertex AI embeddings use GCP credits.
+                    OpenAI API key is still required for query enhancement, agentic planner, and groundedness (gpt-4o-mini),
+                    but these are low-cost operations (~$0.0005/query combined).
                 </CalloutBox>
             </DocSection>
 
@@ -228,8 +229,8 @@ ENABLE_GROUNDEDNESS=false`}
 
             {/* Docker Setup */}
             <DocSection
-                title="Docker Setup"
-                description="Production deployment with docker-compose.prod.yml and Caddy reverse proxy"
+                title="Docker & GCP Deployment"
+                description="Local development with Docker Compose, production deployment on GCP Cloud Run with Terraform IaC"
             >
                 <DiagramCard title="Docker Compose Architecture">
                     <MermaidDiagram
@@ -254,21 +255,23 @@ npm run dev`}
                             </CodeBlock>
                         </div>
                         <div style={{ padding: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Production</div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}>Production (GCP)</div>
                             <CodeBlock>
-{`# Full stack via docker-compose.prod.yml
-docker compose --env-file .env.production \\
-  -f docker-compose.prod.yml build --no-cache
+{`# Deploy with Terraform
+cd infra/terraform
+terraform apply -var-file=environments/prod.tfvars
 
-docker compose --env-file .env.production \\
-  -f docker-compose.prod.yml up -d`}
+# Or use deploy script
+cd infra/scripts && ./deploy.sh
+
+# CI/CD: Push to main triggers deploy-api.yml`}
                             </CodeBlock>
                         </div>
                     </div>
 
                     <CalloutBox type="info">
-                        <strong>Production stack:</strong> Caddy (reverse proxy + auto-TLS) → FastAPI (Gunicorn + Uvicorn workers) → Qdrant + PostgreSQL.
-                        Frontend is pre-built and served by Caddy.
+                        <strong>GCP Production stack:</strong> Cloud Run (API + Frontend, scale-to-zero) → Qdrant Cloud (managed vector DB) → Cloud SQL PostgreSQL.
+                        ~$25-55/month within $300 GCP credit.
                     </CalloutBox>
                 </div>
 
@@ -555,12 +558,20 @@ Components:
                 <div style={{ marginTop: '16px' }}>
                     <CodeBlock title="Environment Variables (Full Reference)">
 {`# ═══════════════════════════════════════════════════════════
-# API KEYS (Required)
+# GCP CONFIGURATION (Required for production)
 # ═══════════════════════════════════════════════════════════
-OPENAI_API_KEY=sk-...          # Embeddings, enhancement, agentic, groundedness
-ANTHROPIC_API_KEY=sk-ant-...   # Claude RAG generation + Batch API
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_API_KEY=...             # For Gemini API access
+VERTEX_AI_REGION=us-central1
+USE_VERTEX_EMBEDDINGS=true     # Use text-embedding-005 (20× cheaper)
+DATA_BUCKET=cag-data-xxx       # GCS bucket for data
+
+# ═══════════════════════════════════════════════════════════
+# API KEYS
+# ═══════════════════════════════════════════════════════════
+OPENAI_API_KEY=sk-...          # Enhancement, agentic, groundedness (gpt-4o-mini)
+ANTHROPIC_API_KEY=sk-ant-...   # Claude Batch API for summaries
 COHERE_API_KEY=...             # Reranking (fallback to BGE if missing)
-GOOGLE_API_KEY=...             # Gemini visual extraction
 
 # ═══════════════════════════════════════════════════════════
 # SERVICES
@@ -571,7 +582,7 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/cag_entity_graph
 # ═══════════════════════════════════════════════════════════
 # LLM PROVIDER SELECTION
 # ═══════════════════════════════════════════════════════════
-LLM_PROVIDER=anthropic         # anthropic | openai | google
+LLM_PROVIDER=google            # google (default) | anthropic | openai
 
 # ═══════════════════════════════════════════════════════════
 # FEATURE FLAGS
@@ -587,24 +598,20 @@ QUERY_LOG_DEV_MODE=false       # Include full prompts in logs
 # RATE LIMITING & SECURITY
 # ═══════════════════════════════════════════════════════════
 RATE_LIMIT_CHAT=30/hour        # Chat endpoint rate limit
-VITE_ACCESS_CODE=code1,code2   # Access gate codes (comma-separated)
-
-# ═══════════════════════════════════════════════════════════
-# ANALYTICS (Optional)
-# ═══════════════════════════════════════════════════════════
-VITE_PUBLIC_POSTHOG_KEY=phc_...`}
+VITE_ACCESS_CODE=code1,code2   # Access gate codes (comma-separated)`}
                     </CodeBlock>
                 </div>
 
                 <div style={{ marginTop: '24px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Production Considerations</h3>
+                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>GCP Production Setup</h3>
                     <ul style={{ paddingLeft: '24px', lineHeight: '1.8', color: '#475569' }}>
-                        <li>Use Nginx or Caddy as reverse proxy for FastAPI + React</li>
-                        <li>Consider Qdrant Cloud for managed vector DB (easier scaling)</li>
-                        <li>Set up CI/CD for automatic deployments (GitHub Actions, GitLab CI)</li>
-                        <li>Monitor costs: OpenAI embeddings, Claude API, Gemini API</li>
-                        <li>Implement rate limiting and caching for API endpoints</li>
-                        <li>Use environment-specific configs (dev, staging, prod)</li>
+                        <li><strong>Cloud Run:</strong> API + Frontend with scale-to-zero (~$5-20/month)</li>
+                        <li><strong>Compute Engine:</strong> Parsing pipeline on spot instance (~$15-25/month)</li>
+                        <li><strong>Cloud Storage:</strong> PDFs and processed JSONs</li>
+                        <li><strong>Qdrant Cloud:</strong> Managed vector DB (free tier available)</li>
+                        <li><strong>Terraform IaC:</strong> Infrastructure defined in <code>infra/terraform/</code></li>
+                        <li><strong>CI/CD:</strong> GitHub Actions for deploy-api, run-parsing, terraform workflows</li>
+                        <li><strong>Cost target:</strong> ~$25-55/month within $300 GCP credit</li>
                     </ul>
                 </div>
             </DocSection>
