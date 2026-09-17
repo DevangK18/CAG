@@ -108,32 +108,34 @@ jobs:
             --project=${{ env.PROJECT_ID }} \
             --command="
               set -e
-              cd /app
+              cd ~
 
-              # Get bucket name from metadata
-              export DATA_BUCKET=\$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/attributes/DATA_BUCKET -H 'Metadata-Flavor: Google' || echo 'cag-data-${{ env.PROJECT_ID }}')
+              # Get bucket name from metadata or use default
+              export DATA_BUCKET=\$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/attributes/DATA_BUCKET -H 'Metadata-Flavor: Google' 2>/dev/null || echo 'cag-data-443e4a28')
+              echo \"Using DATA_BUCKET: \${DATA_BUCKET}\"
 
               # =================================================================
               # PRE-RUN: Sync existing data from GCS to local (for incremental runs)
               # =================================================================
               echo 'Syncing existing data from GCS...'
 
-              # Create all required directories
-              mkdir -p /app/data/{raw,processed,batch_jobs,extraction_images,entity_graph}/{union,state,local_body} 2>/dev/null || true
-              mkdir -p /app/data/processed/ocred
-              mkdir -p /app/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
-              mkdir -p /app/data/extraction_images/{tables,charts}
-              mkdir -p /app/logs/traces/{union,state,local_body}
+              # Use /var/tmp for Container-Optimized OS (read-only root filesystem)
+              export WORK_DIR=/var/tmp/cag
+              mkdir -p \${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
+              mkdir -p \${WORK_DIR}/data/processed/ocred
+              mkdir -p \${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
+              mkdir -p \${WORK_DIR}/data/extraction_images/{tables,charts}
+              mkdir -p \${WORK_DIR}/logs/traces/{union,state,local_body}
 
               # Sync raw PDFs (to avoid re-downloading)
-              gsutil -m rsync -r gs://\${DATA_BUCKET}/raw/ /app/data/raw/ 2>/dev/null || true
+              gsutil -m rsync -r gs://\${DATA_BUCKET}/raw/ \${WORK_DIR}/data/raw/ 2>/dev/null || true
 
               # Sync processed files (for incremental processing)
-              gsutil -m rsync -r gs://\${DATA_BUCKET}/processed/ /app/data/processed/ 2>/dev/null || true
+              gsutil -m rsync -r gs://\${DATA_BUCKET}/processed/ \${WORK_DIR}/data/processed/ 2>/dev/null || true
 
               # Download manifest from GCS
               echo 'Downloading manifest...'
-              gsutil cp gs://\${DATA_BUCKET}/manifests/${{ inputs.manifest }} ./manifest.xlsx
+              gsutil cp gs://\${DATA_BUCKET}/manifests/${{ inputs.manifest }} \${WORK_DIR}/manifest.xlsx
 
               # Pull latest parsing image
               echo 'Pulling latest parsing image...'
@@ -144,9 +146,9 @@ jobs:
               # =================================================================
               echo 'Starting parsing pipeline...'
               docker run --rm \
-                -v /app/data:/app/data \
-                -v /app/logs:/app/logs \
-                -v /app/manifest.xlsx:/app/manifest.xlsx \
+                -v \${WORK_DIR}/data:/app/data \
+                -v \${WORK_DIR}/logs:/app/logs \
+                -v \${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
                 -e DATA_BUCKET=\${DATA_BUCKET} \
                 -e GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }} \
                 -e USE_VERTEX_AI=true \
@@ -162,30 +164,30 @@ jobs:
 
               # P0: Core outputs (required for API/frontend)
               echo '  → Syncing processed files (chunks, manifests, OCRd PDFs)...'
-              gsutil -m rsync -r /app/data/processed gs://\${DATA_BUCKET}/processed/
+              gsutil -m rsync -r \${WORK_DIR}/data/processed gs://\${DATA_BUCKET}/processed/
 
               echo '  → Syncing raw PDFs...'
-              gsutil -m rsync -r /app/data/raw gs://\${DATA_BUCKET}/raw/
+              gsutil -m rsync -r \${WORK_DIR}/data/raw gs://\${DATA_BUCKET}/raw/
 
               echo '  → Syncing batch job outputs (overviews, summaries, hierarchical)...'
-              gsutil -m rsync -r /app/data/batch_jobs gs://\${DATA_BUCKET}/batch_jobs/
+              gsutil -m rsync -r \${WORK_DIR}/data/batch_jobs gs://\${DATA_BUCKET}/batch_jobs/
 
               # P1: Supporting outputs
               echo '  → Syncing extraction images (tables, charts)...'
-              gsutil -m rsync -r /app/data/extraction_images gs://\${DATA_BUCKET}/extraction_images/ 2>/dev/null || true
+              gsutil -m rsync -r \${WORK_DIR}/data/extraction_images gs://\${DATA_BUCKET}/extraction_images/ 2>/dev/null || true
 
               echo '  → Syncing entity graph data...'
-              gsutil -m rsync -r /app/data/entity_graph gs://\${DATA_BUCKET}/entity_graph/ 2>/dev/null || true
+              gsutil -m rsync -r \${WORK_DIR}/data/entity_graph gs://\${DATA_BUCKET}/entity_graph/ 2>/dev/null || true
 
               echo '  → Syncing canonical data (ministry bridge)...'
-              gsutil -m rsync -r /app/data/canonical gs://\${DATA_BUCKET}/canonical/ 2>/dev/null || true
+              gsutil -m rsync -r \${WORK_DIR}/data/canonical gs://\${DATA_BUCKET}/canonical/ 2>/dev/null || true
 
               # P2: Logs and traces (for debugging/observability)
               echo '  → Syncing trace logs...'
-              gsutil -m rsync -r /app/logs/traces gs://\${DATA_BUCKET}/traces/ 2>/dev/null || true
+              gsutil -m rsync -r \${WORK_DIR}/logs/traces gs://\${DATA_BUCKET}/traces/ 2>/dev/null || true
 
               echo '  → Syncing pipeline logs...'
-              gsutil -m cp /app/logs/*.log gs://\${DATA_BUCKET}/logs/ 2>/dev/null || true
+              gsutil -m cp \${WORK_DIR}/logs/*.log gs://\${DATA_BUCKET}/logs/ 2>/dev/null || true
 
               echo ''
               echo '============================================='
