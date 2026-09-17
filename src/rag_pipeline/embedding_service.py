@@ -50,9 +50,27 @@ class SparseVectorService:
     - Entity acronyms: "NHAI", "PMJAY"
     - Monetary values: "₹847.71 crore"
 
+    OPT-3: Enhanced with government schemes, audit terms, clause references
+    OPT-6: Tier-aware tokens for union/state/local filtering
+
     NOTE: This built-in implementation is used instead of fastembed
     due to huggingface_hub version conflicts with docling.
     """
+
+    # OPT-3: Government scheme patterns (high-value exact match)
+    SCHEME_PATTERNS = {
+        "mgnrega", "mgnregs", "nrega", "pmay", "pmjay", "nsap", "pmkisan",
+        "pm-kisan", "swachh bharat", "pmgsy", "pmksy", "ssa", "icds", "mdm",
+        "mid day meal", "sarva shiksha", "nrhm", "nulm", "disha", "mnerga"
+    }
+
+    # OPT-3: Audit terminology (finding-related boosting)
+    AUDIT_TERMS = {
+        "irregularity", "misappropriation", "shortfall", "deficiency",
+        "deviation", "non-compliance", "noncompliance", "excess", "shortage",
+        "embezzlement", "diversion", "misuse", "overpayment", "underpayment",
+        "outstanding", "unspent", "unutilized", "lapsed"
+    }
 
     def __init__(self, model_name: str = "built-in-bm25"):
         """Initialize the sparse vector service."""
@@ -160,8 +178,12 @@ class SparseVectorService:
 
         logger.info(f"SparseVectorService initialized (built-in BM25)")
 
-    def _extract_special_tokens(self, text: str) -> List[str]:
-        """Extract special patterns important for CAG documents."""
+    def _extract_special_tokens(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[str]:
+        """Extract special patterns important for CAG documents.
+
+        OPT-3: Enhanced with clause references, scheme names, audit terms
+        OPT-6: Tier-aware tokens from metadata
+        """
         tokens = []
         text_lower = text.lower()
 
@@ -177,6 +199,16 @@ class SparseVectorService:
         # Rule references: "Rule 86B" -> "rule_86b"
         for match in re.finditer(r"rule\s*(\d+[a-z]?)", text_lower):
             tokens.append(f"rule_{match.group(1)}")
+
+        # OPT-3: Clause references: "Clause 4.2" -> "clause_4_2"
+        for match in re.finditer(r"clause\s*(\d+(?:\.\d+)?)", text_lower):
+            clause_num = match.group(1).replace(".", "_")
+            tokens.append(f"clause_{clause_num}")
+
+        # OPT-3: Para/Paragraph references: "Para 3.2.1" -> "para_3_2_1"
+        for match in re.finditer(r"para(?:graph)?\s*(\d+(?:\.\d+)*)", text_lower):
+            para_num = match.group(1).replace(".", "_")
+            tokens.append(f"para_{para_num}")
 
         # Form references: "Form 26AS" -> "form_26as"
         for match in re.finditer(r"form\s*(\d+[a-z]*)", text_lower):
@@ -210,16 +242,48 @@ class SparseVectorService:
         for match in re.finditer(r"\b([A-Z]{2,6})\b", text):
             tokens.append(f"acronym_{match.group(1)}")
 
+        # OPT-3: Government scheme patterns
+        for scheme in self.SCHEME_PATTERNS:
+            if scheme in text_lower:
+                # Normalize scheme name
+                scheme_token = f"scheme_{scheme.replace(' ', '_').replace('-', '_')}"
+                tokens.append(scheme_token)
+
+        # OPT-3: Audit terminology
+        for term in self.AUDIT_TERMS:
+            if term in text_lower:
+                tokens.append(f"audit_{term.replace('-', '_')}")
+
+        # OPT-6: Tier-aware tokens from metadata
+        if metadata:
+            tier = metadata.get("government_body_type", "")
+            if tier == "union":
+                tokens.append("tier_union")
+            elif tier == "state":
+                tokens.append("tier_state")
+                state_name = metadata.get("state_name", "")
+                if state_name:
+                    tokens.append(f"state_{state_name.lower().replace(' ', '_')}")
+            elif tier == "local_body":
+                tokens.append("tier_local_body")
+
+            # Add audit category as token
+            audit_cat = metadata.get("audit_category", "")
+            if audit_cat:
+                tokens.append(f"category_{audit_cat}")
+
         return tokens
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[str]:
         """
         Tokenize text with special handling for CAG documents.
+
+        OPT-3/OPT-6: Now accepts metadata for tier-aware tokenization.
         """
         tokens = []
 
         # Extract special patterns first (these get boosted)
-        tokens.extend(self._extract_special_tokens(text))
+        tokens.extend(self._extract_special_tokens(text, metadata))
 
         # Regular word tokenization
         text_lower = text.lower()
@@ -237,17 +301,24 @@ class SparseVectorService:
             self._next_id += 1
         return self._vocab[token]
 
-    def encode(self, texts: List[str]) -> List[Dict[str, List]]:
+    def encode(
+        self,
+        texts: List[str],
+        metadata_list: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Dict[str, List]]:
         """
         Generate sparse vectors for texts using BM25-style weighting.
+
+        OPT-3/OPT-6: Now accepts metadata for enhanced tokenization.
 
         Returns:
             List of {"indices": [...], "values": [...]}
         """
         results = []
 
-        for text in texts:
-            tokens = self._tokenize(text)
+        for i, text in enumerate(texts):
+            metadata = metadata_list[i] if metadata_list and i < len(metadata_list) else None
+            tokens = self._tokenize(text, metadata)
 
             # Count term frequencies
             tf: Dict[str, int] = {}
@@ -266,12 +337,19 @@ class SparseVectorService:
                 tf_score = count / (count + k1)
 
                 # IDF-like boost for important patterns
-                if token.startswith(("section_", "rule_", "form_", "article_")):
+                # OPT-3: Added scheme_, audit_, clause_, para_ boosts
+                if token.startswith(("section_", "rule_", "form_", "article_", "clause_", "para_")):
                     idf_boost = 3.0  # Legal/regulatory references - very important
+                elif token.startswith("scheme_"):
+                    idf_boost = 3.5  # Government schemes - very domain-specific
+                elif token.startswith("audit_"):
+                    idf_boost = 2.0  # Audit terminology
                 elif token.startswith("acronym_"):
                     idf_boost = 2.5  # Entity acronyms
                 elif token.startswith(("money_", "year_", "has_percentage")):
                     idf_boost = 1.5  # Numeric context
+                elif token.startswith(("tier_", "state_", "category_")):
+                    idf_boost = 1.5  # Tier/metadata tokens
                 else:
                     idf_boost = 1.0  # Regular words
 
@@ -289,9 +367,9 @@ class SparseVectorService:
 
         return results
 
-    def encode_single(self, text: str) -> Dict[str, List]:
+    def encode_single(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, List]:
         """Encode a single text."""
-        return self.encode([text])[0]
+        return self.encode([text], [metadata] if metadata else None)[0]
 
 
 # =============================================================================
@@ -468,19 +546,74 @@ class SemanticPayloadExtractor:
 
 class DenseEmbeddingService:
     """
-    Generates dense embeddings using OpenAI.
+    Generates dense embeddings using OpenAI or Vertex AI.
+
+    When USE_VERTEX_EMBEDDINGS=true:
+        Uses Vertex AI text-embedding-005 ($0.00625/1M tokens) - 20x cheaper!
+    Otherwise:
+        Uses OpenAI text-embedding-3-large ($0.13/1M tokens)
     """
 
     def __init__(self, config: EmbeddingConfig, api_key: str):
         self.config = config
-        self.client = OpenAI(api_key=api_key)
         self.total_tokens = 0
+
+        # Check if Vertex AI embeddings are enabled
+        try:
+            from src.core.vertex_client import (
+                is_vertex_embeddings_enabled,
+                VertexEmbeddingService,
+            )
+
+            self.use_vertex = is_vertex_embeddings_enabled()
+        except ImportError:
+            self.use_vertex = False
+
+        if self.use_vertex:
+            # Use Vertex AI embeddings
+            from src.core.vertex_client import VertexEmbeddingService
+
+            # Vertex AI text-embedding-005 max dimensions is 768
+            vertex_dims = min(config.dimensions, 768) if config.dimensions else 768
+            self.vertex_service = VertexEmbeddingService(
+                model="text-embedding-005",
+                dimensions=vertex_dims,
+            )
+            self.client = None
+            logger.info(f"DenseEmbeddingService using Vertex AI (dims={vertex_dims})")
+        else:
+            # Use OpenAI embeddings
+            self.vertex_service = None
+            self.client = OpenAI(api_key=api_key)
+            logger.info(f"DenseEmbeddingService using OpenAI ({config.model})")
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of texts."""
         if not texts:
             return []
 
+        if self.use_vertex:
+            return self._embed_vertex(texts)
+        else:
+            return self._embed_openai(texts)
+
+    def _embed_vertex(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings using Vertex AI."""
+        # Truncate overly long texts
+        truncated = []
+        for text in texts:
+            max_chars = self.config.max_chunk_tokens * 4
+            if len(text) > max_chars:
+                text = text[:max_chars]
+            truncated.append(text)
+
+        embeddings = self.vertex_service.embed_texts(truncated)
+        self.total_tokens = self.vertex_service.total_tokens
+
+        return embeddings
+
+    def _embed_openai(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings using OpenAI."""
         # Truncate overly long texts
         truncated = []
         for text in texts:
@@ -516,7 +649,8 @@ class DenseEmbeddingService:
             for i in range(0, len(texts), self.config.batch_size)
         ]
 
-        iterator = tqdm(batches, desc="Embedding") if show_progress else batches
+        desc = "Embedding (Vertex AI)" if self.use_vertex else "Embedding (OpenAI)"
+        iterator = tqdm(batches, desc=desc) if show_progress else batches
 
         for batch in iterator:
             embeddings = self.embed_texts(batch)
@@ -526,8 +660,12 @@ class DenseEmbeddingService:
 
     def get_cost_estimate(self) -> float:
         """Get estimated cost in USD."""
-        # text-embedding-3-large: $0.13 per 1M tokens
-        return (self.total_tokens / 1_000_000) * 0.13
+        if self.use_vertex:
+            # text-embedding-005: $0.00625 per 1M tokens (20x cheaper!)
+            return (self.total_tokens / 1_000_000) * 0.00625
+        else:
+            # text-embedding-3-large: $0.13 per 1M tokens
+            return (self.total_tokens / 1_000_000) * 0.13
 
 
 # =============================================================================
@@ -577,11 +715,15 @@ class EmbeddingService:
         self,
         chunk: Dict[str, Any],
         parent_hierarchy: Dict[str, str],
+        parent_chunk: Optional[Dict[str, Any]] = None,
+        report_title: Optional[str] = None,
     ) -> str:
         """
         Prepare chunk text for embedding with enhancements.
 
         Adds:
+        - OPT-1: Context augmentation (report title, parent context)
+        - OPT-5: Content type signal
         - Hierarchy prefix
         - Table summary (for table chunks)
         """
@@ -590,10 +732,50 @@ class EmbeddingService:
 
         parts = []
 
+        # OPT-5: Content type signal
+        content_signal = ""
+        if self.config.embedding.enable_content_type_signal:
+            if content_type in ("table_markdown", "table"):
+                content_signal = "TABLE"
+            elif chunk.get("finding_type") or "finding" in content_type.lower():
+                content_signal = "FINDING"
+            elif chunk.get("is_recommendation"):
+                content_signal = "RECOMMENDATION"
+
+        # Build prefix with hierarchy
+        prefix_parts = []
+
+        # OPT-1: Include report title for document-level context
+        if self.config.embedding.include_report_title_in_prefix and report_title:
+            # Truncate long titles
+            short_title = report_title[:80] + "..." if len(report_title) > 80 else report_title
+            prefix_parts.append(f"Report: {short_title}")
+
         # Hierarchy prefix
         if self.config.embedding.enable_hierarchy_prefix and parent_hierarchy:
-            hierarchy_str = " > ".join(parent_hierarchy.values())
-            parts.append(f"[{hierarchy_str}]")
+            hierarchy_str = " > ".join(
+                v for v in parent_hierarchy.values() if v and not v.startswith(("_", "0_", "1_", "2_", "3_", "4_", "5_"))
+            )
+            if hierarchy_str:
+                prefix_parts.append(hierarchy_str)
+
+        # Combine with content signal
+        if prefix_parts:
+            if content_signal:
+                parts.append(f"[{content_signal} | {' | '.join(prefix_parts)}]")
+            else:
+                parts.append(f"[{' | '.join(prefix_parts)}]")
+        elif content_signal:
+            parts.append(f"[{content_signal}]")
+
+        # OPT-1: Parent section context (first sentence or toc_entry)
+        if self.config.embedding.include_parent_context and parent_chunk:
+            parent_toc = parent_chunk.get("toc_entry", "")
+            # Clean up numbered prefixes like "5_Executive summary"
+            if parent_toc and "_" in parent_toc and parent_toc.split("_")[0].isdigit():
+                parent_toc = parent_toc.split("_", 1)[1]
+            if parent_toc and parent_toc not in str(parent_hierarchy.values()):
+                parts.append(f"Section: {parent_toc}")
 
         # Table summary
         if self.table_service and content_type in ("table_markdown", "table"):
@@ -615,6 +797,7 @@ class EmbeddingService:
         parent_chunks: List[Dict[str, Any]],
         semantic_enrichment: Optional[Dict[str, Any]] = None,
         show_progress: bool = True,
+        report_title: Optional[str] = None,
     ) -> Tuple[List[str], List[List[float]], List[Dict], List[Dict[str, Any]]]:
         """
         Process all chunks for indexing.
@@ -625,6 +808,10 @@ class EmbeddingService:
         # Build parent lookup
         parent_lookup = {p["chunk_id"]: p for p in parent_chunks}
 
+        # Get report title from first chunk if not provided
+        if not report_title and child_chunks:
+            report_title = child_chunks[0].get("report_title", "")
+
         texts = []
         payloads = []
 
@@ -634,8 +821,13 @@ class EmbeddingService:
             parent = parent_lookup.get(parent_id, {})
             hierarchy = chunk.get("hierarchy") or parent.get("hierarchy", {})
 
-            # Prepare text
-            text = self.prepare_text_for_embedding(chunk, hierarchy)
+            # Prepare text with OPT-1 context augmentation
+            text = self.prepare_text_for_embedding(
+                chunk,
+                hierarchy,
+                parent_chunk=parent,
+                report_title=report_title,
+            )
             texts.append(text)
 
             # Build payload
@@ -650,6 +842,11 @@ class EmbeddingService:
                 "page_logical": str(chunk.get("source_page_logical", "")),
                 "hierarchy": hierarchy,
                 "report_title": chunk.get("report_title", ""),
+                # Multi-tier metadata fields
+                "government_body_type": chunk.get("government_body_type", "union"),
+                "state_name": chunk.get("state_name"),
+                "department": chunk.get("department"),
+                "audit_category": chunk.get("audit_category", "compliance"),
             }
 
             # Add semantic enrichment

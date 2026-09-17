@@ -1,12 +1,13 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
+ *
  * Citation Utilities - IMPROVED
  * Better parsing and normalization for citation matching
  */
 
 import { CitationMap } from './api';
+import { debug } from './debug';
 
 // ============================================================================
 // Citation Parsing
@@ -138,7 +139,7 @@ export function buildNormalizedCitationMap(
     }
   }
   
-  console.log('Built normalized citation map with', normalizedMap.size, 'entries');
+  debug.log('Built normalized citation map with', normalizedMap.size, 'entries');
   
   return normalizedMap;
 }
@@ -152,27 +153,27 @@ export function lookupCitation(
   normalizedMap: Map<string, CitationMap[string]>
 ): CitationMap[string] | null {
   if (normalizedMap.size === 0) {
-    console.log('Citation map is empty');
+    debug.log('Citation map is empty');
     return null;
   }
   
   // Strategy 1: Try exact normalized match
   const normalized = normalizeCitationKey(citationText);
-  console.log('Looking up citation:', citationText, '-> normalized:', normalized);
+  debug.log('Looking up citation:', citationText, '-> normalized:', normalized);
   
   if (normalizedMap.has(normalized)) {
-    console.log('Found via exact normalized match');
+    debug.log('Found via exact normalized match');
     return normalizedMap.get(normalized)!;
   }
   
   // Strategy 2: Extract section and page, try direct match
   const { section, page } = extractCitationParts(citationText);
-  console.log('Extracted parts - section:', section, 'page:', page);
+  debug.log('Extracted parts - section:', section, 'page:', page);
   
   if (section && page) {
     const shortKey = `${section}p${page}`;
     if (normalizedMap.has(shortKey)) {
-      console.log('Found via short key:', shortKey);
+      debug.log('Found via short key:', shortKey);
       return normalizedMap.get(shortKey)!;
     }
   }
@@ -180,9 +181,15 @@ export function lookupCitation(
   // Strategy 3: Try matching just by page number if we have one
   if (page) {
     // Look for any entry that matches this page
-    for (const [key, value] of normalizedMap.entries()) {
-      if (value.page_physical === page - 1 || value.page_logical === `${page}`) {
-        console.log('Found via page number match');
+    // page_physical is 0-based, page is 1-based from citation text
+    // page_logical is a string (e.g., "54"), convert to number for robust comparison
+    for (const [_key, value] of normalizedMap.entries()) {
+      const physicalPageMatch = value.page_physical === page - 1;
+      const logicalPageNum = parseInt(value.page_logical, 10);
+      const logicalPageMatch = !isNaN(logicalPageNum) && logicalPageNum === page;
+
+      if (physicalPageMatch || logicalPageMatch) {
+        debug.log('Found via page number match');
         return value;
       }
     }
@@ -196,7 +203,7 @@ export function lookupCitation(
 
     for (const [key, value] of normalizedMap.entries()) {
       if (key.includes(sectionPart) && key.includes(`p${pagePart}`)) {
-        console.log('Found via fuzzy match');
+        debug.log('Found via fuzzy match');
         return value;
       }
     }
@@ -207,7 +214,7 @@ export function lookupCitation(
   const pageMatch = citationText.match(/p\.?\s*(\d+)/i);
   if (pageMatch) {
     const targetPage = pageMatch[1];
-    const pageMatches = Array.from(normalizedMap.entries()).filter(([key, value]) => {
+    const pageMatches = Array.from(normalizedMap.entries()).filter(([key, _value]) => {
       // Extract page number from normalized key (typically at end after 'p')
       const keyPageMatch = key.match(/p(\d+)/);
       return keyPageMatch && keyPageMatch[1] === targetPage;
@@ -216,11 +223,11 @@ export function lookupCitation(
     // Only use this fallback if exactly one citation has this page number
     // If multiple citations share a page, we can't disambiguate
     if (pageMatches.length === 1) {
-      console.log(`Citation fallback: matched "${citationText}" by unique page ${targetPage}`);
+      debug.log(`Citation fallback: matched "${citationText}" by unique page ${targetPage}`);
       return pageMatches[0][1];
     }
   }
 
-  console.log('Citation not found in map. Available keys:', Array.from(normalizedMap.keys()).slice(0, 10));
+  debug.log('Citation not found in map. Available keys:', Array.from(normalizedMap.keys()).slice(0, 10));
   return null;
 }

@@ -66,6 +66,7 @@ else:
 try:
     from rag_service import RAGService, ResponseStyle as RAGResponseStyle
     from models import RAGResponse, Citation as RAGCitation, RetrievalResult
+    from report_registry import SeriesContext
 
     logging.info("RAG service modules imported successfully")
 except ImportError as e:
@@ -77,6 +78,7 @@ except ImportError as e:
     RAGResponse = None
     RAGCitation = None
     RetrievalResult = None
+    SeriesContext = None
 
 from ..models import Citation as APICitation, ChatResponse
 from .report_service import get_report_by_id
@@ -144,6 +146,10 @@ def _convert_citations(rag_citations: List) -> List[APICitation]:
                 finding_type=c.finding_type,
                 severity=c.severity,
                 amount_crore=c.amount_crore,
+                # Item 7: Enhanced semantic fields
+                entities_mentioned=c.entities_mentioned if c.entities_mentioned else None,
+                section_type=c.section_type,
+                is_recommendation=c.is_recommendation,
             )
         )
 
@@ -176,6 +182,35 @@ def _build_citation_map(citations: List[APICitation]) -> Dict[str, Dict[str, Any
         citation_map[key] = value
 
     return citation_map
+
+
+async def _maybe_verify_groundedness(
+    rag,
+    answer: str,
+    retrieval_result,
+    loop,
+) -> Optional[Dict[str, Any]]:
+    """
+    Run groundedness verification if enabled. Returns dict for emitting,
+    or None if disabled/failed.
+
+    Phase 13.
+    """
+    groundedness_service = getattr(rag, "groundedness_service", None)
+    if groundedness_service is None:
+        return None
+    if not answer.strip():
+        return None
+
+    try:
+        report = await loop.run_in_executor(
+            _executor,
+            lambda: groundedness_service.verify(answer, retrieval_result),
+        )
+        return report.to_dict()
+    except Exception as e:
+        logger.warning(f"Groundedness check failed: {e}", exc_info=True)
+        return None
 
 
 def generate_sync(
@@ -221,6 +256,8 @@ def generate_sync(
         citations=citations,
         sources_used=response.sources_used,
         model_used=response.model_used,
+        groundedness=response.groundedness,
+        sota_features=response.sota_features,  # Item 1: SOTA RAG features
     )
 
 
@@ -229,6 +266,8 @@ async def generate_stream(
     style: str = "adaptive",
     report_ids: Optional[List[str]] = None,
     top_k: int = 10,
+    client_session_id: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Async streaming generation using SSE.
@@ -243,9 +282,30 @@ async def generate_stream(
         yield {"type": "error", "data": "RAG service not initialized"}
         return
 
+    # Initialize logging context
+    log_ctx = None
+    query_logger = getattr(rag, "query_logger", None)
+
     try:
         loop = asyncio.get_event_loop()
         style_enum = RAGResponseStyle(style)
+
+        # Determine interaction mode for logging
+        interaction_mode = "directory" if report_ids else "home"
+
+        # Start query logging
+        if query_logger:
+            log_ctx = query_logger.start_query(
+                query_text=query,
+                interaction_mode=interaction_mode,
+                report_ids_filter=report_ids,
+                explicit_filters={"report_id": report_ids} if report_ids else None,
+                style=style,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
 
         # Build filters
         # Note: Qdrant handles lists as MatchAny, single values as MatchValue
@@ -257,11 +317,46 @@ async def generate_stream(
                 # Pass list directly - qdrant_service._build_filter handles it as MatchAny
                 filters["report_id"] = report_ids
 
+        # Tier context lookup for query enhancement
+        tier_context_for_enhancer = None
+        if filters and "report_id" in filters:
+            try:
+                from report_registry import get_registry
+
+                registry = get_registry()
+                report_id = filters["report_id"]
+                # Handle both single report_id and list of report_ids
+                if isinstance(report_id, list):
+                    report_id = report_id[0]  # Use first report for context
+                report_info = registry.get_report(report_id)
+                if report_info:
+                    govt_type = (
+                        getattr(report_info, "government_body_type", None) or "union"
+                    )
+                    if govt_type != "union":
+                        tier_label = "State" if govt_type == "state" else "Local Body"
+                        tier_context_for_enhancer = f"{tier_label} audit report"
+                        state_name = getattr(report_info, "state_name", None)
+                        if state_name:
+                            tier_context_for_enhancer += f" from {state_name}"
+                        department = getattr(report_info, "department", None)
+                        if department and department.lower() not in (
+                            "unknown",
+                            "n/a",
+                            "",
+                        ):
+                            tier_context_for_enhancer += f", department: {department}"
+            except Exception as e:
+                logger.warning(f"Failed to lookup tier context: {e}")
+
         # NEW: Run query enhancement first (in thread pool)
         enhancement = None
         if hasattr(rag, "query_enhancer") and rag.config.query_enhancement.enabled:
             enhancement = await loop.run_in_executor(
-                _executor, lambda: rag.query_enhancer.enhance(query, style=style)
+                _executor,
+                lambda: rag.query_enhancer.enhance(
+                    query, style=style, tier_context=tier_context_for_enhancer
+                ),
             )
 
             # Apply recommended style
@@ -275,6 +370,12 @@ async def generate_stream(
             if enhancement:
                 top_k = enhancement.top_k
 
+        # Log enhancement
+        if log_ctx:
+            log_ctx.record_query_enhancement(enhancement)
+            log_ctx.end_phase("enhancement")
+            log_ctx.start_phase("retrieval")
+
         # Step 1: Run retrieval (sync, in thread pool)
         retrieval_result = await loop.run_in_executor(
             _executor,
@@ -286,7 +387,24 @@ async def generate_stream(
             ),
         )
 
+        # Log retrieval
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                rag.config.observability.dev_debug
+                if hasattr(rag.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                retrieval_result,
+                reranker_used=retrieval_result.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.record_merged_filters(filters)
+
         if retrieval_result.total_after_rerank == 0:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
             yield {
                 "type": "token",
                 "data": "I couldn't find any relevant information in the CAG reports to answer this question.",
@@ -302,6 +420,9 @@ async def generate_stream(
 
         # NEW: Context sufficiency check + emit caveat event
         context_sufficient = rag._check_context_sufficiency(retrieval_result)
+        if log_ctx:
+            log_ctx.record_context_sufficient(context_sufficient)
+            log_ctx.start_phase("generation")
         if not context_sufficient:
             yield {"type": "caveat", "data": "low_relevance"}
 
@@ -311,6 +432,21 @@ async def generate_stream(
         citation_map = _build_citation_map(api_citations)
 
         yield {"type": "citation_map", "data": citation_map}
+
+        # Item 2: Emit search metadata event
+        yield {
+            "type": "metadata",
+            "data": {
+                "search_type": retrieval_result.search_type,
+                "reranker_used": retrieval_result.reranker_used,
+                "total_candidates": retrieval_result.total_candidates,
+                "total_after_rerank": retrieval_result.total_after_rerank,
+            }
+        }
+
+        # Item 3: Emit auto-applied filters event
+        if retrieval_result.filters_applied:
+            yield {"type": "filters", "data": retrieval_result.filters_applied}
 
         # Step 3: Get prepared prompts from RAG service — pass adaptive context length
         generation_inputs = await loop.run_in_executor(
@@ -329,23 +465,427 @@ async def generate_stream(
         system_prompt = generation_inputs["system_prompt"]
         user_prompt = generation_inputs["user_prompt"]
 
-        # Step 4: Stream from LLM
+        # Step 4: Stream from LLM (accumulate for Phase 13 groundedness)
         provider = rag.config.llm.provider.value
+        accumulated_answer_parts: List[str] = []
 
         if provider == "claude":
-            async for token in _stream_anthropic(rag, user_prompt, system_prompt):
-                yield {"type": "token", "data": token}
+            stream_iter = _stream_anthropic(rag, user_prompt, system_prompt)
         elif provider == "gemini":
-            async for token in _stream_gemini(rag, user_prompt, system_prompt):
-                yield {"type": "token", "data": token}
+            stream_iter = _stream_gemini(rag, user_prompt, system_prompt)
         else:
-            async for token in _stream_openai(rag, user_prompt, system_prompt):
-                yield {"type": "token", "data": token}
+            stream_iter = _stream_openai(rag, user_prompt, system_prompt)
+
+        async for token in stream_iter:
+            accumulated_answer_parts.append(token)
+            yield {"type": "token", "data": token}
+
+        # Log generation completion
+        if log_ctx:
+            log_ctx.end_phase("generation")
+
+        # Phase 13: Groundedness verification (runs after token stream completes)
+        full_answer = "".join(accumulated_answer_parts)
+
+        # Log generation details
+        if log_ctx:
+            log_ctx.record_generation(
+                answer=full_answer,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=full_answer,
+                provider=provider,
+                model=rag._get_model_name(),
+            )
+            log_ctx.start_phase("groundedness")
+
+        groundedness_dict = await _maybe_verify_groundedness(
+            rag,
+            full_answer,
+            retrieval_result,
+            loop,
+        )
+        if groundedness_dict is not None:
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
+            yield {"type": "groundedness", "data": groundedness_dict}
+        elif log_ctx:
+            log_ctx.end_phase("groundedness")
+
+        # Complete logging
+        if log_ctx:
+            log_ctx.__exit__(None, None, None)
 
         yield {"type": "done", "data": None}
 
     except Exception as e:
         logger.error(f"Stream generation error: {e}", exc_info=True)
+        if log_ctx:
+            log_ctx.record_error(str(e))
+            log_ctx.__exit__(None, None, None)
+        yield {"type": "error", "data": str(e)}
+
+
+def generate_agentic_sync(
+    query: str,
+    style: str = "adaptive",
+    report_ids: Optional[List[str]] = None,
+    top_k: int = 10,
+    series_context: Optional["SeriesContext"] = None,
+) -> ChatResponse:
+    """
+    Synchronous agentic generation. Delegates to AgenticRAGService.ask().
+    Phase 11.
+
+    Args:
+        query: The user's question
+        style: Response style preference
+        report_ids: Optional list of report IDs to scope retrieval
+        top_k: Number of chunks to retrieve
+        series_context: Optional SeriesContext for temporal-aware decomposition
+                       and synthesis (Phase B - Series × Agentic integration)
+    """
+    rag = get_rag_service()
+    if not rag:
+        raise RuntimeError("RAG service not initialized")
+    if not rag.agentic_service:
+        raise RuntimeError("Agentic service not enabled")
+
+    style_enum = RAGResponseStyle(style)
+
+    # Build filters (match generate_sync pattern)
+    filters = {}
+    if report_ids:
+        if len(report_ids) == 1:
+            filters["report_id"] = report_ids[0]
+        else:
+            filters["report_id"] = report_ids
+
+    response = rag.agentic_service.ask(
+        question=query,
+        filters=filters if filters else None,
+        top_k=top_k,
+        style=style_enum,
+        series_context=series_context,
+    )
+
+    citations = _convert_citations(response.citations)
+
+    return ChatResponse(
+        answer=response.answer,
+        citations=citations,
+        sources_used=response.sources_used,
+        model_used=response.model_used,
+        groundedness=response.groundedness,
+        agentic_trace=response.agentic_trace,
+        sota_features=response.sota_features,  # Item 1: SOTA RAG features
+    )
+
+
+async def generate_agentic_stream(
+    query: str,
+    style: str = "adaptive",
+    report_ids: Optional[List[str]] = None,
+    top_k: int = 10,
+    client_session_id: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    series_context: Optional["SeriesContext"] = None,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Agentic streaming. Emits same event types as generate_stream() plus:
+    - "planning"       — decomposition result
+    - "sub_query"      — each sub-query starting
+    - "iteration"      — each retrieval iteration
+    - "reformulation"  — when a query is rewritten
+    - "synthesizing"   — final answer generation starting
+
+    Phase 11.
+
+    Args:
+        query: The user's question
+        style: Response style preference
+        report_ids: Optional list of report IDs to scope retrieval
+        top_k: Number of chunks to retrieve
+        client_session_id: Session ID for logging
+        user_agent: User agent for logging
+        series_context: Optional SeriesContext for temporal-aware decomposition
+                       and synthesis (Phase B - Series × Agentic integration)
+    """
+    rag = get_rag_service()
+    if not rag:
+        yield {"type": "error", "data": "RAG service not initialized"}
+        return
+    if not rag.agentic_service:
+        yield {"type": "error", "data": "Agentic service not enabled"}
+        return
+
+    # Initialize logging context
+    log_ctx = None
+    query_logger = getattr(rag, "query_logger", None)
+
+    try:
+        loop = asyncio.get_event_loop()
+        style_enum = RAGResponseStyle(style)
+
+        # Build filters (match generate_stream pattern)
+        filters = {}
+        if report_ids:
+            if len(report_ids) == 1:
+                filters["report_id"] = report_ids[0]
+            else:
+                filters["report_id"] = report_ids
+        filters_or_none = filters if filters else None
+
+        # Start query logging
+        if query_logger:
+            log_ctx = query_logger.start_query(
+                query_text=query,
+                interaction_mode="home",  # Will be agentic
+                report_ids_filter=report_ids,
+                explicit_filters=filters_or_none,
+                style=style,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
+
+        # Step 1: Plan (in thread pool — single LLM call)
+        # Pass series_context for temporal-aware decomposition
+        plan = await loop.run_in_executor(
+            _executor,
+            lambda: rag.agentic_service._decompose(query, series_context=series_context),
+        )
+
+        # Log enhancement phase
+        if log_ctx:
+            log_ctx.end_phase("enhancement")
+            log_ctx.agentic_complexity = plan["complexity"]
+
+        yield {
+            "type": "planning",
+            "data": {
+                "complexity": plan["complexity"],
+                "sub_queries": plan.get("sub_queries") or [],
+                "reason": plan.get("reason", ""),
+            },
+        }
+
+        # Simple path — delegate to regular streaming
+        if plan["complexity"] == "simple":
+            # Close agentic log context before delegating
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
+                log_ctx = None
+            async for event in generate_stream(
+                query, style, report_ids, top_k, client_session_id, user_agent
+            ):
+                yield event
+            return
+
+        # Start retrieval phase for complex queries
+        if log_ctx:
+            log_ctx.start_phase("retrieval")
+
+        # Build a trace object — agentic_service expects a real AgenticTrace
+        from agentic_service import AgenticTrace
+
+        trace = AgenticTrace(
+            original_query=query,
+            complexity=plan["complexity"],
+            decomposition_reason=plan.get("reason", ""),
+            sub_queries=plan.get("sub_queries") or [],
+        )
+
+        # Step 2: Run loop per sub-query (each runs in thread pool)
+        sub_queries = trace.sub_queries[: rag.agentic_service.config.max_sub_queries]
+        all_retrievals = []
+
+        for i, sq in enumerate(sub_queries):
+            yield {
+                "type": "sub_query",
+                "data": {"index": i, "query": sq, "total": len(sub_queries)},
+            }
+
+            sub_result = await loop.run_in_executor(
+                _executor,
+                lambda sq=sq: rag.agentic_service._run_subquery_loop(
+                    sq, filters_or_none, trace
+                ),
+            )
+
+            for refo in sub_result.reformulations:
+                yield {
+                    "type": "reformulation",
+                    "data": {"sub_index": i, "new_query": refo},
+                }
+
+            yield {
+                "type": "iteration",
+                "data": {
+                    "sub_index": i,
+                    "iterations": sub_result.iterations,
+                    "sufficient": sub_result.sufficient,
+                    "num_chunks": sub_result.final_retrieval.total_after_rerank
+                    if sub_result.final_retrieval
+                    else 0,
+                },
+            }
+
+            if sub_result.final_retrieval:
+                all_retrievals.append(sub_result.final_retrieval)
+
+        # Step 3: If nothing retrieved, bail
+        if not all_retrievals:
+            if log_ctx:
+                log_ctx.record_agentic_trace(trace)
+                log_ctx.__exit__(None, None, None)
+            yield {
+                "type": "token",
+                "data": "I couldn't find sufficient information across the requested aspects. "
+                "Try simpler questions or check that the topics are covered in the indexed reports.",
+            }
+            yield {"type": "done", "data": None}
+            return
+
+        # Step 4: Merge retrievals (in thread pool)
+        merged = await loop.run_in_executor(
+            _executor,
+            lambda: rag.agentic_service._merge_retrievals(all_retrievals),
+        )
+
+        # Log retrieval results
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                rag.config.observability.dev_debug
+                if hasattr(rag.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                merged,
+                reranker_used=merged.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.start_phase("generation")
+
+        # Step 5: Emit citation_map (match existing contract)
+        rag_citations = rag.build_citations(merged)
+        api_citations = _convert_citations(rag_citations)
+        citation_map = _build_citation_map(api_citations)
+        yield {"type": "citation_map", "data": citation_map}
+
+        # Item 2: Emit search metadata event
+        yield {
+            "type": "metadata",
+            "data": {
+                "search_type": merged.search_type,
+                "reranker_used": merged.reranker_used,
+                "total_candidates": merged.total_candidates,
+                "total_after_rerank": merged.total_after_rerank,
+            }
+        }
+
+        # Item 3: Emit auto-applied filters event
+        if merged.filters_applied:
+            yield {"type": "filters", "data": merged.filters_applied}
+
+        yield {"type": "synthesizing", "data": None}
+
+        # Step 6: Build the synthesis prompt by calling existing rag_service helpers
+        # Mirrors what AgenticRAGService._synthesize_answer does, but for streaming.
+        generation_inputs = await loop.run_in_executor(
+            _executor,
+            lambda: rag.prepare_generation_inputs(
+                question=query,
+                retrieval_result=merged,
+                style=style_enum,
+            ),
+        )
+
+        sub_q_summary = "\n".join([f"- {sq}" for sq in sub_queries])
+        # Import the synthesis addendum prompts
+        from agentic_service import SYNTHESIS_SYSTEM_PROMPT_ADDITION, SERIES_SYNTHESIS_ADDITION
+
+        enhanced_user_prompt = (
+            generation_inputs["user_prompt"]
+            + f"\n\n---\n\nThis question was decomposed into these sub-queries:\n{sub_q_summary}\n\n"
+            + SYNTHESIS_SYSTEM_PROMPT_ADDITION
+        )
+
+        # Add series-specific synthesis instructions if context is available
+        if series_context:
+            enhanced_user_prompt += "\n" + SERIES_SYNTHESIS_ADDITION
+            logger.info(
+                f"Streaming synthesis with series context: {series_context.series_id}"
+            )
+
+        system_prompt = generation_inputs["system_prompt"]
+
+        # Step 7: Stream tokens (REUSE existing helpers from this module)
+        provider = rag.config.llm.provider.value
+        accumulated_answer_parts: List[str] = []
+
+        if provider == "claude":
+            stream_iter = _stream_anthropic(rag, enhanced_user_prompt, system_prompt)
+        elif provider == "gemini":
+            stream_iter = _stream_gemini(rag, enhanced_user_prompt, system_prompt)
+        else:
+            stream_iter = _stream_openai(rag, enhanced_user_prompt, system_prompt)
+
+        async for token in stream_iter:
+            accumulated_answer_parts.append(token)
+            yield {"type": "token", "data": token}
+
+        # Log generation completion
+        if log_ctx:
+            log_ctx.end_phase("generation")
+
+        # Step 8: Phase 13 groundedness verification (reuse helper)
+        full_answer = "".join(accumulated_answer_parts)
+
+        # Log generation
+        if log_ctx:
+            log_ctx.record_generation(
+                answer=full_answer,
+                system_prompt=system_prompt,
+                user_prompt=enhanced_user_prompt,
+                raw_response=full_answer,
+                provider=provider,
+                model=rag._get_model_name(),
+            )
+            log_ctx.start_phase("groundedness")
+
+        groundedness_dict = await _maybe_verify_groundedness(
+            rag,
+            full_answer,
+            merged,
+            loop,
+        )
+        if groundedness_dict is not None:
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
+            yield {"type": "groundedness", "data": groundedness_dict}
+        elif log_ctx:
+            log_ctx.end_phase("groundedness")
+
+        # Log agentic trace
+        if log_ctx:
+            log_ctx.record_agentic_trace(trace)
+            log_ctx.__exit__(None, None, None)
+
+        # Step 9: Emit the agentic trace as a final metadata event
+        yield {"type": "agentic_trace", "data": trace.to_dict()}
+
+        yield {"type": "done", "data": None}
+
+    except Exception as e:
+        logger.error(f"Agentic stream error: {e}", exc_info=True)
+        if log_ctx:
+            log_ctx.record_error(str(e))
+            log_ctx.__exit__(None, None, None)
         yield {"type": "error", "data": str(e)}
 
 
@@ -380,23 +920,55 @@ async def _stream_openai(
 async def _stream_anthropic(
     rag, prompt: str, system_prompt: str
 ) -> AsyncGenerator[str, None]:
-    """Stream tokens from Anthropic."""
+    """Stream tokens from Anthropic (direct API or Vertex AI)."""
+    # Check if Vertex AI is enabled
     try:
-        from anthropic import AsyncAnthropic
+        from src.core.vertex_client import (
+            is_vertex_ai_enabled,
+            get_async_anthropic_client,
+            get_vertex_model_name,
+        )
+
+        use_vertex = is_vertex_ai_enabled()
     except ImportError:
-        yield "[Error: anthropic package not installed for async streaming]"
-        return
+        use_vertex = False
 
-    client = AsyncAnthropic(api_key=rag.config.anthropic_api_key)
+    if use_vertex:
+        # Use Vertex AI Claude
+        try:
+            client = get_async_anthropic_client()
+            model = get_vertex_model_name(rag.config.llm.claude_model)
+            logger.info(f"Streaming via Vertex AI Claude: {model}")
 
-    async with client.messages.stream(
-        model=rag.config.llm.claude_model,
-        max_tokens=rag.config.llm.max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        async for text in stream.text_stream:
-            yield text
+            async with client.messages.stream(
+                model=model,
+                max_tokens=rag.config.llm.max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+        except Exception as e:
+            logger.error(f"Vertex AI Claude streaming error: {e}")
+            yield f"[Error: Vertex AI Claude streaming failed: {e}]"
+    else:
+        # Direct Anthropic API
+        try:
+            from anthropic import AsyncAnthropic
+        except ImportError:
+            yield "[Error: anthropic package not installed for async streaming]"
+            return
+
+        client = AsyncAnthropic(api_key=rag.config.anthropic_api_key)
+
+        async with client.messages.stream(
+            model=rag.config.llm.claude_model,
+            max_tokens=rag.config.llm.max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
 
 
 async def _stream_gemini(

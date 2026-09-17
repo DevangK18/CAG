@@ -33,6 +33,10 @@ export interface APICitation {
   severity?: string;
   amount_crore?: number;
   audit_year?: string;
+  // Item 7: Enhanced semantic fields
+  entities_mentioned?: string[];
+  section_type?: string;
+  is_recommendation?: boolean;
 }
 
 export interface APIReportSummary {
@@ -47,6 +51,15 @@ export interface APIReportSummary {
   status: string;
   filename: string;
   report_type?: string | null;
+  government_body_type: string;
+  state_name?: string | null;
+  department?: string | null;
+  audit_category: string;
+  // Item 5: Availability flags and distributions
+  has_summaries?: boolean;
+  has_overview_llm?: boolean;
+  severity_distribution?: Record<string, number>;
+  finding_type_distribution?: Record<string, number>;
 }
 
 export interface APIReportDetail {
@@ -65,6 +78,10 @@ export interface APIReportDetail {
   monetary_impact: string | null;
   findings_count: number;
   report_type?: string | null;
+  government_body_type: string;
+  state_name?: string | null;
+  department?: string | null;
+  audit_category: string;
 }
 
 export interface APIChatResponse {
@@ -317,10 +334,16 @@ export async function fetchHealth(): Promise<APIHealthResponse> {
 export async function fetchReports(params?: {
   sector?: string;
   year?: number;
+  government_body_type?: string;
+  state_name?: string;
+  audit_category?: string;
 }): Promise<{ reports: APIReportSummary[]; total: number }> {
   const searchParams = new URLSearchParams();
   if (params?.sector) searchParams.set('sector', params.sector);
   if (params?.year) searchParams.set('year', params.year.toString());
+  if (params?.government_body_type) searchParams.set('government_body_type', params.government_body_type);
+  if (params?.state_name) searchParams.set('state_name', params.state_name);
+  if (params?.audit_category) searchParams.set('audit_category', params.audit_category);
 
   const queryString = searchParams.toString();
   const url = `${API_URL}/reports${queryString ? `?${queryString}` : ''}`;
@@ -333,6 +356,27 @@ export async function fetchReports(params?: {
 export async function fetchReport(reportId: string): Promise<APIReportDetail> {
   const response = await fetch(`${API_URL}/reports/${reportId}`);
   if (!response.ok) throw new Error(`Failed to fetch report: ${reportId}`);
+  return response.json();
+}
+
+export interface FilterOption {
+  value: string;
+  label?: string;
+  count: number;
+}
+
+export interface ReportFiltersResponse {
+  government_body_types: FilterOption[];
+  states: FilterOption[];
+  audit_categories: FilterOption[];
+  // Item 4: Semantic filter options
+  finding_types: FilterOption[];
+  severities: FilterOption[];
+}
+
+export async function fetchReportFilters(): Promise<ReportFiltersResponse> {
+  const response = await fetch(`${API_URL}/reports/filters`);
+  if (!response.ok) throw new Error('Failed to fetch report filters');
   return response.json();
 }
 
@@ -647,7 +691,25 @@ export async function fetchSummaryMetadata(
 // ============================================================================
 
 export interface StreamEvent {
-  type: 'citation_map' | 'caveat' | 'token' | 'done' | 'error';
+  type:
+    | 'citation_map'
+    | 'caveat'
+    | 'token'
+    | 'done'
+    | 'error'
+    // Phase 13
+    | 'groundedness'
+    // Phase 11
+    | 'planning'
+    | 'sub_query'
+    | 'iteration'
+    | 'reformulation'
+    | 'synthesizing'
+    | 'agentic_trace'
+    // Items 1-3: SOTA features, metadata, filters
+    | 'metadata'
+    | 'filters'
+    | 'sota_features';
   data: any;
 }
 
@@ -671,6 +733,61 @@ export async function* streamChat(params: {
   top_k?: number;
 }): AsyncGenerator<StreamEvent> {
   const response = await fetch(`${API_URL}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: params.query,
+      style: params.style || 'adaptive',
+      report_ids: params.report_ids,
+      top_k: params.top_k || 10,
+    }),
+  });
+
+  if (!response.ok) {
+    yield { type: 'error', data: 'Stream request failed' };
+    return;
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          yield data as StreamEvent;
+        } catch (e) {
+          console.error('Failed to parse SSE event:', line);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Phase 11: Stream from the agentic endpoint.
+ * Same parameters as streamChat; the backend decides whether to short-circuit
+ * to the regular path (simple queries) or run the multi-hop loop.
+ */
+export async function* streamChatAgentic(params: {
+  query: string;
+  style?: string;
+  report_ids?: string[];
+  top_k?: number;
+}): AsyncGenerator<StreamEvent> {
+  const response = await fetch(`${API_URL}/chat/agentic/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -765,4 +882,340 @@ export async function* streamSeriesChat(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * Stream agentic chat for a time series.
+ *
+ * Uses the AgenticRAGService for multi-hop and cross-report queries
+ * scoped to the series, with temporal-aware decomposition and synthesis.
+ *
+ * Emits additional event types:
+ * - "series_info"    — Series metadata at start
+ * - "planning"       — Decomposition result (complexity, sub-queries)
+ * - "sub_query"      — Each sub-query starting
+ * - "iteration"      — Each retrieval iteration
+ * - "reformulation"  — When a query is rewritten
+ * - "synthesizing"   — Final answer generation starting
+ * - "agentic_trace"  — Full trace at end
+ */
+export async function* streamSeriesChatAgentic(
+  seriesId: string,
+  params: {
+    query: string;
+    style?: string;
+    compare_years?: boolean;
+    top_k_per_report?: number;
+  }
+): AsyncGenerator<StreamEvent> {
+  const response = await fetch(`${API_URL}/series/${seriesId}/query/agentic/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: params.query,
+      style: params.style || 'adaptive',
+      compare_years: params.compare_years ?? true,
+      top_k_per_report: params.top_k_per_report || 5,
+    }),
+  });
+
+  if (!response.ok) {
+    yield { type: 'error', data: 'Series agentic stream request failed' };
+    return;
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          yield data as StreamEvent;
+        } catch (e) {
+          console.error('Failed to parse SSE event:', line);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+// ============================================================================
+// Home Page API Functions (Phase A - Stubs)
+// ============================================================================
+
+import type {
+  HomeStats,
+  HomeFacets,
+  HomeFeatured,
+  TrendingSearch,
+  EntitySummary,
+  EntityDetail,
+  GroupedSearchResults,
+  SearchChannel,
+} from '../types';
+
+/**
+ * Get home page stats
+ */
+export async function getHomeStats(): Promise<HomeStats> {
+  const response = await fetch(`${API_URL}/home/stats`);
+  if (!response.ok) throw new Error('Failed to fetch home stats');
+  return response.json();
+}
+
+/**
+ * Get home page facets
+ */
+export async function getHomeFacets(): Promise<HomeFacets> {
+  const response = await fetch(`${API_URL}/home/facets`);
+  if (!response.ok) throw new Error('Failed to fetch home facets');
+  return response.json();
+}
+
+/**
+ * Get home page featured content
+ */
+export async function getHomeFeatured(): Promise<HomeFeatured> {
+  const response = await fetch(`${API_URL}/home/featured`);
+  if (!response.ok) throw new Error('Failed to fetch home featured content');
+  return response.json();
+}
+
+/**
+ * Get trending searches
+ */
+export async function getHomeTrending(): Promise<TrendingSearch[]> {
+  const response = await fetch(`${API_URL}/home/trending`);
+  if (!response.ok) throw new Error('Failed to fetch trending searches');
+  return response.json();
+}
+
+/**
+ * Get random surprise report
+ */
+export async function getSurpriseReport(): Promise<APIReportSummary> {
+  const response = await fetch(`${API_URL}/home/surprise/report`);
+  if (!response.ok) throw new Error('Failed to fetch surprise report');
+  return response.json();
+}
+
+/**
+ * Get random surprise entity
+ */
+export async function getSurpriseEntity(): Promise<EntitySummary> {
+  const response = await fetch(`${API_URL}/home/surprise/entity`);
+  if (!response.ok) throw new Error('Failed to fetch surprise entity');
+  return response.json();
+}
+
+/**
+ * Smart search across all channels
+ * Phase C: Full implementation with AbortController support
+ *
+ * @param params.q - Search query
+ * @param params.type - Optional channel filter
+ * @param params.limit - Max results per channel
+ * @param signal - Optional AbortSignal for cancellation
+ * @returns Grouped search results or null if aborted
+ */
+export async function smartSearch(
+  params: {
+    q: string;
+    type?: SearchChannel;
+    limit?: number;
+  },
+  signal?: AbortSignal
+): Promise<GroupedSearchResults | null> {
+  const searchParams = new URLSearchParams();
+  searchParams.set('q', params.q);
+  if (params.type && params.type !== 'all') {
+    searchParams.set('type', params.type);
+  }
+  if (params.limit) {
+    searchParams.set('limit', params.limit.toString());
+  }
+
+  try {
+    const response = await fetch(
+      `${API_URL}/search?${searchParams.toString()}`,
+      { signal }
+    );
+
+    if (!response.ok) {
+      throw new Error('Search failed');
+    }
+
+    return response.json();
+  } catch (err) {
+    // Handle AbortError gracefully
+    if (err instanceof Error && err.name === 'AbortError') {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Get entity full details
+ * Phase D: Real implementation
+ */
+export async function getEntityFull(id: number): Promise<EntityDetail> {
+  const response = await fetch(`${API_URL}/entities/${id}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch entity ${id}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get findings for an entity
+ * Phase D: Entity page
+ */
+export async function getEntityFindings(
+  entityId: number,
+  options?: { minAmountCrore?: number; severity?: string; limit?: number }
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (options?.minAmountCrore !== undefined) {
+    params.set('min_amount_crore', options.minAmountCrore.toString());
+  }
+  if (options?.severity) {
+    params.set('severity', options.severity);
+  }
+  if (options?.limit) {
+    params.set('limit', options.limit.toString());
+  }
+
+  const url = `${API_URL}/entities/${entityId}/findings${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch findings for entity ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.findings || [];
+}
+
+/**
+ * Get reports for an entity
+ * Phase D: Entity page
+ */
+export async function getEntityReports(entityId: number): Promise<string[]> {
+  const url = `${API_URL}/entities/${entityId}/reports`;
+  console.log(`[API] getEntityReports: fetching ${url}`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch reports for entity ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  console.log(`[API] getEntityReports(${entityId}): received`, data.report_ids?.length ?? 0, 'report_ids');
+  return data.report_ids || [];
+}
+
+/**
+ * Get related entities
+ * Phase D: Entity page
+ */
+export async function getEntityRelated(entityId: number, limit: number = 20): Promise<any[]> {
+  const response = await fetch(`${API_URL}/entities/${entityId}/related?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch related entities for ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.related || [];
+}
+
+/**
+ * Get mentions for an entity
+ * Phase D: Entity page
+ */
+export async function getEntityMentions(
+  entityId: number,
+  options?: { findingType?: string; auditYear?: string; governmentBodyType?: string; limit?: number }
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (options?.findingType) {
+    params.set('finding_type', options.findingType);
+  }
+  if (options?.auditYear) {
+    params.set('audit_year', options.auditYear);
+  }
+  if (options?.governmentBodyType) {
+    params.set('government_body_type', options.governmentBodyType);
+  }
+  if (options?.limit) {
+    params.set('limit', options.limit.toString());
+  }
+
+  const url = `${API_URL}/entities/${entityId}/mentions${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch mentions for entity ${entityId}: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.mentions || [];
+}
+
+// ============================================================================
+// Hierarchical Summaries (Item 6: RAPTOR summaries)
+// ============================================================================
+
+export interface HierarchicalSummary {
+  chunk_id: string;
+  title: string;
+  summary: string;
+  level: number; // 1=section, 2=chapter
+  parent_chunk_id?: string;
+}
+
+export interface HierarchicalResponse {
+  report_id: string;
+  summaries: HierarchicalSummary[];
+  total: number;
+}
+
+/**
+ * Fetch hierarchical (RAPTOR) summaries for a report.
+ * These are pre-computed chapter and section-level summaries.
+ *
+ * @param reportId - The report identifier
+ * @param level - Optional filter by hierarchy level (1=section, 2=chapter)
+ * @param limit - Maximum number of summaries to return (default: 20, max: 50)
+ */
+export async function fetchHierarchicalSummaries(
+  reportId: string,
+  options?: { level?: number; limit?: number }
+): Promise<HierarchicalResponse> {
+  const params = new URLSearchParams();
+  if (options?.level) {
+    params.set('level', options.level.toString());
+  }
+  if (options?.limit) {
+    params.set('limit', options.limit.toString());
+  }
+
+  const queryString = params.toString();
+  const url = `${API_URL}/reports/${reportId}/hierarchical${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 503) {
+      throw new Error('Qdrant service not available');
+    }
+    throw new Error(`Failed to fetch hierarchical summaries: ${response.statusText}`);
+  }
+
+  return response.json();
 }

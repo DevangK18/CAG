@@ -1,11 +1,13 @@
 """
 Configuration management with environment variables.
+
+Supports both local development and Cloud Run deployment with GCS.
 """
 
 from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import computed_field
-from typing import List
+from typing import List, Optional
 import os
 
 
@@ -27,11 +29,26 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     COHERE_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
 
-    # LLM Settings
-    LLM_PROVIDER: str = "openai"
+    # LLM Settings - Default to Gemini for GCP credit billing
+    LLM_PROVIDER: str = "gemini"
     OPENAI_MODEL: str = "gpt-4o"
-    CLAUDE_MODEL: str = "claude-sonnet-4-20250514"
+    CLAUDE_MODEL: str = "claude-sonnet-5"
+    GEMINI_MODEL: str = "gemini-3.5-flash"  # Latest Gemini for GCP billing
+
+    # GCS Storage Configuration (for Cloud Run deployment)
+    DATA_BUCKET: str = ""  # GCS bucket name (e.g., "cag-data-project-id")
+    DATA_DIR: str = ""  # Override data directory (set by Cloud Run/Docker)
+
+    # Environment
+    ENVIRONMENT: str = "development"
+
+    @computed_field
+    @property
+    def is_cloud_run(self) -> bool:
+        """Check if running on Cloud Run (GCS-backed storage)."""
+        return bool(self.DATA_BUCKET)
 
     @computed_field
     @property
@@ -41,21 +58,33 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
+    def _data_root(self) -> Path:
+        """Root directory for data files.
+
+        In Cloud Run: uses DATA_DIR env var (e.g., /app/data)
+        In local dev: uses BASE_DIR/data
+        """
+        if self.DATA_DIR:
+            return Path(self.DATA_DIR)
+        return _BASE_DIR / "data"
+
+    @computed_field
+    @property
     def PDF_DIR(self) -> Path:
         """Directory containing PDF files"""
-        return _BASE_DIR / "data" / "raw"
+        return self._data_root / "raw"
 
     @computed_field
     @property
     def PROCESSED_DIR(self) -> Path:
         """Directory containing processed JSON files"""
-        return _BASE_DIR / "data" / "processed"
+        return self._data_root / "processed"
 
     @computed_field
     @property
     def MANIFEST_PATH(self) -> Path:
         """Path to manifest.json"""
-        return _BASE_DIR / "data" / "processed" / "manifest.json"
+        return self._data_root / "processed" / "manifest.json"
 
     class Config:
         env_file = ".env"

@@ -433,6 +433,261 @@ async def query_series_stream(request: Request, series_id: str, body: SeriesQuer
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =============================================================================
+# AGENTIC ENDPOINTS (Phase 11 - Series × Agentic Integration)
+# =============================================================================
+
+# SSE headers shared by streaming routes
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+def _build_series_context_from_dict(series: dict):
+    """
+    Build a SeriesContext from a series dictionary.
+
+    This is used when we have series data from _get_series_by_id()
+    rather than from the ReportRegistry directly.
+
+    Args:
+        series: Dictionary with series_id, name, description, and reports[]
+
+    Returns:
+        SeriesContext for temporal-aware decomposition and synthesis
+    """
+    try:
+        from report_registry import SeriesContext
+    except ImportError:
+        # If import fails, return None to gracefully degrade
+        logger.warning("Could not import SeriesContext; temporal awareness disabled")
+        return None
+
+    reports = series.get("reports", [])
+    if not reports:
+        return None
+
+    # Build year-ordered report IDs
+    ordered_report_ids = [r["report_id"] for r in reports]
+
+    # Build years list
+    years_covered = [r["audit_year"] for r in reports if r.get("audit_year")]
+
+    # Build report_id -> audit_year mapping
+    report_year_map = {
+        r["report_id"]: r.get("audit_year", "Unknown")
+        for r in reports
+    }
+
+    # Build report_id -> title mapping
+    import re
+    report_title_map = {}
+    for r in reports:
+        title = r.get("report_title", r["report_id"])
+        # Remove "Report No. X of YYYY - " prefix if present
+        title = re.sub(r"^Report\s+No\.?\s*\d+\s+of\s+\d{4}\s*[-–]\s*", "", title)
+        # Remove "Union Government" / "State Government" prefix
+        title = re.sub(r"^(Union|State)\s+Government\s*[-–]?\s*", "", title)
+        report_title_map[r["report_id"]] = title.strip() or r.get("report_title", r["report_id"])
+
+    return SeriesContext(
+        series_id=series["series_id"],
+        series_name=series.get("name", series["series_id"]),
+        description=series.get("description", ""),
+        ordered_report_ids=ordered_report_ids,
+        years_covered=years_covered,
+        report_year_map=report_year_map,
+        report_title_map=report_title_map,
+    )
+
+
+@router.post("/{series_id}/query/agentic", response_model=ChatResponse)
+@limiter.limit(RATE_LIMIT_CHAT)
+async def query_series_agentic(request: Request, series_id: str, body: SeriesQueryRequest):
+    """
+    Agentic query across all reports in a time series (synchronous).
+
+    Uses the AgenticRAGService for multi-hop and cross-report queries,
+    with retrieval scope locked to the reports in the series.
+
+    Rate limited to prevent LLM API abuse.
+    """
+    try:
+        series = _get_series_by_id(series_id)
+
+        if not series:
+            raise HTTPException(
+                status_code=404, detail=f"Series '{series_id}' not found"
+            )
+
+        # Get report IDs from series
+        report_ids = [r["report_id"] for r in series["reports"]]
+
+        if not report_ids:
+            raise HTTPException(
+                status_code=404, detail=f"No reports found in series '{series_id}'"
+            )
+
+        # Check if agentic service is enabled
+        from ..services.streaming_wrapper import get_rag_service, generate_agentic_sync
+
+        rag = get_rag_service()
+        if not rag:
+            raise HTTPException(status_code=503, detail="RAG service not initialized")
+        if not rag.agentic_service:
+            raise HTTPException(
+                status_code=503,
+                detail="Agentic service not enabled. Set agentic.enabled=True in config.",
+            )
+
+        logger.info(f"=== SERIES AGENTIC QUERY (sync) ===")
+        logger.info(f"Series: {series_id}")
+        logger.info(f"Query: {body.query}")
+        logger.info(f"Report IDs ({len(report_ids)}): {report_ids}")
+        logger.info(f"Compare years: {body.compare_years}")
+
+        # Calculate total top_k based on reports
+        total_top_k = body.top_k_per_report * len(report_ids)
+
+        # Build series context for temporal awareness when compare_years is enabled
+        series_context = None
+        if body.compare_years:
+            series_context = _build_series_context_from_dict(series)
+            if series_context:
+                logger.info(
+                    f"Series context built: {len(series_context.years_covered)} years"
+                )
+
+        result = generate_agentic_sync(
+            query=body.query,
+            style=body.style.value,
+            report_ids=report_ids,
+            top_k=total_top_k,
+            series_context=series_context,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in agentic query for series {series_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{series_id}/query/agentic/stream")
+@limiter.limit(RATE_LIMIT_CHAT)
+async def query_series_agentic_stream(request: Request, series_id: str, body: SeriesQueryRequest):
+    """
+    Agentic query across all reports in a time series (streaming SSE).
+
+    Uses the AgenticRAGService for multi-hop and cross-report queries,
+    with retrieval scope locked to the reports in the series.
+
+    Emits additional event types beyond standard chat:
+    - "planning"       — decomposition result (complexity, sub-queries)
+    - "sub_query"      — each sub-query starting
+    - "iteration"      — each retrieval iteration
+    - "reformulation"  — when a query is rewritten
+    - "synthesizing"   — final answer generation starting
+    - "agentic_trace"  — full trace at end
+
+    Rate limited to prevent LLM API abuse.
+    """
+    try:
+        series = _get_series_by_id(series_id)
+
+        if not series:
+            raise HTTPException(
+                status_code=404, detail=f"Series '{series_id}' not found"
+            )
+
+        # Get report IDs from series
+        report_ids = [r["report_id"] for r in series["reports"]]
+
+        if not report_ids:
+            raise HTTPException(
+                status_code=404, detail=f"No reports found in series '{series_id}'"
+            )
+
+        # Check if agentic service is enabled
+        from ..services.streaming_wrapper import get_rag_service, generate_agentic_stream
+
+        rag = get_rag_service()
+        if not rag:
+            raise HTTPException(status_code=503, detail="RAG service not initialized")
+        if not rag.agentic_service:
+            raise HTTPException(
+                status_code=503,
+                detail="Agentic service not enabled. Set agentic.enabled=True in config.",
+            )
+
+        logger.info(f"=== SERIES AGENTIC QUERY (stream) ===")
+        logger.info(f"Series: {series_id}")
+        logger.info(f"Query: {body.query}")
+        logger.info(f"Report IDs ({len(report_ids)}): {report_ids}")
+        logger.info(f"Compare years: {body.compare_years}")
+
+        # Calculate total top_k based on reports
+        total_top_k = body.top_k_per_report * len(report_ids)
+        logger.info(f"Total top_k: {total_top_k}")
+
+        # Build series context for temporal awareness when compare_years is enabled
+        series_context = None
+        if body.compare_years:
+            series_context = _build_series_context_from_dict(series)
+            if series_context:
+                logger.info(
+                    f"Series context built: {len(series_context.years_covered)} years"
+                )
+
+        async def event_generator():
+            try:
+                # Emit series metadata first
+                series_meta = {
+                    "series_id": series_id,
+                    "series_name": series["name"],
+                    "years": [
+                        r["audit_year"] for r in series["reports"] if r["audit_year"]
+                    ],
+                    "report_count": len(report_ids),
+                    "report_ids": report_ids,
+                    "agentic": True,  # Flag to indicate agentic mode
+                    "temporal_aware": series_context is not None,  # Phase B flag
+                }
+                yield f"data: {json.dumps({'type': 'series_info', 'data': series_meta})}\n\n"
+
+                # Use agentic streaming with series context
+                async for event in generate_agentic_stream(
+                    query=body.query,
+                    style=body.style.value,
+                    report_ids=report_ids,
+                    top_k=total_top_k,
+                    series_context=series_context,
+                ):
+                    yield f"data: {json.dumps(event)}\n\n"
+
+            except Exception as e:
+                logger.error(f"Agentic stream error: {e}", exc_info=True)
+                yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers=SSE_HEADERS,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error starting agentic stream for series {series_id}: {e}", exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{series_id}/reports")
 async def list_series_reports(series_id: str):
     """List all reports in a time series."""

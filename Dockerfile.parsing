@@ -1,0 +1,83 @@
+# =============================================================================
+# CAG Parsing Pipeline Container
+# =============================================================================
+# This container includes all heavy ML dependencies for running the
+# 10-phase parsing pipeline on Compute Engine.
+#
+# Build:
+#   docker build -f Dockerfile.parsing -t cag-parsing .
+#
+# Run locally:
+#   docker run -v ./data:/app/data -v ./manifest.xlsx:/app/manifest.xlsx \
+#     cag-parsing manifest.xlsx
+#
+# On GCP (with GCS):
+#   docker run -e DATA_BUCKET=cag-data-xxx cag-parsing manifest.xlsx
+# =============================================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for OCR, PDF processing, and ML
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # OCR
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    # PDF utilities
+    poppler-utils \
+    ghostscript \
+    # OpenCV dependencies
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    # Build tools for some Python packages
+    gcc \
+    g++ \
+    # Utilities
+    curl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry for dependency management
+RUN pip install --no-cache-dir poetry
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock ./
+
+# Configure Poetry: don't create virtualenv, install to system Python
+RUN poetry config virtualenvs.create false
+
+# Install all dependencies including parsing group
+RUN poetry install --with parsing --no-interaction --no-ansi --no-root
+
+# Install additional GCS dependencies
+RUN pip install --no-cache-dir google-cloud-storage
+
+# Copy all source code (including parsing pipeline)
+COPY src/ ./src/
+
+# Copy configuration files
+COPY parsing_config.yaml ./
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Data directory (can be mounted or synced from GCS)
+ENV DATA_DIR=/app/data
+
+# Create all required data directories
+RUN mkdir -p /app/data/{raw,processed}/{union,state,local_body} \
+    && mkdir -p /app/data/processed/ocred \
+    && mkdir -p /app/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction} \
+    && mkdir -p /app/data/extraction_images/{tables,charts} \
+    && mkdir -p /app/data/entity_graph \
+    && mkdir -p /app/logs/traces/{union,state,local_body}
+
+# Default entrypoint runs the parsing pipeline
+ENTRYPOINT ["python", "-m", "src.parsing_pipeline.main"]
+
+# Default command (can be overridden)
+CMD ["--help"]

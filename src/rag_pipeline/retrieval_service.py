@@ -14,6 +14,7 @@ Requirements:
 
 import re
 import logging
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
 try:
@@ -52,6 +53,30 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# FINDING SNIPPET (for home page search)
+# =============================================================================
+
+
+@dataclass
+class FindingSnippet:
+    """
+    Lightweight finding result for home page search dropdown.
+
+    Per §8 of 02_backend_implementation_plan.md.
+    """
+
+    chunk_id: str
+    report_id: str
+    section: str
+    page: int
+    snippet: str  # First ~200 chars of chunk content
+    finding_type: Optional[str]
+    severity: Optional[str]
+    amount_crore: Optional[float]
+    score: float
 
 
 # =============================================================================
@@ -315,6 +340,45 @@ class SparseQueryEncoder:
         for match in re.finditer(r"\b([A-Z]{2,6})\b", text):
             tokens.append(f"acronym_{match.group(1)}")
 
+        # State/Local Body specific patterns
+        # These terms are important for State/Local reports but don't match
+        # the acronym pattern (which already catches PRI, ULB, GP, ZP, ATIR, SPSE)
+
+        # Panchayat-related terms (boost for local body queries)
+        panchayat_patterns = [
+            r"panchayat",
+            r"panchayati",
+            r"gram\s*panchayat",
+            r"zila\s*parishad",
+            r"block\s*development",
+            r"municipal\s*corporation",
+            r"urban\s*local",
+            r"local\s*body",
+            r"local\s*bodies",
+            r"local\s*fund",
+            r"pri\s*audit",
+            r"ulb\s*audit",
+        ]
+        for pattern in panchayat_patterns:
+            for match in re.finditer(rf"\b({pattern})\b", text_lower):
+                tokens.append(f"local_body_{match.group(1).replace(' ', '_')}")
+
+        # State audit specific terms
+        state_patterns = [
+            r"state\s*exchequer",
+            r"state\s*consolidated",
+            r"state\s*pse",
+            r"district\s*collector",
+            r"state\s*ag",
+            r"principal\s*accountant",
+            r"accountant\s*general",
+            r"state\s*finance",
+            r"state\s*revenue",
+        ]
+        for pattern in state_patterns:
+            for match in re.finditer(rf"\b({pattern})\b", text_lower):
+                tokens.append(f"state_audit_{match.group(1).replace(' ', '_')}")
+
         # Regular words
         words = re.findall(r"\b[a-z]{2,}\b", text_lower)
         tokens.extend([w for w in words if w not in self._stopwords])
@@ -339,6 +403,8 @@ class SparseQueryEncoder:
                 boost = 3.0
             elif token.startswith("acronym_"):
                 boost = 2.5
+            elif token.startswith(("local_body_", "state_audit_")):
+                boost = 2.0  # Slightly below acronym boost, above default
             elif token.startswith(("money_", "year_")):
                 boost = 1.5
             else:
@@ -561,12 +627,22 @@ class RetrievalService:
         Main retrieval method (backward compatible).
         Now delegates to retrieve_multi_query.
 
+        Note: Auto-filter extraction (state names, years, tiers, audit categories)
+        is handled by the calling service (RAGService, AgenticRAGService) before
+        filters are passed here. The filters dict may contain auto-detected values
+        merged with explicit user filters. This method accepts the final merged
+        filters and applies them to Qdrant queries.
+
         Args:
             query: User's question
             top_k: Number of final results
-            filters: Semantic filters like:
+            filters: Semantic filters (explicit or auto-detected) like:
                 - report_id: str
                 - report_year: int or {"gte": 2022}
+                - audit_year: str (e.g., "2023-24")
+                - state_name: str (e.g., "Kerala")
+                - government_body_type: str ("union", "state", "local_body")
+                - audit_category: str ("performance", "compliance", etc.)
                 - finding_type: str
                 - severity: str
                 - total_amount_crore: {"gte": 10.0}
@@ -671,10 +747,21 @@ class RetrievalService:
         )
 
     def _embed_query_dense(self, query: str) -> List[float]:
-        """Generate dense embedding for query."""
+        """Generate dense embedding for query.
+
+        OPT-4: Prepends instruction prefix for better retrieval alignment.
+        """
+        # OPT-4: Add query instruction prefix if enabled
+        retrieval_config = self.config.retrieval
+        if getattr(retrieval_config, 'enable_query_prefix', False):
+            prefix = getattr(retrieval_config, 'query_prefix', 'Retrieve audit finding: ')
+            query_text = f"{prefix}{query}"
+        else:
+            query_text = query
+
         response = self.openai_client.embeddings.create(
             model=self.config.embedding.model,
-            input=query,
+            input=query_text,
             dimensions=self.config.embedding.dimensions,
         )
         return response.data[0].embedding
@@ -781,3 +868,111 @@ class RetrievalService:
         )
 
         return parents
+
+    # =========================================================================
+    # FINDINGS SNIPPET SEARCH (Phase C - Home Page)
+    # =========================================================================
+
+    def search_findings_snippets(
+        self,
+        query: str,
+        limit: int = 5,
+        auto_filter: bool = True,
+    ) -> List[FindingSnippet]:
+        """
+        Lightweight finding search for home page search dropdown.
+
+        Per §8 of 02_backend_implementation_plan.md:
+        - Calls retrieve() with filter for findings only
+        - Returns small snippet objects (first ~200 chars)
+        - Used by search_service._search_findings()
+
+        Args:
+            query: Search query
+            limit: Max findings to return
+            auto_filter: Enable Bridge A auto-filter extraction (default True)
+
+        Returns:
+            List of FindingSnippet objects
+        """
+        if not query or not query.strip():
+            return []
+
+        try:
+            # Build filter for findings only
+            filters = {"finding_type": {"$ne": None}}
+
+            # Call retrieve with the findings filter
+            result = self.retrieve(
+                query=query,
+                top_k=limit,
+                filters=filters,
+            )
+
+            snippets = []
+            seen_chunks = set()
+
+            # Walk through parents and extract highest-scored chunk per finding
+            for parent in result.parents:
+                for child in parent.children:
+                    if child.chunk_id in seen_chunks:
+                        continue
+
+                    # Only include chunks with finding_type
+                    finding_type = child.finding_type
+                    if not finding_type:
+                        continue
+
+                    seen_chunks.add(child.chunk_id)
+
+                    # Truncate content to ~200 chars
+                    content = child.content or ""
+                    snippet_text = content[:200]
+                    if len(content) > 200:
+                        # Try to break at word boundary
+                        last_space = snippet_text.rfind(' ')
+                        if last_space > 150:
+                            snippet_text = snippet_text[:last_space] + "..."
+                        else:
+                            snippet_text = snippet_text + "..."
+
+                    # Extract report_id from chunk_id
+                    # Format: {report_id}_child_p{page}_{type}_{index}
+                    report_id = child.report_id or ""
+                    if not report_id and child.chunk_id:
+                        # Parse from chunk_id if not available
+                        parts = child.chunk_id.rsplit("_child_", 1)
+                        if len(parts) > 1:
+                            report_id = parts[0]
+
+                    # Get section from hierarchy
+                    section = "Unknown Section"
+                    if child.hierarchy:
+                        # Get the most specific (last) hierarchy entry
+                        section_values = list(child.hierarchy.values())
+                        if section_values:
+                            section = section_values[-1]
+
+                    snippets.append(FindingSnippet(
+                        chunk_id=child.chunk_id,
+                        report_id=report_id,
+                        section=section,
+                        page=child.page_physical or 0,
+                        snippet=snippet_text,
+                        finding_type=finding_type,
+                        severity=child.severity,
+                        amount_crore=child.total_amount_crore,
+                        score=child.score,
+                    ))
+
+                    if len(snippets) >= limit:
+                        break
+
+                if len(snippets) >= limit:
+                    break
+
+            return snippets
+
+        except Exception as e:
+            logger.warning(f"search_findings_snippets failed: {e}")
+            return []

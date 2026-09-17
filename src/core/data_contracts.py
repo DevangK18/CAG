@@ -17,6 +17,77 @@ from typing import List, Optional, Literal, Dict, Tuple, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
+from dataclasses import dataclass, field
+
+
+# ==================== TOC QUALITY METRICS ====================
+
+
+# Source types for TOC extraction - tracks which method produced the TOC
+TOCSource = Literal[
+    "bookmarks",          # PDF embedded bookmarks
+    "toc_table",          # Parsed from printed TOC table
+    "heuristic",          # Font-based heading detection
+    "combined",           # Multiple sources merged
+    "docling_reconciled", # Phase 5.5 reconciliation with Docling
+    "llm_validated",      # Phase 5.7 LLM validation
+    "none",               # No TOC extracted
+]
+
+
+@dataclass
+class TOCQualityMetrics:
+    """
+    Quality metrics for a TOC extraction.
+
+    Used by Phase 4 (Scaffolding) to score bookmark quality and decide
+    whether to use embedded TOC or fall back to heuristic generation.
+
+    The score() method returns 0-100 based on structural quality and
+    confidence adjustments (assembly pattern penalties, CAG pattern bonuses).
+    """
+
+    source: str  # TOCSource literal value
+    entry_count: int
+    level_count: int  # Number of unique hierarchy levels
+    has_chapters: bool
+    has_sections: bool
+    page_coverage: float  # Fraction of document pages covered (0-1)
+    confidence: float  # Confidence adjustment factor (0-1)
+
+    def score(self) -> float:
+        """
+        Calculate overall quality score (0-100).
+
+        Scoring breakdown:
+        - Entry count: 0-30 points (2 points per entry, max 30)
+        - Level depth: 0-25 points (8 points per level, max 25)
+        - Has chapters: 15 points
+        - Has sections: 15 points
+        - Page coverage: 0-15 points (proportional to coverage)
+
+        Final score is multiplied by confidence factor.
+        """
+        score = 0.0
+
+        # Entry count (0-30 points)
+        score += min(30, self.entry_count * 2)
+
+        # Level depth (0-25 points)
+        score += min(25, self.level_count * 8)
+
+        # Has chapters (15 points)
+        if self.has_chapters:
+            score += 15
+
+        # Has sections (15 points)
+        if self.has_sections:
+            score += 15
+
+        # Page coverage (0-15 points)
+        score += self.page_coverage * 15
+
+        return min(100, score) * self.confidence
 
 
 # ==================== PHASE 1-3: EXTRACTION MODELS ====================
@@ -98,6 +169,28 @@ class ParentChunk(BaseModel):
         description="Y-coordinate of section heading on first page (for multi-section pages)"
     )
 
+    # Multi-tier expansion fields
+    government_body_type: Literal["union", "state", "local_body"] = Field(
+        default="union",
+        description="Type of government body: union, state, or local_body"
+    )
+    state_name: Optional[str] = Field(
+        default=None,
+        description="State name for State/Local Body reports (e.g., 'Odisha', 'Maharashtra'); null for Union"
+    )
+    department: Optional[str] = Field(
+        default=None,
+        description="State/Local Body department (equivalent to Union ministry); null for Union"
+    )
+    audit_category: Literal["compliance", "performance", "financial", "revenue", "commercial", "atir"] = Field(
+        default="compliance",
+        description="Audit category type"
+    )
+    report_subtype: Optional[Literal["PSE", "Revenue", "PRI_ULB"]] = Field(
+        default=None,
+        description="Report subtype: PSE (Public Sector Enterprises), Revenue, PRI_ULB (Panchayati Raj/Urban Local Bodies)"
+    )
+
 
 class ChildChunk(BaseModel):
     """Child chunk with full extraction metadata and parent linking."""
@@ -166,6 +259,28 @@ class ChildChunk(BaseModel):
         description="P4-6: Subtype for image_caption chunks: 'chart', 'map', 'flowchart', 'diagram', 'photo', 'data_visualization', 'unknown'"
     )
 
+    # Multi-tier expansion fields
+    government_body_type: Literal["union", "state", "local_body"] = Field(
+        default="union",
+        description="Type of government body: union, state, or local_body"
+    )
+    state_name: Optional[str] = Field(
+        default=None,
+        description="State name for State/Local Body reports (e.g., 'Odisha', 'Maharashtra'); null for Union"
+    )
+    department: Optional[str] = Field(
+        default=None,
+        description="State/Local Body department (equivalent to Union ministry); null for Union"
+    )
+    audit_category: Literal["compliance", "performance", "financial", "revenue", "commercial", "atir"] = Field(
+        default="compliance",
+        description="Audit category type"
+    )
+    report_subtype: Optional[Literal["PSE", "Revenue", "PRI_ULB"]] = Field(
+        default=None,
+        description="Report subtype: PSE (Public Sector Enterprises), Revenue, PRI_ULB (Panchayati Raj/Urban Local Bodies)"
+    )
+
 
 # ==================== PHASE 5: SEMANTIC ENRICHMENT MODELS ====================
 
@@ -209,6 +324,21 @@ class SectionTypeEnum(str, Enum):
     GLOSSARY = "glossary"
     ACKNOWLEDGEMENT = "acknowledgement"
     PREFACE = "preface"
+    # P0-09: Expanded taxonomy for State/Local Body performance audits
+    FINANCIAL_MANAGEMENT = "financial_management"
+    EMPLOYMENT = "employment"
+    EXECUTION = "execution"
+    PLANNING = "planning"
+    CAPACITY_BUILDING = "capacity_building"
+    GRIEVANCE_REDRESSAL = "grievance_redressal"
+    IMPACT = "impact"
+    MONITORING_EVALUATION = "monitoring_evaluation"
+    COMPLIANCE_REVIEW = "compliance_review"
+    PERFORMANCE_AUDIT = "performance_audit"
+    INFRASTRUCTURE = "infrastructure"
+    SERVICE_DELIVERY = "service_delivery"
+    REGULATORY = "regulatory"
+    ENVIRONMENT = "environment"
     OTHER = "other"
 
 
@@ -236,6 +366,13 @@ class Finding(BaseModel):
     total_amount_inr: int = Field(
         default=0, description="Sum of all monetary values (in paise)"
     )
+    # P0-01: Single monetary value fields (max amount from monetary_values)
+    monetary_value: Optional[int] = Field(
+        default=None, description="P0-01: Max single monetary amount (in paise)"
+    )
+    monetary_value_crore: Optional[float] = Field(
+        default=None, description="P0-01: Max single monetary amount (in crore, derived from monetary_value)"
+    )
     # P1-2: Enhanced semantic pattern matching fields
     confidence: float = Field(
         default=0.0, description="P1-2: Confidence score (0.0-1.0) from pattern matching"
@@ -248,12 +385,21 @@ class Finding(BaseModel):
         default_factory=list, description="P1-3: Links to supporting evidence (tables, paragraphs, etc.)"
     )
     chapter: Optional[str] = Field(None, description="Chapter heading")
-    section: Optional[str] = Field(None, description="Section heading")
+    section: Optional[str] = Field(
+        None,
+        description="Section heading from parent chunk's toc_entry. Also accessible as source_section property."
+    )
     page: int = Field(default=0, description="Source page number")
     source_chunk_id: str = Field(default="", description="Source chunk ID")
     entities_mentioned: List[str] = Field(
         default_factory=list, description="Schemes, programs, etc."
     )
+
+    # M2 fix: Alias for section field for clarity (source_section is more descriptive)
+    @property
+    def source_section(self) -> Optional[str]:
+        """Alias for section field - returns the source section from parent chunk's TOC entry."""
+        return self.section
 
     # P3-3: Temporal context for the finding
     audit_period: Optional[Dict[str, int]] = Field(
@@ -263,6 +409,28 @@ class Finding(BaseModel):
     reference_years: List[int] = Field(
         default_factory=list,
         description="All years explicitly mentioned in the finding text"
+    )
+
+    # R3: Cross-finding deduplication fields
+    is_duplicate: bool = Field(
+        default=False,
+        description="R3: True if this finding duplicates another (same amount on nearby pages)"
+    )
+    dedup_group_id: Optional[str] = Field(
+        default=None,
+        description="R3: Group identifier for duplicate findings (e.g., 'dedup_10000000000')"
+    )
+
+    # R4: Executive summary section flagging
+    is_executive_summary: bool = Field(
+        default=False,
+        description="R4: True if finding is from executive summary/overview section"
+    )
+
+    # R5: Monetary context classification
+    monetary_context: Optional[str] = Field(
+        default=None,
+        description="R5: Context of primary monetary value (finding_impact, budget_allocation, etc.)"
     )
 
 
@@ -313,6 +481,11 @@ class SectionClassification(BaseModel):
     section_title: str = Field(..., description="Section title from TOC")
     section_type: str = Field(..., description="SectionType enum value")
     confidence: float = Field(..., description="Classification confidence 0.0-1.0")
+    # P1-C: Flag for low-confidence extractions needing LLM validation
+    is_low_confidence: bool = Field(
+        default=False,
+        description="True if confidence below threshold, candidate for LLM validation"
+    )
 
 
 class SemanticEnrichmentStats(BaseModel):
@@ -375,6 +548,41 @@ class SemanticEnrichment(BaseModel):
     )
 
 
+# ==================== P1-14c: VISUAL ASSET REGISTRY ====================
+
+
+class VisualAssetRegistry(BaseModel):
+    """
+    P1-14c: Registry tracking all extracted visual assets.
+
+    Used for:
+    - Counting tables/figures per report
+    - Tracking extraction methods used (pdfplumber, docling, gemini)
+    - Grouping visual assets by section for downstream processing
+    """
+
+    total_tables: int = Field(
+        default=0,
+        description="Total number of table chunks in the report"
+    )
+    total_figures: int = Field(
+        default=0,
+        description="Total number of figure/chart chunks in the report"
+    )
+    tables_by_section: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Map of parent_chunk_id -> list of table chunk_ids"
+    )
+    figures_by_section: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Map of parent_chunk_id -> list of figure chunk_ids"
+    )
+    extraction_stats: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Counts by extraction method: {'pdfplumber-lines_strict': 42, 'docling-tableformer': 15}"
+    )
+
+
 # ==================== PIPELINE TASK MODEL ====================
 
 
@@ -405,6 +613,8 @@ class DocumentTask(BaseModel):
     # Added by ChunkingService
     parent_chunks: Optional[List[ParentChunk]] = None
     child_chunks: Optional[List[ChildChunk]] = None
+    # M2-FIX: DLQ entries from multi-page table handler
+    dlq_entries: Optional[List[Dict[str, Any]]] = None
 
     # Added by AssemblyService
     assembled_output_path: Optional[str] = None

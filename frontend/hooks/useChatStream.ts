@@ -6,12 +6,15 @@
  */
 
 import { useCallback } from 'react';
-import { streamChat } from '../lib/api';
+import { streamChat, streamChatAgentic } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { trackEvent } from '../lib/posthog';
+import { debug } from '../lib/debug';
+
+export type ChatMode = 'regular' | 'agentic';
 
 export interface UseChatStreamResult {
-  sendMessage: (query: string, reportIds?: string[]) => Promise<void>;
+  sendMessage: (query: string, reportIds?: string[], mode?: ChatMode) => Promise<void>;
   isStreaming: boolean;
   clearChat: () => void;
 }
@@ -28,9 +31,14 @@ export function useChatStream(): UseChatStreamResult {
     setCitationMap,
     clearMessages,
     setShowLowRelevanceCaveat,
+    setLastMessageGroundedness,
   } = useAppStore();
 
-  const sendMessage = useCallback(async (query: string, reportIds?: string[]) => {
+  const sendMessage = useCallback(async (
+    query: string,
+    reportIds?: string[],
+    mode: ChatMode = 'regular',
+  ) => {
     if (isStreaming) return;
 
     // Add user message
@@ -51,7 +59,8 @@ export function useChatStream(): UseChatStreamResult {
     setIsStreaming(true);
 
     try {
-      const stream = streamChat({
+      const streamFn = mode === 'agentic' ? streamChatAgentic : streamChat;
+      const stream = streamFn({
         query,
         style: responseStyle,
         report_ids: reportIds,
@@ -64,7 +73,7 @@ export function useChatStream(): UseChatStreamResult {
         switch (event.type) {
           case 'citation_map':
             // Store citation map FIRST before any tokens
-            console.log('Received citation_map event with keys:', Object.keys(event.data || {}));
+            debug.tagged('chat', 'Received citation_map event with keys:', Object.keys(event.data || {}));
             setCitationMap(event.data);
             break;
 
@@ -95,6 +104,22 @@ export function useChatStream(): UseChatStreamResult {
             appendToLastMessage(`\n\n_Error: ${event.data}_`);
             setLastMessageStreaming(false);
             break;
+
+          // Phase 11: agentic events. Log for now; UI can consume later.
+          case 'planning':
+          case 'sub_query':
+          case 'iteration':
+          case 'reformulation':
+          case 'synthesizing':
+          case 'agentic_trace':
+            debug.tagged(`agentic:${event.type}`, event.data);
+            break;
+
+          // Phase D: groundedness event - wire to store
+          case 'groundedness':
+            debug.tagged('groundedness', event.data);
+            setLastMessageGroundedness(event.data);
+            break;
         }
       }
     } catch (err) {
@@ -106,7 +131,7 @@ export function useChatStream(): UseChatStreamResult {
       setIsStreaming(false);
       setLastMessageStreaming(false);
     }
-  }, [isStreaming, responseStyle, addMessage, appendToLastMessage, setLastMessageStreaming, setLastMessageWaiting, setCitationMap, setIsStreaming, setShowLowRelevanceCaveat]);
+  }, [isStreaming, responseStyle, addMessage, appendToLastMessage, setLastMessageStreaming, setLastMessageWaiting, setCitationMap, setIsStreaming, setShowLowRelevanceCaveat, setLastMessageGroundedness]);
 
   return {
     sendMessage,

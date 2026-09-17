@@ -33,6 +33,7 @@ try:
         Prefetch,
         FusionQuery,
         PayloadSchemaType,
+        IsNullCondition,
     )
 except ImportError:
     raise ImportError("Install qdrant-client: pip install qdrant-client")
@@ -161,6 +162,10 @@ class QdrantService:
             ("parent_chunk_id", PayloadSchemaType.KEYWORD),
             ("content_type", PayloadSchemaType.KEYWORD),
             ("page_physical", PayloadSchemaType.INTEGER),
+            # Multi-tier indexes
+            ("government_body_type", PayloadSchemaType.KEYWORD),
+            ("state_name", PayloadSchemaType.KEYWORD),
+            ("audit_category", PayloadSchemaType.KEYWORD),
             # Semantic enrichment indexes
             ("finding_type", PayloadSchemaType.KEYWORD),
             ("severity", PayloadSchemaType.KEYWORD),
@@ -277,6 +282,47 @@ class QdrantService:
 
         return len(points)
 
+    def upsert_hierarchical_summaries(
+        self,
+        points_data: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Index hierarchical summaries (RAPTOR chapter/section summaries).
+
+        These are stored in the child collection with dense vectors only
+        (no sparse vectors needed for summaries).
+
+        Args:
+            points_data: List of dicts with 'id', 'vector', 'payload' keys
+
+        Returns:
+            Number of points upserted
+        """
+        points = []
+
+        for data in points_data:
+            # Construct vectors dict - dense only for hierarchical summaries
+            vectors = {"dense": data["vector"]}
+
+            points.append(
+                PointStruct(
+                    id=data["id"],
+                    vector=vectors,
+                    payload=data["payload"],
+                )
+            )
+
+        # Upsert in batches
+        batch_size = 100
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            self.client.upsert(
+                collection_name=self.child_collection,
+                points=batch,
+            )
+
+        return len(points)
+
     # =========================================================================
     # SEARCH
     # =========================================================================
@@ -291,6 +337,9 @@ class QdrantService:
         """
         Hybrid search using dense + sparse vectors with RRF fusion.
 
+        OPT-2: Uses configurable dense/sparse candidate ratios.
+        Default 40/60 favors BM25 for exact term matching in audit docs.
+
         Args:
             dense_vector: Dense embedding
             sparse_vector: Sparse vector {"indices": [], "values": []}
@@ -302,6 +351,12 @@ class QdrantService:
         """
         query_filter = self._build_filter(filters)
 
+        # OPT-2: Configurable dense/sparse candidate counts
+        # Higher sparse_candidates gives BM25 more influence in RRF fusion
+        retrieval_config = self.config.retrieval
+        dense_candidates = getattr(retrieval_config, 'dense_candidates', limit)
+        sparse_candidates = getattr(retrieval_config, 'sparse_candidates', limit)
+
         try:
             results = self.client.query_points(
                 collection_name=self.child_collection,
@@ -309,7 +364,7 @@ class QdrantService:
                     Prefetch(
                         query=dense_vector,
                         using="dense",
-                        limit=limit,
+                        limit=dense_candidates,
                         filter=query_filter,
                     ),
                     Prefetch(
@@ -318,7 +373,7 @@ class QdrantService:
                             values=sparse_vector.get("values", []),
                         ),
                         using="sparse",
-                        limit=limit,
+                        limit=sparse_candidates,
                         filter=query_filter,
                     ),
                 ],
@@ -351,14 +406,15 @@ class QdrantService:
         """
         query_filter = self._build_filter(filters)
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.child_collection,
-            query_vector=("dense", dense_vector),
+            query=dense_vector,
+            using="dense",
             query_filter=query_filter,
             limit=limit,
         )
 
-        return self._convert_results(results)
+        return self._convert_results(results.points)
 
     def _build_filter(self, filters: Optional[Dict[str, Any]]) -> Optional[Filter]:
         """Build Qdrant filter from semantic filters."""
@@ -372,18 +428,42 @@ class QdrantService:
                 continue
 
             if isinstance(value, dict):
-                # Range filter (e.g., {"gte": 10.0})
-                conditions.append(
-                    FieldCondition(
-                        key=key,
-                        range=Range(
-                            gte=value.get("gte"),
-                            lte=value.get("lte"),
-                            gt=value.get("gt"),
-                            lt=value.get("lt"),
-                        ),
+                # Check for special operators
+                if "$ne" in value:
+                    # Not equal operator: use IsNull if checking against None
+                    if value["$ne"] is None:
+                        # Field exists (is not null)
+                        conditions.append(
+                            FieldCondition(
+                                key=key,
+                                is_null=IsNullCondition(is_null=False),
+                            )
+                        )
+                    else:
+                        # For other values, we'd need to use must_not, skip for now
+                        logger.warning(f"$ne operator with non-None value not supported: {key}={value}")
+                elif "$exists" in value:
+                    # Exists operator
+                    is_null = not value["$exists"]
+                    conditions.append(
+                        FieldCondition(
+                            key=key,
+                            is_null=IsNullCondition(is_null=is_null),
+                        )
                     )
-                )
+                else:
+                    # Range filter (e.g., {"gte": 10.0})
+                    conditions.append(
+                        FieldCondition(
+                            key=key,
+                            range=Range(
+                                gte=value.get("gte"),
+                                lte=value.get("lte"),
+                                gt=value.get("gt"),
+                                lt=value.get("lt"),
+                            ),
+                        )
+                    )
             elif isinstance(value, list):
                 # Array match any
                 conditions.append(
@@ -471,6 +551,61 @@ class QdrantService:
             pass
 
         return None
+
+    def scroll_by_filter(
+        self,
+        filters: Dict[str, Any],
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Scroll through points matching filter conditions (no vector query).
+        Returns raw payloads.
+
+        Item 6: Used for hierarchical summaries endpoint.
+
+        Args:
+            filters: Filter conditions to match
+            limit: Maximum number of points to return
+
+        Returns:
+            List of payload dictionaries
+        """
+        query_filter = self._build_filter(filters)
+
+        try:
+            results, _ = self.client.scroll(
+                collection_name=self.child_collection,
+                scroll_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            return [point.payload for point in results]
+        except Exception as e:
+            logger.warning(f"scroll_by_filter failed: {e}")
+            return []
+
+    def count_filtered(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Count points matching a filter in the child collection.
+
+        Args:
+            filters: Semantic filters (same format as hybrid_search)
+
+        Returns:
+            Number of matching points
+        """
+        query_filter = self._build_filter(filters)
+
+        try:
+            result = self.client.count(
+                collection_name=self.child_collection,
+                count_filter=query_filter,
+            )
+            return result.count
+        except Exception as e:
+            logger.error(f"Count failed: {e}")
+            return 0
 
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get collection statistics."""

@@ -26,10 +26,64 @@ import json
 import re
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_report_no(report_no: Optional[str]) -> str:
+    """
+    Normalize report_no to clean 'X of YYYY' format.
+
+    Handles:
+    - Already clean: "16 of 2020" → "16 of 2020"
+    - Underscore num_year: "02_2024" → "2 of 2024"
+    - Underscore year_num: "2017_10" → "10 of 2017"
+    - "Unknown" or empty → ""
+    - None → ""
+
+    Returns:
+        Normalized report number string, or empty string if not available
+    """
+    if report_no is None:
+        return ""
+
+    val = str(report_no).strip()
+
+    # Handle "Unknown" or empty
+    if not val or val.lower() == "unknown" or val == "N/A":
+        return ""
+
+    # Already in clean format "X of YYYY"
+    if re.match(r"^\d+\s+of\s+\d{4}$", val, re.IGNORECASE):
+        return val
+
+    # Handle underscore formats
+    if "_" in val:
+        parts = val.split("_")
+        if len(parts) == 2:
+            first, second = parts
+            # year_num format: "2017_10"
+            if first.isdigit() and len(first) == 4:
+                return f"{int(second)} of {first}"
+            # num_year format: "02_2024"
+            elif second.isdigit() and len(second) == 4:
+                return f"{int(first)} of {second}"
+
+    # Handle slash formats: "2025/15" or "15/2025"
+    if "/" in val:
+        parts = val.split("/")
+        if len(parts) == 2:
+            first, second = parts
+            if first.isdigit() and len(first) == 4:
+                return f"{int(second)} of {first}"
+            elif second.isdigit() and len(second) == 4:
+                return f"{int(first)} of {second}"
+
+    # Return as-is if we can't parse it
+    return val
 
 
 @dataclass
@@ -46,6 +100,11 @@ class ReportInfo:
     sector: str
     report_type: str
     series_id: Optional[str] = None  # Which time series this belongs to
+    government_body_type: str = "union"  # "union", "state", "local_body"
+    state_name: Optional[str] = None  # e.g., "Odisha", null for Union
+    department: Optional[str] = None  # State/Local dept
+    audit_category: str = "compliance"  # "compliance", "performance", etc.
+    ingested_at: Optional[str] = None  # ISO timestamp of when report was ingested
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -60,6 +119,11 @@ class ReportInfo:
             "sector": self.sector,
             "report_type": self.report_type,
             "series_id": self.series_id,
+            "government_body_type": self.government_body_type,
+            "state_name": self.state_name,
+            "department": self.department,
+            "audit_category": self.audit_category,
+            "ingested_at": self.ingested_at,
         }
 
 
@@ -79,6 +143,60 @@ class TimeSeries:
             "name": self.name,
             "description": self.description,
             "report_ids": self.report_ids,
+        }
+
+
+@dataclass
+class SeriesContext:
+    """
+    Context for series-aware agentic queries.
+
+    Provides all information needed for temporal-aware decomposition
+    and synthesis prompts in agentic search over a time series.
+    """
+
+    series_id: str
+    series_name: str
+    description: str
+    ordered_report_ids: List[str]  # Year-ordered (oldest first)
+    years_covered: List[str]  # e.g., ["2020-21", "2021-22", "2022-23"]
+    report_year_map: Dict[str, str]  # report_id -> audit_year
+    report_title_map: Dict[str, str]  # report_id -> report_title (short)
+
+    def to_prompt_block(self) -> str:
+        """
+        Format context as a block for injection into prompts.
+
+        Returns a structured text block describing the series for LLM context.
+        """
+        lines = [
+            f"TIME SERIES CONTEXT: {self.series_name}",
+            f"Description: {self.description}",
+            f"Years covered: {', '.join(self.years_covered)}",
+            "",
+            "Reports in this series (chronological order):",
+        ]
+
+        for report_id in self.ordered_report_ids:
+            year = self.report_year_map.get(report_id, "Unknown")
+            title = self.report_title_map.get(report_id, report_id)
+            # Truncate title if too long
+            if len(title) > 80:
+                title = title[:77] + "..."
+            lines.append(f"  - [{year}] {title}")
+
+        return "\n".join(lines)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "series_id": self.series_id,
+            "series_name": self.series_name,
+            "description": self.description,
+            "ordered_report_ids": self.ordered_report_ids,
+            "years_covered": self.years_covered,
+            "report_year_map": self.report_year_map,
+            "report_title_map": self.report_title_map,
         }
 
 
@@ -182,10 +300,13 @@ class ReportRegistry:
                 # Determine series membership
                 series_id = self._match_series(report_title)
 
+                # Populate ingested_at from three sources (priority order)
+                ingested_at = self._extract_ingested_at(json_file, meta)
+
                 self._reports[report_id] = ReportInfo(
                     report_id=report_id,
                     report_title=report_title,
-                    report_no=meta.get("report_no", ""),
+                    report_no=normalize_report_no(meta.get("report_no")),
                     filename=filename,
                     report_year=meta.get("report_year", 0),
                     audit_year=audit_year,
@@ -193,6 +314,11 @@ class ReportRegistry:
                     sector=meta.get("sector", ""),
                     report_type=meta.get("report_type", ""),
                     series_id=series_id,
+                    government_body_type=meta.get("government_body_type", "union"),
+                    state_name=meta.get("state_name"),
+                    department=meta.get("department"),
+                    audit_category=meta.get("audit_category", "compliance"),
+                    ingested_at=ingested_at,
                 )
                 count += 1
 
@@ -288,6 +414,36 @@ class ReportRegistry:
             if re.search(config["pattern"], title, re.IGNORECASE):
                 return series_id
         return None
+
+    def _extract_ingested_at(self, json_file: Path, meta: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract ingested_at timestamp from three sources (priority order):
+        1. metadata.processing_completed_at from *_chunks.json
+        2. generated_at from *_overview_llm.json
+        3. File mtime fallback
+        """
+        # Priority 1: Check for processing_completed_at in metadata
+        if "processing_completed_at" in meta:
+            return meta.get("processing_completed_at")
+
+        # Priority 2: Try to load *_overview_llm.json for generated_at
+        overview_file = json_file.parent / json_file.name.replace("_chunks.json", "_overview_llm.json")
+        if overview_file.exists():
+            try:
+                with open(overview_file, "r", encoding="utf-8") as f:
+                    overview_data = json.load(f)
+                    if "generated_at" in overview_data:
+                        return overview_data.get("generated_at")
+            except Exception as e:
+                logger.debug(f"Could not load overview file {overview_file.name}: {e}")
+
+        # Priority 3: Fallback to file mtime
+        try:
+            mtime = json_file.stat().st_mtime
+            return datetime.fromtimestamp(mtime).isoformat()
+        except Exception as e:
+            logger.warning(f"Could not get mtime for {json_file.name}: {e}")
+            return None
 
     def _build_series(self):
         """Build TimeSeries objects from loaded reports."""
@@ -407,3 +563,59 @@ def init_registry(processed_dir: Path) -> ReportRegistry:
     if not registry.is_loaded():
         registry.load_from_json_dir(processed_dir)
     return registry
+
+
+def build_series_context(
+    registry: ReportRegistry,
+    series_id: str,
+) -> Optional[SeriesContext]:
+    """
+    Build a SeriesContext for use in agentic queries.
+
+    Args:
+        registry: The report registry instance
+        series_id: ID of the series to build context for
+
+    Returns:
+        SeriesContext with all information needed for temporal-aware
+        decomposition and synthesis, or None if series not found.
+    """
+    series = registry.get_series(series_id)
+    if not series:
+        logger.warning(f"Series not found: {series_id}")
+        return None
+
+    reports = registry.get_reports_in_series(series_id)
+    if not reports:
+        logger.warning(f"No reports found in series: {series_id}")
+        return None
+
+    # Build ordered report IDs (already ordered by audit year from registry)
+    ordered_report_ids = [r.report_id for r in reports]
+
+    # Build years list
+    years_covered = [r.audit_year for r in reports if r.audit_year]
+
+    # Build report_id -> audit_year mapping
+    report_year_map = {r.report_id: r.audit_year for r in reports}
+
+    # Build report_id -> title mapping (use short title if possible)
+    report_title_map = {}
+    for r in reports:
+        # Try to extract a shorter title (remove common prefixes)
+        title = r.report_title
+        # Remove "Report No. X of YYYY - " prefix if present
+        title = re.sub(r"^Report\s+No\.?\s*\d+\s+of\s+\d{4}\s*[-–]\s*", "", title)
+        # Remove "Union Government" / "State Government" prefix
+        title = re.sub(r"^(Union|State)\s+Government\s*[-–]?\s*", "", title)
+        report_title_map[r.report_id] = title.strip() or r.report_title
+
+    return SeriesContext(
+        series_id=series_id,
+        series_name=series.name,
+        description=series.description,
+        ordered_report_ids=ordered_report_ids,
+        years_covered=years_covered,
+        report_year_map=report_year_map,
+        report_title_map=report_title_map,
+    )

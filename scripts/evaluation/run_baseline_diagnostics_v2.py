@@ -1,10 +1,39 @@
 """
 Pipeline Quality Diagnostic v4
-Standalone — no external dependencies beyond stdlib.
+Standalone — no external dependencies beyond stdlib (pandas optional for manifest filtering).
 Runs against *_chunks.json files and optionally raw PDFs.
 
+Multi-tier support: Auto-detects tier (union/state/local_body) from manifest filename
+and looks in corresponding subdirectories.
+
 Usage:
-    python run_pipeline_diagnostics.py [data_dir] [--pdf-dir PDF_DIR]
+    python scripts/run_baseline_diagnostics_v2.py [data_dir] [--manifest EXCEL_FILE] [--no-pdf]
+
+Arguments:
+    data_dir            Directory containing *_chunks.json files (default: data/processed)
+    --pdf-dir           Directory containing PDFs for ground truth validation (default: data/raw)
+    --no-pdf            Disable PDF ground truth validation
+    --manifest          Filter to reports in this Excel manifest file (can be used multiple times)
+
+Examples:
+    # Run on all reports (with PDF validation from data/raw)
+    python scripts/run_baseline_diagnostics_v2.py
+
+    # Run on state reports (auto-detects tier, looks in data/processed/state and data/raw/state)
+    python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx
+
+    # Run on local body reports
+    python scripts/run_baseline_diagnostics_v2.py --manifest Local_Body_Examples.xlsx
+
+    # Run on multiple tiers
+    python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx --manifest Union_Examples.xlsx
+
+    # Disable PDF validation
+    python scripts/run_baseline_diagnostics_v2.py --no-pdf
+
+Output:
+    - Saves to logs/diagnostics_{manifest_name}_{date}.md when using --manifest
+    - Saves to logs/all_report_diagnostics_{date}.md otherwise
 
 Changes from v3:
   - Weighted rubric scoring (not just issue-deduction)
@@ -1365,25 +1394,303 @@ def get_pdf_page_count(pdf_path: Path) -> Optional[int]:
     return None
 
 
-def main():
-    data_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/processed")
-    pdf_dir = None
-    if "--pdf-dir" in sys.argv:
-        idx = sys.argv.index("--pdf-dir")
-        if idx + 1 < len(sys.argv):
-            pdf_dir = Path(sys.argv[idx + 1])
+def extract_report_ids_from_manifest(manifest_path: Path) -> list:
+    """
+    Extract report IDs from an Excel manifest file.
+    Mirrors the logic from manifest_ingestion_service._build_report_id().
+    Supports both Union and State/Local manifest formats.
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        print("❌ pandas required for manifest parsing. Install with: pip install pandas")
+        return []
 
-    json_files = sorted(data_dir.glob("*_chunks.json"))
-    if not json_files:
-        print(f"❌ No *_chunks.json files found in {data_dir}")
+    try:
+        # Try header=0 first (State format), fall back to header=1 (Union format)
+        df = pd.read_excel(manifest_path, header=0)
+
+        # Strip whitespace from column names
+        df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+
+        # Check if this is State/Local format (has State_code column)
+        known_state_headers = {"State_code", "State", "Government Type"}
+        found_state_headers = set(df.columns) & known_state_headers
+
+        # Check if this is Union format (has SL NO, Report PDF, etc.)
+        known_union_headers = {"SL NO", "Report PDF", "Title", "Original Title"}
+        found_union_headers = set(df.columns) & known_union_headers
+
+        # If no known headers found with header=0, try header=1 (Union format)
+        if not found_state_headers and not found_union_headers:
+            df = pd.read_excel(manifest_path, header=1)
+            df.columns = [str(c).strip() if isinstance(c, str) else c for c in df.columns]
+
+        # Check if this is a State/Local manifest
+        is_state_or_local = "State_code" in df.columns
+
+        # Drop empty rows
+        df = df.dropna(how="all")
+
+        report_ids = []
+        for _, row in df.iterrows():
+            if is_state_or_local:
+                # State/Local format: {State_code}_{YYYY}_{No}_{title}
+                state_code = row.get("State_code", "")
+                if pd.isna(state_code) or not str(state_code).strip():
+                    continue
+
+                report_no_raw = row.get("Report_No", "")
+                if pd.isna(report_no_raw) or not str(report_no_raw).strip():
+                    continue
+
+                # Convert Report_No from "XX_YYYY" to "YYYY_XX" format
+                report_no_str = str(report_no_raw).strip()
+                if re.match(r"^(\d{1,2})_(\d{4})$", report_no_str):
+                    num, year = report_no_str.split("_")
+                    formatted_no = f"{year}_{num.zfill(2)}"
+                else:
+                    formatted_no = report_no_str.replace("/", "_")
+
+                # Get title
+                rec_title = row.get("Recommended Title", "")
+                if pd.isna(rec_title) or not rec_title:
+                    rec_title = row.get("Original Title", "")
+                if pd.isna(rec_title):
+                    rec_title = ""
+                rec_title = str(rec_title).strip()
+
+                # Sanitize title
+                sanitized_title = re.sub(r'[^\w\s-]', '', rec_title)
+                sanitized_title = re.sub(r'\s+', '_', sanitized_title)
+                sanitized_title = sanitized_title[:80]
+
+                # Build State/Local report_id: ST_YYYY_XX_title
+                report_id = f"{state_code}_{formatted_no}_{sanitized_title}"
+                report_ids.append(report_id)
+
+            else:
+                # Union format: {YYYY}_{No}_{title}
+                report_no_raw = row.get("Report_No", row.get("Report No", ""))
+                sl_no = row.get("SL NO", 0)
+
+                if pd.isna(report_no_raw) or report_no_raw == "" or report_no_raw == "Unknown":
+                    # Fallback to report_XXX for NA Report_No
+                    if pd.isna(sl_no):
+                        continue
+                    report_no_raw = f"report_{int(sl_no):03d}"
+                else:
+                    report_no_str = str(report_no_raw).strip()
+
+                    # Handle "X of YYYY" format → "YYYY_X"
+                    of_match = re.match(r"(\d+)\s+of\s+(\d{4})", report_no_str)
+                    if of_match:
+                        num, year = of_match.groups()
+                        report_no_raw = f"{year}_{num}"
+                    # Handle "XX_YYYY" format → "YYYY_XX"
+                    elif re.match(r"^(\d{1,2})_(\d{4})$", report_no_str):
+                        num, year = report_no_str.split("_")
+                        report_no_raw = f"{year}_{num}"
+                    else:
+                        # Replace / with _ for filename safety
+                        report_no_raw = report_no_str.replace("/", "_").replace(" ", "_")
+
+                # Get Recommended Title (or fallback to Title/Original Title)
+                rec_title = row.get("Recommended Title", "")
+                if pd.isna(rec_title) or not rec_title:
+                    rec_title = row.get("Title", row.get("Original Title", ""))
+                if pd.isna(rec_title):
+                    rec_title = ""
+                rec_title = str(rec_title).strip()
+
+                # Sanitize title for filename
+                sanitized_title = re.sub(r'[^\w\s-]', '', rec_title)
+                sanitized_title = re.sub(r'\s+', '_', sanitized_title)
+                sanitized_title = sanitized_title[:80]  # Truncate
+
+                # Build Union report_id: YYYY_XX_title
+                report_id = f"{report_no_raw}_{sanitized_title}"
+                report_ids.append(report_id)
+
+        return report_ids
+
+    except Exception as e:
+        print(f"❌ Error parsing manifest {manifest_path}: {e}")
+        return []
+
+
+def detect_tier_from_manifest(manifest_path: Path) -> Optional[str]:
+    """
+    Detect tier from manifest filename.
+    Returns: "union", "state", or "local_body"
+
+    Patterns (matching manifest_ingestion_service.detect_government_body_type):
+    - "local_body", "local-body", "localbody" → "local_body"
+    - "local" (without "state") → "local_body"
+    - "state" (without "union") → "state"
+    - "union" or default → "union"
+    """
+    filename = manifest_path.name.lower()
+
+    # Check for local body patterns first (more specific)
+    if "local_body" in filename or "local-body" in filename or "localbody" in filename:
+        return "local_body"
+    # "local" without "state" = local_body (catches "Local_Examples")
+    elif "local" in filename and "state" not in filename:
+        return "local_body"
+    elif "state" in filename and "union" not in filename:
+        return "state"
+    elif "union" in filename:
+        return "union"
+    return None
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Pipeline Quality Diagnostic v4 - Analyze *_chunks.json files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run on all reports (PDF validation enabled by default from data/raw)
+  python scripts/run_baseline_diagnostics_v2.py
+
+  # Run only on reports from a manifest file (auto-detects tier from filename)
+  python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx
+
+  # Run on reports from multiple manifests
+  python scripts/run_baseline_diagnostics_v2.py --manifest State_Examples.xlsx --manifest Union_Examples.xlsx
+
+  # Use custom PDF directory
+  python scripts/run_baseline_diagnostics_v2.py --pdf-dir /path/to/pdfs
+
+  # Disable PDF validation
+  python scripts/run_baseline_diagnostics_v2.py --no-pdf
+        """
+    )
+    parser.add_argument(
+        "data_dir",
+        nargs="?",
+        default="data/processed",
+        help="Directory containing *_chunks.json files (default: data/processed)"
+    )
+    parser.add_argument(
+        "--pdf-dir",
+        type=str,
+        default="data/raw",
+        help="Directory containing PDFs for ground truth validation (default: data/raw)"
+    )
+    parser.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="Disable PDF ground truth validation"
+    )
+    parser.add_argument(
+        "--manifest",
+        action="append",
+        dest="manifests",
+        metavar="EXCEL_FILE",
+        help="Filter to reports in this manifest file (can be used multiple times)"
+    )
+
+    args = parser.parse_args()
+
+    base_data_dir = Path(args.data_dir)
+    base_pdf_dir = None if args.no_pdf else Path(args.pdf_dir)
+
+    # Detect tiers from manifests and collect all JSON files
+    all_json_files = []
+    manifest_names = []
+    detected_tiers = set()
+    all_report_ids = set()
+
+    if args.manifests:
+        # When manifests provided, detect tiers and look in tier-specific directories
+        for manifest_path in args.manifests:
+            manifest_file = Path(manifest_path)
+            if not manifest_file.exists():
+                print(f"⚠️  Manifest not found: {manifest_path}")
+                continue
+
+            # Extract report IDs from manifest
+            report_ids = extract_report_ids_from_manifest(manifest_file)
+            if report_ids:
+                print(f"📋 Loaded {len(report_ids)} report IDs from {manifest_file.name}")
+                all_report_ids.update(report_ids)
+                manifest_names.append(manifest_file.stem)
+
+            # Detect tier and look in tier-specific subdirectory
+            tier = detect_tier_from_manifest(manifest_file)
+            if tier:
+                detected_tiers.add(tier)
+
+                # Look in tier-specific subdirectory
+                tier_data_dir = base_data_dir / tier
+                if tier_data_dir.exists():
+                    tier_json_files = sorted(tier_data_dir.glob("*_chunks.json"))
+                    all_json_files.extend(tier_json_files)
+                    print(f"📂 Found {len(tier_json_files)} JSON files in {tier_data_dir}")
+                else:
+                    print(f"⚠️  Directory not found: {tier_data_dir}")
+            else:
+                print(f"⚠️  Could not detect tier from manifest: {manifest_file.name}")
+    else:
+        # No manifest - look in base directory
+        all_json_files = sorted(base_data_dir.glob("*_chunks.json"))
+
+    if not all_json_files:
+        if detected_tiers:
+            print(f"❌ No *_chunks.json files found in tier directories: {', '.join(str(base_data_dir / t) for t in detected_tiers)}")
+        else:
+            print(f"❌ No *_chunks.json files found in {base_data_dir}")
         sys.exit(1)
+
+    # Filter by manifest report IDs if provided
+    json_files = all_json_files
+
+    if all_report_ids:
+        # Build lookup sets for flexible matching
+        # Handle both new naming (ST_YYYY_XX_title) and legacy naming (YYYY_XX_title)
+        report_id_variants = set()
+        for rid in all_report_ids:
+            report_id_variants.add(rid)
+            # Also add version without state code prefix (for legacy files)
+            # Pattern: XX_YYYY_NN_title -> YYYY_NN_title
+            if re.match(r"^[A-Z]{2}_\d{4}_", rid):
+                legacy_id = rid[3:]  # Strip "XX_" prefix
+                report_id_variants.add(legacy_id)
+
+        # Filter json_files to only include matching reports
+        filtered_files = []
+        for jf in all_json_files:
+            # Extract report_id from filename (remove _chunks.json suffix)
+            report_id = jf.stem.replace("_chunks", "")
+            if report_id in report_id_variants:
+                filtered_files.append(jf)
+
+        if not filtered_files:
+            print(f"❌ No matching *_chunks.json files found for manifest report IDs")
+            print(f"   Looking for: {list(all_report_ids)[:5]}...")
+            print(f"   Files in directory: {[jf.stem.replace('_chunks', '')[:50] for jf in all_json_files[:5]]}...")
+            sys.exit(1)
+
+        json_files = filtered_files
+        print(f"✓ Filtered to {len(json_files)}/{len(all_json_files)} reports from manifest(s)")
 
     # Set up output file in logs directory
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%d_%m_%y")
-    output_file = logs_dir / f"all_report_diagnostics_{timestamp}.md"
+
+    # Build output filename
+    if manifest_names:
+        # Use manifest name(s) in filename
+        manifest_suffix = "_".join(manifest_names)
+        output_file = logs_dir / f"diagnostics_{manifest_suffix}_{timestamp}.md"
+    else:
+        output_file = logs_dir / f"all_report_diagnostics_{timestamp}.md"
 
     # Create TeeOutput to write to both stdout and file
     tee = TeeOutput(output_file)
@@ -1391,7 +1698,13 @@ def main():
     sys.stdout = tee
 
     try:
-        print(f"🔍 Pipeline Diagnostic v4 — {len(json_files)} reports in {data_dir}")
+        if detected_tiers:
+            tier_dirs = ', '.join(str(base_data_dir / t) for t in sorted(detected_tiers))
+            print(f"🔍 Pipeline Diagnostic v4 — {len(json_files)} reports from {tier_dirs}")
+        else:
+            print(f"🔍 Pipeline Diagnostic v4 — {len(json_files)} reports in {base_data_dir}")
+        if manifest_names:
+            print(f"📋 Manifest filter: {', '.join(manifest_names)}")
         print(f"📝 Saving results to: {output_file}")
         print(f"{'━' * 70}")
 
@@ -1400,14 +1713,29 @@ def main():
             with open(jf) as f:
                 data = json.load(f)
 
-            # Try to find matching PDF
+            # Try to find matching PDF in tier-specific directory
             pdf_pages = None
-            if pdf_dir:
+            if base_pdf_dir:
                 stem = jf.stem.replace("_chunks", "")
-                for ext in [".pdf", ".PDF"]:
-                    pdf_path = pdf_dir / f"{stem}{ext}"
-                    if pdf_path.exists():
-                        pdf_pages = get_pdf_page_count(pdf_path)
+
+                # Determine tier from parent directory if json file is in a tier subdir
+                tier_from_path = None
+                if jf.parent.name in ["union", "state", "local_body"]:
+                    tier_from_path = jf.parent.name
+
+                # Search in tier-specific PDF directory if available
+                pdf_search_dirs = []
+                if tier_from_path:
+                    pdf_search_dirs.append(base_pdf_dir / tier_from_path)
+                pdf_search_dirs.append(base_pdf_dir)  # Fallback to base dir
+
+                for pdf_search_dir in pdf_search_dirs:
+                    for ext in [".pdf", ".PDF"]:
+                        pdf_path = pdf_search_dir / f"{stem}{ext}"
+                        if pdf_path.exists():
+                            pdf_pages = get_pdf_page_count(pdf_path)
+                            break
+                    if pdf_pages:
                         break
 
             r = diagnose_report(data, pdf_pages)

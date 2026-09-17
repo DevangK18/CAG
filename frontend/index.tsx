@@ -10,10 +10,11 @@
  * - Professional Markdown rendering for summaries
  */
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 
 import { ViewState, AuditReport, TabState, SummaryVariant, SUMMARY_VARIANT_CONFIG } from './types';
+import { SuspenseWrapper, ErrorBoundary } from './components/common';
 
 // API Integration imports
 import { useReports } from './hooks/useReports';
@@ -23,13 +24,16 @@ import { useTables } from './hooks/useTables';
 import { useSeries } from './hooks/useSeries';
 import { useChatStream } from './hooks/useChatStream';
 import { useSeriesChat } from './hooks/useSeriesChat';
+import { getAgenticStatusMessage } from './hooks/useAgenticEvents';
 import { useOverview } from './hooks/useOverview';
 import { useSummaries } from './hooks/useSummaries';
+import { useFetchFilters } from './hooks/useFetchFilters';
 import { useAppStore } from './stores/appStore';
 import { PDFViewer } from './components/PDFViewer';
 import { TablePreview } from './components/TablePreview';
 import { ChatMessage } from './components/ChatMessage';
 import { lookupCitation } from './lib/citationUtils';
+import { renderMarkdown } from './lib/markdown';
 import { ChartItem, TableItem, TimeSeriesInfo, getPdfUrl, TopicCovered, GlossaryTerm } from './lib/api';
 
 import {
@@ -44,111 +48,39 @@ import {
     CheckCircleIcon,
     SwapIcon,
     LayoutGridIcon,
-    ListIcon
+    ListIcon,
+    ChatIcon,
+    CloseIcon,
+    SparkleIcon,
+    ChartIcon,
+    TableIcon,
+    LocationIcon,
+    CalendarIcon,
+    TrendingIcon,
+    BookIcon,
+    TargetIcon,
+    ShuffleIcon,
+    LoadingSpinner,
 } from './components/Icons';
 import { ReportCard } from './components/ReportCard';
 import { TierSelector } from './components/TierSelector';
-import { DemoReportCard } from './components/DemoReportCard';
-import { HowItWorks } from './components/HowItWorks/HowItWorks';
-import { GovernmentTier, STATE_REPORTS, LOCAL_BODY_REPORTS, STATE_STATS, LOCAL_STATS } from './constants';
+// DemoReportCard is no longer used - all tiers use real API data
+// import { DemoReportCard } from './components/DemoReportCard';
+
+// Lazy loaded components (code splitting for performance)
+const HowItWorks = lazy(() => import('./components/HowItWorks/HowItWorks').then(m => ({ default: m.HowItWorks })));
+const DirectoryPage = lazy(() => import('./components/Directory/DirectoryPage').then(m => ({ default: m.DirectoryPage })));
+const TimeSeriesPage = lazy(() => import('./components/TimeSeries/TimeSeriesPage').then(m => ({ default: m.TimeSeriesPage })));
+const EntityPage = lazy(() => import('./components/Entity/EntityPage').then(m => ({ default: m.EntityPage })));
+
+// Non-lazy imports
+import { HomePage } from './components/Home/HomePage';
+import { HomePDFPanel } from './components/Home/HomePDFPanel';
+import { GovernmentTier } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
 import './index.css';
 import './how-it-works.css';
-
-// Icons
-const ChatIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-);
-
-const CloseIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-);
-
-const SparkleIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-    </svg>
-);
-
-const ChartIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10"/>
-        <line x1="12" y1="20" x2="12" y2="4"/>
-        <line x1="6" y1="20" x2="6" y2="14"/>
-    </svg>
-);
-
-const TableIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-        <line x1="3" y1="9" x2="21" y2="9"/>
-        <line x1="3" y1="15" x2="21" y2="15"/>
-        <line x1="9" y1="3" x2="9" y2="21"/>
-    </svg>
-);
-
-const LocationIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="10" r="3"/>
-        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 6.9 8 11.7z"/>
-    </svg>
-);
-
-const CalendarIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-        <line x1="16" y1="2" x2="16" y2="6"/>
-        <line x1="8" y1="2" x2="8" y2="6"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-    </svg>
-);
-
-const TrendingIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-        <polyline points="17 6 23 6 23 12"/>
-    </svg>
-);
-
-const BookIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-    </svg>
-);
-
-const TargetIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <circle cx="12" cy="12" r="6"/>
-        <circle cx="12" cy="12" r="2"/>
-    </svg>
-);
-
-// ListIcon is now imported from './components/Icons'
-
-const ShuffleIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="16 3 21 3 21 8"/>
-        <line x1="4" y1="20" x2="21" y2="3"/>
-        <polyline points="21 16 21 21 16 21"/>
-        <line x1="15" y1="15" x2="21" y2="21"/>
-        <line x1="4" y1="4" x2="9" y2="9"/>
-    </svg>
-);
-
-const LoadingSpinner = () => (
-    <div className="tab-loading">
-        <div className="tab-spinner"></div>
-        <span>Loading...</span>
-    </div>
-);
 
 // Response style type
 type ResponseStyle = 'executive' | 'concise' | 'detailed' | 'technical' | 'comparative' | 'adaptive';
@@ -173,117 +105,7 @@ const CHART_TYPE_LABELS: Record<string, string> = {
     bar: 'BAR', line: 'LINE', pie: 'PIE', area: 'AREA', table_chart: 'TABLE', unknown: 'CHART'
 };
 
-// Simple Markdown renderer for summaries
-const renderMarkdown = (content: string): React.ReactNode => {
-    if (!content) return null;
-    
-    // Split into lines
-    const lines = content.split('\n');
-    const elements: React.ReactNode[] = [];
-    let currentList: string[] = [];
-    let listType: 'ul' | 'ol' | null = null;
-    let key = 0;
-    
-    const flushList = () => {
-        if (currentList.length > 0) {
-            if (listType === 'ol') {
-                elements.push(
-                    <ol key={key++} className="summary-list ordered">
-                        {currentList.map((item, i) => <li key={i}>{renderInlineFormatting(item)}</li>)}
-                    </ol>
-                );
-            } else {
-                elements.push(
-                    <ul key={key++} className="summary-list">
-                        {currentList.map((item, i) => <li key={i}>{renderInlineFormatting(item)}</li>)}
-                    </ul>
-                );
-            }
-            currentList = [];
-            listType = null;
-        }
-    };
-    
-    const renderInlineFormatting = (text: string): React.ReactNode => {
-        // Handle bold: **text** or __text__
-        let result: React.ReactNode[] = [];
-        const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
-        
-        parts.forEach((part, i) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-                result.push(<strong key={i}>{part.slice(2, -2)}</strong>);
-            } else if (part.startsWith('__') && part.endsWith('__')) {
-                result.push(<strong key={i}>{part.slice(2, -2)}</strong>);
-            } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
-                result.push(<em key={i}>{part.slice(1, -1)}</em>);
-            } else {
-                result.push(part);
-            }
-        });
-        
-        return result;
-    };
-    
-    lines.forEach((line, lineIndex) => {
-        const trimmed = line.trim();
-        
-        // Headers
-        if (trimmed.startsWith('# ')) {
-            flushList();
-            elements.push(<h1 key={key++} className="summary-h1">{trimmed.slice(2)}</h1>);
-        } else if (trimmed.startsWith('## ')) {
-            flushList();
-            elements.push(<h2 key={key++} className="summary-h2">{trimmed.slice(3)}</h2>);
-        } else if (trimmed.startsWith('### ')) {
-            flushList();
-            elements.push(<h3 key={key++} className="summary-h3">{trimmed.slice(4)}</h3>);
-        } else if (trimmed.startsWith('#### ')) {
-            flushList();
-            elements.push(<h4 key={key++} className="summary-h4">{trimmed.slice(5)}</h4>);
-        }
-        // Horizontal rule
-        else if (trimmed === '---' || trimmed === '***') {
-            flushList();
-            elements.push(<hr key={key++} className="summary-hr" />);
-        }
-        // Ordered list
-        else if (/^\d+\.\s/.test(trimmed)) {
-            if (listType !== 'ol') {
-                flushList();
-                listType = 'ol';
-            }
-            currentList.push(trimmed.replace(/^\d+\.\s/, ''));
-        }
-        // Unordered list
-        else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ')) {
-            if (listType !== 'ul') {
-                flushList();
-                listType = 'ul';
-            }
-            currentList.push(trimmed.slice(2));
-        }
-        // Blockquote
-        else if (trimmed.startsWith('> ')) {
-            flushList();
-            elements.push(<blockquote key={key++} className="summary-blockquote">{renderInlineFormatting(trimmed.slice(2))}</blockquote>);
-        }
-        // Empty line
-        else if (trimmed === '') {
-            flushList();
-        }
-        // Regular paragraph
-        else {
-            flushList();
-            elements.push(<p key={key++} className="summary-paragraph">{renderInlineFormatting(trimmed)}</p>);
-        }
-    });
-    
-    flushList();
-    return elements;
-};
-
 function App() {
-    const [view, setView] = useState<ViewState>('landing');
     const [selectedSeries, setSelectedSeries] = useState<TimeSeriesInfo | null>(null);
     const [activeTab, setActiveTab] = useState<TabState>('overview');
     const [searchTerm, setSearchTerm] = useState('');
@@ -293,6 +115,7 @@ function App() {
     const [filterAuditType, setFilterAuditType] = useState<Set<string>>(new Set());
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [activeTier, setActiveTier] = useState<GovernmentTier>('union');
+    const [selectedState, setSelectedState] = useState<string | null>(null);
     const [inputValue, setInputValue] = useState('');
     const [chatOpen, setChatOpen] = useState(false);
     const [citationFeedback, setCitationFeedback] = useState<{show: boolean; section: string; page: number; auditYear?: string; switched?: boolean} | null>(null);
@@ -325,15 +148,32 @@ function App() {
 
     // API INTEGRATION
     const {
+        view, setView,
         currentReportId, setCurrentReportId, messages, responseStyle, setResponseStyle,
         normalizedCitationMap, citationMap, clearMessages, setPdfPage, pdfPage,
         showLowRelevanceCaveat,
+        chatMode, setChatMode,
+        searchFilters, clearSearchFilters,
+        goBack,
     } = useAppStore();
-    
-    const { reports, stats, isLoading: reportsLoading } = useReports();
+
+    // Fetch filter options
+    const { filters, isLoading: filtersLoading } = useFetchFilters();
+
+    // Determine government_body_type based on activeTier
+    const tierMap: Record<GovernmentTier, string> = {
+        union: 'union',
+        state: 'state',
+        local: 'local_body',
+    };
+
+    const { reports, stats, isLoading: reportsLoading } = useReports({
+        government_body_type: tierMap[activeTier],
+        state_name: selectedState || undefined,
+    });
     const { report: selectedReport, pdfUrl, isLoading: reportLoading } = useReport(currentReportId);
     const { sendMessage, isStreaming } = useChatStream();
-    const { sendSeriesMessage, isStreaming: isSeriesStreaming } = useSeriesChat();
+    const { sendSeriesMessage, isStreaming: isSeriesStreaming, agenticProgress, isAgenticMode } = useSeriesChat();
     const { charts, total: chartsTotal, isLoading: chartsLoading, error: chartsError } = useCharts(currentReportId);
     const { tables, total: tablesTotal, isLoading: tablesLoading, error: tablesError } = useTables(currentReportId);
     const { series: allSeries, total: seriesTotal, isLoading: seriesLoading, error: seriesError } = useSeries();
@@ -402,6 +242,40 @@ function App() {
         setBannerMinimized(false);
     }, [currentReportId, selectedSeries]);
 
+    // Apply searchFilters from appStore when navigating to directory (Phase FE-E)
+    useEffect(() => {
+        if (view === 'directory' && searchFilters && Object.keys(searchFilters).length > 0) {
+            // Apply tier filter
+            if (searchFilters.tier) {
+                const tierMapping: Record<string, GovernmentTier> = {
+                    'union': 'union',
+                    'state': 'state',
+                    'local_body': 'local',
+                };
+                const tier = tierMapping[searchFilters.tier];
+                if (tier) setActiveTier(tier);
+            }
+
+            // Apply state filter
+            if (searchFilters.states && searchFilters.states.length > 0) {
+                setSelectedState(searchFilters.states[0]); // Use first state for now
+            }
+
+            // Apply year filter
+            if (searchFilters.years && searchFilters.years.length > 0) {
+                setFilterYear(searchFilters.years[0]); // Use first year for now
+            }
+
+            // Apply audit category filter
+            if (searchFilters.audit_categories && searchFilters.audit_categories.length > 0) {
+                setFilterAuditType(new Set(searchFilters.audit_categories));
+            }
+
+            // Clear searchFilters after applying so they don't persist on subsequent visits
+            clearSearchFilters();
+        }
+    }, [view, searchFilters, clearSearchFilters]);
+
     // Panel visibility functions
     const showPdfPanel = useCallback(() => {
         if (pdfCollapsed) {
@@ -434,6 +308,16 @@ function App() {
         setChatOpen(false);
     };
 
+    const handleSelectReport = (reportId: string) => {
+        // Handler for EntityPage navigation - takes report ID string
+        trackEvent('report_viewed', { report_id: reportId });
+        setCurrentReportId(reportId);
+        setSelectedSeries(null);
+        setView('report');
+        setActiveTab('overview');
+        setChatOpen(false);
+    };
+
     const handleSeriesClick = (series: TimeSeriesInfo) => {
         setSelectedSeries(series);
         setCurrentReportId(null);
@@ -443,10 +327,16 @@ function App() {
         setSeriesPagePositions({});
     };
 
+    const handleBackToHome = () => {
+        setCurrentReportId(null);
+        setChatOpen(false);
+        setView('home');
+    };
+
     const handleBackToLanding = () => {
         setCurrentReportId(null);
         setChatOpen(false);
-        setView('landing');
+        setView('directory');
     };
 
     const handleBackToTimeSeries = () => {
@@ -476,15 +366,18 @@ function App() {
         }
     };
 
-    const handleSendMessage = async () => {
-        if (!inputValue.trim() || isStreaming || isSeriesStreaming) return;
-        const query = inputValue.trim();
+    const handleSendMessage = async (useAgentic: boolean = false, explicitQuery?: string) => {
+        const query = (explicitQuery || inputValue).trim();
+        if (!query || isStreaming || isSeriesStreaming) return;
         setInputValue('');
         if (!chatOpen) setChatOpen(true);
         if (view === 'series-chat' && selectedSeries) {
             await sendSeriesMessage(selectedSeries.series_id, query);
+        } else if (view === 'corpus-chat') {
+            // Corpus-wide chat using agentic mode
+            await sendMessage(query, undefined, 'agentic');
         } else if (currentReportId) {
-            await sendMessage(query, [currentReportId]);
+            await sendMessage(query, [currentReportId], useAgentic ? 'agentic' : 'regular');
         }
     };
 
@@ -559,15 +452,7 @@ function App() {
         }
     };
 
-    // Drag logic
-    const startDrag = (e: React.MouseEvent) => {
-        isDragging.current = true;
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-        document.body.style.userSelect = 'none';
-        document.body.classList.add('is-dragging');
-    };
-
+    // Drag logic - with proper cleanup to prevent memory leaks
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isDragging.current || !splitContainerRef.current) return;
         const containerRect = splitContainerRef.current.getBoundingClientRect();
@@ -577,7 +462,7 @@ function App() {
         setSplitRatio(newRatio);
     }, []);
 
-    const handleMouseUp = () => {
+    const handleMouseUp = useCallback(() => {
         isDragging.current = false;
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -585,7 +470,29 @@ function App() {
         document.body.classList.remove('is-dragging');
         // Trigger PDF reload after resize completes
         setResizeKey(prev => prev + 1);
-    };
+    }, [handleMouseMove]);
+
+    const startDrag = useCallback((e: React.MouseEvent) => {
+        isDragging.current = true;
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.body.style.userSelect = 'none';
+        document.body.classList.add('is-dragging');
+    }, [handleMouseMove, handleMouseUp]);
+
+    // Cleanup drag listeners on unmount to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            // Reset body styles if component unmounts during drag
+            if (isDragging.current) {
+                document.body.style.userSelect = 'auto';
+                document.body.classList.remove('is-dragging');
+                isDragging.current = false;
+            }
+        };
+    }, [handleMouseMove, handleMouseUp]);
 
     // Toggle handler for audit type pills
     const toggleAuditType = (type: string) => {
@@ -662,6 +569,7 @@ function App() {
 
         const ministryCount = new Set(reports.map(r => r.ministry)).size;
         const sectorCount = new Set(reports.map(r => r.sector)).size;
+        const stateCount = new Set(reports.filter(r => r.state_name).map(r => r.state_name)).size;
 
         const yearsSet = new Set(reports.map(r => r.year));
         const yearsArray = Array.from(yearsSet).sort((a, b) => a - b);
@@ -688,23 +596,31 @@ function App() {
             reportsWithMonetary,
             ministryCount,
             sectorCount,
+            stateCount,
             yearSpan,
         };
     }, [reports]);
 
-    // Stats based on active tier
-    const currentStats = useMemo(() => {
-        if (activeTier === 'union') return enhancedStats;
-        if (activeTier === 'state') return STATE_STATS;
-        return LOCAL_STATS;
-    }, [activeTier, enhancedStats]);
+    // Stats - use computed stats from all tiers
+    const currentStats = enhancedStats;
 
-    // Reports to display based on active tier
-    const currentReports = useMemo(() => {
-        if (activeTier === 'union') return { type: 'union' as const, data: filteredReports };
-        if (activeTier === 'state') return { type: 'demo' as const, data: STATE_REPORTS };
-        return { type: 'demo' as const, data: LOCAL_BODY_REPORTS };
-    }, [activeTier, filteredReports]);
+    // All tiers now use real reports from API
+    const currentReports = { type: 'union' as const, data: filteredReports };
+
+    // Tier counts from filters API
+    const tierCounts = useMemo(() => {
+        if (!filters) return { union: 0, state: 0, local: 0 };
+        const unionCount = filters.government_body_types.find(t => t.value === 'union')?.count || 0;
+        const stateCount = filters.government_body_types.find(t => t.value === 'state')?.count || 0;
+        const localCount = filters.government_body_types.find(t => t.value === 'local_body')?.count || 0;
+        return { union: unionCount, state: stateCount, local: localCount };
+    }, [filters]);
+
+    // Available states for dropdown
+    const availableStates = useMemo(() => {
+        if (!filters) return [];
+        return filters.states.map(s => s.value);
+    }, [filters]);
 
     const clearAllFilters = () => {
         setSearchTerm('');
@@ -806,18 +722,19 @@ function App() {
                     </div>
                 </div>
 
-                {/* 1. Overview Summary */}
-                {overview?.executive_summary && (
+                {/* 1. AI Summaries Available Prompt */}
+                {overview?._metadata?.summaries_available && (
                     <section className="collapsible-section">
                         <button className="section-header" onClick={() => toggleSection('summary')}>
-                            <span className="section-icon"><FileTextIcon /></span>
-                            <span className="section-title">Overview Summary</span>
+                            <span className="section-icon"><SparkleIcon /></span>
+                            <span className="section-title">AI-Generated Summaries</span>
+                            <span className="section-count">5 styles</span>
                             <span className={`expand-icon ${expandedSections.summary ? 'expanded' : ''}`}>▼</span>
                         </button>
                         {expandedSections.summary && (
                             <div className="section-content">
                                 <p style={{ fontSize: '14px', lineHeight: '1.7', color: '#475569', margin: 0 }}>
-                                    {overview.executive_summary}
+                                    This report has AI-generated summaries available in 5 different styles, tailored for different audiences: Executive Brief, Journalist's Take, Deep Dive, Simple Explainer, and Policy Brief.
                                 </p>
                                 <button
                                     onClick={() => {
@@ -838,7 +755,7 @@ function App() {
                                         padding: 0
                                     }}
                                 >
-                                    Read full summary <span>→</span>
+                                    View summaries <span>→</span>
                                 </button>
                             </div>
                         )}
@@ -1231,6 +1148,24 @@ function App() {
                                     </div>
                                 </div>
                             )}
+                            {/* Agentic progress indicator for series chat */}
+                            {isSeries && isAgenticMode && agenticProgress.phase !== 'idle' && agenticProgress.phase !== 'done' && (
+                                <div className="agentic-progress-banner">
+                                    <div className="agentic-progress-spinner" />
+                                    <div className="agentic-progress-content">
+                                        <span className="agentic-progress-status">{getAgenticStatusMessage(agenticProgress)}</span>
+                                        {agenticProgress.subQueries.length > 0 && (
+                                            <div className="agentic-progress-details">
+                                                {agenticProgress.subQueries.map((sq, idx) => (
+                                                    <span key={idx} className={`agentic-subquery ${sq.status}`}>
+                                                        {sq.status === 'complete' ? '✓' : sq.status === 'running' ? '◌' : '○'}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             {messages.map((m, i) => {
                                 const isLastMessage = i === messages.length - 1;
                                 const isThisMessageStreaming = isLastMessage && isCurrentlyStreaming && m.role === 'assistant';
@@ -1241,6 +1176,7 @@ function App() {
                                         content={m.content}
                                         isStreaming={isThisMessageStreaming}
                                         isWaitingForResponse={m.isWaitingForResponse}
+                                        groundednessReport={m.groundednessReport}
                                     />
                                 );
                             })}
@@ -1451,194 +1387,97 @@ function App() {
     return (
         <div className="cag-app">
             <header className="cag-header">
-                <div className="cag-header-left"><div className="cag-logo" onClick={handleBackToLanding}><FileTextIcon /><span>CAG GATEWAY</span></div></div>
+                <div className="cag-header-left"><div className="cag-logo" onClick={handleBackToHome}><FileTextIcon /><span>CAG GATEWAY</span></div></div>
                 <nav className="cag-nav">
-                    <button onClick={handleBackToLanding} className={view === 'landing' ? 'active' : ''}>Report Directory</button>
-                    <button onClick={() => setView('time-series')} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
-                    <button onClick={() => setView('how-it-works')} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
+                    <button onClick={handleBackToHome} className={view === 'home' ? 'active' : ''}>Home</button>
+                    <button onClick={handleBackToLanding} className={view === 'directory' ? 'active' : ''}>Report Directory</button>
+                    <button onClick={() => { setView('time-series'); }} className={view === 'time-series' || view === 'series-chat' ? 'active' : ''}>Time Series Analysis</button>
+                    <button onClick={() => { setView('how-it-works'); }} className={view === 'how-it-works' ? 'active' : ''}>How It Works</button>
                 </nav>
                 <div className="cag-header-right"></div>
             </header>
 
-            {view === 'landing' && (
-                <main className="landing-view">
-                    <div className="hero-section">
-                        <h1>CAG Gateway</h1>
-                        <p className="hero-subtitle">An intelligent audit report analysis platform</p>
-                        <div className="hero-body">
-                            <p>
-                                India's Comptroller and Auditor General ({' '}
-                                <a href="https://cag.gov.in" target="_blank" rel="noopener noreferrer" className="hero-link">
-                                    CAG
-                                </a>
-                                ) is the supreme audit institution for Union and State government accounts, established under Article 148 of the Constitution.
-                                Each year, the CAG publishes hundreds of audit reports covering everything from defence procurement and railway safety to
-                                tax administration and public sector enterprise performance. These reports contain critical findings on government
-                                accountability — but they're published as dense, lengthy PDFs that are difficult to search, compare, or extract insights from at scale.
-                            </p>
-                            <p>
-                                CAG Gateway addresses this by transforming these static documents into an interactive research platform.
-                                Reports are parsed and semantically chunked through a custom multi-tier extraction pipeline, then indexed into a hybrid
-                                search system combining dense vector embeddings with BM25 retrieval and Cohere reranking. Users can explore any report
-                                through AI-powered chat with streaming source citations, navigate extracted charts and tables with PDF cross-referencing,
-                                read AI-generated summaries in multiple formats, and perform cross-report time series analysis to track how audit findings
-                                evolve across financial years. To learn how this system works under the hood, visit the{' '}
-                                <button className="hero-link-btn" onClick={() => setView('how-it-works')}>How It Works</button> section.
-                            </p>
-                        </div>
-                        <div className="hero-disclaimer">
-                            <p>
-                                <strong>Disclaimer:</strong> This is an independent research project and is not affiliated with or endorsed by the CAG of India.
-                                All audit reports used are public documents published by the CAG. Their non-commercial use is protected under
-                                Section 52(1)(q) of the Indian Copyright Act, 1957, which permits the reproduction of public documents for informational purposes.
-                            </p>
-                        </div>
-                    </div>
-                    {activeTier === 'union' && (
-                        <div className="stats-bar">
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : 34}</span>
-                                <span className="stat-label">Active Reports</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats ? `${enhancedStats.totalFindings}+` : '...'}</span>
-                                <span className="stat-label">Total Findings</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
-                                <span className="stat-label">Monetary Impact</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.ministryCount ?? '...'}</span>
-                                <span className="stat-label">Ministries</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.sectorCount ?? '...'}</span>
-                                <span className="stat-label">Sectors</span>
-                            </div>
-                            <div className="stat-item">
-                                <span className="stat-value">{reportsLoading ? '...' : enhancedStats?.yearSpan ?? '...'}</span>
-                                <span className="stat-label">Year Span</span>
-                            </div>
-                        </div>
-                    )}
-                    <TierSelector
-                        activeTier={activeTier}
-                        onTierChange={setActiveTier}
-                        counts={{ union: reports.length, state: 10, local: 4 }}
-                    />
-                    <div className="filter-block">
-                        <div className="filter-row-primary">
-                            <div className="search-box"><SearchIcon /><input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                            <div className="dropdown-group"><label><FilterIcon /> Sector:</label><select value={filterSector} onChange={(e) => setFilterSector(e.target.value)}>{sectors.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                            <div className="view-toggle">
-                                <button
-                                    className={viewMode === 'grid' ? 'active' : ''}
-                                    onClick={() => setViewMode('grid')}
-                                    title="Grid view"
-                                >
-                                    <LayoutGridIcon />
-                                </button>
-                                <button
-                                    className={viewMode === 'list' ? 'active' : ''}
-                                    onClick={() => setViewMode('list')}
-                                    title="List view"
-                                >
-                                    <ListIcon />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="filter-row-secondary">
-                            <div className="secondary-filters-left">
-                                <div className="dropdown-group">
-                                    <label>Ministry:</label>
-                                    <select value={filterMinistry} onChange={(e) => setFilterMinistry(e.target.value)}>
-                                        {ministries.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                </div>
-                                <div className="dropdown-group">
-                                    <label>Year:</label>
-                                    <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
-                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                    </select>
-                                </div>
-                                <div className="filter-divider" />
-                                <div className="audit-type-pills">
-                                    {AUDIT_TYPES.map(type => (
-                                        <button
-                                            key={type.value}
-                                            className={`audit-type-pill ${filterAuditType.has(type.value) ? 'active' : ''}`}
-                                            onClick={() => toggleAuditType(type.value)}
-                                        >
-                                            {type.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            {activeFilterCount > 0 && (
-                                <div className="filter-status">
-                                    <span className="filter-count">{filteredReports.length} of {reports.length} reports</span>
-                                    <button className="clear-filters-btn" onClick={clearAllFilters}>Clear all</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    {reportsLoading && activeTier === 'union' && <div className="loading-spinner">Loading reports...</div>}
-                    {!reportsLoading && activeTier === 'union' && filteredReports.length === 0 && (
-                        <div className="no-results">
-                            <p>No reports match your current filters.</p>
-                            {hasActiveFilters && (
-                                <button className="clear-filters-link" onClick={clearAllFilters}>Clear all filters</button>
-                            )}
-                        </div>
-                    )}
-                    {currentReports.type === 'union' && !reportsLoading && currentReports.data.length > 0 && (
-                        <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
-                            {currentReports.data.map(report => (
-                                <ReportCard
-                                    key={report.id}
-                                    report={report}
-                                    viewMode={viewMode}
-                                    onClick={() => handleReportClick(report)}
-                                />
-                            ))}
-                        </div>
-                    )}
-                    {currentReports.type === 'demo' && (
-                        <div className={`report-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
-                            {currentReports.data.map(report => (
-                                <DemoReportCard
-                                    key={report.id}
-                                    report={report}
-                                    viewMode={viewMode}
-                                    tier={activeTier as 'state' | 'local'}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </main>
+            {view === 'home' && (
+                <HomePage
+                    setView={setView}
+                    setCurrentSeriesId={(id: string) => {
+                        setSelectedSeries(allSeries.find(s => s.series_id === id) || null);
+                    }}
+                    openChatDrawer={() => {
+                        setChatMode('agentic');
+                        setChatOpen(true);
+                        // Open chat in first available report (chat only renders in report views currently)
+                        if (reports.length > 0) {
+                            setCurrentReportId(reports[0].id);
+                            setView('report');
+                        } else {
+                            // Fallback: navigate to directory if no reports loaded yet
+                            setView('directory');
+                        }
+                    }}
+                />
+            )}
+
+            {view === 'entity' && (
+                <ErrorBoundary>
+                    <SuspenseWrapper>
+                        <EntityPage onNavigateToReport={handleSelectReport} />
+                    </SuspenseWrapper>
+                </ErrorBoundary>
+            )}
+
+            {view === 'directory' && (
+                <ErrorBoundary>
+                    <SuspenseWrapper>
+                        <DirectoryPage
+                            activeTier={activeTier}
+                            setActiveTier={setActiveTier}
+                            selectedState={selectedState}
+                            setSelectedState={setSelectedState}
+                            tierCounts={tierCounts}
+                            availableStates={availableStates}
+                            enhancedStats={enhancedStats}
+                            reportsLoading={reportsLoading}
+                            searchTerm={searchTerm}
+                            setSearchTerm={setSearchTerm}
+                            sectors={sectors}
+                            filterSector={filterSector}
+                            setFilterSector={setFilterSector}
+                            ministries={ministries}
+                            filterMinistry={filterMinistry}
+                            setFilterMinistry={setFilterMinistry}
+                            years={years}
+                            filterYear={filterYear}
+                            setFilterYear={setFilterYear}
+                            filterAuditType={filterAuditType}
+                            toggleAuditType={toggleAuditType}
+                            auditTypes={AUDIT_TYPES}
+                            viewMode={viewMode}
+                            setViewMode={setViewMode}
+                            activeFilterCount={activeFilterCount}
+                            filteredReports={filteredReports}
+                            currentReports={currentReports}
+                            reports={reports}
+                            hasActiveFilters={hasActiveFilters}
+                            clearAllFilters={clearAllFilters}
+                            handleReportClick={handleReportClick}
+                            setView={setView}
+                        />
+                    </SuspenseWrapper>
+                </ErrorBoundary>
             )}
 
             {view === 'time-series' && (
-                <main className="landing-view">
-                    <div className="hero-section"><h1>Time Series Analysis</h1><p className="hero-subtitle">Analyze trends across multiple financial years.</p></div>
-                    {seriesLoading && <div className="loading-spinner">Loading time series...</div>}
-                    {seriesError && <div className="tab-error" style={{margin:'40px auto',maxWidth:'600px'}}><p>Failed to load: {seriesError}</p></div>}
-                    {!seriesLoading && !seriesError && allSeries.length === 0 && <div className="placeholder-text" style={{textAlign:'center',padding:'60px'}}><p>No time series available.</p></div>}
-                    {!seriesLoading && !seriesError && allSeries.length > 0 && (
-                        <div className="report-grid">
-                            {allSeries.map(series => (
-                                <div key={series.series_id} className="report-card series-card" onClick={() => handleSeriesClick(series)}>
-                                    <div className="card-top"><span className="report-num">{series.reports.length} Reports</span><span className="status-badge compliant">Longitudinal Data</span></div>
-                                    <h3>{series.name}</h3>
-                                    <p className="series-desc">{series.description}</p>
-                                    <div className="series-timeline-preview">{series.years_covered.map(year => <div key={year} className="timeline-dot"><span className="year">{year}</span><span className="dot"></span></div>)}</div>
-                                    <div className="card-footer"><span>Cross-Report Intelligence</span><div className="action-link">Start Analysis <ArrowRightIcon /></div></div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </main>
+                <ErrorBoundary>
+                    <SuspenseWrapper>
+                        <TimeSeriesPage
+                            allSeries={allSeries}
+                            seriesLoading={seriesLoading}
+                            seriesError={seriesError}
+                            handleSeriesClick={handleSeriesClick}
+                        />
+                    </SuspenseWrapper>
+                </ErrorBoundary>
             )}
 
             {(view === 'report' || view === 'series-chat') && (
@@ -1703,13 +1542,181 @@ function App() {
 
             {view === 'how-it-works' && (
                 <main className="how-it-works-main">
-                    <HowItWorks />
+                    <ErrorBoundary>
+                        <SuspenseWrapper>
+                            <HowItWorks />
+                        </SuspenseWrapper>
+                    </ErrorBoundary>
                 </main>
             )}
 
-            {(view === 'landing' || view === 'time-series' || view === 'how-it-works') && (
+            {view === 'corpus-chat' && (
+                <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    maxWidth: '900px',
+                    margin: '0 auto',
+                    padding: '2rem',
+                    width: '100%',
+                    minHeight: 'calc(100vh - 80px)'
+                }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            alignSelf: 'flex-start',
+                            padding: '8px 16px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            background: 'white',
+                            cursor: 'pointer',
+                            marginBottom: '1.5rem',
+                            fontSize: '0.9rem'
+                        }}
+                    >
+                        ← Back to Home
+                    </button>
+
+                    <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        Ask Across All CAG Reports
+                    </h1>
+                    <p style={{ color: '#64748b', marginBottom: '2rem' }}>
+                        Agentic search with intelligent question decomposition • Auto-filtering by state, year, and tier
+                    </p>
+
+                    <div style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        background: 'white'
+                    }}>
+                        {/* Chat messages area */}
+                        <div style={{
+                            flex: 1,
+                            overflowY: 'auto',
+                            padding: '1.5rem',
+                            minHeight: '400px'
+                        }}>
+                            {messages.length === 0 ? (
+                                <div style={{
+                                    textAlign: 'center',
+                                    padding: '4rem 2rem',
+                                    color: '#94a3b8'
+                                }}>
+                                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💬</div>
+                                    <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>
+                                        Start a conversation
+                                    </h3>
+                                    <p>Ask about findings, trends, recommendations across all {enhancedStats?.totalReports || reports.length || 'available'} reports</p>
+                                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                        {['Key findings on toll collection?', 'Revenue loss trends across states', 'NHAI compliance issues'].map(q => (
+                                            <button
+                                                key={q}
+                                                onClick={() => {
+                                                    if (!isCurrentlyStreaming) {
+                                                        handleSendMessage(true, q);
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '6px 14px',
+                                                    border: '1px solid #e2e8f0',
+                                                    borderRadius: '20px',
+                                                    background: '#f8fafc',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                messages.map((msg, i) => (
+                                    <ChatMessage
+                                        key={msg.id || i}
+                                        role={msg.role}
+                                        content={msg.content}
+                                        isStreaming={i === messages.length - 1 && isCurrentlyStreaming && msg.role === 'assistant'}
+                                        isWaitingForResponse={msg.isWaitingForResponse}
+                                        groundednessReport={msg.groundednessReport}
+                                    />
+                                ))
+                            )}
+                            {isCurrentlyStreaming && <div style={{ padding: '1rem', color: '#64748b' }}>Thinking...</div>}
+                        </div>
+
+                        {/* Chat input */}
+                        <div style={{
+                            borderTop: '1px solid #e2e8f0',
+                            padding: '1rem 1.5rem',
+                            display: 'flex',
+                            gap: '0.75rem'
+                        }}>
+                            <input
+                                className="corpus-chat-input"
+                                type="text"
+                                placeholder="Ask about any CAG audit report..."
+                                style={{
+                                    flex: 1,
+                                    padding: '12px 16px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '0.95rem',
+                                    outline: 'none'
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        const input = e.target as HTMLInputElement;
+                                        const query = input.value.trim();
+                                        if (query && !isCurrentlyStreaming) {
+                                            handleSendMessage(true, query);
+                                            input.value = '';
+                                        }
+                                    }
+                                }}
+                                disabled={isCurrentlyStreaming}
+                            />
+                            <button
+                                onClick={() => {
+                                    const input = document.querySelector('.corpus-chat-input') as HTMLInputElement;
+                                    if (input) {
+                                        const query = input.value.trim();
+                                        if (query && !isCurrentlyStreaming) {
+                                            handleSendMessage(true, query);
+                                            input.value = '';
+                                        }
+                                    }
+                                }}
+                                disabled={isCurrentlyStreaming}
+                                style={{
+                                    padding: '12px 20px',
+                                    background: '#1e293b',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: isCurrentlyStreaming ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.95rem'
+                                }}
+                            >
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Footer is rendered inside HomePage for home view */}
+            {(view === 'directory' || view === 'time-series' || view === 'how-it-works') && (
                 <footer className="cag-footer"><div className="footer-content"><p>© 2025 CAG Gateway</p><div className="footer-links"><button>Privacy</button><button>Terms</button></div></div></footer>
             )}
+
+            {/* Home PDF Panel - slides over from right */}
+            <HomePDFPanel />
         </div>
     );
 }
@@ -1719,8 +1726,11 @@ initPostHog();
 
 // Wrapper component for access gate
 function AppWithGate() {
+    // TEMPORARY: Access gate disabled for competition review. Re-enable after review period.
+    const isGateDisabled = import.meta.env.VITE_DISABLE_ACCESS_GATE === 'true';
+
     const [granted, setGranted] = useState(
-        () => sessionStorage.getItem('cag_access_granted') === 'true'
+        () => isGateDisabled || sessionStorage.getItem('cag_access_granted') === 'true'
     );
 
     const handleGranted = (accessCode: string) => {

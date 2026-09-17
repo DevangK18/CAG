@@ -4,16 +4,22 @@ CAG RAG Pipeline - Indexing Script
 
 Indexes all processed JSON files into Qdrant.
 
+Supports:
+- Regular chunk indexing (*_chunks.json, *_enriched.json)
+- Hierarchical summary indexing (*_hierarchical.json) for RAPTOR retrieval
+
 Usage:
     python -m rag_pipeline.indexer --input-dir data/processed
     python -m rag_pipeline.indexer --input-dir data/processed --recreate
+    python -m rag_pipeline.indexer --input-dir data/processed --include-hierarchical
 """
 
 import json
 import argparse
 import logging
+import uuid
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 from tqdm import tqdm
 
 try:
@@ -56,6 +62,7 @@ class Indexer:
         self,
         input_dir: str,
         recreate: bool = False,
+        include_hierarchical: bool = False,
     ) -> Dict[str, Any]:
         """
         Index all JSON files in directory.
@@ -63,16 +70,17 @@ class Indexer:
         Args:
             input_dir: Directory containing *_chunks.json or *_enriched.json
             recreate: Delete and recreate collections
+            include_hierarchical: Also index *_hierarchical.json files for RAPTOR
 
         Returns:
             Statistics about indexing
         """
         input_path = Path(input_dir)
 
-        # Find JSON files
-        json_files = list(input_path.glob("*_enriched.json"))
+        # Find JSON files (recursively search subdirectories for multi-tier support)
+        json_files = list(input_path.glob("**/*_enriched.json"))
         if not json_files:
-            json_files = list(input_path.glob("*_chunks.json"))
+            json_files = list(input_path.glob("**/*_chunks.json"))
 
         if not json_files:
             raise ValueError(f"No JSON files found in {input_dir}")
@@ -114,6 +122,12 @@ class Indexer:
                         "error": str(e),
                     }
                 )
+
+        # Index hierarchical summaries if requested
+        if include_hierarchical:
+            logger.info("Indexing hierarchical summaries (RAPTOR)...")
+            hierarchical_stats = self.index_all_hierarchical(input_dir)
+            stats["hierarchical"] = hierarchical_stats
 
         # Add embedding stats
         embedding_stats = self.embedding_service.get_stats()
@@ -167,12 +181,173 @@ class Indexer:
         # Index parents
         parents_indexed = self.qdrant_service.upsert_parents(parent_chunks)
 
+        # Phase 12: Optionally index entity mentions
+        if (
+            self.config.entity_graph.enabled
+            and self.config.entity_graph.auto_index_on_ingest
+        ):
+            try:
+                try:
+                    from src.entity_graph.mention_indexer import index_report
+                except ImportError:
+                    from entity_graph.mention_indexer import index_report
+
+                mentions = index_report(json_path)
+                logger.info(f"  Entity mentions indexed: {mentions}")
+            except Exception as e:
+                # Non-fatal: chunk indexing succeeded; entity indexing failed
+                logger.warning(f"Entity mention indexing failed for {json_path.name}: {e}")
+
         return {
             "report_id": report_id,
             "children": children_indexed,
             "parents": parents_indexed,
             "has_enrichment": semantic_enrichment is not None,
         }
+
+    def index_hierarchical_file(self, json_path: Path) -> Dict[str, Any]:
+        """
+        Index a hierarchical summary JSON file (RAPTOR summaries).
+
+        Hierarchical summaries are indexed into the same collection as child chunks
+        but with special metadata (content_type, hierarchy_level) for filtered retrieval.
+
+        Args:
+            json_path: Path to *_hierarchical.json file
+
+        Returns:
+            Statistics for this file
+        """
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        report_id = data.get("report_id", json_path.stem.replace("_hierarchical", ""))
+
+        points = []
+
+        # Index chapter summaries (L2)
+        for chapter in data.get("chapter_summaries", []):
+            if not chapter.get("summary"):
+                continue
+
+            chunk_id = f"{report_id}_L2_{chapter['parent_chunk_id']}"
+            embedding = self.embedding_service.dense_service.embed_single(chapter["summary"])
+
+            points.append({
+                "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_id)),
+                "vector": embedding,
+                "payload": {
+                    "chunk_id": chunk_id,
+                    "content": chapter["summary"],
+                    "content_type": "chapter_summary",
+                    "hierarchy_level": 2,
+                    "parent_chunk_id": chapter["parent_chunk_id"],
+                    "title": chapter.get("title", ""),
+                    "report_id": report_id,
+                    "tier": chapter.get("tier", "union"),
+                },
+            })
+
+        # Index section summaries (L1)
+        for section in data.get("section_summaries", []):
+            if not section.get("summary"):
+                continue
+
+            chunk_id = f"{report_id}_L1_{section['parent_chunk_id']}"
+            embedding = self.embedding_service.dense_service.embed_single(section["summary"])
+
+            points.append({
+                "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_id)),
+                "vector": embedding,
+                "payload": {
+                    "chunk_id": chunk_id,
+                    "content": section["summary"],
+                    "content_type": "section_summary",
+                    "hierarchy_level": 1,
+                    "parent_chunk_id": section["parent_chunk_id"],
+                    "title": section.get("title", ""),
+                    "report_id": report_id,
+                    "tier": section.get("tier", "union"),
+                },
+            })
+
+        if not points:
+            logger.warning(f"No hierarchical summaries to index for {report_id}")
+            return {
+                "report_id": report_id,
+                "chapter_summaries": 0,
+                "section_summaries": 0,
+            }
+
+        # Upsert to child collection (same collection as regular chunks)
+        self.qdrant_service.upsert_hierarchical_summaries(points)
+
+        chapter_count = sum(1 for p in points if p["payload"]["hierarchy_level"] == 2)
+        section_count = sum(1 for p in points if p["payload"]["hierarchy_level"] == 1)
+
+        logger.info(
+            f"Indexed {len(points)} hierarchical summaries for {report_id} "
+            f"({chapter_count} chapters, {section_count} sections)"
+        )
+
+        return {
+            "report_id": report_id,
+            "chapter_summaries": chapter_count,
+            "section_summaries": section_count,
+        }
+
+    def index_all_hierarchical(
+        self,
+        input_dir: str,
+    ) -> Dict[str, Any]:
+        """
+        Index all hierarchical summary JSON files in directory.
+
+        Args:
+            input_dir: Directory containing *_hierarchical.json files
+
+        Returns:
+            Statistics about hierarchical indexing
+        """
+        input_path = Path(input_dir)
+
+        # Find hierarchical JSON files
+        hierarchical_files = list(input_path.glob("**/*_hierarchical.json"))
+
+        if not hierarchical_files:
+            logger.info(f"No hierarchical JSON files found in {input_dir}")
+            return {
+                "files_processed": 0,
+                "total_chapter_summaries": 0,
+                "total_section_summaries": 0,
+                "errors": [],
+            }
+
+        logger.info(f"Found {len(hierarchical_files)} hierarchical files to index")
+
+        stats = {
+            "files_processed": 0,
+            "total_chapter_summaries": 0,
+            "total_section_summaries": 0,
+            "errors": [],
+        }
+
+        for json_file in tqdm(hierarchical_files, desc="Indexing hierarchical summaries"):
+            try:
+                file_stats = self.index_hierarchical_file(json_file)
+
+                stats["files_processed"] += 1
+                stats["total_chapter_summaries"] += file_stats["chapter_summaries"]
+                stats["total_section_summaries"] += file_stats["section_summaries"]
+
+            except Exception as e:
+                logger.error(f"Error indexing {json_file.name}: {e}")
+                stats["errors"].append({
+                    "file": json_file.name,
+                    "error": str(e),
+                })
+
+        return stats
 
 
 def main():
@@ -198,6 +373,11 @@ def main():
         "--no-tables",
         action="store_true",
         help="Disable LLM table summaries",
+    )
+    parser.add_argument(
+        "--include-hierarchical",
+        action="store_true",
+        help="Index RAPTOR hierarchical summaries (*_hierarchical.json)",
     )
 
     args = parser.parse_args()
@@ -225,11 +405,16 @@ def main():
     print(f"Recreate: {args.recreate}")
     print(f"Sparse vectors: {config.embedding.enable_sparse_vectors}")
     print(f"Table summaries: {config.embedding.enable_table_summaries}")
+    print(f"Hierarchical (RAPTOR): {args.include_hierarchical}")
     print("=" * 60 + "\n")
 
     # Run indexer
     indexer = Indexer(config)
-    stats = indexer.index_all(args.input_dir, args.recreate)
+    stats = indexer.index_all(
+        args.input_dir,
+        recreate=args.recreate,
+        include_hierarchical=args.include_hierarchical,
+    )
 
     # Print results
     print("\n" + "=" * 60)
@@ -239,6 +424,16 @@ def main():
     print(f"Children indexed: {stats['total_children']}")
     print(f"Parents indexed: {stats['total_parents']}")
     print(f"Files with enrichment: {stats['files_with_enrichment']}")
+
+    # Hierarchical stats
+    if "hierarchical" in stats:
+        hier = stats["hierarchical"]
+        print(f"\nHierarchical (RAPTOR):")
+        print(f"  Files processed: {hier['files_processed']}")
+        print(f"  Chapter summaries: {hier['total_chapter_summaries']}")
+        print(f"  Section summaries: {hier['total_section_summaries']}")
+        if hier.get("errors"):
+            print(f"  Errors: {len(hier['errors'])}")
 
     if "embedding_stats" in stats:
         emb = stats["embedding_stats"]

@@ -31,10 +31,31 @@ try:
 except ImportError:
     from report_registry import get_registry, init_registry
 
+# Anthropic client - uses Vertex AI wrapper when USE_VERTEX_AI=true
 try:
-    from anthropic import Anthropic
+    from src.core.vertex_client import (
+        get_anthropic_client,
+        is_vertex_ai_enabled,
+        get_vertex_model_name,
+    )
+
+    _use_vertex_ai = is_vertex_ai_enabled()
 except ImportError:
-    Anthropic = None
+    # Fallback to direct import if vertex_client not available
+    from anthropic import Anthropic as _DirectAnthropic
+
+    def get_anthropic_client():
+        import os
+
+        return _DirectAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    def is_vertex_ai_enabled():
+        return False
+
+    def get_vertex_model_name(model):
+        return model
+
+    _use_vertex_ai = False
 
 try:
     from openai import OpenAI
@@ -48,10 +69,14 @@ try:
     from ..core.config import RAGConfig, LLMProvider
     from .models import RAGResponse, Citation, RetrievalResult, ParentContext
     from .retrieval_service import RetrievalService
+    from .auto_filter import AutoFilterExtractor
+    from .retrieval_utils import merge_filters, has_explicit_report_filter
 except ImportError:
     from src.core.config import RAGConfig, LLMProvider
     from models import RAGResponse, Citation, RetrievalResult, ParentContext
     from retrieval_service import RetrievalService
+    from auto_filter import AutoFilterExtractor
+    from retrieval_utils import merge_filters, has_explicit_report_filter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -92,11 +117,19 @@ class ResponseStyle(Enum):
 
 BASE_EXPERTISE = """You are an expert analyst for the Comptroller and Auditor General (CAG) of India.
 
+CAG audits cover three tiers of government:
+- **Union**: Central government ministries and departments, audited through the office of the CAG
+- **State**: State government departments, audited by the State Accountant General (AG) under CAG's mandate
+- **Local Bodies**: Panchayati Raj Institutions (PRIs) and Urban Local Bodies (ULBs), audited through Annual Technical Inspection Reports (ATIRs) and Local Fund Audits
+
 Your expertise includes:
 - Analyzing audit findings, observations, and their monetary implications
-- Understanding government accounting, budgeting, and financial procedures  
+- Understanding government accounting, budgeting, and financial procedures
 - Interpreting CAG terminology: "short levy", "excess expenditure", "revenue foregone", "infructuous expenditure"
 - Synthesizing information from multiple sections of audit reports
+- Union audit concepts: Consolidated Fund of India, Parliamentary committees, Central ministries
+- State audit concepts: State Exchequer, State Consolidated Fund, State PSEs (Public Sector Enterprises), State AG reports, District-level audits
+- Local Body concepts: Gram Panchayat (GP), Zila Parishad (ZP), Panchayat Samiti, Municipal Corporation, Town Council, PRIASoft accounting, Local Fund Audit, three-tier Panchayati Raj system, 73rd/74th Constitutional Amendments
 
 ## CRITICAL RULES (NEVER violate):
 1. ONLY state facts explicitly present in the provided context
@@ -864,10 +897,14 @@ class RAGService:
     - Citation placement at END of sentences
     - Mandatory year in time series citations
     - Explicit handling of missing year data
+
+    Bridge C additions:
+    - Query observability logging via QueryLogger
     """
 
-    def __init__(self, config: RAGConfig = None):
+    def __init__(self, config: RAGConfig = None, query_logger=None):
         self.config = config or RAGConfig()
+        self.query_logger = query_logger
 
         # Validate
         errors = self.config.validate()
@@ -883,15 +920,20 @@ class RAGService:
 
         # Initialize LLM clients
         if self.config.llm.provider == LLMProvider.CLAUDE:
-            if Anthropic is None:
-                raise ImportError("Install anthropic: pip install anthropic")
-            self.anthropic = Anthropic(api_key=self.config.anthropic_api_key)
-            self.openai = OpenAI(api_key=self.config.openai_api_key)  # Still need OpenAI for QueryEnhancer
+            # Use Vertex AI wrapper when enabled, else direct API
+            self.anthropic = get_anthropic_client()
+            if _use_vertex_ai:
+                logger.info("Using Claude via Vertex AI")
+            self.openai = OpenAI(
+                api_key=self.config.openai_api_key
+            )  # Still need OpenAI for QueryEnhancer
             self.gemini = None
         elif self.config.llm.provider == LLMProvider.GEMINI:
             # Lazy-init Gemini client
             self.gemini = self._init_gemini_client()
-            self.openai = OpenAI(api_key=self.config.openai_api_key)  # Still need OpenAI for QueryEnhancer
+            self.openai = OpenAI(
+                api_key=self.config.openai_api_key
+            )  # Still need OpenAI for QueryEnhancer
             self.anthropic = None
         else:
             self.openai = OpenAI(api_key=self.config.openai_api_key)
@@ -916,8 +958,132 @@ class RAGService:
                 logger.warning(f"Could not import QueryEnhancer: {e}")
                 self.config.query_enhancement.enabled = False
 
+        # Phase 13: Initialize Groundedness Service
+        self.groundedness_service = None
+        if self.config.groundedness.enabled:
+            try:
+                try:
+                    from .groundedness_service import GroundednessService
+                except ImportError:
+                    from groundedness_service import GroundednessService
+
+                self.groundedness_service = GroundednessService(
+                    config=self.config.groundedness,
+                    openai_client=self.openai,
+                    anthropic_client=self.anthropic,
+                    gemini_client=self.gemini,
+                )
+                logger.info("Groundedness verification enabled (Phase 13)")
+            except ImportError as e:
+                logger.warning(f"Could not import GroundednessService: {e}")
+                self.config.groundedness.enabled = False
+
+        # Phase 11: Initialize Agentic Service
+        self.agentic_service = None
+        if self.config.agentic.enabled:
+            try:
+                try:
+                    from .agentic_service import AgenticRAGService
+                except ImportError:
+                    from agentic_service import AgenticRAGService
+
+                self.agentic_service = AgenticRAGService(
+                    rag_service=self,
+                    config=self.config.agentic,
+                )
+                logger.info("Agentic RAG enabled (Phase 11)")
+            except ImportError as e:
+                logger.warning(f"Could not import AgenticRAGService: {e}")
+                self.config.agentic.enabled = False
+
+        # Initialize Auto-Filter Extractor
+        self.auto_filter_extractor = None
+        if self.config.auto_filter.enabled:
+            self.auto_filter_extractor = AutoFilterExtractor(self.config.auto_filter)
+            logger.info("Auto-Filter extraction enabled")
+
+        # ===== SOTA RAG Features Initialization =====
+
+        # Query Router (SOTA Feature 2)
+        self.query_router = None
+        if self.config.query_routing.enabled:
+            try:
+                try:
+                    from .query_router import QueryRouter
+                except ImportError:
+                    from query_router import QueryRouter
+
+                self.query_router = QueryRouter(
+                    config=self.config.query_routing,
+                    openai_client=self.openai,
+                )
+                logger.info("Query Routing enabled (SOTA Feature 2)")
+            except ImportError as e:
+                logger.warning(f"Could not import QueryRouter: {e}")
+                self.config.query_routing.enabled = False
+
+        # Self-RAG / Retrieval Decider (SOTA Feature 3)
+        self.retrieval_decider = None
+        self.parametric_responder = None
+        if self.config.self_rag.enabled:
+            try:
+                try:
+                    from .retrieval_decider import RetrievalDecider, ParametricResponder
+                except ImportError:
+                    from retrieval_decider import RetrievalDecider, ParametricResponder
+
+                self.retrieval_decider = RetrievalDecider(self.config.self_rag)
+                self.parametric_responder = ParametricResponder(
+                    llm_client=self.openai,
+                    model="gpt-4o-mini",
+                )
+                logger.info("Self-RAG enabled (SOTA Feature 3)")
+            except ImportError as e:
+                logger.warning(f"Could not import RetrievalDecider: {e}")
+                self.config.self_rag.enabled = False
+
+        # Corrective RAG (SOTA Feature 4)
+        self.corrective_service = None
+        if self.config.corrective_rag.enabled:
+            try:
+                try:
+                    from .corrective_rag import CorrectiveRAGService
+                except ImportError:
+                    from corrective_rag import CorrectiveRAGService
+
+                self.corrective_service = CorrectiveRAGService(
+                    config=self.config.corrective_rag,
+                    openai_client=self.openai,
+                )
+                logger.info("Corrective RAG enabled (SOTA Feature 4)")
+            except ImportError as e:
+                logger.warning(f"Could not import CorrectiveRAGService: {e}")
+                self.config.corrective_rag.enabled = False
+
+        # Hierarchical Retriever (SOTA Feature 1 - RAPTOR)
+        self.hierarchical_retriever = None
+        if self.config.hierarchical.enabled:
+            try:
+                try:
+                    from .hierarchical_retriever import HierarchicalRetriever
+                except ImportError:
+                    from hierarchical_retriever import HierarchicalRetriever
+
+                # Note: HierarchicalRetriever requires qdrant_service and embedding_service
+                # which are initialized in RetrievalService. We'll initialize it lazily.
+                logger.info("Hierarchical Retrieval enabled (SOTA Feature 1 - RAPTOR)")
+            except ImportError as e:
+                logger.warning(f"Could not import HierarchicalRetriever: {e}")
+                self.config.hierarchical.enabled = False
+
         logger.info(
-            f"RAG Service v3.2 initialized with {self.config.llm.provider.value}"
+            f"RAG Service v3.3 initialized with {self.config.llm.provider.value}"
+        )
+        logger.info(
+            f"SOTA Features: Routing={self.config.query_routing.enabled}, "
+            f"Self-RAG={self.config.self_rag.enabled}, "
+            f"Corrective={self.config.corrective_rag.enabled}, "
+            f"Hierarchical={self.config.hierarchical.enabled}"
         )
 
     def ask(
@@ -926,6 +1092,8 @@ class RAGService:
         filters: Optional[Dict[str, Any]] = None,
         top_k: int = 10,
         style: Optional[ResponseStyle] = None,
+        client_session_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> RAGResponse:
         """
         Ask a question and get an answer based on CAG reports.
@@ -934,6 +1102,143 @@ class RAGService:
         if style is None:
             style = ResponseStyle.ADAPTIVE
 
+        # Determine interaction mode for logging
+        interaction_mode = "directory" if filters and "report_id" in filters else "home"
+
+        # Extract report_ids for logging
+        report_ids_filter = None
+        if filters and "report_id" in filters:
+            rid = filters["report_id"]
+            report_ids_filter = rid if isinstance(rid, list) else [rid]
+
+        # Start query logging context (if logger available)
+        log_ctx = None
+        if self.query_logger:
+            log_ctx = self.query_logger.start_query(
+                query_text=question,
+                interaction_mode=interaction_mode,
+                report_ids_filter=report_ids_filter,
+                explicit_filters=filters,
+                style=style.value if style else None,
+                client_session_id=client_session_id,
+                user_agent=user_agent,
+            )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("enhancement")
+
+        try:
+            return self._ask_impl(
+                question=question,
+                filters=filters,
+                top_k=top_k,
+                style=style,
+                log_ctx=log_ctx,
+            )
+        except Exception as e:
+            if log_ctx:
+                log_ctx.record_error(str(e))
+            raise
+        finally:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
+
+    def _ask_impl(
+        self,
+        question: str,
+        filters: Optional[Dict[str, Any]],
+        top_k: int,
+        style: ResponseStyle,
+        log_ctx=None,
+    ) -> RAGResponse:
+        """Internal implementation of ask() with logging support."""
+
+        # ===== SOTA: Self-RAG Check (Feature 3) =====
+        # Check if retrieval is needed - skip for definitional queries
+        if self.retrieval_decider:
+            try:
+                from .retrieval_decider import RetrievalDecision
+            except ImportError:
+                from retrieval_decider import RetrievalDecision
+
+            decision = self.retrieval_decider.decide(question)
+
+            if decision.decision == RetrievalDecision.SKIP:
+                logger.info(f"Self-RAG: Skipping retrieval - {decision.reasoning}")
+
+                # Generate parametric response without retrieval
+                parametric_answer = decision.parametric_answer
+                if not parametric_answer and self.parametric_responder:
+                    parametric_answer = self.parametric_responder.respond(question)
+
+                if parametric_answer:
+                    return RAGResponse(
+                        query=question,
+                        answer=parametric_answer,
+                        citations=[],
+                        sources_used=0,
+                        context_length=0,
+                        reranker_used="none",
+                        search_type="parametric",
+                        model_used="parametric",
+                        sota_features={
+                            "self_rag": "skip",
+                            "routing": "none",
+                            "corrective": False,
+                        }
+                    )
+
+            elif decision.decision == RetrievalDecision.MULTI_RETRIEVE:
+                # Use agentic service for complex queries
+                if self.agentic_service:
+                    logger.info("Self-RAG: Routing to agentic retrieval")
+                    return self.agentic_service.ask(
+                        question=question,
+                        filters=filters,
+                        style=style,
+                    )
+
+        # ===== SOTA: Query Routing (Feature 2) =====
+        routing_decision = None
+        if self.query_router:
+            routing_decision = self.query_router.route(question)
+            logger.info(
+                f"Query Routing: {routing_decision.route.value} "
+                f"(confidence: {routing_decision.confidence:.2f})"
+            )
+
+            # Apply routing-suggested filters
+            if routing_decision.filters_suggested:
+                if filters is None:
+                    filters = {}
+                # Routing filters have lower priority than explicit filters
+                for key, value in routing_decision.filters_suggested.items():
+                    if key not in filters and value is not None:
+                        filters[key] = value
+                        logger.info(f"Routing added filter: {key}={value}")
+
+        # ===== Tier context lookup for query enhancement =====
+        tier_context_for_enhancer = None
+        if filters and "report_id" in filters:
+            registry = get_registry()
+            report_id = filters["report_id"]
+            # Handle both single report_id and list of report_ids
+            if isinstance(report_id, list):
+                report_id = report_id[0]  # Use first report for context
+            report_info = registry.get_report(report_id)
+            if report_info:
+                govt_type = (
+                    getattr(report_info, "government_body_type", None) or "union"
+                )
+                if govt_type != "union":
+                    tier_label = "State" if govt_type == "state" else "Local Body"
+                    tier_context_for_enhancer = f"{tier_label} audit report"
+                    state_name = getattr(report_info, "state_name", None)
+                    if state_name:
+                        tier_context_for_enhancer += f" from {state_name}"
+                    department = getattr(report_info, "department", None)
+                    if department and department.lower() not in ("unknown", "n/a", ""):
+                        tier_context_for_enhancer += f", department: {department}"
+
         # ===== NEW: Query Enhancement (Phase 1) =====
         enhancement = None
         question_type = None
@@ -941,7 +1246,11 @@ class RAGService:
 
         if self.config.query_enhancement.enabled and self.query_enhancer:
             # Single LLM call for query enhancement
-            enhancement = self.query_enhancer.enhance(question, style=style.value)
+            enhancement = self.query_enhancer.enhance(
+                question,
+                style=style.value,
+                tier_context=tier_context_for_enhancer,
+            )
             question_type = enhancement.question_type
 
             # Apply recommended style if adaptive
@@ -961,7 +1270,9 @@ class RAGService:
             # Increase context for complex questions
             if question_type in ["list", "aggregation", "comparison"]:
                 adjusted_top_k = max(top_k, 15)
-                logger.info(f"Detected {question_type} question, top_k → {adjusted_top_k}")
+                logger.info(
+                    f"Detected {question_type} question, top_k → {adjusted_top_k}"
+                )
 
             # Auto-select style for specific question types
             if style == ResponseStyle.ADAPTIVE:
@@ -972,13 +1283,106 @@ class RAGService:
                     style = ResponseStyle.EXPLANATORY
                     logger.info("Auto-selected EXPLANATORY style")
 
-        # ===== Retrieval (now with multi-query + auto-filters) =====
-        retrieval_result = self.retrieval.retrieve(
-            question,
-            top_k=adjusted_top_k,
-            filters=filters,
-            enhancement=enhancement,  # NEW parameter
-        )
+        # Log query enhancement
+        if log_ctx:
+            log_ctx.record_query_enhancement(enhancement)
+            log_ctx.end_phase("enhancement")
+            log_ctx.start_phase("retrieval")
+
+        # ===== Auto-Filter Extraction =====
+        # Only apply when caller didn't specify report_id
+        auto_filters = None
+        if self.auto_filter_extractor and not has_explicit_report_filter(filters):
+            auto_filters = self.auto_filter_extractor.extract(question, enhancement)
+            filters = merge_filters(filters, auto_filters)
+
+        # Log filters
+        if log_ctx:
+            log_ctx.record_auto_filters(auto_filters)
+            log_ctx.record_merged_filters(filters)
+
+        # ===== SOTA: Route-based Retrieval =====
+        # Check if we should use hierarchical retrieval (RAPTOR)
+        use_hierarchical = False
+        if routing_decision:
+            try:
+                from .query_router import QueryRoute
+            except ImportError:
+                from query_router import QueryRoute
+
+            if routing_decision.route == QueryRoute.SUMMARY_ONLY:
+                use_hierarchical = True
+                logger.info(
+                    f"Routing to hierarchical retrieval (L{routing_decision.hierarchy_level or 2})"
+                )
+
+        # Hierarchical retrieval for summary queries
+        if use_hierarchical and self.config.hierarchical.enabled:
+            # Lazy initialization of hierarchical retriever
+            if self.hierarchical_retriever is None:
+                try:
+                    from .hierarchical_retriever import HierarchicalRetriever
+                except ImportError:
+                    from hierarchical_retriever import HierarchicalRetriever
+
+                self.hierarchical_retriever = HierarchicalRetriever(
+                    qdrant_service=self.retrieval.qdrant,
+                    embedding_service=self.retrieval.embedding,
+                    config=self.config,
+                )
+
+            retrieval_result = self.hierarchical_retriever.retrieve(
+                query=question,
+                level=routing_decision.hierarchy_level if routing_decision else 2,
+                report_id=filters.get("report_id") if filters else None,
+                top_k=adjusted_top_k,
+            )
+        else:
+            # Standard retrieval (now with multi-query + auto-filters)
+            retrieval_result = self.retrieval.retrieve(
+                question,
+                top_k=adjusted_top_k,
+                filters=filters,
+                enhancement=enhancement,
+            )
+
+        # ===== SOTA: Corrective RAG - Relevance Check (Feature 4) =====
+        correction_info = None
+        if self.corrective_service and retrieval_result.total_after_rerank > 0:
+            # Define re-retrieve function for corrective flow
+            def retrieve_fn(reformulated_query):
+                return self.retrieval.retrieve(
+                    reformulated_query,
+                    top_k=adjusted_top_k,
+                    filters=filters,
+                    enhancement=None,  # Don't re-enhance reformulated query
+                )
+
+            retrieval_result, correction_info = self.corrective_service.check_and_correct_retrieval(
+                query=question,
+                retrieval_result=retrieval_result,
+                retrieve_fn=retrieve_fn,
+            )
+
+            if correction_info.get("retrieval_attempts", 1) > 1:
+                logger.info(
+                    f"Corrective RAG: {correction_info['retrieval_attempts']} retrieval attempts, "
+                    f"final assessment: {correction_info.get('final_assessment', {}).get('suggestion', 'unknown')}"
+                )
+
+        # Log retrieval results
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                self.config.observability.dev_debug
+                if hasattr(self.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                retrieval_result,
+                reranker_used=retrieval_result.reranker_used,
+                include_full_content=include_full,
+            )
 
         if retrieval_result.total_after_rerank == 0:
             return RAGResponse(
@@ -1001,6 +1405,11 @@ class RAGService:
         # ===== NEW: Context Sufficiency Check =====
         context_sufficient = self._check_context_sufficiency(retrieval_result)
 
+        # Log context sufficiency
+        if log_ctx:
+            log_ctx.record_context_sufficient(context_sufficient)
+            log_ctx.start_phase("generation")
+
         # Build context
         context = retrieval_result.to_context_string(
             include_neighbors=self.config.llm.include_neighbor_context,
@@ -1019,8 +1428,45 @@ class RAGService:
         if len(context) > max_context:
             context = context[:max_context] + "\n\n[Context truncated...]"
 
+        # Inject tier context for State/Local Body reports (non-streaming path)
+        tier_context = self._build_tier_context(retrieval_result)
+        if tier_context:
+            context = tier_context + "\n\n" + context
+
+        # Get prepared prompts for logging (use style-specific prompts)
+        system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS[ResponseStyle.ADAPTIVE])
+        query_template = QUERY_TEMPLATES.get(style, QUERY_TEMPLATES[ResponseStyle.ADAPTIVE])
+        user_prompt = query_template.format(context=context, question=question)
+
         # Generate
         answer = self._generate_answer(question, context, style, question_type)
+
+        # ===== SOTA: Corrective RAG - Citation Validation (Feature 4) =====
+        citation_validation = None
+        if self.corrective_service and self.config.corrective_rag.validate_citations:
+            answer, citation_validation = self.corrective_service.validate_and_clean_answer(
+                answer=answer,
+                retrieval_result=retrieval_result,
+            )
+            if citation_validation and not citation_validation.all_valid:
+                logger.info(
+                    f"Citation validation: {len(citation_validation.valid_citations)} valid, "
+                    f"{len(citation_validation.invalid_citations)} invalid (stripped)"
+                )
+
+        # Log generation
+        if log_ctx:
+            log_ctx.end_phase("generation")
+            log_ctx.record_generation(
+                answer=answer,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=answer,  # Same as answer for non-streaming
+                provider=self.config.llm.provider.value,
+                model=self._get_model_name(),
+                prompt_tokens=None,  # Would need tiktoken to estimate
+                completion_tokens=None,
+            )
 
         # Prepend caveat if context insufficient
         if not context_sufficient:
@@ -1030,8 +1476,42 @@ class RAGService:
             )
             answer = caveat + answer
 
+        # Phase 13: Groundedness verification (runs for ALL queries, not just insufficient)
+        groundedness_dict = None
+        if self.groundedness_service:
+            if log_ctx:
+                log_ctx.start_phase("groundedness")
+            report = self.groundedness_service.verify(answer, retrieval_result)
+            groundedness_dict = report.to_dict()
+            if log_ctx:
+                log_ctx.end_phase("groundedness")
+                log_ctx.record_groundedness(groundedness_dict)
+
+            # Optional: prepend caveat if verification failed AND block_on_failure is on
+            if not report.verified and self.config.groundedness.block_on_failure:
+                gcaveat = (
+                    f"⚠️ **Groundedness check**: Only {report.num_grounded} of "
+                    f"{report.num_claims} factual claims in this answer could be "
+                    f"verified against the retrieved sources. Treat with caution.\n\n"
+                )
+                answer = gcaveat + answer
+
         # Build citations
         citations = self.build_citations(retrieval_result)
+
+        # Build SOTA features summary
+        sota_features = {}
+        if routing_decision:
+            sota_features["routing"] = routing_decision.route.value
+            sota_features["routing_confidence"] = routing_decision.confidence
+        if correction_info:
+            sota_features["corrective_attempts"] = correction_info.get("retrieval_attempts", 1)
+            sota_features["corrective_reformulations"] = len(correction_info.get("reformulations", []))
+        if citation_validation:
+            sota_features["citation_valid"] = len(citation_validation.valid_citations)
+            sota_features["citation_invalid"] = len(citation_validation.invalid_citations)
+        if use_hierarchical:
+            sota_features["hierarchical_level"] = routing_decision.hierarchy_level if routing_decision else 2
 
         return RAGResponse(
             query=question,
@@ -1042,6 +1522,8 @@ class RAGService:
             reranker_used=retrieval_result.reranker_used,
             search_type=retrieval_result.search_type,
             model_used=self._get_model_name(),
+            groundedness=groundedness_dict,
+            sota_features=sota_features if sota_features else None,
         )
 
     # =========================================================================
@@ -1125,6 +1607,11 @@ class RAGService:
         }
         user_prompt += type_hints.get(question_type, "")
 
+        # Inject tier context for State/Local Body reports
+        tier_context = self._build_tier_context(retrieval_result)
+        if tier_context:
+            user_prompt = tier_context + "\n\n" + user_prompt
+
         return {
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
@@ -1193,12 +1680,36 @@ class RAGService:
         Uses the top reranker score as a proxy. If the best chunk scores
         below the threshold, the context is likely insufficient.
 
+        The threshold is lowered by 30% for State/Local Body reports because
+        their vocabulary may score slightly lower with the Cohere reranker
+        (trained on general English and Union audit language).
+
         Returns True if sufficient, False if insufficient.
         """
         if not self.config.query_enhancement.enable_sufficiency_check:
             return True  # Skip check if disabled
 
         threshold = self.config.query_enhancement.min_rerank_score
+
+        # Lower threshold for State/Local Body reports (vocabulary differences)
+        # The Cohere reranker was calibrated for Union reports; State/Local
+        # terminology may score slightly lower but answers are still good.
+        report_ids = set()
+        for parent in retrieval_result.parents:
+            for child in parent.children:
+                report_ids.add(child.report_id)
+
+        registry = get_registry()
+        for rid in report_ids:
+            info = registry.get_report(rid)
+            if info:
+                govt_type = getattr(info, "government_body_type", None) or "union"
+                if govt_type != "union":
+                    threshold *= 0.7  # 30% lower threshold for non-Union
+                    logger.debug(
+                        f"Lowered sufficiency threshold to {threshold:.3f} for {govt_type} report"
+                    )
+                    break
 
         # Find the best score across all children in all parents
         best_score = 0.0
@@ -1214,6 +1725,198 @@ class RAGService:
             )
 
         return sufficient
+
+    def _build_tier_context(self, retrieval_result: RetrievalResult) -> str:
+        """
+        Build tier-aware context header for State/Local Body reports.
+
+        This helps the LLM understand the government tier context and use
+        appropriate terminology when generating responses.
+
+        Returns empty string for Union reports (no extra context needed).
+        """
+        # Get unique report_ids from retrieval results
+        report_ids = set()
+        for parent in retrieval_result.parents:
+            for child in parent.children:
+                report_ids.add(child.report_id)
+
+        if not report_ids:
+            return ""
+
+        registry = get_registry()
+
+        # For single-report chat (most common case)
+        if len(report_ids) == 1:
+            report_info = registry.get_report(report_ids.pop())
+            if not report_info:
+                return ""
+
+            # Get government_body_type - default to "union" if not set
+            govt_type = getattr(report_info, "government_body_type", None) or "union"
+            if govt_type == "union":
+                return ""  # No extra context needed for Union
+
+            tier_label = (
+                "State"
+                if govt_type == "state"
+                else "Local Body (Panchayati Raj Institutions / Urban Local Bodies)"
+            )
+
+            parts = [f"📋 REPORT CONTEXT: This is a {tier_label} audit report"]
+
+            state_name = getattr(report_info, "state_name", None)
+            if state_name:
+                parts[0] += f" from {state_name}"
+            parts[0] += "."
+
+            department = getattr(report_info, "department", None)
+            if department and department.lower() not in ("unknown", "n/a", ""):
+                parts.append(f"Department/Sector: {department}")
+
+            audit_category = getattr(report_info, "audit_category", None)
+            if audit_category:
+                parts.append(f"Audit type: {audit_category.title()} Audit")
+
+            # Add tier-specific terminology hints
+            if govt_type == "state":
+                parts.append(
+                    "Note: State audit terminology may include 'State AG', 'State Exchequer', "
+                    "'State Consolidated Fund', 'SPSE' (State Public Sector Enterprise)."
+                )
+            elif govt_type == "local_body":
+                parts.append(
+                    "Note: Local Body terminology may include 'PRI' (Panchayati Raj Institution), "
+                    "'ULB' (Urban Local Body), 'GP' (Gram Panchayat), 'ZP' (Zila Parishad), "
+                    "'ATIR' (Annual Technical Inspection Report), 'PRIASoft', 'Local Fund Audit'."
+                )
+
+            return "\n".join(parts)
+
+        # For multi-report chat (cross-report analysis)
+        # Just note the tiers involved
+        tiers = set()
+        states = set()
+        for rid in report_ids:
+            info = registry.get_report(rid)
+            if info:
+                govt_type = getattr(info, "government_body_type", None) or "union"
+                tiers.add(govt_type)
+                state_name = getattr(info, "state_name", None)
+                if state_name:
+                    states.add(state_name)
+
+        if tiers == {"union"}:
+            return ""
+
+        tier_labels = [t.replace("_", " ").title() for t in tiers]
+        context = f"📋 REPORT CONTEXT: These reports span {', '.join(tier_labels)} government tiers"
+        if states:
+            context += f" covering {', '.join(sorted(states))}"
+        context += "."
+        return context
+
+    # =========================================================================
+    # Smart Report Selection for Comparative Queries
+    # =========================================================================
+
+    def _smart_select_reports(
+        self,
+        report_ids: List[str],
+        question: str,
+        matched_entities: Optional[List[Dict[str, Any]]],
+        cap: int,
+    ) -> List[str]:
+        """
+        Intelligently select top N reports when the set exceeds the cap.
+
+        Selection strategies (in priority order):
+        1. If matched_entities: rank by entity mention count in each report
+        2. Else if years in question: rank by proximity to mentioned years
+        3. Else: rank by report_year descending (most recent first)
+
+        Args:
+            report_ids: Full list of candidate report IDs
+            question: User's question (used for year extraction)
+            matched_entities: Entities matched from entity graph (may be None)
+            cap: Maximum number of reports to return
+
+        Returns:
+            List of top N report IDs
+        """
+        registry = get_registry()
+
+        # Strategy 1: Rank by entity mention count
+        if matched_entities:
+            try:
+                try:
+                    from src.entity_graph.entity_service import get_entity_service
+                except ImportError:
+                    from entity_graph.entity_service import get_entity_service
+
+                entity_service = get_entity_service()
+                if entity_service:
+                    # Score each report by sum of mention counts for matched entities
+                    report_scores: Dict[str, int] = {}
+                    for report_id in report_ids:
+                        score = 0
+                        for ent in matched_entities:
+                            mentions = entity_service.get_mentions(
+                                entity_id=ent["id"],
+                                report_id=report_id,
+                            )
+                            score += len(mentions) if mentions else 0
+                        report_scores[report_id] = score
+
+                    # Sort by score descending, take top N
+                    sorted_reports = sorted(
+                        report_ids,
+                        key=lambda r: report_scores.get(r, 0),
+                        reverse=True,
+                    )
+                    logger.info(
+                        f"Smart-select by entity mentions: top scores = "
+                        f"{[(r, report_scores.get(r, 0)) for r in sorted_reports[:5]]}"
+                    )
+                    return sorted_reports[:cap]
+            except Exception as e:
+                logger.warning(f"Entity-based smart select failed: {e}")
+                # Fall through to next strategy
+
+        # Strategy 2: Rank by year proximity
+        import re
+        year_pattern = re.compile(r'\b(20\d{2})\b')
+        year_matches = year_pattern.findall(question)
+
+        if year_matches:
+            target_years = [int(y) for y in year_matches]
+            avg_target_year = sum(target_years) / len(target_years)
+
+            def year_proximity(report_id: str) -> float:
+                """Lower is better (closer to target year)."""
+                info = registry.get_report(report_id)
+                if info and info.report_year:
+                    return abs(info.report_year - avg_target_year)
+                return float('inf')  # Unknown year goes last
+
+            sorted_reports = sorted(report_ids, key=year_proximity)
+            logger.info(
+                f"Smart-select by year proximity to {target_years}: "
+                f"selected {sorted_reports[:cap]}"
+            )
+            return sorted_reports[:cap]
+
+        # Strategy 3: Most recent first
+        def report_year_desc(report_id: str) -> int:
+            """Higher year is better (more recent)."""
+            info = registry.get_report(report_id)
+            if info and info.report_year:
+                return -info.report_year  # Negative for descending sort
+            return 0  # Unknown year goes last
+
+        sorted_reports = sorted(report_ids, key=report_year_desc)
+        logger.info(f"Smart-select by recency: selected {sorted_reports[:cap]}")
+        return sorted_reports[:cap]
 
     # =========================================================================
     # Question Type Detection
@@ -1333,9 +2036,14 @@ class RAGService:
             return self._generate_openai(prompt, system_prompt)
 
     def _generate_claude(self, prompt: str, system_prompt: str) -> str:
-        """Generate using Claude."""
+        """Generate using Claude (via Vertex AI when enabled)."""
+        # Map model name for Vertex AI if enabled
+        model_name = self.config.llm.claude_model
+        if _use_vertex_ai:
+            model_name = get_vertex_model_name(model_name)
+
         response = self.anthropic.messages.create(
-            model=self.config.llm.claude_model,
+            model=model_name,
             max_tokens=self.config.llm.max_tokens,
             temperature=self.config.llm.temperature,
             system=system_prompt,
@@ -1362,8 +2070,11 @@ class RAGService:
         if _gemini_client is None:
             try:
                 from google import genai
+
                 _gemini_client = genai.Client()
-                logger.info(f"Gemini client initialized with model: {self.config.llm.gemini_model}")
+                logger.info(
+                    f"Gemini client initialized with model: {self.config.llm.gemini_model}"
+                )
             except ImportError:
                 raise ImportError("Install google-genai: pip install google-genai")
         return _gemini_client
@@ -1412,6 +2123,10 @@ class RAGService:
                         report_title=report_info.report_title if report_info else "",
                         filename=report_info.filename if report_info else "",
                         audit_year=report_info.audit_year if report_info else "",
+                        # Item 7: Enhanced semantic fields
+                        entities_mentioned=child.entities_mentioned or [],
+                        section_type=child.section_type,
+                        is_recommendation=child.is_recommendation,
                     )
                 )
                 num += 1
@@ -1435,65 +2150,153 @@ class RAGService:
         question: str,
         report_ids: List[str],
         top_k_per_report: int = 5,
+        client_session_id: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> RAGResponse:
         """
-        Compare findings across multiple reports.
+        Cross-report comparative query.
 
-        v3.2: Enhanced year context injection and explicit year labeling.
+        Phase 12 changes:
+        - Optionally narrows report_ids using entity graph (if entity_graph.enabled
+          and enable_comparative_filtering=True and query mentions a known entity)
+        - Builds per-report RetrievalResult objects, then merges via
+          retrieval_utils.merge_retrieval_results
+        - Runs groundedness verification on the merged result
         """
-        registry = get_registry()
-        all_contexts = []
-        all_citations = []
-        total_chunks = 0
-        citation_num = 1
-        years_covered = []
-
-        for report_id in report_ids:
-            report_info = registry.get_report(report_id)
-            year_label = report_info.audit_year if report_info else report_id
-
-            if year_label:
-                years_covered.append(year_label)
-
-            result = self.retrieval.retrieve(
-                question,
-                top_k=top_k_per_report,
-                filters={"report_id": report_id},
+        # Start query logging context
+        log_ctx = None
+        if self.query_logger:
+            log_ctx = self.query_logger.start_query(
+                query_text=question,
+                interaction_mode="comparative",
+                report_ids_filter=report_ids,
+                explicit_filters={"report_id": report_ids},
+                style="comparative",
+                client_session_id=client_session_id,
+                user_agent=user_agent,
             )
+            log_ctx = log_ctx.__enter__()
+            log_ctx.start_phase("retrieval")
 
-            if result.total_after_rerank > 0:
-                # v3.2 POLISHED: Stronger year context header
-                context = f"\n{'=' * 60}\n"
-                context += f"📅 YEAR: {year_label}\n"
-                context += f"📄 Report: {report_info.report_title if report_info else report_id}\n"
-                context += f"{'=' * 60}\n\n"
-                context += f"⚠️ All findings below are from {year_label}. Cite as: [{year_label} - Section X, p.XX]\n\n"
-                context += result.to_context_string()
-                all_contexts.append(context)
-                total_chunks += result.total_after_rerank
+        try:
+            return self._ask_comparative_impl(
+                question=question,
+                report_ids=report_ids,
+                top_k_per_report=top_k_per_report,
+                log_ctx=log_ctx,
+            )
+        except Exception as e:
+            if log_ctx:
+                log_ctx.record_error(str(e))
+            raise
+        finally:
+            if log_ctx:
+                log_ctx.__exit__(None, None, None)
 
-                for parent in result.parents:
-                    for child in parent.children:
-                        all_citations.append(
-                            Citation(
-                                id=citation_num,
-                                report_id=child.report_id,
-                                section=parent.toc_entry,
-                                page=child.page_physical + 1,
-                                score=round(child.score, 3),
-                                finding_type=child.finding_type,
-                                severity=child.severity,
-                                amount_crore=child.total_amount_crore,
-                                report_title=report_info.report_title
-                                if report_info
-                                else "",
-                                filename=report_info.filename if report_info else "",
-                                audit_year=year_label,
-                            )
+    def _ask_comparative_impl(
+        self,
+        question: str,
+        report_ids: List[str],
+        top_k_per_report: int,
+        log_ctx=None,
+    ) -> RAGResponse:
+        """Internal implementation of ask_comparative() with logging support."""
+        try:
+            from .retrieval_utils import merge_retrieval_results
+        except ImportError:
+            from retrieval_utils import merge_retrieval_results
+
+        logger.info(f"Comparative query across {len(report_ids)} reports: '{question}'")
+
+        # ---- Auto-Filter Extraction for comparative queries ----
+        # Extract any auto-filters (year, tier, category) from the question
+        # These will be merged into per-report filters below
+        comparative_auto_filters: Dict[str, Any] = {}
+        if self.auto_filter_extractor:
+            comparative_auto_filters = self.auto_filter_extractor.extract(question, None)
+            if comparative_auto_filters:
+                logger.info(f"Comparative auto-filters: {comparative_auto_filters}")
+
+        # ---- Phase 12: optionally narrow report set via entity graph ----
+        narrowed_report_ids = list(report_ids)
+        entity_filter_applied = False
+        matched_entities: Optional[List[Dict[str, Any]]] = None
+
+        if (
+            hasattr(self.config, 'entity_graph')
+            and self.config.entity_graph.enabled
+            and self.config.entity_graph.enable_comparative_filtering
+        ):
+            try:
+                from src.entity_graph.entity_service import get_entity_service
+            except ImportError:
+                from entity_graph.entity_service import get_entity_service
+
+            entity_service = get_entity_service()
+            if entity_service:
+                matched_entities = entity_service.extract_entities_from_query(question)
+                if matched_entities:
+                    # Union of reports that mention ANY of the matched entities,
+                    # intersected with original report_ids
+                    candidate_reports: set = set()
+                    for ent in matched_entities:
+                        candidate_reports.update(
+                            entity_service.get_reports_for_entity(ent["id"])
                         )
-                        citation_num += 1
+                    intersected = [r for r in report_ids if r in candidate_reports]
+                    if intersected:
+                        narrowed_report_ids = intersected
+                        entity_filter_applied = True
+                        logger.info(
+                            f"Entity-graph narrowing: {len(report_ids)} → "
+                            f"{len(intersected)} reports (matched: "
+                            f"{[e['canonical_name'] for e in matched_entities]})"
+                        )
+                    else:
+                        logger.info(
+                            f"Entity match found ({[e['canonical_name'] for e in matched_entities]}) "
+                            f"but no reports in series mention them; "
+                            f"falling back to original report_ids"
+                        )
 
-        if not all_contexts:
+        # ---- Smart cap: limit reports when set is too large ----
+        cap = self.config.entity_graph.comparative_max_reports
+        if len(narrowed_report_ids) > cap:
+            original_count = len(narrowed_report_ids)
+            narrowed_report_ids = self._smart_select_reports(
+                narrowed_report_ids, question, matched_entities, cap
+            )
+            logger.info(f"Capped narrowed reports {original_count} → {cap}")
+
+        # ---- Per-report retrieval ----
+        per_report_retrievals: List[RetrievalResult] = []
+        years_covered: set = set()
+
+        for report_id in narrowed_report_ids:
+            try:
+                # Merge report_id with any auto-detected filters (year, tier, category)
+                report_filter = merge_filters(
+                    {"report_id": report_id},
+                    comparative_auto_filters,
+                )
+                result = self.retrieval.retrieve(
+                    question,
+                    top_k=top_k_per_report,
+                    filters=report_filter,
+                    enhancement=None,  # comparative doesn't need expansion
+                )
+                if result.total_after_rerank > 0:
+                    per_report_retrievals.append(result)
+                    # Track years for prompt context
+                    for parent in result.parents:
+                        for child in parent.children:
+                            if child.report_year:
+                                years_covered.add(str(child.report_year))
+            except Exception as e:
+                logger.warning(f"Comparative retrieval failed for {report_id}: {e}")
+                continue
+
+        if not per_report_retrievals:
             return RAGResponse(
                 query=question,
                 answer="No relevant information found in the specified reports.",
@@ -1501,24 +2304,52 @@ class RAGService:
                 sources_used=0,
                 context_length=0,
                 reranker_used="none",
-                search_type="hybrid",
+                search_type="comparative_empty",
                 model_used=self._get_model_name(),
+                groundedness=None,
+                agentic_trace=None,
             )
 
-        combined_context = "\n\n".join(all_contexts)
+        # ---- Merge into single RetrievalResult ----
+        merged = merge_retrieval_results(per_report_retrievals)
+
+        # Log retrieval results
+        if log_ctx:
+            log_ctx.end_phase("retrieval")
+            include_full = (
+                self.config.observability.dev_debug
+                if hasattr(self.config, "observability")
+                else False
+            )
+            log_ctx.record_retrieval(
+                merged,
+                reranker_used=merged.reranker_used,
+                include_full_content=include_full,
+            )
+            log_ctx.record_auto_filters(comparative_auto_filters)
+            log_ctx.start_phase("generation")
+
+        # ---- Build context string ----
+        context = merged.to_context_string(
+            include_neighbors=False,  # Cross-report comparison: skip neighbors for clarity
+            include_semantic_tags=True,
+        )
+
         years_str = (
             ", ".join(sorted(years_covered)) if years_covered else "multiple years"
         )
 
+        # ---- Generate ----
         system_prompt = TIME_SERIES_SYSTEM_PROMPT
         user_prompt = TIME_SERIES_QUERY_TEMPLATE.format(
-            context=combined_context,
+            context=context,
             question=question,
             years=years_str,
         )
-
-        # v3.2: Add explicit reminder about years at end of prompt
-        user_prompt += f"\n\n📌 REMINDER: You have data from these years: {years_str}. Include year in every citation."
+        user_prompt += (
+            f"\n\n📌 REMINDER: You have data from these years: {years_str}. "
+            f"Include year in every citation."
+        )
 
         if self.config.llm.provider == LLMProvider.CLAUDE:
             answer = self._generate_claude(user_prompt, system_prompt)
@@ -1527,15 +2358,64 @@ class RAGService:
         else:
             answer = self._generate_openai(user_prompt, system_prompt)
 
+        # Log generation
+        if log_ctx:
+            log_ctx.end_phase("generation")
+            log_ctx.record_generation(
+                answer=answer,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_response=answer,
+                provider=self.config.llm.provider.value,
+                model=self._get_model_name(),
+            )
+
+        # ---- Phase 13: groundedness verification on merged result ----
+        groundedness_dict = None
+        if self.groundedness_service:
+            if log_ctx:
+                log_ctx.start_phase("groundedness")
+            try:
+                report = self.groundedness_service.verify(answer, merged)
+                groundedness_dict = report.to_dict()
+                if log_ctx:
+                    log_ctx.end_phase("groundedness")
+                    log_ctx.record_groundedness(groundedness_dict)
+                if (
+                    not report.verified
+                    and self.config.groundedness.block_on_failure
+                ):
+                    gcaveat = (
+                        f"⚠️ **Groundedness check**: Only {report.num_grounded} of "
+                        f"{report.num_claims} factual claims could be verified "
+                        f"against the retrieved sources. Treat with caution.\n\n"
+                    )
+                    answer = gcaveat + answer
+            except Exception as e:
+                logger.warning(f"Comparative groundedness failed: {e}")
+                if log_ctx:
+                    log_ctx.end_phase("groundedness")
+
+        # ---- Build citations from merged result ----
+        citations = self.build_citations(merged)
+
         return RAGResponse(
             query=question,
             answer=answer,
-            citations=all_citations,
-            sources_used=total_chunks,
-            context_length=len(combined_context),
-            reranker_used="cohere",
-            search_type="hybrid",
+            citations=citations,
+            sources_used=merged.total_after_rerank,
+            context_length=len(context),
+            reranker_used=merged.reranker_used,
+            search_type="comparative",
             model_used=self._get_model_name(),
+            groundedness=groundedness_dict,
+            agentic_trace=(
+                {"entity_filter_applied": entity_filter_applied,
+                 "narrowed_from": len(report_ids),
+                 "narrowed_to": len(narrowed_report_ids)}
+                if entity_filter_applied
+                else None
+            ),
         )
 
 

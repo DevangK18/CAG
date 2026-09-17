@@ -3,7 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-export const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
+/**
+ * Generate a unique ID that is collision-resistant even when called
+ * multiple times in the same millisecond.
+ *
+ * Format: {timestamp}-{random1}-{random2}
+ * Example: "lz5kv2x-abc123-xyz789"
+ *
+ * @returns A unique string identifier
+ */
+export const generateId = (): string => {
+  const timestamp = Date.now().toString(36);
+  const random1 = Math.random().toString(36).substring(2, 9);
+  const random2 = Math.random().toString(36).substring(2, 6);
+  return `${timestamp}-${random1}-${random2}`;
+};
 
 /**
  * Sanitize report titles for display in cards and lists.
@@ -26,10 +40,16 @@ export function sanitizeReportTitle(title: string): string {
   // =============================================
 
   // 1. "Audit Report No. X of YYYY-" prefix
-  cleaned = cleaned.replace(/^Audit\s+Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,]?\s*/i, '');
+  cleaned = cleaned.replace(/^Audit\s+Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,:]?\s*/i, '');
 
-  // 2. "Report No. X of YYYY" prefix (all variations)
-  cleaned = cleaned.replace(/^Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,]?\s*/i, '');
+  // 2. "Report No. X of YYYY" prefix (all variations, including colon)
+  cleaned = cleaned.replace(/^Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,:]?\s*/i, '');
+
+  // 2a. "Performance/Compliance/Financial Audit Report No. X of YYYY:" prefix (State pattern)
+  cleaned = cleaned.replace(/^(Performance|Compliance|Financial)\s+Audit\s+Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\s*[-–,:]?\s*/i, '');
+
+  // 2b. "Report No. X -" (without year, seen in State reports)
+  cleaned = cleaned.replace(/^Report\s*(No\.?\s*)?\d+\s*[-–:]\s*/i, '');
 
   // 3. Leading "of the" left over after prefix strip
   cleaned = cleaned.replace(/^of\s+the\s+/i, '');
@@ -61,6 +81,9 @@ export function sanitizeReportTitle(title: string): string {
 
   // 8. Trailing "(Performance Audit-Commercial)", "(Compliance Audit-Railways)", "(Financial Audit)" etc.
   cleaned = cleaned.replace(/\s*\((Performance|Compliance|Financial)\s+Audit[-–]?[^)]*\)\s*$/i, '');
+
+  // 8a. Trailing "(Report No. X of YYYY)" parenthetical (common in State/Local titles)
+  cleaned = cleaned.replace(/\s*\(Report\s*(No\.?\s*)?\d+\s*of\s*\d{4}\)\s*$/i, '');
 
   // 9. Trailing "- Report No.26 of 2025" or "Report No. 3 of 2025 (Type)"
   cleaned = cleaned.replace(/[-–]?\s*Report\s*No\.?\s*\d+\s*of\s*\d{4}\s*(\([^)]+\))?\s*$/i, '');
@@ -109,4 +132,127 @@ export function sanitizeReportTitle(title: string): string {
   }
 
   return cleaned || title;
+}
+
+/**
+ * Check if a ministry/organization name is valid (not "Unknown" or similar)
+ * Single source of truth for filtering out invalid ministries.
+ *
+ * @param value - Ministry name to check
+ * @returns true if valid, false if null/undefined/empty or contains "unknown"
+ */
+export function isValidMinistry(value: string | null | undefined): boolean {
+  if (!value || value.trim() === '') {
+    return false;
+  }
+  return !value.toLowerCase().includes('unknown');
+}
+
+/**
+ * Format large numbers for display in stats tiles
+ * >=1000 → "Xk" not "X,000"
+ *
+ * @param num - Number to format
+ * @returns Formatted string
+ */
+export function formatStat(num: number): string {
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(1)}M`.replace('.0M', 'M');
+  }
+  if (num >= 1000) {
+    return `${(num / 1000).toFixed(1)}k`.replace('.0k', 'k');
+  }
+  return num.toString();
+}
+
+/**
+ * Format entity type for display
+ * Converts snake_case entity types to human-readable names with proper capitalization
+ *
+ * @param type - Raw entity type string
+ * @returns Formatted display name
+ */
+export function formatEntityType(type: string): string {
+  const map: Record<string, string> = {
+    psu: 'PSU',
+    scheme: 'Scheme',
+    regulatory_authority: 'Regulatory Authority',
+    autonomous_body: 'Autonomous Body',
+    local_body: 'Local Body',
+    state_government: 'State Government',
+    ministry: 'Ministry',
+  };
+  return map[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Format monetary amounts in Indian numbering system with crore suffix
+ *
+ * @param amount - Amount in crores
+ * @returns Formatted string with rupee symbol and 'cr' suffix, or empty string for zero/null
+ */
+export function formatAmountCrore(amount: number): string {
+  if (!amount || amount === 0) return '';
+  return `₹${amount.toLocaleString('en-IN')} cr`;
+}
+
+/**
+ * Format tier for display
+ * Converts tier values to human-readable format
+ *
+ * @param tier - Raw tier string (union, state, local_body)
+ * @returns Formatted tier name
+ */
+export function formatTier(tier: string): string {
+  const map: Record<string, string> = {
+    union: 'Union',
+    state: 'State',
+    local_body: 'Local Body',
+  };
+  return map[tier] || tier.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Format audit category for display
+ * Converts snake_case audit category to Title Case
+ *
+ * @param category - Raw audit category string (e.g., "performance", "compliance_audit")
+ * @returns Formatted display name (e.g., "Performance Audit", "Compliance Audit")
+ */
+export function formatAuditCategory(category: string): string {
+  if (!category) return '';
+  const map: Record<string, string> = {
+    performance: 'Performance Audit',
+    compliance: 'Compliance Audit',
+    financial: 'Financial Audit',
+    revenue: 'Revenue Audit',
+    commercial: 'Commercial Audit',
+    atir: 'ATIR',
+  };
+  return map[category.toLowerCase()] || category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Format report slug/ID as a readable title
+ * Converts slug format to human-readable title with year in parentheses
+ *
+ * Example:
+ *   "2025_38_Performance_Audit_of_Blast_Furnace_in_Steel_Authority_of_India_Limited"
+ *   → "Performance Audit of Blast Furnace in Steel Authority of India Limited (2025)"
+ *
+ * @param slug - Report slug/ID string
+ * @returns Formatted title string
+ */
+export function formatReportSlug(slug: string): string {
+  if (!slug) return slug;
+
+  const parts = slug.split('_');
+  if (parts.length < 3) return slug;
+
+  const year = parts[0];
+  // Skip the serial number (parts[1]) and start from the title parts
+  const titleParts = parts.slice(2);
+  const title = titleParts.join(' ');
+
+  return `${title} (${year})`;
 }

@@ -1,0 +1,39 @@
+# =============================================================================
+# Production Environment Variables
+# =============================================================================
+# Copy this file to prod.tfvars and fill in the values:
+#   cp prod.tfvars.example prod.tfvars
+#
+# Then apply:
+#   terraform apply -var-file=environments/prod.tfvars
+# =============================================================================
+
+# GCP Project Configuration
+project_id  = "your-gcp-project-id"
+region      = "us-central1"
+zone        = "us-central1-a"
+environment = "prod"
+
+# Cloud Run Configuration
+api_min_instances = 0      # Scale to zero for cost savings
+api_max_instances = 5
+api_memory        = "2Gi"
+api_cpu           = "2"
+
+# Compute Engine (Parsing VM)
+parsing_machine_type = "e2-standard-4"  # 4 vCPU, 16GB RAM
+parsing_disk_size    = 100              # GB
+parsing_preemptible  = true             # Spot pricing (~70% discount)
+
+# External Services (fill these in)
+qdrant_url     = "https://your-cluster.cloud.qdrant.io"
+qdrant_api_key = "your-qdrant-api-key"
+cohere_api_key = "your-cohere-api-key"
+google_api_key = "your-google-api-key"
+
+# Frontend Configuration
+posthog_key = ""               # Optional: PostHog analytics
+access_code = "cag-prod-2025"  # Frontend access gate
+
+# Monitoring
+alert_email = "your-email@example.com"

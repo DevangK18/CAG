@@ -10,7 +10,7 @@ v3.2: Fixed ResponseStyle enum to match frontend exactly
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Literal, Tuple
 from enum import Enum
 
 
@@ -83,6 +83,10 @@ class Citation(BaseModel):
     finding_type: Optional[str] = None
     severity: Optional[str] = None
     amount_crore: Optional[float] = None
+    # Item 7: Enhanced citation fields
+    entities_mentioned: Optional[List[str]] = None
+    section_type: Optional[str] = None
+    is_recommendation: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -92,6 +96,10 @@ class ChatResponse(BaseModel):
     citations: List[Citation]
     sources_used: int
     model_used: str
+    groundedness: Optional[Dict[str, Any]] = None
+    agentic_trace: Optional[Dict[str, Any]] = None
+    # Item 1: SOTA RAG features (routing, self-RAG, corrective)
+    sota_features: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================
@@ -113,6 +121,16 @@ class ReportSummary(BaseModel):
     status: str
     filename: str
     report_type: Optional[str] = None
+    government_body_type: str = "union"
+    state_name: Optional[str] = None
+    department: Optional[str] = None
+    audit_category: str = "compliance"
+    ingested_at: Optional[str] = None
+    # Item 5: Availability flags and distributions
+    has_summaries: bool = False
+    has_overview_llm: bool = False
+    severity_distribution: Optional[Dict[str, int]] = None
+    finding_type_distribution: Optional[Dict[str, int]] = None
 
 
 class ReportDetail(BaseModel):
@@ -133,6 +151,11 @@ class ReportDetail(BaseModel):
     monetary_impact: Optional[str] = None
     findings_count: int
     report_type: Optional[str] = None
+    government_body_type: str = "union"
+    state_name: Optional[str] = None
+    department: Optional[str] = None
+    audit_category: str = "compliance"
+    ingested_at: Optional[str] = None
 
 
 class ReportsListResponse(BaseModel):
@@ -195,7 +218,9 @@ class TableItem(BaseModel):
     data_preview: Optional[List[List[str]]] = None  # First few rows (future)
     bbox: Optional[List[float]] = None  # Bounding box
     source_chunk_id: Optional[str] = None  # Reference to source chunk
-    structured_data: Optional[Dict[str, Any]] = None  # Structured table data for preview
+    structured_data: Optional[Dict[str, Any]] = (
+        None  # Structured table data for preview
+    )
     preview: Optional[Dict[str, Any]] = None  # Mini-preview for card display
 
 
@@ -268,3 +293,191 @@ class HealthResponse(BaseModel):
     rag_service: str
     reports_loaded: int
     version: str = "2.0.0"
+
+
+# ============================================================================
+# RESPONSE MODELS - Home Page (NEW)
+# ============================================================================
+
+
+class HomeStats(BaseModel):
+    """Aggregate statistics for home page hero."""
+
+    total_reports: int
+    total_entities: int
+    total_ministries: int
+    total_mentions: int
+    total_findings: int
+    total_charts: int
+    total_tables: int
+    latest_ingest: Optional[str] = None
+    year_range: Tuple[int, int]
+
+
+class FacetValue(BaseModel):
+    """A single facet value with count."""
+
+    value: str
+    label: Optional[str] = None
+    count: int
+
+
+class HomeFacets(BaseModel):
+    """All available facet values for filtering."""
+
+    tiers: List[FacetValue]
+    states: List[FacetValue]
+    years: List[FacetValue]
+    ministries: List[FacetValue]
+    entities: List[FacetValue]
+    audit_categories: List[FacetValue]
+
+
+class FeaturedMinistry(BaseModel):
+    """A featured ministry for the home page rails."""
+
+    entity_id: int
+    canonical_name: str
+    report_count: int
+    finding_count: int
+    mention_count: int
+    primary_tier: str
+
+
+class FeaturedEntity(BaseModel):
+    """A featured entity (PSU, scheme, etc.) for the home page rails."""
+
+    entity_id: int
+    canonical_name: str
+    entity_type: str
+    mention_count: int
+    finding_count: int
+    primary_tier: str
+
+
+class HomeFeatured(BaseModel):
+    """Featured content for home page rails."""
+
+    top_ministries: List[FeaturedMinistry]
+    top_entities: List[FeaturedEntity]
+    recent_reports: List[ReportSummary]
+    deep_dives: List[TimeSeriesInfo]
+    popular_starts: List[Union[FeaturedMinistry, FeaturedEntity]]
+
+
+# ============================================================================
+# RESPONSE MODELS - Smart Search (NEW)
+# ============================================================================
+
+
+class SearchResultReport(BaseModel):
+    """A report in search results."""
+
+    kind: Literal["report"] = "report"
+    report_id: str
+    title: str
+    ministry: Optional[str] = None
+    audit_year: Optional[str] = None
+    findings_count: int
+    snippet: Optional[str] = None
+
+
+class SearchResultMinistry(BaseModel):
+    """A ministry in search results."""
+
+    kind: Literal["ministry"] = "ministry"
+    entity_id: int
+    canonical_name: str
+    report_count: int
+    finding_count: int
+
+
+class SearchResultEntity(BaseModel):
+    """An entity (PSU, scheme, etc.) in search results."""
+
+    kind: Literal["entity"] = "entity"
+    entity_id: int
+    canonical_name: str
+    entity_type: str
+    mention_count: int
+    primary_tier: str
+
+
+class SearchResultFinding(BaseModel):
+    """A finding in search results."""
+
+    kind: Literal["finding"] = "finding"
+    chunk_id: str
+    report_id: str
+    section: str
+    page: int
+    finding_type: Optional[str] = None
+    severity: Optional[str] = None
+    amount_crore: Optional[float] = None
+    snippet: str
+    score: float
+
+
+class SearchResultGlossary(BaseModel):
+    """A glossary term in search results."""
+
+    kind: Literal["glossary"] = "glossary"
+    term: str
+    abbreviation: Optional[str] = None
+    definition: Optional[str] = None
+    report_id: str
+
+
+class GroupedSearchResults(BaseModel):
+    """Search results grouped by channel."""
+
+    reports: List[SearchResultReport]
+    ministries: List[SearchResultMinistry]
+    entities: List[SearchResultEntity]
+    findings: List[SearchResultFinding]
+    glossary: List[SearchResultGlossary]
+    top_hit_channel: Optional[str] = None
+    top_hit_score: Optional[float] = None
+
+
+# ============================================================================
+# RESPONSE MODELS - Entity Summary (NEW)
+# ============================================================================
+
+
+class EntitySummary(BaseModel):
+    """Complete summary of an entity."""
+
+    id: int
+    canonical_name: str
+    entity_type: str
+    primary_tier: str
+    aliases: List[str]
+    first_seen_year: Optional[int] = None
+    last_seen_year: Optional[int] = None
+    mention_count: int
+    finding_count: int
+    report_count: int
+
+
+# ============================================================================
+# RESPONSE MODELS - Hierarchical Summaries (Item 6)
+# ============================================================================
+
+
+class HierarchicalSummary(BaseModel):
+    """A hierarchical (RAPTOR) summary of a chapter or section."""
+
+    chunk_id: str
+    title: str
+    summary: str
+    level: int  # 1=section, 2=chapter
+    parent_chunk_id: Optional[str] = None
+
+
+class HierarchicalResponse(BaseModel):
+    """Response for GET /reports/{id}/hierarchical."""
+
+    report_id: str
+    summaries: List[HierarchicalSummary]
+    total: int

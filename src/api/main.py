@@ -25,8 +25,8 @@ from pathlib import Path
 from slowapi.errors import RateLimitExceeded
 
 from .config import settings
-from .routes import health, reports, chat, assets, series, overview, summaries
-from .services.streaming_wrapper import initialize_rag_service
+from .routes import health, reports, chat, assets, series, overview, summaries, entities, home, search, hierarchical
+from .services.streaming_wrapper import initialize_rag_service, get_rag_service
 from .services.report_service import initialize as initialize_reports
 from .rate_limit import limiter, get_real_ip
 
@@ -83,6 +83,19 @@ async def lifespan(app: FastAPI):
     logger.info(f"Base directory: {settings.BASE_DIR}")
     logger.info(f"PDF directory: {settings.PDF_DIR}")
     logger.info(f"Processed directory: {settings.PROCESSED_DIR}")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"GCS bucket: {settings.DATA_BUCKET or '(local mode)'}")
+
+    # Sync data from GCS on Cloud Run startup
+    if settings.is_cloud_run:
+        logger.info("Cloud Run detected - syncing data from GCS...")
+        try:
+            from .gcs_sync import sync_from_gcs
+            downloaded = sync_from_gcs()
+            logger.info(f"GCS sync complete: {downloaded} files downloaded")
+        except Exception as e:
+            logger.error(f"GCS sync failed: {e}")
+            # Continue startup - data might be cached from previous instance
 
     # Initialize report metadata
     logger.info("Loading report metadata...")
@@ -96,6 +109,129 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing RAG service...")
     initialize_rag_service()
 
+    # Initialize query observability (Bridge C)
+    logger.info("Initializing query observability...")
+    try:
+        from src.observability.query_logger import init_query_logger
+        from src.observability.models import Base as ObsBase
+        from src.entity_graph.db import get_engine
+
+        # Create query_logs table
+        engine = get_engine()
+        ObsBase.metadata.create_all(engine)
+
+        # Get config from RAG service
+        rag = get_rag_service()
+        if rag:
+            from src.observability.query_logger import ObservabilityConfig
+            obs_config = rag.config.observability
+            query_logger = init_query_logger(obs_config)
+            app.state.query_logger = query_logger
+
+            # Plumb the query logger to RAG service so streaming wrapper sees it
+            rag.query_logger = query_logger
+
+            # Also propagate to agentic service which captured rag.query_logger=None at construction
+            if hasattr(rag, "agentic_service") and rag.agentic_service is not None:
+                rag.agentic_service.query_logger = query_logger
+
+            logger.info(f"Query observability enabled (env={obs_config.environment}, dev_debug={obs_config.dev_debug})")
+        else:
+            logger.warning("RAG service not available; query observability disabled")
+    except Exception as e:
+        logger.warning(f"Query observability init failed: {e}")
+
+    # Initialize search service (Phase C) - resilient initialization
+    # Each dependency is wrapped individually so failures don't block others
+    logger.info("Initializing search service...")
+    try:
+        from .services.search_service import SearchService
+        from .services.report_service import get_glossary_index
+
+        # Collect dependencies - each wrapped in try/except for resilience
+        search_deps = {"available": [], "failed": []}
+
+        # 1. Registry (in-memory, should always work)
+        registry = None
+        try:
+            from report_registry import get_registry
+            registry = get_registry()
+            if registry:
+                search_deps["available"].append("registry")
+            else:
+                search_deps["failed"].append("registry (not initialized)")
+        except Exception as e:
+            search_deps["failed"].append(f"registry ({e})")
+            logger.warning(f"Search registry unavailable: {e}")
+
+        # 2. Entity service (requires Postgres - optional)
+        entity_service = None
+        try:
+            from src.entity_graph.entity_service import get_entity_service
+            entity_service = get_entity_service()
+            if entity_service:
+                search_deps["available"].append("entity_service")
+            else:
+                search_deps["failed"].append("entity_service (no ENTITY_GRAPH_DSN)")
+        except Exception as e:
+            search_deps["failed"].append(f"entity_service ({e})")
+            logger.warning(f"Search entity_service unavailable: {e}")
+
+        # 3. Retrieval service (requires Qdrant - optional)
+        retrieval_service = None
+        try:
+            rag = get_rag_service()
+            if rag and rag.retrieval:
+                retrieval_service = rag.retrieval
+                search_deps["available"].append("retrieval_service")
+            else:
+                search_deps["failed"].append("retrieval_service (RAG not available)")
+        except Exception as e:
+            search_deps["failed"].append(f"retrieval_service ({e})")
+            logger.warning(f"Search retrieval_service unavailable: {e}")
+
+        # 4. Glossary index (in-memory, should always work)
+        glossary_index = {}
+        try:
+            glossary_index = get_glossary_index()
+            if glossary_index:
+                search_deps["available"].append(f"glossary ({len(glossary_index)} terms)")
+            else:
+                search_deps["failed"].append("glossary (empty)")
+        except Exception as e:
+            search_deps["failed"].append(f"glossary ({e})")
+            logger.warning(f"Search glossary_index unavailable: {e}")
+
+        # 5. Config (optional)
+        config = None
+        try:
+            rag = get_rag_service()
+            if rag:
+                config = rag.config
+        except Exception:
+            pass  # Config is optional, no warning needed
+
+        # Create SearchService with whatever dependencies are available
+        # Reports (rapidfuzz) and glossary channels work without external deps
+        search_service = SearchService(
+            registry=registry,
+            entity_service=entity_service,
+            retrieval_service=retrieval_service,
+            glossary_index=glossary_index,
+            config=config,
+        )
+        app.state.search_service = search_service
+
+        # Log status
+        if search_deps["available"]:
+            logger.info(f"Search service initialized with: {', '.join(search_deps['available'])}")
+        if search_deps["failed"]:
+            logger.warning(f"Search service missing: {', '.join(search_deps['failed'])}")
+
+    except Exception as e:
+        logger.error(f"Search service init failed completely: {e}")
+        app.state.search_service = None
+
     # Log environment configuration
     logger.info("-" * 60)
     logger.info("[CONFIG] Environment: %s", os.environ.get("ENVIRONMENT", "development"))
@@ -104,7 +240,6 @@ async def lifespan(app: FastAPI):
     logger.info("-" * 60)
 
     # Log active configuration
-    from .services.streaming_wrapper import get_rag_service
     rag = get_rag_service()
     if rag:
         provider = rag.config.llm.provider.value
@@ -138,6 +273,14 @@ async def lifespan(app: FastAPI):
     logger.info("  - POST /api/chat                    - Synchronous chat")
     logger.info("  - POST /api/chat/stream             - Streaming chat (SSE)")
     logger.info("  - GET  /api/files/{name}            - Serve PDF files")
+    logger.info("  - GET  /api/entities/search?q=...   - Search entities (Phase 12)")
+    logger.info("  - GET  /api/entities/{id}/mentions  - Entity mentions (Phase 12)")
+    logger.info("  - GET  /api/home/stats              - Home page stats (Phase A)")
+    logger.info("  - GET  /api/home/facets             - Home page facets (Phase A)")
+    logger.info("  - GET  /api/home/featured           - Home page featured rails (Phase A)")
+    logger.info("  - GET  /api/home/surprise/report    - Random report (Phase A)")
+    logger.info("  - GET  /api/home/surprise/entity    - Random entity (Phase A)")
+    logger.info("  - GET  /api/search                  - Smart search (Phase A)")
     logger.info("=" * 60)
 
     yield
@@ -240,6 +383,16 @@ app.include_router(series.router, prefix="/api/series", tags=["Time Series"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(overview.router, prefix="/api")
 app.include_router(summaries.router, prefix="/api")
+
+# Phase 12: Entity graph (only registers routes; service is lazy)
+app.include_router(entities.router, prefix="/api/entities", tags=["Entities"])
+
+# Home page redesign (Phase A+)
+app.include_router(home.router, prefix="/api/home", tags=["Home"])
+app.include_router(search.router, prefix="/api/search", tags=["Search"])
+
+# Item 6: Hierarchical summaries
+app.include_router(hierarchical.router, prefix="/api", tags=["Hierarchical"])
 
 
 # Root endpoint - only in non-production (so "/" falls through to static mount in production)

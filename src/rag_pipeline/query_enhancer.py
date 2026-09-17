@@ -7,8 +7,8 @@ Single LLM call that provides:
 3. Filter suggestions (report_id hints, finding_type, temporal scope)
 4. Retrieval parameter recommendations (top_k, context_limit)
 
-IMPORTANT: This is ONE call to GPT-4o-mini per query (~$0.0002).
-Cost: ~$0.0002/query (single GPT-4o-mini call) + zero-cost algorithmic improvements
+Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+Cost: ~$0.0001/query (Gemini) - minimal cost for query enhancement
 """
 
 import json
@@ -68,6 +68,10 @@ Rules for expanded_queries:
 - Rephrase using CAG/audit domain vocabulary (e.g., "money lost" → "revenue loss quantified in crore")
 - Include specific terms likely in audit reports (findings, observations, recommendations, compliance)
 - If the query mentions an entity, include its full name AND acronym in different queries
+- If a report context is provided (State or Local Body), use tier-appropriate vocabulary:
+  * State reports: Use terms like "State AG", "State Exchequer", "State PSE", "State Consolidated Fund", "State Revenue Audit", "District-level audit", "State department"
+  * Local Body reports: Use terms like "Panchayati Raj Institution (PRI)", "Urban Local Body (ULB)", "Gram Panchayat (GP)", "Zila Parishad (ZP)", "Local Fund Audit", "ATIR", "Municipal Corporation", "Town Council", "PRIASoft", "three-tier Panchayat system"
+  * If no report context is provided, default to Union terminology (Central ministries, Consolidated Fund of India, Parliamentary committees)
 
 Rules for suggested_filters:
 - Only include filters you're confident about. Empty {} is fine.
@@ -115,9 +119,14 @@ class QueryEnhancer:
                 raise ImportError("Install google-genai: pip install google-genai")
         return self._gemini_client
 
-    def enhance(self, query: str, style: str = "adaptive") -> QueryEnhancement:
+    def enhance(self, query: str, style: str = "adaptive", tier_context: Optional[str] = None) -> QueryEnhancement:
         """
         Enhance a query with a single LLM call.
+
+        Args:
+            query: User's question
+            style: Response style preference
+            tier_context: Optional tier context (e.g., "State audit report from Gujarat")
 
         If enhancement is disabled or fails, returns a safe fallback
         with the original query and default parameters.
@@ -129,6 +138,8 @@ class QueryEnhancer:
             user_prompt = f'Question: "{query}"'
             if style != "adaptive":
                 user_prompt += f"\n(User selected style: {style} — do NOT override recommended_style)"
+            if tier_context:
+                user_prompt += f"\n\nReport context: {tier_context}"
 
             # Route to appropriate provider
             if self.config.provider == LLMProvider.GEMINI:
