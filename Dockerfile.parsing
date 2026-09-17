@@ -74,6 +74,7 @@ RUN mkdir -p /app/data/{raw,processed}/{union,state,local_body} \
     && mkdir -p /app/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction} \
     && mkdir -p /app/data/extraction_images/{tables,charts} \
     && mkdir -p /app/data/entity_graph \
+    && mkdir -p /app/data/canonical \
     && mkdir -p /app/logs/traces/{union,state,local_body}
 
 # Default entrypoint runs the parsing pipeline

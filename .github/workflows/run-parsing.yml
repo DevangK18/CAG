@@ -177,6 +177,9 @@ jobs:
               echo '  → Syncing entity graph data...'
               gsutil -m rsync -r /app/data/entity_graph gs://\${DATA_BUCKET}/entity_graph/ 2>/dev/null || true
 
+              echo '  → Syncing canonical data (ministry bridge)...'
+              gsutil -m rsync -r /app/data/canonical gs://\${DATA_BUCKET}/canonical/ 2>/dev/null || true
+
               # P2: Logs and traces (for debugging/observability)
               echo '  → Syncing trace logs...'
               gsutil -m rsync -r /app/logs/traces gs://\${DATA_BUCKET}/traces/ 2>/dev/null || true
@@ -193,6 +196,8 @@ jobs:
               echo '  gs://'\${DATA_BUCKET}'/raw/           - Original PDFs'
               echo '  gs://'\${DATA_BUCKET}'/batch_jobs/    - Overviews, summaries, visual extraction'
               echo '  gs://'\${DATA_BUCKET}'/extraction_images/ - Table/chart images'
+              echo '  gs://'\${DATA_BUCKET}'/entity_graph/  - Canonical entities'
+              echo '  gs://'\${DATA_BUCKET}'/canonical/     - Ministry bridge data'
               echo '  gs://'\${DATA_BUCKET}'/traces/        - Trace instrumentation logs'
               echo '  gs://'\${DATA_BUCKET}'/logs/          - Pipeline execution logs'
             "
