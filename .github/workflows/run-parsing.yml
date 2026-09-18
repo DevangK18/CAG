@@ -95,6 +95,14 @@ jobs:
           #!/bin/bash
           set -e
 
+          # FIRST: Fix Docker config BEFORE any docker commands
+          # COS VM may have stale HOME pointing to /home/runner from SSH
+          export HOME="/var/tmp/cag"
+          export DOCKER_CONFIG="${HOME}/.docker"
+          mkdir -p "${DOCKER_CONFIG}"
+          echo '{"credHelpers":{"us-central1-docker.pkg.dev":"gcr","gcr.io":"gcr"}}' > "${DOCKER_CONFIG}/config.json"
+          echo "Docker config set up at: ${DOCKER_CONFIG}/config.json"
+
           # Configuration - these are replaced by sed below
           DATA_BUCKET="${DATA_BUCKET}"
           PROJECT_ID="${PROJECT_ID}"
@@ -110,6 +118,8 @@ jobs:
           echo "MANIFEST: ${MANIFEST}"
           echo "SKIP_ARG: ${SKIP_ARG}"
           echo "REPORTS_ARG: ${REPORTS_ARG}"
+          echo "HOME: ${HOME}"
+          echo "DOCKER_CONFIG: ${DOCKER_CONFIG}"
           echo ""
 
           # Use /var/tmp for Container-Optimized OS (root is read-only)
@@ -142,17 +152,6 @@ jobs:
 
           echo "Downloading manifest..."
           run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
-
-          # Configure Docker to authenticate with Artifact Registry
-          # Override any inherited DOCKER_CONFIG and HOME settings
-          echo "Configuring Docker authentication for Artifact Registry..."
-          echo "Original HOME: ${HOME}"
-          export HOME="/var/tmp/cag"
-          export DOCKER_CONFIG="${HOME}/.docker"
-          mkdir -p "${DOCKER_CONFIG}"
-          echo '{"credHelpers":{"us-central1-docker.pkg.dev":"gcr"}}' > "${DOCKER_CONFIG}/config.json"
-          echo "Docker config created at ${DOCKER_CONFIG}/config.json:"
-          cat "${DOCKER_CONFIG}/config.json"
 
           echo "Pulling latest parsing image..."
           PARSING_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/cag-images/cag-parsing:latest"
