@@ -137,6 +137,14 @@ from src.core.data_contracts import DocumentTask
 python -m src.module.name
 ```
 
+## Git Commit Rules
+
+- **NO** `Co-Authored-By` lines in commits - ever
+- Keep commit messages concise and human-like
+- Use imperative mood: "Fix bug" not "Fixed bug" or "Fixes bug"
+- One-line summary, max 72 characters
+- No verbose explanations unless absolutely necessary
+
 ## Pipeline Configuration
 
 Centralized in `parsing_config.yaml`:
