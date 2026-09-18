@@ -105,6 +105,7 @@ jobs:
           echo "============================================="
           echo "CAG Parsing Pipeline"
           echo "============================================="
+          echo "PROJECT_ID: ${PROJECT_ID}"
           echo "DATA_BUCKET: ${DATA_BUCKET}"
           echo "MANIFEST: ${MANIFEST}"
           echo "SKIP_ARG: ${SKIP_ARG}"
@@ -143,16 +144,18 @@ jobs:
           run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
 
           # Configure Docker to authenticate with Artifact Registry
+          # COS has docker-credential-gcr pre-installed - use it
           echo "Configuring Docker authentication for Artifact Registry..."
-          docker run --rm --network=host \
-            -v /home/${USER}/.docker:/root/.docker \
-            ${GCLOUD_IMAGE} \
-            gcloud auth configure-docker us-central1-docker.pkg.dev --quiet 2>/dev/null || true
+          docker-credential-gcr configure-docker --registries=us-central1-docker.pkg.dev
 
           echo "Pulling latest parsing image..."
           PARSING_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/cag-images/cag-parsing:latest"
-          docker pull ${PARSING_IMAGE} || {
-            echo "ERROR: Failed to pull parsing image. Make sure it exists in Artifact Registry."
+          echo "Image to pull: ${PARSING_IMAGE}"
+          docker pull "${PARSING_IMAGE}" || {
+            echo "ERROR: Failed to pull parsing image."
+            echo "Checking if image exists..."
+            echo "Project ID: ${PROJECT_ID}"
+            echo "Expected image: ${PARSING_IMAGE}"
             exit 1
           }
 
