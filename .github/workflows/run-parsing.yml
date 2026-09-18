@@ -144,18 +144,15 @@ jobs:
           run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
 
           # Configure Docker to authenticate with Artifact Registry
-          # COS has docker-credential-gcr pre-installed - set up config manually
+          # Override any inherited DOCKER_CONFIG and HOME settings
           echo "Configuring Docker authentication for Artifact Registry..."
-          echo "HOME directory: ${HOME}"
-          mkdir -p "${HOME}/.docker"
-          cat > "${HOME}/.docker/config.json" << 'DOCKER_CONFIG'
-          {
-            "credHelpers": {
-              "us-central1-docker.pkg.dev": "gcr"
-            }
-          }
-          DOCKER_CONFIG
-          echo "Docker config created at ${HOME}/.docker/config.json"
+          echo "Original HOME: ${HOME}"
+          export HOME="/var/tmp/cag"
+          export DOCKER_CONFIG="${HOME}/.docker"
+          mkdir -p "${DOCKER_CONFIG}"
+          echo '{"credHelpers":{"us-central1-docker.pkg.dev":"gcr"}}' > "${DOCKER_CONFIG}/config.json"
+          echo "Docker config created at ${DOCKER_CONFIG}/config.json:"
+          cat "${DOCKER_CONFIG}/config.json"
 
           echo "Pulling latest parsing image..."
           PARSING_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/cag-images/cag-parsing:latest"
