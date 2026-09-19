@@ -230,9 +230,12 @@ jobs:
           echo "  Skip phases: ${{ inputs.skip_phases }}"
           echo "  Reports: ${{ inputs.reports }}"
 
+          # Use SSH keep-alive to prevent broken pipe on long-running commands
           gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} \
+            --ssh-flag="-o ServerAliveInterval=60" \
+            --ssh-flag="-o ServerAliveCountMax=30" \
             --command="bash /tmp/run_pipeline.sh"
 
       - name: Stop Parsing VM

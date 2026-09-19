@@ -65,6 +65,13 @@ COPY parsing_config.yaml ./
 # Set Python path
 ENV PYTHONPATH=/app
 
+# CRITICAL: Disable output buffering so logs appear in real-time
+ENV PYTHONUNBUFFERED=1
+
+# HuggingFace cache directory for model downloads
+ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/.cache/huggingface
+
 # Data directory (can be mounted or synced from GCS)
 ENV DATA_DIR=/app/data
 
@@ -75,7 +82,24 @@ RUN mkdir -p /app/data/{raw,processed}/{union,state,local_body} \
     && mkdir -p /app/data/extraction_images/{tables,charts} \
     && mkdir -p /app/data/entity_graph \
     && mkdir -p /app/data/canonical \
-    && mkdir -p /app/logs/traces/{union,state,local_body}
+    && mkdir -p /app/logs/traces/{union,state,local_body} \
+    && mkdir -p /app/.cache/huggingface
+
+# Pre-download Docling models during build (avoids runtime download hang)
+# This initializes the DocumentConverter which triggers model download
+RUN python -c "\
+print('Pre-downloading Docling models (TableFormer ACCURATE mode)...'); \
+import sys; sys.stdout.flush(); \
+from docling.document_converter import DocumentConverter, PdfFormatOption; \
+from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode; \
+from docling.datamodel.base_models import InputFormat; \
+opts = PdfPipelineOptions(do_table_structure=True); \
+opts.table_structure_options.mode = TableFormerMode.ACCURATE; \
+print('Initializing DocumentConverter (downloads ~500MB models)...'); \
+sys.stdout.flush(); \
+converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}); \
+print('✅ Docling models pre-downloaded and cached'); \
+"
 
 # Default entrypoint runs the parsing pipeline
 ENTRYPOINT ["python", "-m", "src.parsing_pipeline.main"]

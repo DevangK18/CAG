@@ -99,9 +99,23 @@ class LayoutAnalysisService:
 
         with trace_emitter.phase_timer("5"):
             try:
-                # Run the conversion
+                # Log before conversion starts (helps debug hangs)
+                import os
+                pdf_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
+                logger.info(
+                    f"[{task.report_id}] Starting Docling conversion... "
+                    f"(PDF: {pdf_size_mb:.1f} MB)"
+                )
+
+                # Run the conversion (this can take a long time for large PDFs)
+                import time
+                start_time = time.time()
                 conversion_result = self.converter.convert(source=pdf_path)
+                elapsed = time.time() - start_time
                 docling_doc = conversion_result.document
+                logger.info(
+                    f"[{task.report_id}] Docling conversion complete in {elapsed:.1f}s"
+                )
 
                 # Convert to our standard format
                 all_blocks = self._convert_docling_doc_to_standard_format(docling_doc)
