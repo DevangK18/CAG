@@ -53,6 +53,9 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -61,6 +64,18 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build and Push Parsing Image
+        run: |
+          IMAGE="us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing:latest"
+          echo "Building parsing image: $IMAGE"
+          docker build -f Dockerfile.parsing -t "$IMAGE" .
+          echo "Pushing to Artifact Registry..."
+          docker push "$IMAGE"
+          echo "✅ Parsing image built and pushed"
 
       - name: Start Parsing VM
         run: |
