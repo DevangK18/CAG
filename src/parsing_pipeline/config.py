@@ -229,11 +229,11 @@ class LLMValidationConfig:
     Set to False to skip LLM validation (saves API costs, ~$0.005-0.01 per report).
     """
 
-    model: str = "gemini-1.5-flash"
+    model: str = "gemini-3.8-flash"
     """
     Gemini model for TOC validation. Flash is cost-efficient (~$0.015/report).
 
-    Options: 'gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'
+    Options: 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'
     """
 
     max_input_chars: int = 8000

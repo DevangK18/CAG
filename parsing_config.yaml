@@ -130,8 +130,8 @@ llm_validation:
   # Set to false to skip (saves ~$0.005-0.01 per report)
   enabled: true
 
-  # Gemini model: 'gemini-1.5-flash' (cost-efficient, 1M context)
-  model: "gemini-1.5-flash"
+  # Gemini model: 'gemini-3.8-flash' (cost-efficient, 1M context)
+  model: "gemini-3.8-flash"
 
   # Max chars of document text to send to LLM
   # 8000 chars covers first ~15 pages

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     OPENAI_MODEL: str = "gpt-4o"
     CLAUDE_MODEL: str = "claude-sonnet-5"
-    GEMINI_MODEL: str = "gemini-1.5-flash"  # Latest Gemini for GCP billing
+    GEMINI_MODEL: str = "gemini-3.8-flash"  # Latest Gemini for GCP billing
 
     # GCS Storage Configuration (for Cloud Run deployment)
     DATA_BUCKET: str = ""  # GCS bucket name (e.g., "cag-data-project-id")

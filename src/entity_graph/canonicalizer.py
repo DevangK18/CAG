@@ -552,7 +552,7 @@ def _local_passthrough_conversion(records: List[Dict[str, Any]]) -> List[Dict[st
 
 def canonicalize_via_llm(
     consolidated: List[Dict[str, Any]],
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-3.5-flash-lite",
     batch_size: int = 40,
 ) -> List[Dict[str, Any]]:
     """
@@ -984,7 +984,7 @@ def _apply_pass2_merges(
 
 def pass2_dedup_via_llm(
     canonicals: List[Dict[str, Any]],
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-3.5-flash-lite",
     batch_size: int = 250,
 ) -> List[Dict[str, Any]]:
     """
@@ -1130,11 +1130,11 @@ def load_canonical_to_db(canonical_entities: List[Dict[str, Any]]) -> int:
 def canonicalize_all(
     overviews_dir: Path,
     output_path: Optional[Path] = None,
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-3.5-flash-lite",
     batch_size: int = 40,
     two_pass_threshold: int = 1000,
     pass2_batch_size: int = 250,
-    pass2_model: str = "gemini-1.5-flash",
+    pass2_model: str = "gemini-3.5-flash-lite",
 ) -> List[Dict[str, Any]]:
     """
     End-to-end canonicalization pipeline.
