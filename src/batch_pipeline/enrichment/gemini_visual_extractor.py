@@ -225,7 +225,7 @@ class GeminiVisualExtractor:
 
     def __init__(
         self,
-        model: str = "gemini-3.6-flash",  # Vertex AI stable Flash model for visual extraction
+        model: str = "gemini-1.5-flash",  # Vertex AI stable Flash model for visual extraction
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
         images_dir: str = "data/extraction_images",

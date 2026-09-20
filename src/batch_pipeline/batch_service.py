@@ -218,12 +218,12 @@ class BatchService:
             # Use Pro for high-reasoning tasks, Flash for simpler ones
             # Model IDs: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/models
             self.models = {
-                "overview": "gemini-3.1-pro",      # High reasoning - latest Pro
-                "executive": "gemini-3.1-pro",     # High reasoning - latest Pro
-                "journalist": "gemini-3.1-pro",    # Creative writing - latest Pro
-                "deep_dive": "gemini-3.1-pro",     # High reasoning - latest Pro
-                "simple": "gemini-3.6-flash",      # Simpler task - stable Flash
-                "policy": "gemini-3.1-pro",        # High reasoning - latest Pro
+                "overview": "gemini-1.5-pro",      # High reasoning - latest Pro
+                "executive": "gemini-1.5-pro",     # High reasoning - latest Pro
+                "journalist": "gemini-1.5-pro",    # Creative writing - latest Pro
+                "deep_dive": "gemini-1.5-pro",     # High reasoning - latest Pro
+                "simple": "gemini-1.5-flash",      # Simpler task - stable Flash
+                "policy": "gemini-1.5-pro",        # High reasoning - latest Pro
             }
 
         # Max output tokens
@@ -661,7 +661,7 @@ class BatchService:
                 json.dump({
                     "report_id": report_id,
                     "generated_at": datetime.now().isoformat(),
-                    "model": "gemini-3.5-flash",
+                    "model": "gemini-1.5-flash",
                     "summaries": summaries,
                 }, f, indent=2)
             logger.info(f"Saved summaries: {output_path}")
@@ -1184,8 +1184,8 @@ class BatchService:
         else:
             # Gemini models for GCP credit billing
             hierarchical_models = {
-                "chapter_summary": "gemini-3.5-flash-lite",
-                "section_summary": "gemini-3.5-flash-lite",
+                "chapter_summary": "gemini-1.5-flash-lite",
+                "section_summary": "gemini-1.5-flash-lite",
             }
         hierarchical_max_tokens = {
             "chapter_summary": 500,   # 3-5 sentences

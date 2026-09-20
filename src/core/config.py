@@ -161,7 +161,7 @@ class LLMConfig:
         if self.openai_model is None:
             self.openai_model = os.getenv("LLM_OPENAI_MODEL", "gpt-4o")
         if self.gemini_model is None:
-            self.gemini_model = os.getenv("LLM_GEMINI_MODEL", "gemini-3.5-flash")
+            self.gemini_model = os.getenv("LLM_GEMINI_MODEL", "gemini-1.5-flash")
 
 
 @dataclass
@@ -177,8 +177,8 @@ class QueryEnhancementConfig:
     # Provider and model (shared single call)
     # Default to Gemini for GCP credit billing
     provider: LLMProvider = LLMProvider.GEMINI
-    model: str = "gemini-3.5-flash-lite"  # Gemini model (cost-effective)
-    gemini_model: str = "gemini-3.5-flash-lite"  # Gemini model
+    model: str = "gemini-1.5-flash-lite"  # Gemini model (cost-effective)
+    gemini_model: str = "gemini-1.5-flash-lite"  # Gemini model
     max_tokens: int = 300
     temperature: float = 0.0
 
@@ -208,7 +208,7 @@ class GroundednessConfig:
     provider: LLMProvider = LLMProvider.GEMINI
     openai_model: str = "gpt-4o-mini"
     claude_model: str = "claude-haiku-4-5-20251001"
-    gemini_model: str = "gemini-3.5-flash-lite"  # Updated from deprecated 2.0-flash
+    gemini_model: str = "gemini-1.5-flash-lite"  # Updated from deprecated 2.0-flash
 
     max_tokens: int = 1500
     min_groundedness_score: float = 0.75  # Fraction of claims that must be grounded
@@ -221,7 +221,7 @@ class AgenticConfig:
     enabled: bool = True  # OFF by default; exposed via /chat/agentic endpoint
 
     # Planner (query decomposer) - Gemini for GCP credit billing
-    planner_model: str = "gemini-3.5-flash"  # Gemini for GCP billing
+    planner_model: str = "gemini-1.5-flash"  # Gemini for GCP billing
 
     # Loop bounds
     max_sub_queries: int = 4
@@ -267,7 +267,7 @@ class EntityGraphConfig:
         )
 
     # Canonicalization model (cross-corpus dedup) - Gemini for GCP billing
-    canonicalization_model: str = "gemini-3.5-flash-lite"
+    canonicalization_model: str = "gemini-1.5-flash-lite"
     canonicalization_batch_size: int = 80  # entities per LLM call
 
     # Auto-index on chunk indexing? If True, indexer.py also writes to entity graph
@@ -283,7 +283,7 @@ class EntityGraphConfig:
     # Only triggers pass 2 if raw record count exceeds this threshold
     two_pass_threshold: int = 1000
     pass2_batch_size: int = 250
-    pass2_model: str = "gemini-3.5-flash-lite"  # Gemini for GCP billing
+    pass2_model: str = "gemini-1.5-flash-lite"  # Gemini for GCP billing
 
     def __post_init__(self):
         self.dsn = os.getenv("ENTITY_GRAPH_DSN", self.dsn)
@@ -362,8 +362,8 @@ class HierarchicalConfig:
     enabled: bool = True
 
     # Models for summary generation - Gemini for GCP credit billing
-    chapter_model: str = "gemini-3.5-flash-lite"
-    section_model: str = "gemini-3.5-flash-lite"
+    chapter_model: str = "gemini-1.5-flash-lite"
+    section_model: str = "gemini-1.5-flash-lite"
 
     # Max tokens for summaries
     chapter_max_tokens: int = 500  # 3-5 sentences
@@ -392,7 +392,7 @@ class QueryRoutingConfig:
     enabled: bool = True
 
     # Classification model - Gemini for GCP credit billing
-    model: str = "gemini-3.5-flash-lite"
+    model: str = "gemini-1.5-flash-lite"
     max_tokens: int = 200
     temperature: float = 0.0
 
@@ -444,7 +444,7 @@ class CorrectiveRAGConfig:
 
     # Query reformulation - Gemini for GCP credit billing
     max_reformulations: int = 2
-    reformulation_model: str = "gemini-3.5-flash-lite"
+    reformulation_model: str = "gemini-1.5-flash-lite"
 
     # Citation validation
     validate_citations: bool = True

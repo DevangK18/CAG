@@ -140,7 +140,7 @@ class LLMValidator:
         self,
         confidence_lower_bound: float = 0.5,
         confidence_upper_bound: float = 0.7,
-        model: str = "gemini-3.5-flash",
+        model: str = "gemini-1.5-flash",
         use_batch_api: bool = True,
         api_key: Optional[str] = None,
         collect_refinement_data: bool = True,
@@ -154,7 +154,7 @@ class LLMValidator:
                                    Below this, extraction is rejected without LLM.
             confidence_upper_bound: Maximum confidence to send to LLM.
                                    Above this, extraction is accepted without LLM.
-            model: Gemini model to use for validation (default: gemini-3.5-flash).
+            model: Gemini model to use for validation (default: gemini-1.5-flash).
             use_batch_api: Reserved for future batch API support.
             api_key: Google API key. If None, uses Vertex AI ADC or GOOGLE_API_KEY env var.
             collect_refinement_data: Whether to log invalid findings for pattern refinement.
