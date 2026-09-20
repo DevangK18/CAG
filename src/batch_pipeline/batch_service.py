@@ -189,13 +189,14 @@ class BatchService:
         else:
             # Gemini models via Vertex AI (GCP project billing)
             # Use Pro for high-reasoning tasks, Flash for simpler ones
+            # Model IDs: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/models
             self.models = {
-                "overview": "gemini-2.5-pro",      # High reasoning - use Pro
-                "executive": "gemini-2.5-pro",     # High reasoning - use Pro
-                "journalist": "gemini-2.5-pro",    # Creative writing - use Pro
-                "deep_dive": "gemini-2.5-pro",     # High reasoning - use Pro
-                "simple": "gemini-2.5-flash",      # Simpler task - Flash is fine
-                "policy": "gemini-2.5-pro",        # High reasoning - use Pro
+                "overview": "gemini-3.1-pro",      # High reasoning - latest Pro
+                "executive": "gemini-3.1-pro",     # High reasoning - latest Pro
+                "journalist": "gemini-3.1-pro",    # Creative writing - latest Pro
+                "deep_dive": "gemini-3.1-pro",     # High reasoning - latest Pro
+                "simple": "gemini-3.6-flash",      # Simpler task - stable Flash
+                "policy": "gemini-3.1-pro",        # High reasoning - latest Pro
             }
 
         # Max output tokens
