@@ -32,11 +32,16 @@ from datetime import datetime
 from typing import List, Dict, Optional
 
 from .enrichment_router import EnrichmentRouter, EnrichmentTask, RoutingDecision
-from .openai_batch import OpenAIBatchService
-from ..batch_service import BatchService as AnthropicBatchService
+from ..batch_service import BatchService as GeminiBatchService
 from ..prompts.finding_extraction import build_finding_prompt
 from ..prompts.implicit_finding import build_implicit_prompt
 from ..prompts.entity_extraction import build_entity_prompt
+
+# Optional: OpenAI batch service (only if openai package installed)
+try:
+    from .openai_batch import OpenAIBatchService
+except ImportError:
+    OpenAIBatchService = None  # type: ignore
 
 
 class EnrichmentService:

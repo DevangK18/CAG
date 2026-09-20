@@ -4,7 +4,8 @@ LLM Validator: Validates low-confidence extractions via LLM.
 P3: Implements hybrid validation approach - regex extracts everything,
 LLM validates only uncertain extractions (confidence 0.4-0.7).
 
-Uses OpenAI GPT-4o Mini via Batch API for cost efficiency (~$0.002/report).
+Uses Gemini via Vertex AI for GCP credit billing (cost-effective validation).
+Fallback: Direct Gemini API via GOOGLE_API_KEY.
 
 Usage:
     from src.parsing_pipeline.modules.enrichment.llm_validator import LLMValidator
@@ -130,13 +131,16 @@ class LLMValidator:
     - Confidence < lower_bound: Rejected by regex, no LLM needed
     - lower_bound <= Confidence < upper_bound: Send to LLM
     - Confidence >= upper_bound: Accepted by regex, no LLM needed
+
+    Default: Uses Gemini via Vertex AI for GCP credit billing.
+    Fallback: GOOGLE_API_KEY for direct Gemini API access.
     """
 
     def __init__(
         self,
         confidence_lower_bound: float = 0.5,
         confidence_upper_bound: float = 0.7,
-        model: str = "gpt-4o-mini",
+        model: str = "gemini-3.5-flash",
         use_batch_api: bool = True,
         api_key: Optional[str] = None,
         collect_refinement_data: bool = True,
@@ -150,9 +154,9 @@ class LLMValidator:
                                    Below this, extraction is rejected without LLM.
             confidence_upper_bound: Maximum confidence to send to LLM.
                                    Above this, extraction is accepted without LLM.
-            model: OpenAI model to use for validation.
-            use_batch_api: Use OpenAI Batch API for 50% cost savings.
-            api_key: OpenAI API key. If None, uses OPENAI_API_KEY env var.
+            model: Gemini model to use for validation (default: gemini-3.5-flash).
+            use_batch_api: Reserved for future batch API support.
+            api_key: Google API key. If None, uses Vertex AI ADC or GOOGLE_API_KEY env var.
             collect_refinement_data: Whether to log invalid findings for pattern refinement.
             refinement_data_path: Directory to save refinement data.
         """
@@ -160,13 +164,13 @@ class LLMValidator:
         self.upper_bound = confidence_upper_bound
         self.model = model
         self.use_batch_api = use_batch_api
-        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
 
         # Data collection for pattern refinement
         self.collect_refinement_data = collect_refinement_data
         self.refinement_data_path = refinement_data_path or DEFAULT_REFINEMENT_PATH
 
-        # Lazy-load OpenAI client
+        # Lazy-load Gemini client
         self._client = None
 
         # Load config from pattern_loader if available
@@ -200,13 +204,47 @@ class LLMValidator:
 
     @property
     def client(self):
-        """Lazy-load OpenAI client."""
+        """Lazy-load Gemini client using Vertex AI or API key fallback."""
         if self._client is None:
             try:
-                import openai
-                self._client = openai.OpenAI(api_key=self._api_key)
+                from google import genai
+
+                project = os.getenv("GOOGLE_CLOUD_PROJECT")
+                location = os.getenv("VERTEX_AI_REGION", "us-central1")
+
+                # Try Vertex AI first (GCP project billing), fall back to API key
+                if project:
+                    try:
+                        import google.auth
+                        credentials, auth_project = google.auth.default(
+                            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                        )
+                        project = project or auth_project
+
+                        self._client = genai.Client(
+                            vertexai=True,
+                            project=project,
+                            location=location,
+                            credentials=credentials
+                        )
+                        logger.info(f"LLMValidator using Vertex AI (project={project})")
+                    except Exception as e:
+                        logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
+                        if self._api_key:
+                            self._client = genai.Client(api_key=self._api_key)
+                            logger.info("LLMValidator using Gemini API key")
+                        else:
+                            raise
+                elif self._api_key:
+                    self._client = genai.Client(api_key=self._api_key)
+                    logger.info("LLMValidator using Gemini API key")
+                else:
+                    raise ValueError(
+                        "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
+                        "or GOOGLE_API_KEY for direct API access."
+                    )
             except ImportError:
-                logger.error("openai package not installed. Run: pip install openai")
+                logger.error("google-genai package not installed. Run: pip install google-genai")
                 raise
         return self._client
 
@@ -232,7 +270,7 @@ class LLMValidator:
 
         Args:
             request: ValidationRequest with extraction details
-            timeout: API timeout in seconds
+            timeout: API timeout in seconds (not used for Gemini, kept for API compat)
 
         Returns:
             ValidationResult with verdict and reasoning
@@ -244,21 +282,24 @@ class LLMValidator:
 
         user_message = self._format_validation_request(request)
 
+        # Combine system prompt and user message for Gemini
+        full_prompt = f"{system_prompt}\n\n---\n\n{user_message}"
+
         try:
-            response = self.client.chat.completions.create(
+            from google.genai import types
+
+            response = self.client.models.generate_content(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                max_tokens=100,
-                temperature=0.1,  # Low temperature for consistent validation
-                timeout=timeout,
+                contents=[types.Part.from_text(text=full_prompt)],
+                config=types.GenerateContentConfig(
+                    temperature=0.1,  # Low temperature for consistent validation
+                    max_output_tokens=150,
+                ),
             )
 
             return self._parse_response(
                 request.extraction_id,
-                response.choices[0].message.content
+                response.text
             )
 
         except Exception as e:
@@ -298,8 +339,7 @@ class LLMValidator:
 
         logger.info(f"Submitting {len(to_validate)} extractions for LLM validation")
 
-        # For now, fall back to synchronous validation
-        # TODO: Implement actual OpenAI Batch API integration
+        # Synchronous validation (Gemini doesn't have batch API like Anthropic)
         results = []
         for request in to_validate:
             result = self.validate_single(request)
@@ -310,12 +350,12 @@ class LLMValidator:
         invalid_count = sum(1 for r in results if r.verdict == ValidationVerdict.INVALID)
         uncertain_count = sum(1 for r in results if r.verdict == ValidationVerdict.UNCERTAIN)
 
-        # Estimate cost (GPT-4o Mini pricing)
+        # Estimate cost (Gemini 3.5 Flash pricing via Vertex AI)
         # Input: ~850 tokens/request, Output: ~60 tokens/request
-        # $0.15/1M input, $0.60/1M output
+        # $0.50/1M input, $3.00/1M output (Gemini 3.5 Flash)
         input_tokens = len(to_validate) * 850
         output_tokens = len(to_validate) * 60
-        cost = (input_tokens * 0.15 / 1_000_000) + (output_tokens * 0.60 / 1_000_000)
+        cost = (input_tokens * 0.50 / 1_000_000) + (output_tokens * 3.00 / 1_000_000)
 
         return ValidationBatchResult(
             results=results,

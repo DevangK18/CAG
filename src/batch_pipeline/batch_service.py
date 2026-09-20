@@ -141,16 +141,43 @@ class BatchService:
             logger.info("BatchService initialized with Claude Batch API")
         else:
             from google import genai
-            # Use Vertex AI for GCP project billing (uses VM service account credentials)
             project = os.getenv("GOOGLE_CLOUD_PROJECT")
             location = os.getenv("VERTEX_AI_REGION", "us-central1")
-            self._gemini_client = genai.Client(
-                vertexai=True,
-                project=project,
-                location=location
-            )
+            api_key = os.getenv("GOOGLE_API_KEY")
+
+            # Try Vertex AI first (GCP project billing), fall back to API key
+            if project:
+                try:
+                    # Explicitly get ADC credentials for Vertex AI
+                    import google.auth
+                    credentials, auth_project = google.auth.default(
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    project = project or auth_project
+
+                    self._gemini_client = genai.Client(
+                        vertexai=True,
+                        project=project,
+                        location=location,
+                        credentials=credentials
+                    )
+                    logger.info(f"BatchService initialized with Vertex AI Gemini (project={project}, location={location})")
+                except Exception as e:
+                    logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
+                    if api_key:
+                        self._gemini_client = genai.Client(api_key=api_key)
+                        logger.info("BatchService initialized with Gemini API key")
+                    else:
+                        raise
+            elif api_key:
+                self._gemini_client = genai.Client(api_key=api_key)
+                logger.info("BatchService initialized with Gemini API key")
+            else:
+                raise ValueError(
+                    "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
+                    "or GOOGLE_API_KEY for direct API access."
+                )
             self.client = None  # No Anthropic client needed
-            logger.info(f"BatchService initialized with Vertex AI Gemini (project={project}, location={location})")
 
         # Trace: Emit client mode selection decision
         self._trace_emitter.emit_decision(

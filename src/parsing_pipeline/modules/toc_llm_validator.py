@@ -114,13 +114,47 @@ Return ONLY the JSON array, no explanations."""
         self._trace_emitter = trace_emitter or get_noop_emitter()
 
     def _get_client(self):
-        """Lazy-initialize Google Gemini client using google-genai SDK."""
+        """Lazy-initialize Google Gemini client using Vertex AI or API key fallback."""
         if self._client is None:
             try:
+                import os
                 from google import genai
-                # Client automatically uses GOOGLE_API_KEY env var
-                self._client = genai.Client()
-                logger.debug(f"Gemini client initialized for TOC validation (model: {self.model})")
+
+                project = os.getenv("GOOGLE_CLOUD_PROJECT")
+                location = os.getenv("VERTEX_AI_REGION", "us-central1")
+                api_key = os.getenv("GOOGLE_API_KEY")
+
+                # Try Vertex AI first (GCP project billing), fall back to API key
+                if project:
+                    try:
+                        import google.auth
+                        credentials, auth_project = google.auth.default(
+                            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                        )
+                        project = project or auth_project
+
+                        self._client = genai.Client(
+                            vertexai=True,
+                            project=project,
+                            location=location,
+                            credentials=credentials
+                        )
+                        logger.info(f"TOC LLM Validator using Vertex AI (project={project}, model={self.model})")
+                    except Exception as e:
+                        logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
+                        if api_key:
+                            self._client = genai.Client(api_key=api_key)
+                            logger.info(f"TOC LLM Validator using Gemini API key (model={self.model})")
+                        else:
+                            raise
+                elif api_key:
+                    self._client = genai.Client(api_key=api_key)
+                    logger.info(f"TOC LLM Validator using Gemini API key (model={self.model})")
+                else:
+                    raise ValueError(
+                        "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
+                        "or GOOGLE_API_KEY for direct API access."
+                    )
             except ImportError:
                 raise ImportError(
                     "google-genai package required. Install: pip install google-genai"

@@ -263,20 +263,50 @@ class GeminiVisualExtractor:
 
     @property
     def client(self):
-        """Lazy-initialize Gemini client using Vertex AI."""
+        """Lazy-initialize Gemini client using Vertex AI or API key fallback."""
         if self._client is None:
             try:
                 import os
                 from google import genai
-                # Use Vertex AI for GCP project billing (uses VM service account credentials)
+
                 project = os.getenv("GOOGLE_CLOUD_PROJECT")
                 location = os.getenv("VERTEX_AI_REGION", "us-central1")
-                self._client = genai.Client(
-                    vertexai=True,
-                    project=project,
-                    location=location
-                )
-                logger.info(f"Gemini client initialized with Vertex AI (project={project}, model={self.model})")
+                api_key = os.getenv("GOOGLE_API_KEY")
+
+                # Try Vertex AI first (GCP project billing), fall back to API key
+                if project:
+                    try:
+                        # Explicitly get ADC credentials for Vertex AI
+                        import google.auth
+                        credentials, auth_project = google.auth.default(
+                            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                        )
+                        # Use auth_project if GOOGLE_CLOUD_PROJECT not set
+                        project = project or auth_project
+
+                        self._client = genai.Client(
+                            vertexai=True,
+                            project=project,
+                            location=location,
+                            credentials=credentials
+                        )
+                        logger.info(f"Gemini client initialized with Vertex AI (project={project}, model={self.model})")
+                    except Exception as e:
+                        logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
+                        if api_key:
+                            self._client = genai.Client(api_key=api_key)
+                            logger.info(f"Gemini client initialized with API key (model={self.model})")
+                        else:
+                            raise
+                elif api_key:
+                    # Direct API key mode
+                    self._client = genai.Client(api_key=api_key)
+                    logger.info(f"Gemini client initialized with API key (model={self.model})")
+                else:
+                    raise ValueError(
+                        "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
+                        "or GOOGLE_API_KEY for direct API access."
+                    )
             except ImportError:
                 raise ImportError(
                     "google-genai package required. Install: pip install google-genai"

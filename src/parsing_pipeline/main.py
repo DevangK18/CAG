@@ -38,8 +38,8 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
 ## Phase Reference
 
     5.5     TOC Reconciliation (fuses heuristic + Docling detections)
-    5.7     LLM TOC Validation (Claude Haiku for low-quality TOCs)
-    10a     Overview & Summary Generation (Claude Batch API)
+    5.7     LLM TOC Validation (Gemini for low-quality TOCs)
+    10a     Overview & Summary Generation (Gemini via Vertex AI)
     10b     Visual Extraction (Gemini for tables/charts)
     10c     Visual Post-Processing
 
@@ -52,7 +52,7 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
 - Dead letter queue for debugging extraction failures
 - Comprehensive error logging and observability
 - PHASE 9: Semantic enrichment for cross-report analytics
-- PHASE 10: Overview & Summary generation via Claude Batch API
+- PHASE 10: Overview & Summary generation via Gemini/Vertex AI
 - INTELLIGENT TOC: Hierarchy enrichment for flat TOC structures
 
 ## Phase 1 Enhancements (P0 Tasks)
@@ -1390,29 +1390,42 @@ class PipelineOrchestrator:
         """Phase 10a: Overview & Summary Generation (Batch API)."""
         self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
 
+        # Add explicit logging for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Phase 10a: enrichment_complete has {len(self.state.enrichment_complete)} reports")
+
         if self.state.enrichment_complete:
             try:
                 # Import batch service (will fail gracefully if not installed)
                 from src.batch_pipeline.batch_service import BatchService
 
                 # Get JSON files for successfully enriched reports
-                json_files = [
-                    Path(task.assembled_output_path)
-                    for task in self.state.enrichment_complete
-                    if task.assembled_output_path
-                    and Path(task.assembled_output_path).exists()
-                ]
+                json_files = []
+                for task in self.state.enrichment_complete:
+                    if task.assembled_output_path:
+                        path = Path(task.assembled_output_path)
+                        if path.exists():
+                            json_files.append(path)
+                        else:
+                            logger.warning(f"Phase 10a: File not found: {path}")
+                    else:
+                        logger.warning(f"Phase 10a: No assembled_output_path for {task.report_id}")
+
+                logger.info(f"Phase 10a: Found {len(json_files)} valid JSON files")
 
                 if json_files:
                     self._log(
                         f"Submitting {len(json_files)} reports for Phase 10a processing..."
                     )
                     self._log(
-                        "  (Overview extraction + 5 summary variants via Claude Batch API)"
+                        "  (Overview extraction + 5 summary variants via Gemini/Vertex AI)"
                     )
 
                     emitter = self.state.trace_emitter
+                    logger.info("Phase 10a: Initializing BatchService...")
                     service = BatchService(trace_emitter=emitter)
+                    logger.info("Phase 10a: BatchService initialized, submitting batches...")
 
                     # Submit batches (async - returns immediately)
                     overview_batch_id = service.submit_overview_batch(json_files)
