@@ -225,7 +225,7 @@ class GeminiVisualExtractor:
 
     def __init__(
         self,
-        model: str = "gemini-3.5-flash",  # Updated for GCP credit billing
+        model: str = "gemini-2.5-flash",  # Vertex AI model for visual extraction
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
         images_dir: str = "data/extraction_images",
@@ -263,12 +263,20 @@ class GeminiVisualExtractor:
 
     @property
     def client(self):
-        """Lazy-initialize Gemini client."""
+        """Lazy-initialize Gemini client using Vertex AI."""
         if self._client is None:
             try:
+                import os
                 from google import genai
-                self._client = genai.Client()  # Uses GOOGLE_API_KEY env var
-                logger.info(f"Gemini client initialized with model: {self.model}")
+                # Use Vertex AI for GCP project billing (uses VM service account credentials)
+                project = os.getenv("GOOGLE_CLOUD_PROJECT")
+                location = os.getenv("VERTEX_AI_REGION", "us-central1")
+                self._client = genai.Client(
+                    vertexai=True,
+                    project=project,
+                    location=location
+                )
+                logger.info(f"Gemini client initialized with Vertex AI (project={project}, model={self.model})")
             except ImportError:
                 raise ImportError(
                     "google-genai package required. Install: pip install google-genai"

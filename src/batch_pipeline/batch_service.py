@@ -141,9 +141,16 @@ class BatchService:
             logger.info("BatchService initialized with Claude Batch API")
         else:
             from google import genai
-            self._gemini_client = genai.Client()
+            # Use Vertex AI for GCP project billing (uses VM service account credentials)
+            project = os.getenv("GOOGLE_CLOUD_PROJECT")
+            location = os.getenv("VERTEX_AI_REGION", "us-central1")
+            self._gemini_client = genai.Client(
+                vertexai=True,
+                project=project,
+                location=location
+            )
             self.client = None  # No Anthropic client needed
-            logger.info("BatchService initialized with Gemini (GCP billing)")
+            logger.info(f"BatchService initialized with Vertex AI Gemini (project={project}, location={location})")
 
         # Trace: Emit client mode selection decision
         self._trace_emitter.emit_decision(
@@ -180,14 +187,15 @@ class BatchService:
                 "policy": "claude-sonnet-5",
             }
         else:
-            # Gemini models for GCP credit billing
+            # Gemini models via Vertex AI (GCP project billing)
+            # Use Pro for high-reasoning tasks, Flash for simpler ones
             self.models = {
-                "overview": "gemini-3.5-flash",
-                "executive": "gemini-3.5-flash",
-                "journalist": "gemini-3.5-flash",  # Use Flash for cost efficiency
-                "deep_dive": "gemini-3.5-flash",
-                "simple": "gemini-3.5-flash-lite",
-                "policy": "gemini-3.5-flash",
+                "overview": "gemini-2.5-pro",      # High reasoning - use Pro
+                "executive": "gemini-2.5-pro",     # High reasoning - use Pro
+                "journalist": "gemini-2.5-pro",    # Creative writing - use Pro
+                "deep_dive": "gemini-2.5-pro",     # High reasoning - use Pro
+                "simple": "gemini-2.5-flash",      # Simpler task - Flash is fine
+                "policy": "gemini-2.5-pro",        # High reasoning - use Pro
             }
 
         # Max output tokens

@@ -126,7 +126,6 @@ jobs:
           MANIFEST="${MANIFEST}"
           SKIP_ARG="${SKIP_ARG}"
           REPORTS_ARG="${REPORTS_ARG}"
-          GOOGLE_API_KEY="${GOOGLE_API_KEY}"
 
           echo "============================================="
           echo "CAG Parsing Pipeline"
@@ -183,13 +182,14 @@ jobs:
           }
 
           echo "Starting parsing pipeline..."
-          docker run --rm \
+          # --network=host allows container to access GCE metadata server for Vertex AI ADC
+          docker run --rm --network=host \
             -v ${WORK_DIR}/data:/app/data \
             -v ${WORK_DIR}/logs:/app/logs \
             -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
             -e DATA_BUCKET=${DATA_BUCKET} \
             -e GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
-            -e GOOGLE_API_KEY=${GOOGLE_API_KEY} \
+            -e VERTEX_AI_REGION=us-central1 \
             -e USE_VERTEX_AI=true \
             -e USE_VERTEX_EMBEDDINGS=true \
             -e LLM_PROVIDER=gemini \
@@ -228,7 +228,6 @@ jobs:
           sed -i "s|\${MANIFEST}|${{ inputs.manifest }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${SKIP_ARG}|${SKIP_ARG}|g" /tmp/run_pipeline.sh
           sed -i "s|\${REPORTS_ARG}|${REPORTS_ARG}|g" /tmp/run_pipeline.sh
-          sed -i "s|\${GOOGLE_API_KEY}|${{ secrets.GOOGLE_API_KEY }}|g" /tmp/run_pipeline.sh
 
           chmod +x /tmp/run_pipeline.sh
 
