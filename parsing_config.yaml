@@ -91,14 +91,16 @@ layout:
   # Quality gate to reject garbage tables
   table_min_non_empty_cells: 3
 
-  # Docling accelerator: 'cpu', 'mps' (Apple Silicon), 'cuda' (NVIDIA)
-  # GPU is 5x faster but requires compatible hardware
-  accelerator_device: "cpu"
+  # Docling accelerator: 'auto', 'cpu', 'mps' (Apple Silicon), 'cuda' (NVIDIA)
+  # 'auto' detects GPU at runtime; 'cuda' for NVIDIA GPU, 'cpu' fallback
+  # GPU is 5-10x faster for layout analysis
+  accelerator_device: "auto"
 
   # TableFormer mode: 'FAST' or 'ACCURATE'
-  # ACCURATE: Better quality for scanned PDFs, ~2x slower
-  # Note: Use FAST for CI/CD pipelines (CPU-only), ACCURATE for local GPU runs
-  tableformer_mode: "FAST"
+  # ACCURATE: Better quality for scanned PDFs, ~2x slower on CPU
+  # With GPU: ACCURATE is fast enough (~5 min for large PDFs)
+  # Timeout (conversion_timeout) prevents hangs if running on CPU
+  tableformer_mode: "ACCURATE"
 
   # Maximum time (seconds) for Docling conversion before timeout
   # Large PDFs can take 30+ minutes on CPU - set limit to prevent CI hangs

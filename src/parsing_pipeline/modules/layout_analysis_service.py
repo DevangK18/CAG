@@ -46,8 +46,10 @@ class LayoutAnalysisService:
             else config.confidence_threshold
         )
         self.table_min_non_empty_cells = config.table_min_non_empty_cells
-        self.accelerator_device = config.accelerator_device
         self.conversion_timeout = config.conversion_timeout
+
+        # Auto-detect accelerator device if set to "auto"
+        self.accelerator_device = self._resolve_accelerator_device(config.accelerator_device)
 
         # Parse TableFormerMode from string
         tableformer_mode = (
@@ -80,6 +82,33 @@ class LayoutAnalysisService:
         except Exception as e:
             logger.error(f"FATAL: Failed to initialize DocumentConverter: {e}")
             raise RuntimeError("Could not initialize Docling.") from e
+
+    def _resolve_accelerator_device(self, device: str) -> str:
+        """Resolve 'auto' device to actual accelerator (cuda > mps > cpu)."""
+        if device != "auto":
+            return device
+
+        # Try CUDA first (NVIDIA GPU)
+        try:
+            import torch
+            if torch.cuda.is_available():
+                logger.info(f"🚀 GPU detected: {torch.cuda.get_device_name(0)} - using CUDA")
+                return "cuda"
+        except ImportError:
+            pass
+
+        # Try MPS (Apple Silicon)
+        try:
+            import torch
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                logger.info("🚀 Apple Silicon detected - using MPS")
+                return "mps"
+        except ImportError:
+            pass
+
+        # Fallback to CPU
+        logger.info("Using CPU for layout analysis (no GPU detected)")
+        return "cpu"
 
     def analyze_layout(
         self,

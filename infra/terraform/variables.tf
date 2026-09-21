@@ -68,9 +68,9 @@ variable "api_cpu" {
 # -----------------------------------------------------------------------------
 
 variable "parsing_machine_type" {
-  description = "Machine type for parsing VM"
+  description = "Machine type for parsing VM (use n1-* for GPU support)"
   type        = string
-  default     = "e2-standard-4" # 4 vCPU, 16GB RAM
+  default     = "n1-standard-4" # 4 vCPU, 15GB RAM (GPU-compatible)
 }
 
 variable "parsing_disk_size" {
@@ -83,6 +83,24 @@ variable "parsing_preemptible" {
   description = "Use preemptible/spot instances for cost savings"
   type        = bool
   default     = true
+}
+
+variable "parsing_enable_gpu" {
+  description = "Attach GPU to parsing VM for faster Docling processing"
+  type        = bool
+  default     = true
+}
+
+variable "parsing_gpu_type" {
+  description = "GPU type (nvidia-tesla-t4 is most cost-effective for inference)"
+  type        = string
+  default     = "nvidia-tesla-t4"
+}
+
+variable "parsing_gpu_count" {
+  description = "Number of GPUs to attach"
+  type        = number
+  default     = 1
 }
 
 # -----------------------------------------------------------------------------

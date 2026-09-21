@@ -56,6 +56,11 @@ RUN poetry install --with parsing --no-interaction --no-ansi --no-root
 # Install additional GCS dependencies
 RUN pip install --no-cache-dir google-cloud-storage
 
+# Install PyTorch with CUDA support for GPU acceleration
+# This adds CUDA runtime libraries (~2GB) enabling GPU passthrough via --gpus all
+# Falls back gracefully to CPU if no GPU is available
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu121
+
 # Copy all source code (including parsing pipeline)
 COPY src/ ./src/
 

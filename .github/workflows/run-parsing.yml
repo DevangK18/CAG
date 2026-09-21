@@ -182,8 +182,18 @@ jobs:
           }
 
           echo "Starting parsing pipeline..."
+
+          # Check if GPU is available and set Docker GPU flag
+          GPU_FLAG=""
+          if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+            echo "🚀 GPU detected: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
+            GPU_FLAG="--gpus all"
+          else
+            echo "No GPU detected, running on CPU"
+          fi
+
           # --network=host allows container to access GCE metadata server for Vertex AI ADC
-          docker run --rm --network=host \
+          docker run --rm --network=host ${GPU_FLAG} \
             -v ${WORK_DIR}/data:/app/data \
             -v ${WORK_DIR}/logs:/app/logs \
             -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \

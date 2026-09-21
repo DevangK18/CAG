@@ -56,3 +56,21 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_gpu" {
+  description = "Attach GPU to VM for faster ML inference"
+  type        = bool
+  default     = false
+}
+
+variable "gpu_type" {
+  description = "GPU type (e.g., nvidia-tesla-t4)"
+  type        = string
+  default     = "nvidia-tesla-t4"
+}
+
+variable "gpu_count" {
+  description = "Number of GPUs to attach"
+  type        = number
+  default     = 1
+}

@@ -4,7 +4,8 @@
 
 # Startup script for parsing VM
 locals {
-  startup_script = <<-EOF
+  # Base startup script (common to CPU and GPU)
+  base_startup = <<-EOF
     #!/bin/bash
     set -e
 
@@ -36,9 +37,43 @@ locals {
 
     # Configure Docker to use Artifact Registry
     gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet
-
-    echo "Parsing VM startup complete"
   EOF
+
+  # GPU-specific setup (NVIDIA drivers + Container Toolkit)
+  gpu_startup = <<-EOF
+
+    # Install NVIDIA drivers and Container Toolkit for GPU support
+    echo "Installing NVIDIA drivers..."
+
+    # Install NVIDIA driver (if not already installed)
+    if ! command -v nvidia-smi &> /dev/null; then
+      # Add NVIDIA package repositories
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+      apt-get update
+
+      # Install NVIDIA driver (headless for servers)
+      apt-get install -y linux-headers-$(uname -r)
+      apt-get install -y nvidia-driver-535-server
+
+      # Install NVIDIA Container Toolkit
+      apt-get install -y nvidia-container-toolkit
+
+      # Configure Docker to use NVIDIA runtime
+      nvidia-ctk runtime configure --runtime=docker
+      systemctl restart docker
+
+      echo "NVIDIA drivers installed. Reboot may be required."
+    else
+      echo "NVIDIA drivers already installed: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader)"
+    fi
+  EOF
+
+  # Combine scripts based on GPU configuration
+  startup_script = var.enable_gpu ? "${local.base_startup}${local.gpu_startup}\n\necho 'Parsing VM startup complete (GPU enabled)'" : "${local.base_startup}\n\necho 'Parsing VM startup complete'"
 }
 
 resource "google_compute_instance" "parsing" {
@@ -55,6 +90,15 @@ resource "google_compute_instance" "parsing" {
 
     # Use SPOT provisioning model for better availability
     provisioning_model = var.preemptible ? "SPOT" : "STANDARD"
+  }
+
+  # GPU accelerator (optional, for faster Docling processing)
+  dynamic "guest_accelerator" {
+    for_each = var.enable_gpu ? [1] : []
+    content {
+      type  = var.gpu_type
+      count = var.gpu_count
+    }
   }
 
   boot_disk {

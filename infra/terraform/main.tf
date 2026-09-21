@@ -200,6 +200,11 @@ module "compute" {
   disk_size_gb  = var.parsing_disk_size
   preemptible   = var.parsing_preemptible
 
+  # GPU configuration for faster Docling processing
+  enable_gpu = var.parsing_enable_gpu
+  gpu_type   = var.parsing_gpu_type
+  gpu_count  = var.parsing_gpu_count
+
   service_account_email = google_service_account.parsing.email
 
   data_bucket = module.storage.bucket_name

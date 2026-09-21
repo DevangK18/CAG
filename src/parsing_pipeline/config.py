@@ -159,11 +159,12 @@ class LayoutAnalysisConfig:
     Quality gate to reject garbage tables (e.g., OCR artifacts, formatting noise).
     """
 
-    accelerator_device: str = "cpu"
+    accelerator_device: str = "auto"
     """
-    Docling accelerator device: 'cpu', 'mps', or 'cuda'.
+    Docling accelerator device: 'auto', 'cpu', 'mps', or 'cuda'.
 
-    GPU acceleration (mps/cuda) is 5x faster but requires compatible hardware.
+    'auto': Detect GPU at runtime (cuda > mps > cpu)
+    GPU acceleration (mps/cuda) is 5-10x faster but requires compatible hardware.
     """
 
     tableformer_mode: str = "ACCURATE"
