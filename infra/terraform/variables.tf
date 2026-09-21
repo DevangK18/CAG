@@ -88,7 +88,7 @@ variable "parsing_preemptible" {
 variable "parsing_enable_gpu" {
   description = "Attach GPU to parsing VM for faster Docling processing"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "parsing_gpu_type" {

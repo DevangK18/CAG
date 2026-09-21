@@ -81,6 +81,7 @@ resource "google_project_iam_member" "parsing_permissions" {
     "roles/storage.objectAdmin",
     "roles/secretmanager.secretAccessor",
     "roles/aiplatform.user",
+    "roles/artifactregistry.reader",
   ])
 
   project = var.project_id
@@ -111,7 +112,16 @@ module "secrets" {
 
   project_id = var.project_id
 
-  secrets = {
+  secret_names = [
+    "qdrant-url",
+    "qdrant-api-key",
+    "cohere-api-key",
+    "google-api-key",
+    "posthog-key",
+    "access-code",
+  ]
+
+  secret_values = {
     "qdrant-url"     = var.qdrant_url
     "qdrant-api-key" = var.qdrant_api_key
     "cohere-api-key" = var.cohere_api_key
@@ -193,6 +203,7 @@ module "compute" {
   source = "./modules/compute"
 
   project_id    = var.project_id
+  region        = var.region
   zone          = var.zone
   instance_name = "cag-parsing-vm"
 

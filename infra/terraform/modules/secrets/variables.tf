@@ -7,7 +7,12 @@ variable "project_id" {
   type        = string
 }
 
-variable "secrets" {
+variable "secret_names" {
+  description = "List of secret names to create"
+  type        = list(string)
+}
+
+variable "secret_values" {
   description = "Map of secret names to values"
   type        = map(string)
   sensitive   = true
