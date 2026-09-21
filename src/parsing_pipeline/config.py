@@ -174,6 +174,14 @@ class LayoutAnalysisConfig:
     FAST mode: Faster processing, may miss complex table structures.
     """
 
+    conversion_timeout: int = 1800
+    """
+    Maximum time (seconds) for Docling conversion before timeout.
+
+    Large PDFs can take 30+ minutes on CPU. Default 1800s (30 min) prevents
+    CI/CD hangs while allowing most documents to complete.
+    """
+
 
 @dataclass
 class TOCReconciliationConfig:

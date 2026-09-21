@@ -2,6 +2,7 @@
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
@@ -46,6 +47,7 @@ class LayoutAnalysisService:
         )
         self.table_min_non_empty_cells = config.table_min_non_empty_cells
         self.accelerator_device = config.accelerator_device
+        self.conversion_timeout = config.conversion_timeout
 
         # Parse TableFormerMode from string
         tableformer_mode = (
@@ -104,13 +106,31 @@ class LayoutAnalysisService:
                 pdf_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
                 logger.info(
                     f"[{task.report_id}] Starting Docling conversion... "
-                    f"(PDF: {pdf_size_mb:.1f} MB)"
+                    f"(PDF: {pdf_size_mb:.1f} MB, timeout: {self.conversion_timeout}s)"
                 )
 
-                # Run the conversion (this can take a long time for large PDFs)
+                # Run the conversion with timeout (prevents CI hangs on large PDFs)
                 import time
                 start_time = time.time()
-                conversion_result = self.converter.convert(source=pdf_path)
+
+                # Use ThreadPoolExecutor with timeout to prevent indefinite hangs
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self.converter.convert, source=pdf_path)
+                    try:
+                        conversion_result = future.result(timeout=self.conversion_timeout)
+                    except FuturesTimeoutError:
+                        elapsed = time.time() - start_time
+                        error_msg = (
+                            f"Docling conversion timed out after {elapsed:.1f}s "
+                            f"(limit: {self.conversion_timeout}s)"
+                        )
+                        logger.error(f"[{task.report_id}] {error_msg}")
+                        task.error_log.append(error_msg)
+                        task.processing_status = "failed_layout"
+                        trace_emitter.emit_error("5", error_msg)
+                        trace_emitter.set_phase_status("5", "failed")
+                        return task
+
                 elapsed = time.time() - start_time
                 docling_doc = conversion_result.document
                 logger.info(

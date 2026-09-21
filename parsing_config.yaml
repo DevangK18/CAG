@@ -97,7 +97,12 @@ layout:
 
   # TableFormer mode: 'FAST' or 'ACCURATE'
   # ACCURATE: Better quality for scanned PDFs, ~2x slower
-  tableformer_mode: "ACCURATE"
+  # Note: Use FAST for CI/CD pipelines (CPU-only), ACCURATE for local GPU runs
+  tableformer_mode: "FAST"
+
+  # Maximum time (seconds) for Docling conversion before timeout
+  # Large PDFs can take 30+ minutes on CPU - set limit to prevent CI hangs
+  conversion_timeout: 1800  # 30 minutes
 
 # ==============================================================================
 # PHASE 5.5: TOC RECONCILIATION (FUSE HEURISTIC + DOCLING)
