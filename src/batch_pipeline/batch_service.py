@@ -145,23 +145,25 @@ class BatchService:
             location = os.getenv("VERTEX_AI_REGION", "us-central1")
             api_key = os.getenv("GOOGLE_API_KEY")
 
-            # Try Vertex AI first (GCP project billing), fall back to API key
+            # Try Gemini Enterprise Agent Platform first (GCP project billing), fall back to API key
             if project:
                 try:
-                    # Explicitly get ADC credentials for Vertex AI
+                    # Explicitly get ADC credentials for Gemini Enterprise Agent Platform
                     import google.auth
                     credentials, auth_project = google.auth.default(
                         scopes=["https://www.googleapis.com/auth/cloud-platform"]
                     )
                     project = project or auth_project
 
+                    # Use enterprise=True with location='global' for Gemini Enterprise Agent Platform
+                    # (formerly Vertex AI - rebranded as of 2025)
                     self._gemini_client = genai.Client(
-                        vertexai=True,
+                        enterprise=True,
                         project=project,
-                        location=location,
+                        location="global",
                         credentials=credentials
                     )
-                    logger.info(f"BatchService initialized with Vertex AI Gemini (project={project}, location={location})")
+                    logger.info(f"BatchService initialized with Gemini Enterprise (project={project})")
                 except Exception as e:
                     logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
                     if api_key:

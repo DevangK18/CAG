@@ -212,7 +212,7 @@ class LLMValidator:
                 project = os.getenv("GOOGLE_CLOUD_PROJECT")
                 location = os.getenv("VERTEX_AI_REGION", "us-central1")
 
-                # Try Vertex AI first (GCP project billing), fall back to API key
+                # Try Gemini Enterprise first (GCP project billing), fall back to API key
                 if project:
                     try:
                         import google.auth
@@ -221,13 +221,14 @@ class LLMValidator:
                         )
                         project = project or auth_project
 
+                        # Use enterprise=True with location='global' for Gemini Enterprise Agent Platform
                         self._client = genai.Client(
-                            vertexai=True,
+                            enterprise=True,
                             project=project,
-                            location=location,
+                            location="global",
                             credentials=credentials
                         )
-                        logger.info(f"LLMValidator using Vertex AI (project={project})")
+                        logger.info(f"LLMValidator using Gemini Enterprise (project={project})")
                     except Exception as e:
                         logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
                         if self._api_key:

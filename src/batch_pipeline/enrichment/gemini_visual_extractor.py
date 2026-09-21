@@ -276,7 +276,7 @@ class GeminiVisualExtractor:
                 # Try Vertex AI first (GCP project billing), fall back to API key
                 if project:
                     try:
-                        # Explicitly get ADC credentials for Vertex AI
+                        # Explicitly get ADC credentials for Gemini Enterprise Agent Platform
                         import google.auth
                         credentials, auth_project = google.auth.default(
                             scopes=["https://www.googleapis.com/auth/cloud-platform"]
@@ -284,13 +284,14 @@ class GeminiVisualExtractor:
                         # Use auth_project if GOOGLE_CLOUD_PROJECT not set
                         project = project or auth_project
 
+                        # Use enterprise=True with location='global' for Gemini Enterprise Agent Platform
                         self._client = genai.Client(
-                            vertexai=True,
+                            enterprise=True,
                             project=project,
-                            location=location,
+                            location="global",
                             credentials=credentials
                         )
-                        logger.info(f"Gemini client initialized with Vertex AI (project={project}, model={self.model})")
+                        logger.info(f"Gemini client initialized with Enterprise (project={project}, model={self.model})")
                     except Exception as e:
                         logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
                         if api_key:
