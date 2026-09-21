@@ -976,8 +976,8 @@ async def _stream_gemini(
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from Gemini."""
     try:
-        from google import genai
         from google.genai import types
+        from src.core.gemini_client import get_gemini_client
     except ImportError:
         yield "[Error: google-genai package not installed for streaming]"
         return
@@ -985,7 +985,7 @@ async def _stream_gemini(
     # Gemini uses combined prompt (system + user)
     combined_prompt = f"{system_prompt}\n\n---\n\n{prompt}"
 
-    client = genai.Client()
+    client = get_gemini_client()
 
     # Use streaming API
     response = client.models.generate_content_stream(

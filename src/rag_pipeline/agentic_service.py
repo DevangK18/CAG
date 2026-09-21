@@ -480,8 +480,8 @@ class AgenticRAGService:
         """Lazy-initialize standalone Gemini client."""
         if self._gemini_client is None:
             try:
-                from google import genai
-                self._gemini_client = genai.Client()
+                from src.core.gemini_client import get_gemini_client
+                self._gemini_client = get_gemini_client()
             except ImportError:
                 raise ImportError("Install google-genai: pip install google-genai")
         return self._gemini_client

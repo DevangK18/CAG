@@ -2068,15 +2068,11 @@ class RAGService:
         """Initialize Gemini client lazily."""
         global _gemini_client
         if _gemini_client is None:
-            try:
-                from google import genai
-
-                _gemini_client = genai.Client()
-                logger.info(
-                    f"Gemini client initialized with model: {self.config.llm.gemini_model}"
-                )
-            except ImportError:
-                raise ImportError("Install google-genai: pip install google-genai")
+            from src.core.gemini_client import get_gemini_client
+            _gemini_client = get_gemini_client()
+            logger.info(
+                f"Gemini client initialized with model: {self.config.llm.gemini_model}"
+            )
         return _gemini_client
 
     def _generate_gemini(self, prompt: str, system_prompt: str) -> str:

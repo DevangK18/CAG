@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 def _get_llm_client(model: str):
     """Get appropriate LLM client based on model name."""
     if model.startswith("gemini-"):
-        from google import genai
-        return genai.Client(), "gemini"
+        from src.core.gemini_client import get_gemini_client
+        return get_gemini_client(), "gemini"
     else:
         from openai import OpenAI
         return OpenAI(), "openai"
