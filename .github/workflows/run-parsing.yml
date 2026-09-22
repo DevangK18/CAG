@@ -38,7 +38,7 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  ZONE: us-central1-a
+  ZONE: us-central1-f
   VM_NAME: cag-parsing-vm
   DATA_BUCKET: cag-data-443e4a28
 
