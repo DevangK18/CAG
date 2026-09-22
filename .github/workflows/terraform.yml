@@ -86,7 +86,7 @@ jobs:
           posthog_key        = "${{ secrets.POSTHOG_KEY }}"
           access_code        = "${{ secrets.ACCESS_CODE }}"
           alert_email        = "${{ secrets.ALERT_EMAIL }}"
-          parsing_enable_gpu = true
+          parsing_enable_gpu = false
           EOF
 
       - name: Terraform Plan
