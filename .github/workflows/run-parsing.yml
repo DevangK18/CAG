@@ -5,9 +5,8 @@
 # Starts the parsing VM, runs the pipeline, and uploads results to GCS.
 #
 # Key details:
-# - VM uses Container-Optimized OS (COS) which has read-only root filesystem
-# - COS doesn't have gsutil/gcloud installed - must use Docker images
-# - Writable directories on COS: /var/tmp, /home, /mnt/disks
+# - VM uses Debian 12 with Docker installed
+# - Uses IAP tunneling for SSH (bypasses SSH key sync issues)
 # - Uses script file approach: create script → scp to VM → ssh execute
 
 name: Run Parsing Pipeline
@@ -89,16 +88,20 @@ jobs:
 
       - name: Wait for VM SSH
         run: |
-          for i in {1..10}; do
+          # Use IAP tunneling to avoid SSH key sync issues
+          # IAP uses Google authentication instead of SSH keys
+          for i in {1..15}; do
+            echo "Attempt $i: trying SSH via IAP tunnel..."
             if gcloud compute ssh ${{ env.VM_NAME }} \
               --zone=${{ env.ZONE }} \
               --project=${{ env.PROJECT_ID }} \
-              --command="echo 'VM is ready'" 2>/dev/null; then
+              --tunnel-through-iap \
+              --command="echo 'VM is ready'" 2>&1; then
               echo "VM SSH is ready"
               exit 0
             fi
             echo "Attempt $i: waiting for SSH..."
-            sleep 30
+            sleep 20
           done
           echo "Failed to connect to VM"
           exit 1
@@ -245,10 +248,11 @@ jobs:
           head -50 /tmp/run_pipeline.sh
           echo "..."
 
-          # Copy script to VM
+          # Copy script to VM using IAP tunnel
           gcloud compute scp /tmp/run_pipeline.sh ${{ env.VM_NAME }}:/tmp/run_pipeline.sh \
             --zone=${{ env.ZONE }} \
-            --project=${{ env.PROJECT_ID }}
+            --project=${{ env.PROJECT_ID }} \
+            --tunnel-through-iap
 
       - name: Run Parsing Pipeline
         run: |
@@ -257,10 +261,11 @@ jobs:
           echo "  Skip phases: ${{ inputs.skip_phases }}"
           echo "  Reports: ${{ inputs.reports }}"
 
-          # Use SSH keep-alive to prevent broken pipe on long-running commands
+          # Use IAP tunnel with SSH keep-alive to prevent broken pipe on long-running commands
           gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} \
+            --tunnel-through-iap \
             --ssh-flag="-o ServerAliveInterval=60" \
             --ssh-flag="-o ServerAliveCountMax=30" \
             --command="bash /tmp/run_pipeline.sh"
