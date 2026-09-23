@@ -273,13 +273,24 @@ jobs:
           echo "  Skip phases: ${{ inputs.skip_phases }}"
           echo "  Reports: ${{ inputs.reports }}"
 
-          # Use SSH keep-alive to prevent broken pipe on long-running commands
-          gcloud compute ssh ${{ env.VM_NAME }} \
+          # SSH keep-alives are protocol-level (independent of pipeline output), so a
+          # 5-minute tolerance is enough and detects a lost VM quickly (was 30 min)
+          START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if ! gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} \
-            --ssh-flag="-o ServerAliveInterval=60" \
-            --ssh-flag="-o ServerAliveCountMax=30" \
-            --command="bash /tmp/run_pipeline.sh"
+            --ssh-flag="-o ServerAliveInterval=30" \
+            --ssh-flag="-o ServerAliveCountMax=10" \
+            --command="bash /tmp/run_pipeline.sh"; then
+            PREEMPTED=$(gcloud compute operations list \
+              --project=${{ env.PROJECT_ID }} \
+              --filter="operationType=compute.instances.preempted AND targetLink~${{ env.VM_NAME }} AND insertTime>=${START}" \
+              --format="value(insertTime)")
+            if [ -n "${PREEMPTED}" ]; then
+              echo "::error::Spot VM was preempted by GCP at ${PREEMPTED}. Not a pipeline error; re-run the workflow."
+            fi
+            exit 1
+          fi
 
       - name: Stop Parsing VM
         if: ${{ !inputs.keep_vm_running && always() }}

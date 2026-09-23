@@ -23,7 +23,7 @@ api_cpu           = "2"
 # Compute Engine (Parsing VM)
 parsing_machine_type = "e2-standard-4"  # 4 vCPU, 16GB RAM
 parsing_disk_size    = 100              # GB
-parsing_preemptible  = true             # Spot pricing (~70% discount)
+parsing_preemptible  = false            # Standard; spot preemptions killed ~45 min runs
 
 # External Services (fill these in)
 qdrant_url     = "https://your-cluster.cloud.qdrant.io"

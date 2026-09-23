@@ -80,9 +80,9 @@ variable "parsing_disk_size" {
 }
 
 variable "parsing_preemptible" {
-  description = "Use preemptible/spot instances for cost savings"
+  description = "Use spot instances (cheaper, but preemption kills in-flight runs)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "parsing_enable_gpu" {

@@ -82,14 +82,14 @@ resource "google_compute_instance" "parsing" {
   zone         = var.zone
   project      = var.project_id
 
-  # Spot/preemptible instance for cost savings
+  # Standard by default (spot preemptions killed long parsing runs); spot optional
   scheduling {
-    preemptible         = var.preemptible
-    automatic_restart   = false
-    on_host_maintenance = "TERMINATE"
-
-    # Use SPOT provisioning model for better availability
+    preemptible        = var.preemptible
     provisioning_model = var.preemptible ? "SPOT" : "STANDARD"
+    automatic_restart  = !var.preemptible
+
+    # Standard e2 VMs require MIGRATE; spot and GPU VMs require TERMINATE
+    on_host_maintenance = (var.preemptible || var.enable_gpu) ? "TERMINATE" : "MIGRATE"
   }
 
   # GPU accelerator (optional, for faster Docling processing)
