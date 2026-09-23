@@ -1387,7 +1387,12 @@ class PipelineOrchestrator:
     # ═══════════════════════════════════════════════════════════════════════
 
     def _phase_overview_summary(self):
-        """Phase 10a: Overview & Summary Generation (Batch API)."""
+        """
+        Phase 10a: Overview & Summary Generation.
+
+        Gemini (default): direct concurrent calls, completes within this run.
+        Claude (USE_CLAUDE_BATCH=true): async Batch API, finish with process_results.
+        """
         self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
 
         # Add explicit logging for debugging
@@ -1418,16 +1423,14 @@ class PipelineOrchestrator:
                     self._log(
                         f"Submitting {len(json_files)} reports for Phase 10a processing..."
                     )
-                    self._log(
-                        "  (Overview extraction + 5 summary variants via Gemini/Vertex AI)"
-                    )
+                    self._log("  (Overview extraction + 5 summary variants)")
 
                     emitter = self.state.trace_emitter
                     logger.info("Phase 10a: Initializing BatchService...")
                     service = BatchService(trace_emitter=emitter)
                     logger.info("Phase 10a: BatchService initialized, submitting batches...")
 
-                    # Submit batches (async - returns immediately)
+                    # Gemini: runs to completion here. Claude: submits async batches.
                     overview_batch_id = service.submit_overview_batch(json_files)
                     summary_batch_id = service.submit_summary_batch(json_files)
 
@@ -1439,12 +1442,34 @@ class PipelineOrchestrator:
                         report_ids=report_ids,
                     )
 
-                    self.state.phase10a_submitted = True
+                    if service.use_claude:
+                        self.state.phase10a_submitted = True
 
-                    self._log(f"\n✅ Phase 10a batch jobs submitted!", force=True)
-                    self._log(f"   Overview Batch: {overview_batch_id}")
-                    self._log(f"   Summary Batch:  {summary_batch_id}")
-                    self._log(f"   Job Tracker:    {phase10_tracker_path}")
+                        self._log(f"\n✅ Phase 10a batch jobs submitted!", force=True)
+                        self._log(f"   Overview Batch: {overview_batch_id}")
+                        self._log(f"   Summary Batch:  {summary_batch_id}")
+                        self._log(f"   Job Tracker:    {phase10_tracker_path}")
+                        self._log("   Finish with: python -m src.batch_pipeline.process_results")
+                    else:
+                        # Gemini outputs are already on disk; build final overview files now
+                        from src.batch_pipeline.process_results import build_final_overviews
+
+                        merged, merge_failed = build_final_overviews(service, report_ids)
+
+                        with open(phase10_tracker_path) as f:
+                            tracker = json.load(f)
+                        tracker["status"] = "completed"
+                        tracker["completed_at"] = datetime.now().isoformat()
+                        with open(phase10_tracker_path, "w") as f:
+                            json.dump(tracker, f, indent=2)
+
+                        self.state.phase10a_completed = merged > 0
+                        self._log(
+                            f"\n✅ Phase 10a complete: {merged} overview(s) created, "
+                            f"{merge_failed} failed",
+                            force=True,
+                        )
+                        self._log(f"   Job Tracker: {phase10_tracker_path}")
                 else:
                     self._log("No JSON files found for Phase 10a processing.")
 
@@ -1655,6 +1680,8 @@ class PipelineOrchestrator:
             final_status = "phase_10c_complete"
         elif self.state.phase10b_completed:
             final_status = "phase_10b_complete"
+        elif self.state.phase10a_completed:
+            final_status = "phase_10a_complete"
         elif self.state.phase10a_submitted:
             final_status = "phase_10a_submitted"
         elif self.state.enrichment_complete:
@@ -1779,7 +1806,9 @@ class PipelineOrchestrator:
 
         # Phase 10 status
         print("")  # Blank line before phase 10 status
-        if self.state.phase10a_submitted:
+        if self.state.phase10a_completed:
+            print("Phase 10a (Overview & Summary): COMPLETE")
+        elif self.state.phase10a_submitted:
             print("Phase 10a (Overview & Summary): SUBMITTED (processing async)")
         elif "10a" in self.skip:
             print("Phase 10a (Overview & Summary): SKIPPED")

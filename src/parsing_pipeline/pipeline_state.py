@@ -55,6 +55,7 @@ class PipelineState:
 
     # Phase 10 tracking flags
     phase10a_submitted: bool = False
+    phase10a_completed: bool = False
     phase10b_completed: bool = False
     phase10c_completed: bool = False
 

@@ -3,7 +3,8 @@
 CLI: Process completed batch results and create final output files.
 
 This script:
-1. Downloads results from completed Anthropic batches
+1. Downloads results from completed Anthropic batches (Gemini jobs save
+   their outputs at generation time, so only the merge step applies)
 2. Parses LLM responses for overview extraction
 3. Parses LLM responses for summary variants
 4. Merges JSON-extracted data with LLM-extracted data
@@ -149,6 +150,86 @@ def extract_overview_from_json(json_path: Path) -> dict:
         "topics_covered": None,
         "glossary_terms": None,
     }
+
+
+def build_final_overviews(service, report_ids) -> tuple[int, int]:
+    """
+    Merge JSON-extracted and LLM-extracted data into final overview files.
+
+    Reads LLM outputs from service.overviews_dir / service.summaries_dir and writes
+    {report_id}_overview.json under the processed dir. Shared by this CLI (Claude
+    batch path) and the parsing pipeline (Gemini sync path).
+
+    Returns:
+        (merge_success, merge_failed)
+    """
+    from .merge_utils import merge_llm_overview_data
+
+    print("\n" + "-" * 40)
+    print("🔄 Creating Final Overview Files...")
+    print(f"   Output: {service.processed_dir}/")
+    print("-" * 40)
+
+    merge_success = 0
+    merge_failed = 0
+    llm_merged_count = 0
+    llm_fields_total = 0
+
+    for report_id in report_ids:
+        # Find source chunks JSON (searches tier subdirectories)
+        chunks_path = service.find_chunks_path(report_id)
+
+        if not chunks_path or not chunks_path.exists():
+            print(f"  ⚠️  {report_id[:40]}...: chunks.json not found")
+            merge_failed += 1
+            continue
+
+        # Detect tier for output path
+        tier = service.get_tier_from_chunks(chunks_path)
+
+        # Extract from JSON (Phase 10A - free data)
+        overview = extract_overview_from_json(chunks_path)
+
+        # Add base metadata (include tier info)
+        overview["_metadata"] = {
+            "generated_at": datetime.now().isoformat(),
+            "source_json": str(chunks_path),
+            "phase": "10",
+            "government_body_type": tier,
+        }
+
+        # Merge LLM-extracted fields using improved merge logic
+        overview, merge_stats = merge_llm_overview_data(
+            report_id,
+            overview,
+            service.overviews_dir,
+            service.summaries_dir,
+            verbose=False  # Set to True for detailed output
+        )
+
+        # Track merge statistics
+        if merge_stats["llm_file_found"]:
+            llm_merged_count += 1
+            llm_fields_total += merge_stats["fields_merged"]
+
+        # Save final overview to processed directory (tier-aware)
+        output_path = service.get_final_overview_path(report_id, tier)
+        with open(output_path, "w") as f:
+            json.dump(overview, f, indent=2, ensure_ascii=False)
+
+        short_id = report_id[:45] + "..." if len(report_id) > 45 else report_id
+        llm_marker = "✓" if merge_stats["llm_file_found"] else "○"
+        sum_marker = "✓" if merge_stats["summaries_available"] else "○"
+        fields_info = f"{merge_stats['fields_merged']}/4" if merge_stats["llm_file_found"] else "0/4"
+        print(f"  ✅ {short_id} [LLM:{llm_marker} {fields_info} SUM:{sum_marker}]")
+        merge_success += 1
+
+    print(f"\n   Overview files created: {merge_success}, failed: {merge_failed}")
+    if llm_merged_count > 0:
+        avg_fields = llm_fields_total / llm_merged_count
+        print(f"   LLM data merged: {llm_merged_count}/{merge_success} reports (avg {avg_fields:.1f}/4 fields)")
+
+    return merge_success, merge_failed
 
 
 def main():
@@ -371,7 +452,9 @@ def main():
     overview_success = 0
     overview_failed = 0
 
-    if not args.skip_overview and tracker["overview_batch"]["batch_id"] != "N/A":
+    if service.is_sync_batch(tracker["overview_batch"]["batch_id"]):
+        print("\n📋 Overview results were saved at generation time (Gemini)")
+    elif not args.skip_overview and tracker["overview_batch"]["batch_id"] != "N/A":
         print("\n" + "-" * 40)
         print("📋 Processing Overview Extraction Results...")
         print(f"   Output: {service.overviews_dir}/")
@@ -433,7 +516,9 @@ def main():
     summary_partial = 0
     summary_failed = 0
 
-    if not args.skip_summary and tracker["summary_batch"]["batch_id"] != "N/A":
+    if service.is_sync_batch(tracker["summary_batch"]["batch_id"]):
+        print("\n📝 Summary results were saved at generation time (Gemini)")
+    elif not args.skip_summary and tracker["summary_batch"]["batch_id"] != "N/A":
         print("\n" + "-" * 40)
         print("📝 Processing Summary Generation Results...")
         print(f"   Output: {service.summaries_dir}/")
@@ -517,71 +602,7 @@ def main():
     # MERGE INTO FINAL OVERVIEW FILES (with improved LLM merge)
     # ═══════════════════════════════════════════════════════════════════════
 
-    from .merge_utils import merge_llm_overview_data
-
-    print("\n" + "-" * 40)
-    print("🔄 Creating Final Overview Files...")
-    print(f"   Output: {service.processed_dir}/")
-    print("-" * 40)
-
-    merge_success = 0
-    merge_failed = 0
-    llm_merged_count = 0
-    llm_fields_total = 0
-
-    for report_id in tracker["reports"].keys():
-        # Find source chunks JSON (searches tier subdirectories)
-        chunks_path = service.find_chunks_path(report_id)
-
-        if not chunks_path or not chunks_path.exists():
-            print(f"  ⚠️  {report_id[:40]}...: chunks.json not found")
-            merge_failed += 1
-            continue
-
-        # Detect tier for output path
-        tier = service.get_tier_from_chunks(chunks_path)
-
-        # Extract from JSON (Phase 10A - free data)
-        overview = extract_overview_from_json(chunks_path)
-
-        # Add base metadata (include tier info)
-        overview["_metadata"] = {
-            "generated_at": datetime.now().isoformat(),
-            "source_json": str(chunks_path),
-            "phase": "10",
-            "government_body_type": tier,
-        }
-
-        # Merge LLM-extracted fields using improved merge logic
-        overview, merge_stats = merge_llm_overview_data(
-            report_id,
-            overview,
-            service.overviews_dir,
-            service.summaries_dir,
-            verbose=False  # Set to True for detailed output
-        )
-
-        # Track merge statistics
-        if merge_stats["llm_file_found"]:
-            llm_merged_count += 1
-            llm_fields_total += merge_stats["fields_merged"]
-
-        # Save final overview to processed directory (tier-aware)
-        output_path = service.get_final_overview_path(report_id, tier)
-        with open(output_path, "w") as f:
-            json.dump(overview, f, indent=2, ensure_ascii=False)
-
-        short_id = report_id[:45] + "..." if len(report_id) > 45 else report_id
-        llm_marker = "✓" if merge_stats["llm_file_found"] else "○"
-        sum_marker = "✓" if merge_stats["summaries_available"] else "○"
-        fields_info = f"{merge_stats['fields_merged']}/4" if merge_stats["llm_file_found"] else "0/4"
-        print(f"  ✅ {short_id} [LLM:{llm_marker} {fields_info} SUM:{sum_marker}]")
-        merge_success += 1
-
-    print(f"\n   Overview files created: {merge_success}, failed: {merge_failed}")
-    if llm_merged_count > 0:
-        avg_fields = llm_fields_total / llm_merged_count
-        print(f"   LLM data merged: {llm_merged_count}/{merge_success} reports (avg {avg_fields:.1f}/4 fields)")
+    merge_success, merge_failed = build_final_overviews(service, tracker["reports"].keys())
 
     # ═══════════════════════════════════════════════════════════════════════
     # UPDATE TRACKER & FINAL SUMMARY

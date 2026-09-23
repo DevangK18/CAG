@@ -24,8 +24,10 @@ Folder Structure:
     └── hierarchical/                          # RAPTOR summaries
         └── {report_id}_hierarchical.json
 
-Default: Gemini 3.5 Flash for GCP credit billing.
-Set USE_CLAUDE_BATCH=true to use Anthropic Batch API instead.
+Default: Gemini (3.1 Pro / Flash) via direct concurrent calls, billed to GCP credits.
+Gemini jobs complete synchronously: outputs are written at generation time and the
+returned batch_id is "gemini_sync_<timestamp>" (no polling or result download needed).
+Set USE_CLAUDE_BATCH=true to use the async Anthropic Batch API instead.
 """
 
 import os
@@ -155,10 +157,10 @@ class BatchService:
                     )
                     project = project or auth_project
 
-                    # Use enterprise=True with location='global' for Gemini Enterprise Agent Platform
+                    # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
                     # (formerly Vertex AI - rebranded as of 2025)
                     self._gemini_client = genai.Client(
-                        enterprise=True,
+                        vertexai=True,
                         project=project,
                         location="global",
                         credentials=credentials
@@ -250,6 +252,7 @@ class BatchService:
 
         # Concurrent processing settings (Gemini mode)
         self.max_workers = 5  # Parallel API calls for Gemini
+        self.max_retries = 3  # Retries for 429/5xx (5s, 10s, 20s backoff)
 
         # Current job timestamp (set when creating job tracker)
         self._current_job_timestamp = None
@@ -306,30 +309,49 @@ class BatchService:
         max_tokens: int,
         custom_id: str,
     ) -> dict:
-        """Process a single request with Gemini."""
+        """Process a single request with Gemini, retrying transient errors."""
         from google.genai import types
 
-        try:
-            response = self._gemini_client.models.generate_content(
-                model=model,
-                contents=[types.Part.from_text(text=prompt)],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=max_tokens,
-                ),
-            )
-            return {
-                "custom_id": custom_id,
-                "content": response.text,
-                "error": None,
-            }
-        except Exception as e:
-            logger.error(f"Gemini request failed for {custom_id}: {e}")
-            return {
-                "custom_id": custom_id,
-                "content": None,
-                "error": str(e),
-            }
+        last_error = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self._gemini_client.models.generate_content(
+                    model=model,
+                    contents=[types.Part.from_text(text=prompt)],
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=max_tokens,
+                    ),
+                )
+                if not response.text:
+                    # Empty text usually means MAX_TOKENS (thinking consumed the budget) or SAFETY
+                    finish_reason = (
+                        response.candidates[0].finish_reason if response.candidates else None
+                    )
+                    raise ValueError(f"Empty response (finish_reason={finish_reason})")
+                return {
+                    "custom_id": custom_id,
+                    "content": response.text,
+                    "error": None,
+                }
+            except Exception as e:
+                last_error = e
+                transient = any(
+                    code in str(e)
+                    for code in ("429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED")
+                )
+                if not transient or attempt == self.max_retries:
+                    break
+                delay = 2 ** attempt * 5
+                logger.warning(f"Gemini request {custom_id} failed ({e}), retrying in {delay}s...")
+                time.sleep(delay)
+
+        logger.error(f"Gemini request failed for {custom_id}: {last_error}")
+        return {
+            "custom_id": custom_id,
+            "content": None,
+            "error": str(last_error),
+        }
 
     def _process_batch_gemini(
         self,
@@ -499,15 +521,9 @@ class BatchService:
 
             output_path = self.get_overview_output_path(report_id)
             try:
-                # Parse JSON response
-                content = result["content"]
-                # Try to extract JSON from the response
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0].strip()
-                elif "```" in content:
-                    content = content.split("```")[1].split("```")[0].strip()
+                from .process_results import clean_json_response
 
-                parsed = json.loads(content)
+                parsed = json.loads(clean_json_response(result["content"]))
                 with open(output_path, "w") as f:
                     json.dump(parsed, f, indent=2)
                 logger.info(f"Saved overview: {output_path}")
@@ -633,11 +649,16 @@ class BatchService:
             return f"gemini_sync_{self._current_job_timestamp}"
 
     def _save_summary_results(self, results: list[dict], id_mapping: dict):
-        """Save Gemini summary results to files, grouped by report."""
+        """
+        Save Gemini summary results to files, grouped by report.
+
+        Uses the same schema as process_results.py (Claude path) so the API's
+        summaries routes read both identically.
+        """
         from collections import defaultdict
 
         # Group by report_id
-        by_report = defaultdict(dict)
+        by_report = defaultdict(lambda: {"variants": {}, "errors": []})
 
         for result in results:
             custom_id = result["custom_id"]
@@ -652,30 +673,43 @@ class BatchService:
 
             if result["error"]:
                 logger.error(f"Summary {variant} failed for {report_id}: {result['error']}")
+                by_report[report_id]["errors"].append({"variant": variant, "error": result["error"]})
                 continue
 
-            by_report[report_id][variant] = result["content"]
+            content = result["content"]
+            by_report[report_id]["variants"][variant] = {
+                "content": content,
+                "word_count": len(content.split()),
+                "thinking_used": False,
+                "model": self.models.get(variant),
+            }
 
         # Save per-report summary files
-        for report_id, summaries in by_report.items():
+        for report_id, data in by_report.items():
             output_path = self.get_summary_output_path(report_id)
             with open(output_path, "w") as f:
                 json.dump({
                     "report_id": report_id,
                     "generated_at": datetime.now().isoformat(),
-                    "model": "gemini-3.8-flash",
-                    "summaries": summaries,
-                }, f, indent=2)
+                    "variants": data["variants"],
+                    "variant_count": len(data["variants"]),
+                    "errors": data["errors"] or None,
+                }, f, indent=2, ensure_ascii=False)
             logger.info(f"Saved summaries: {output_path}")
 
     # ═══════════════════════════════════════════════════════════════════════
     # BATCH STATUS & RESULTS
     # ═══════════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def is_sync_batch(batch_id: str) -> bool:
+        """True for Gemini jobs, which run synchronously and save outputs directly."""
+        return batch_id.startswith("gemini_sync")
+
     def get_batch_status(self, batch_id: str) -> dict:
         """Get current status of a batch job."""
         # Handle Gemini sync mode (already completed)
-        if batch_id.startswith("gemini_sync"):
+        if self.is_sync_batch(batch_id):
             return {
                 "batch_id": batch_id,
                 "status": "ended",
@@ -764,8 +798,12 @@ class BatchService:
         Download results from a completed batch.
 
         Returns:
-            List of {custom_id, report_id, variant, content, thinking, error} dicts
+            List of {custom_id, report_id, variant, content, thinking, error} dicts.
+            Empty for Gemini sync jobs, whose results were saved at generation time.
         """
+        if self.is_sync_batch(batch_id):
+            return []
+
         results = []
         id_mapping = self._load_id_mapping(job_timestamp)
 
@@ -1158,14 +1196,14 @@ class BatchService:
         - Chapter summaries (L2): ~23 per report average
         - Section summaries (L1): ~50 per report average
 
-        Uses Claude Haiku for cost efficiency (~$0.10/report additional).
+        Uses Gemini Flash-Lite (direct calls) or Claude Haiku (Batch API).
 
         Args:
             json_files: List of *_chunks.json file paths
             job_timestamp: Optional timestamp to associate with this batch
 
         Returns:
-            batch_id for tracking
+            batch_id for tracking (or "gemini_sync_*" for Gemini mode)
         """
         from .prompts.hierarchical_summaries import (
             build_chapter_summary_prompt,
@@ -1245,11 +1283,9 @@ class BatchService:
 
                 requests.append({
                     "custom_id": custom_id,
-                    "params": {
-                        "model": hierarchical_models["chapter_summary"],
-                        "max_tokens": hierarchical_max_tokens["chapter_summary"],
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
+                    "prompt": prompt,
+                    "model": hierarchical_models["chapter_summary"],
+                    "max_tokens": hierarchical_max_tokens["chapter_summary"],
                 })
                 chapter_count += 1
 
@@ -1285,11 +1321,9 @@ class BatchService:
 
                 requests.append({
                     "custom_id": custom_id,
-                    "params": {
-                        "model": hierarchical_models["section_summary"],
-                        "max_tokens": hierarchical_max_tokens["section_summary"],
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
+                    "prompt": prompt,
+                    "model": hierarchical_models["section_summary"],
+                    "max_tokens": hierarchical_max_tokens["section_summary"],
                 })
                 section_count += 1
 
@@ -1321,8 +1355,35 @@ class BatchService:
             },
         )
 
+        if not self.use_claude:
+            # Process synchronously with Gemini and save outputs directly
+            results = self._process_batch_gemini(requests, "hierarchical")
+            self._save_hierarchical_results(results, id_mapping)
+
+            success = sum(1 for r in results if r["error"] is None)
+            emitter.emit_decision(
+                "10a",
+                "hierarchical_batch_submission",
+                "completed" if success == len(results) else "partial",
+                ["completed", "partial", "failed"],
+                f"Gemini sync: {success}/{len(results)} succeeded",
+            )
+            return f"gemini_sync_{self._current_job_timestamp}"
+
         # Submit batch using messages.batches API
-        batch = self.client.messages.batches.create(requests=requests)
+        batch = self.client.messages.batches.create(
+            requests=[
+                {
+                    "custom_id": req["custom_id"],
+                    "params": {
+                        "model": req["model"],
+                        "max_tokens": req["max_tokens"],
+                        "messages": [{"role": "user", "content": req["prompt"]}],
+                    },
+                }
+                for req in requests
+            ]
+        )
 
         print(f"✅ Hierarchical batch submitted: {batch.id}")
         print(f"   Reports: {len(json_files)}")
@@ -1358,10 +1419,17 @@ class BatchService:
         Returns:
             Dict with processing stats
         """
-        from collections import defaultdict
+        if self.is_sync_batch(batch_id):
+            print("ℹ️  Gemini hierarchical summaries were saved at generation time")
+            return {"reports_processed": 0, "success_count": 0, "error_count": 0}
 
         results = self.get_batch_results(batch_id, job_timestamp)
         id_mapping = self._load_id_mapping(job_timestamp)
+        return self._save_hierarchical_results(results, id_mapping)
+
+    def _save_hierarchical_results(self, results: list[dict], id_mapping: dict) -> dict:
+        """Group hierarchical summary results by report and save per-report JSON files."""
+        from collections import defaultdict
 
         # Group by report_id
         by_report = defaultdict(lambda: {"chapters": [], "sections": []})
