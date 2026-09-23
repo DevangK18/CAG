@@ -142,45 +142,10 @@ class BatchService:
             self._gemini_client = None
             logger.info("BatchService initialized with Claude Batch API")
         else:
-            from google import genai
-            project = os.getenv("GOOGLE_CLOUD_PROJECT")
-            location = os.getenv("VERTEX_AI_REGION", "us-central1")
-            api_key = os.getenv("GOOGLE_API_KEY")
+            from src.core.gemini_client import get_gemini_client
 
-            # Try Gemini Enterprise Agent Platform first (GCP project billing), fall back to API key
-            if project:
-                try:
-                    # Explicitly get ADC credentials for Gemini Enterprise Agent Platform
-                    import google.auth
-                    credentials, auth_project = google.auth.default(
-                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
-                    )
-                    project = project or auth_project
-
-                    # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
-                    # (formerly Vertex AI - rebranded as of 2025)
-                    self._gemini_client = genai.Client(
-                        vertexai=True,
-                        project=project,
-                        location="global",
-                        credentials=credentials
-                    )
-                    logger.info(f"BatchService initialized with Gemini Enterprise (project={project})")
-                except Exception as e:
-                    logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
-                    if api_key:
-                        self._gemini_client = genai.Client(api_key=api_key)
-                        logger.info("BatchService initialized with Gemini API key")
-                    else:
-                        raise
-            elif api_key:
-                self._gemini_client = genai.Client(api_key=api_key)
-                logger.info("BatchService initialized with Gemini API key")
-            else:
-                raise ValueError(
-                    "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
-                    "or GOOGLE_API_KEY for direct API access."
-                )
+            self._gemini_client = get_gemini_client()
+            logger.info("BatchService initialized with GCP Agent Platform")
             self.client = None  # No Anthropic client needed
 
         # Trace: Emit client mode selection decision

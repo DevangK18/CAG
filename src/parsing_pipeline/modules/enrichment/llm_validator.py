@@ -5,7 +5,7 @@ P3: Implements hybrid validation approach - regex extracts everything,
 LLM validates only uncertain extractions (confidence 0.4-0.7).
 
 Uses Gemini via Vertex AI for GCP credit billing (cost-effective validation).
-Fallback: Direct Gemini API via GOOGLE_API_KEY.
+Billing: GCP project (Agent Platform) via src.core.gemini_client.
 
 Usage:
     from src.parsing_pipeline.modules.enrichment.llm_validator import LLMValidator
@@ -133,7 +133,7 @@ class LLMValidator:
     - Confidence >= upper_bound: Accepted by regex, no LLM needed
 
     Default: Uses Gemini via Vertex AI for GCP credit billing.
-    Fallback: GOOGLE_API_KEY for direct Gemini API access.
+    Billing: GCP project (Agent Platform) via src.core.gemini_client.
     """
 
     def __init__(
@@ -156,7 +156,7 @@ class LLMValidator:
                                    Above this, extraction is accepted without LLM.
             model: Gemini model to use for validation (default: gemini-3.8-flash).
             use_batch_api: Reserved for future batch API support.
-            api_key: Google API key. If None, uses Vertex AI ADC or GOOGLE_API_KEY env var.
+            api_key: Ignored. All calls go through GCP Agent Platform (ADC).
             collect_refinement_data: Whether to log invalid findings for pattern refinement.
             refinement_data_path: Directory to save refinement data.
         """
@@ -164,7 +164,6 @@ class LLMValidator:
         self.upper_bound = confidence_upper_bound
         self.model = model
         self.use_batch_api = use_batch_api
-        self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
 
         # Data collection for pattern refinement
         self.collect_refinement_data = collect_refinement_data
@@ -206,47 +205,10 @@ class LLMValidator:
     def client(self):
         """Lazy-load Gemini client using Vertex AI or API key fallback."""
         if self._client is None:
-            try:
-                from google import genai
+            from src.core.gemini_client import get_gemini_client
 
-                project = os.getenv("GOOGLE_CLOUD_PROJECT")
-                location = os.getenv("VERTEX_AI_REGION", "us-central1")
-
-                # Try Gemini Enterprise first (GCP project billing), fall back to API key
-                if project:
-                    try:
-                        import google.auth
-                        credentials, auth_project = google.auth.default(
-                            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-                        )
-                        project = project or auth_project
-
-                        # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
-                        self._client = genai.Client(
-                            vertexai=True,
-                            project=project,
-                            location="global",
-                            credentials=credentials
-                        )
-                        logger.info(f"LLMValidator using Gemini Enterprise (project={project})")
-                    except Exception as e:
-                        logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
-                        if self._api_key:
-                            self._client = genai.Client(api_key=self._api_key)
-                            logger.info("LLMValidator using Gemini API key")
-                        else:
-                            raise
-                elif self._api_key:
-                    self._client = genai.Client(api_key=self._api_key)
-                    logger.info("LLMValidator using Gemini API key")
-                else:
-                    raise ValueError(
-                        "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
-                        "or GOOGLE_API_KEY for direct API access."
-                    )
-            except ImportError:
-                logger.error("google-genai package not installed. Run: pip install google-genai")
-                raise
+            self._client = get_gemini_client()
+            logger.info("LLMValidator using GCP Agent Platform")
         return self._client
 
     def needs_validation(self, confidence: float) -> bool:

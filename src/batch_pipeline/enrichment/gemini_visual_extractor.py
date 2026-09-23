@@ -229,7 +229,7 @@ class GeminiVisualExtractor:
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
         images_dir: str = "data/extraction_images",
-        requests_per_minute: int = 15,
+        requests_per_minute: int = 120,  # Agent Platform has no fixed RPM (shared quota); 429s are retried
         trace_emitter=None,
     ):
         """
@@ -240,7 +240,7 @@ class GeminiVisualExtractor:
             batch_jobs_dir: Directory for job tracking files
             processed_dir: Directory with processed report JSONs
             images_dir: Directory for saved extraction images
-            requests_per_minute: Rate limit for Gemini API
+            requests_per_minute: Client-side throttle (15 was the AI Studio free-tier limit)
             trace_emitter: Optional TraceEmitter for Phase 10b instrumentation
         """
         self.model = model
@@ -263,55 +263,12 @@ class GeminiVisualExtractor:
 
     @property
     def client(self):
-        """Lazy-initialize Gemini client using Vertex AI or API key fallback."""
+        """Lazy-initialize Gemini client (GCP Agent Platform, project billing)."""
         if self._client is None:
-            try:
-                import os
-                from google import genai
+            from src.core.gemini_client import get_gemini_client
 
-                project = os.getenv("GOOGLE_CLOUD_PROJECT")
-                location = os.getenv("VERTEX_AI_REGION", "us-central1")
-                api_key = os.getenv("GOOGLE_API_KEY")
-
-                # Try Vertex AI first (GCP project billing), fall back to API key
-                if project:
-                    try:
-                        # Explicitly get ADC credentials for Gemini Enterprise Agent Platform
-                        import google.auth
-                        credentials, auth_project = google.auth.default(
-                            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-                        )
-                        # Use auth_project if GOOGLE_CLOUD_PROJECT not set
-                        project = project or auth_project
-
-                        # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
-                        self._client = genai.Client(
-                            vertexai=True,
-                            project=project,
-                            location="global",
-                            credentials=credentials
-                        )
-                        logger.info(f"Gemini client initialized with Enterprise (project={project}, model={self.model})")
-                    except Exception as e:
-                        logger.warning(f"Vertex AI init failed: {e}, trying API key fallback...")
-                        if api_key:
-                            self._client = genai.Client(api_key=api_key)
-                            logger.info(f"Gemini client initialized with API key (model={self.model})")
-                        else:
-                            raise
-                elif api_key:
-                    # Direct API key mode
-                    self._client = genai.Client(api_key=api_key)
-                    logger.info(f"Gemini client initialized with API key (model={self.model})")
-                else:
-                    raise ValueError(
-                        "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Vertex AI "
-                        "or GOOGLE_API_KEY for direct API access."
-                    )
-            except ImportError:
-                raise ImportError(
-                    "google-genai package required. Install: pip install google-genai"
-                )
+            self._client = get_gemini_client()
+            logger.info(f"Gemini client initialized with GCP Agent Platform (model={self.model})")
         return self._client
 
     # ========== RATE LIMITING ==========
@@ -333,6 +290,22 @@ class GeminiVisualExtractor:
                 await asyncio.sleep(sleep_time)
 
         self._request_times.append(time.time())
+
+    async def _generate(self, max_retries: int = 3, **kwargs):
+        """generate_content with backoff on transient errors (429 shared-quota contention, 5xx)."""
+        for attempt in range(max_retries + 1):
+            try:
+                return self.client.models.generate_content(**kwargs)
+            except Exception as e:
+                transient = any(
+                    code in str(e)
+                    for code in ("429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED")
+                )
+                if not transient or attempt == max_retries:
+                    raise
+                delay = 2 ** attempt * 5
+                logger.warning(f"Gemini call failed ({e}), retrying in {delay}s...")
+                await asyncio.sleep(delay)
 
     # ========== SINGLE ITEM EXTRACTION ==========
 
@@ -363,7 +336,7 @@ class GeminiVisualExtractor:
             if context:
                 prompt += f"\n\nCONTEXT:\n{context}"
 
-            response = self.client.models.generate_content(
+            response = await self._generate(
                 model=self.model,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
@@ -407,7 +380,7 @@ class GeminiVisualExtractor:
             if context:
                 prompt += f"\n\nCONTEXT:\n{context}"
 
-            response = self.client.models.generate_content(
+            response = await self._generate(
                 model=self.model,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
@@ -464,7 +437,7 @@ class GeminiVisualExtractor:
 
             parts.append(types.Part.from_text(text=prompt))
 
-            response = self.client.models.generate_content(
+            response = await self._generate(
                 model=self.model,
                 contents=parts,
                 config=types.GenerateContentConfig(

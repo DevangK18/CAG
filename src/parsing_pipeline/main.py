@@ -768,8 +768,8 @@ class PipelineOrchestrator:
         self._phase_header("5.7", "LLM TOC VALIDATION (LOW-QUALITY ONLY)")
         emitter = self.state.trace_emitter
 
-        # Check if GOOGLE_API_KEY is available (for Gemini LLM validation)
-        if os.environ.get("GOOGLE_API_KEY"):
+        # Gemini runs on GCP Agent Platform, so it needs a GCP project (billing target)
+        if os.environ.get("GOOGLE_CLOUD_PROJECT"):
             llm_validator = TOCLLMValidator(trace_emitter=emitter)
             llm_validated_count = 0
             llm_skipped_count = 0
@@ -821,9 +821,9 @@ class PipelineOrchestrator:
                 force=True,
             )
         else:
-            self._log("⚠ SKIPPED: GOOGLE_API_KEY not set", force=True)
+            self._log("⚠ SKIPPED: GOOGLE_CLOUD_PROJECT not set", force=True)
             self._log(
-                "  Set GOOGLE_API_KEY to enable Gemini LLM validation for low-quality TOCs"
+                "  Set GOOGLE_CLOUD_PROJECT to enable Gemini LLM validation for low-quality TOCs"
             )
             # Emit skipped status for all reports
             for task in self.state.layout_complete:
@@ -835,7 +835,7 @@ class PipelineOrchestrator:
                     "llm_validation",
                     "skipped",
                     ["validated", "skipped"],
-                    "GOOGLE_API_KEY not set",
+                    "GOOGLE_CLOUD_PROJECT not set",
                 )
                 emitter.set_phase_status("5.7", "skipped")
 
@@ -1598,7 +1598,7 @@ class PipelineOrchestrator:
             except ImportError as e:
                 self._log(f"⚠️  Gemini extraction not available: {e}", force=True)
                 self._log("   Install: pip install google-genai")
-                self._log("   Set GOOGLE_API_KEY in .env")
+                self._log("   Set GOOGLE_CLOUD_PROJECT in .env")
             except Exception as e:
                 self._log(f"⚠️  Phase 10b failed: {e}", force=True)
                 import traceback

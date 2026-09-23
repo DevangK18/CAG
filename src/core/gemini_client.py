@@ -6,14 +6,15 @@ Centralized client initialization for Google Gemini Enterprise Agent Platform.
 All modules should use get_gemini_client() to ensure consistent configuration.
 
 Configuration:
-- Uses vertexai=True for Gemini Enterprise Agent Platform (GCP billing)
+- Uses vertexai=True for Gemini Enterprise Agent Platform (GCP project billing)
 - Uses location="global" as required by Enterprise API
-- Falls back to API key if GCP project not configured
+- Authenticates with ADC (service account on GCE/Cloud Run, gcloud locally)
+- No API key fallback: AI Studio keys bill separately and hit free-tier limits
 """
 
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,9 @@ _client_mode: Optional[str] = None
 
 def get_gemini_client(force_new: bool = False):
     """
-    Get or create a Gemini client configured for Enterprise Agent Platform.
+    Get or create a Gemini client on GCP Agent Platform (bills to the GCP project).
 
-    Priority:
-    1. Gemini Enterprise (vertexai=True) with GCP project - bills to GCP
-    2. API key fallback - bills to API key account
+    Project is taken from GOOGLE_CLOUD_PROJECT, else from ADC.
 
     Args:
         force_new: Force creation of new client (don't use cache)
@@ -37,7 +36,8 @@ def get_gemini_client(force_new: bool = False):
         Configured genai.Client instance
 
     Raises:
-        ValueError: If no credentials are available
+        ValueError: If no GCP project can be determined
+        google.auth.exceptions.DefaultCredentialsError: If ADC is not configured
         ImportError: If google-genai package is not installed
     """
     global _gemini_client, _client_mode
@@ -47,60 +47,34 @@ def get_gemini_client(force_new: bool = False):
 
     try:
         from google import genai
-
-        project = os.getenv("GOOGLE_CLOUD_PROJECT")
-        api_key = os.getenv("GOOGLE_API_KEY")
-
-        # Try Gemini Enterprise first (GCP project billing)
-        if project:
-            try:
-                import google.auth
-                credentials, auth_project = google.auth.default(
-                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
-                )
-                project = project or auth_project
-
-                # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
-                # This is the correct configuration as of 2025 (formerly Vertex AI)
-                _gemini_client = genai.Client(
-                    vertexai=True,
-                    project=project,
-                    location="global",
-                    credentials=credentials
-                )
-                _client_mode = "enterprise"
-                logger.info(f"Gemini client initialized with Enterprise (project={project})")
-                return _gemini_client
-
-            except Exception as e:
-                logger.warning(f"Enterprise init failed: {e}, trying API key fallback...")
-                if api_key:
-                    _gemini_client = genai.Client(api_key=api_key)
-                    _client_mode = "api_key"
-                    logger.info("Gemini client initialized with API key (fallback)")
-                    return _gemini_client
-                else:
-                    raise
-
-        # API key mode
-        elif api_key:
-            _gemini_client = genai.Client(api_key=api_key)
-            _client_mode = "api_key"
-            logger.info("Gemini client initialized with API key")
-            return _gemini_client
-
-        else:
-            raise ValueError(
-                "No Gemini credentials found. Set GOOGLE_CLOUD_PROJECT for Enterprise "
-                "or GOOGLE_API_KEY for direct API access."
-            )
-
+        import google.auth
     except ImportError:
         raise ImportError("google-genai package required. Install: pip install google-genai")
 
+    credentials, auth_project = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    project = os.getenv("GOOGLE_CLOUD_PROJECT") or auth_project
+    if not project:
+        raise ValueError(
+            "No GCP project found. Set GOOGLE_CLOUD_PROJECT or configure ADC "
+            "(gcloud auth application-default login)."
+        )
+
+    # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
+    _gemini_client = genai.Client(
+        vertexai=True,
+        project=project,
+        location="global",
+        credentials=credentials,
+    )
+    _client_mode = "enterprise"
+    logger.info(f"Gemini client initialized with Enterprise (project={project})")
+    return _gemini_client
+
 
 def get_client_mode() -> Optional[str]:
-    """Get the current client mode ('enterprise' or 'api_key')."""
+    """Get the current client mode (always 'enterprise' once initialized)."""
     return _client_mode
 
 

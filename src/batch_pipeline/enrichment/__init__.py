@@ -10,7 +10,7 @@ Architecture:
 - EnrichmentService: Main orchestrator coordinating enrichment
 
 Default: Uses Gemini via Vertex AI for GCP credit billing.
-Fallback: GOOGLE_API_KEY for direct Gemini API access.
+Billing: GCP project (Agent Platform) via src.core.gemini_client.
 """
 
 from .enrichment_router import EnrichmentRouter, EnrichmentTask, RoutingDecision
