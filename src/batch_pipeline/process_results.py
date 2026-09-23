@@ -602,6 +602,24 @@ def main():
     # MERGE INTO FINAL OVERVIEW FILES (with improved LLM merge)
     # ═══════════════════════════════════════════════════════════════════════
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # PROCESS HIERARCHICAL (RAPTOR) RESULTS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    hierarchical_batch_id = tracker.get("hierarchical_batch", {}).get("batch_id", "N/A")
+    if hierarchical_batch_id != "N/A":
+        print("\n" + "-" * 40)
+        print("🌳 Processing Hierarchical (RAPTOR) Summary Results...")
+        print("-" * 40)
+        try:
+            hier_stats = service.process_hierarchical_results(hierarchical_batch_id, job_timestamp)
+            print(
+                f"\n   Hierarchical: {hier_stats['success_count']} success, "
+                f"{hier_stats['error_count']} failed"
+            )
+        except Exception as e:
+            print(f"❌ Failed to process hierarchical results: {e}")
+
     merge_success, merge_failed = build_final_overviews(service, tracker["reports"].keys())
 
     # ═══════════════════════════════════════════════════════════════════════

@@ -1224,8 +1224,8 @@ class BatchService:
         else:
             # Gemini models for GCP credit billing
             hierarchical_models = {
-                "chapter_summary": "gemini-3.8-flash-lite",
-                "section_summary": "gemini-3.8-flash-lite",
+                "chapter_summary": "gemini-3.5-flash-lite",
+                "section_summary": "gemini-3.5-flash-lite",
             }
         hierarchical_max_tokens = {
             "chapter_summary": 500,   # 3-5 sentences

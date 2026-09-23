@@ -1423,7 +1423,9 @@ class PipelineOrchestrator:
                     self._log(
                         f"Submitting {len(json_files)} reports for Phase 10a processing..."
                     )
-                    self._log("  (Overview extraction + 5 summary variants)")
+                    self._log(
+                        "  (Overview extraction + 5 summary variants + RAPTOR chapter/section summaries)"
+                    )
 
                     emitter = self.state.trace_emitter
                     logger.info("Phase 10a: Initializing BatchService...")
@@ -1433,6 +1435,7 @@ class PipelineOrchestrator:
                     # Gemini: runs to completion here. Claude: submits async batches.
                     overview_batch_id = service.submit_overview_batch(json_files)
                     summary_batch_id = service.submit_summary_batch(json_files)
+                    hierarchical_batch_id = service.submit_hierarchical_batch(json_files)
 
                     # Create job tracker
                     report_ids = [f.stem.replace("_chunks", "") for f in json_files]
@@ -1440,6 +1443,7 @@ class PipelineOrchestrator:
                         overview_batch_id=overview_batch_id,
                         summary_batch_id=summary_batch_id,
                         report_ids=report_ids,
+                        hierarchical_batch_id=hierarchical_batch_id,
                     )
 
                     if service.use_claude:
@@ -1448,6 +1452,7 @@ class PipelineOrchestrator:
                         self._log(f"\n✅ Phase 10a batch jobs submitted!", force=True)
                         self._log(f"   Overview Batch: {overview_batch_id}")
                         self._log(f"   Summary Batch:  {summary_batch_id}")
+                        self._log(f"   RAPTOR Batch:   {hierarchical_batch_id}")
                         self._log(f"   Job Tracker:    {phase10_tracker_path}")
                         self._log("   Finish with: python -m src.batch_pipeline.process_results")
                     else:
