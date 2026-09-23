@@ -156,6 +156,12 @@ jobs:
           mkdir -p ${WORK_DIR}/data/extraction_images/{tables,charts}
           mkdir -p ${WORK_DIR}/logs/traces/{union,state,local_body}
 
+          # The parsing image is ~32GB unpacked; each pull of :latest leaves the previous
+          # one dangling, which filled the 100GB disk. Keep only the current image.
+          echo "Removing old parsing images..."
+          docker image prune -f
+          df -h / | tail -1
+
           # Google Cloud CLI Docker image for gsutil (COS doesn't have gsutil installed)
           GCLOUD_IMAGE="gcr.io/google.com/cloudsdktool/google-cloud-cli:stable"
 
@@ -188,6 +194,8 @@ jobs:
             echo "Expected image: ${PARSING_IMAGE}"
             exit 1
           }
+          docker image prune -f
+          df -h / | tail -1
 
           echo "Starting parsing pipeline..."
 
