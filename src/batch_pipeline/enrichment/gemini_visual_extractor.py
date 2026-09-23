@@ -291,21 +291,11 @@ class GeminiVisualExtractor:
 
         self._request_times.append(time.time())
 
-    async def _generate(self, max_retries: int = 3, **kwargs):
-        """generate_content with backoff on transient errors (429 shared-quota contention, 5xx)."""
-        for attempt in range(max_retries + 1):
-            try:
-                return self.client.models.generate_content(**kwargs)
-            except Exception as e:
-                transient = any(
-                    code in str(e)
-                    for code in ("429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED")
-                )
-                if not transient or attempt == max_retries:
-                    raise
-                delay = 2 ** attempt * 5
-                logger.warning(f"Gemini call failed ({e}), retrying in {delay}s...")
-                await asyncio.sleep(delay)
+    async def _generate(self, **kwargs):
+        """generate_content with backoff on transient errors (see gemini_client.generate_with_retry)."""
+        from src.core.gemini_client import generate_with_retry
+
+        return await asyncio.to_thread(generate_with_retry, **kwargs)
 
     # ========== SINGLE ITEM EXTRACTION ==========
 

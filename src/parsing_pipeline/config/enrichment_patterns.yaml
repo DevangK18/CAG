@@ -336,6 +336,6 @@ confidence_thresholds:
 # LLM Validation Configuration
 llm_validation:
   enabled: true
-  model: "gpt-4o-mini"
+  model: "gemini-3.8-flash"  # Runs on GCP Agent Platform
   collect_refinement_data: true  # Log invalid findings for pattern refinement
   refinement_data_path: "logs/pattern_refinement/"

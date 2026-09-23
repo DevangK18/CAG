@@ -217,7 +217,6 @@ class BatchService:
 
         # Concurrent processing settings (Gemini mode)
         self.max_workers = 5  # Parallel API calls for Gemini
-        self.max_retries = 3  # Retries for 429/5xx (5s, 10s, 20s backoff)
 
         # Current job timestamp (set when creating job tracker)
         self._current_job_timestamp = None
@@ -276,47 +275,29 @@ class BatchService:
     ) -> dict:
         """Process a single request with Gemini, retrying transient errors."""
         from google.genai import types
+        from src.core.gemini_client import generate_with_retry
 
-        last_error = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = self._gemini_client.models.generate_content(
-                    model=model,
-                    contents=[types.Part.from_text(text=prompt)],
-                    config=types.GenerateContentConfig(
-                        temperature=0.1,
-                        max_output_tokens=max_tokens,
-                    ),
-                )
-                if not response.text:
-                    # Empty text usually means MAX_TOKENS (thinking consumed the budget) or SAFETY
-                    finish_reason = (
-                        response.candidates[0].finish_reason if response.candidates else None
-                    )
-                    raise ValueError(f"Empty response (finish_reason={finish_reason})")
-                return {
-                    "custom_id": custom_id,
-                    "content": response.text,
-                    "error": None,
-                }
-            except Exception as e:
-                last_error = e
-                transient = any(
-                    code in str(e)
-                    for code in ("429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED")
-                )
-                if not transient or attempt == self.max_retries:
-                    break
-                delay = 2 ** attempt * 5
-                logger.warning(f"Gemini request {custom_id} failed ({e}), retrying in {delay}s...")
-                time.sleep(delay)
-
-        logger.error(f"Gemini request failed for {custom_id}: {last_error}")
-        return {
-            "custom_id": custom_id,
-            "content": None,
-            "error": str(last_error),
-        }
+        try:
+            response = generate_with_retry(
+                model=model,
+                contents=[types.Part.from_text(text=prompt)],
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=max_tokens,
+                ),
+            )
+            return {
+                "custom_id": custom_id,
+                "content": response.text,
+                "error": None,
+            }
+        except Exception as e:
+            logger.error(f"Gemini request failed for {custom_id}: {e}")
+            return {
+                "custom_id": custom_id,
+                "content": None,
+                "error": str(e),
+            }
 
     def _process_batch_gemini(
         self,

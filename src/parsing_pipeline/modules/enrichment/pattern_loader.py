@@ -230,7 +230,7 @@ class PatternLoader:
         config = self._load_config()
         return config.get("llm_validation", {
             "enabled": False,
-            "model": "gpt-4o-mini",
+            "model": "gemini-3.8-flash",
             "collect_refinement_data": False,
             "refinement_data_path": "logs/pattern_refinement/",
         })

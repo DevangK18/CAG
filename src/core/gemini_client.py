@@ -73,6 +73,54 @@ def get_gemini_client(force_new: bool = False):
     return _gemini_client
 
 
+_TRANSIENT_MARKERS = (
+    "429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED", "Empty response",
+)
+
+
+def generate_with_retry(client=None, max_retries: int = 5, **kwargs):
+    """
+    client.models.generate_content with exponential backoff on transient errors.
+
+    Agent Platform serves Gemini from shared capacity (Dynamic Shared Quota), so
+    429 RESOURCE_EXHAUSTED can occur on paid projects when a model is busy; it is
+    not a fixed quota and succeeds on retry. Empty responses are retried too.
+
+    Args:
+        client: genai.Client to use (default: shared Agent Platform client)
+        max_retries: Retries after the first attempt (~5s, 10s, 20s, 40s, 80s)
+
+    Returns:
+        GenerateContentResponse with non-empty text
+
+    Raises:
+        The last error once retries are exhausted, or immediately if non-transient
+    """
+    import random
+    import time
+
+    client = client or get_gemini_client()
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.models.generate_content(**kwargs)
+            if not response.text:
+                finish_reason = (
+                    response.candidates[0].finish_reason if response.candidates else None
+                )
+                if "MAX_TOKENS" in str(finish_reason):
+                    # Deterministic: output budget spent (often on thinking), retrying won't help
+                    raise ValueError("No text: max_output_tokens exhausted (finish_reason=MAX_TOKENS)")
+                raise ValueError(f"Empty response (finish_reason={finish_reason})")
+            return response
+        except Exception as e:
+            transient = any(marker in str(e) for marker in _TRANSIENT_MARKERS)
+            if not transient or attempt == max_retries:
+                raise
+            delay = 5 * 2 ** attempt * random.uniform(0.8, 1.2)
+            logger.warning(f"Gemini call failed ({e}), retry {attempt + 1}/{max_retries} in {delay:.0f}s")
+            time.sleep(delay)
+
+
 def get_client_mode() -> Optional[str]:
     """Get the current client mode (always 'enterprise' once initialized)."""
     return _client_mode

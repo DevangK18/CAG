@@ -250,13 +250,15 @@ class LLMValidator:
 
         try:
             from google.genai import types
+            from src.core.gemini_client import generate_with_retry
 
-            response = self.client.models.generate_content(
+            response = generate_with_retry(
+                client=self.client,
                 model=self.model,
                 contents=[types.Part.from_text(text=full_prompt)],
                 config=types.GenerateContentConfig(
                     temperature=0.1,  # Low temperature for consistent validation
-                    max_output_tokens=150,
+                    max_output_tokens=1024,  # Includes thinking tokens (~300); 150 truncated replies
                 ),
             )
 

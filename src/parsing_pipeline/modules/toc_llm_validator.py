@@ -225,8 +225,10 @@ Return ONLY the JSON array, no explanations."""
         try:
             from google.genai import types
 
-            client = self._get_client()
-            response = client.models.generate_content(
+            from src.core.gemini_client import generate_with_retry
+
+            response = generate_with_retry(
+                client=self._get_client(),
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
