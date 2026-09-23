@@ -133,9 +133,9 @@ Return ONLY the JSON array, no explanations."""
                         )
                         project = project or auth_project
 
-                        # Use enterprise=True with location='global' for Gemini Enterprise Agent Platform
+                        # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
                         self._client = genai.Client(
-                            enterprise=True,
+                            vertexai=True,
                             project=project,
                             location="global",
                             credentials=credentials

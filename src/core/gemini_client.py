@@ -6,7 +6,7 @@ Centralized client initialization for Google Gemini Enterprise Agent Platform.
 All modules should use get_gemini_client() to ensure consistent configuration.
 
 Configuration:
-- Uses enterprise=True for Gemini Enterprise Agent Platform (GCP billing)
+- Uses vertexai=True for Gemini Enterprise Agent Platform (GCP billing)
 - Uses location="global" as required by Enterprise API
 - Falls back to API key if GCP project not configured
 """
@@ -27,7 +27,7 @@ def get_gemini_client(force_new: bool = False):
     Get or create a Gemini client configured for Enterprise Agent Platform.
 
     Priority:
-    1. Gemini Enterprise (enterprise=True) with GCP project - bills to GCP
+    1. Gemini Enterprise (vertexai=True) with GCP project - bills to GCP
     2. API key fallback - bills to API key account
 
     Args:
@@ -60,10 +60,10 @@ def get_gemini_client(force_new: bool = False):
                 )
                 project = project or auth_project
 
-                # Use enterprise=True with location='global' for Gemini Enterprise Agent Platform
+                # Use vertexai=True with location="global" (google-genai 1.x has no `enterprise` kwarg; it is the 2.x alias)
                 # This is the correct configuration as of 2025 (formerly Vertex AI)
                 _gemini_client = genai.Client(
-                    enterprise=True,
+                    vertexai=True,
                     project=project,
                     location="global",
                     credentials=credentials
