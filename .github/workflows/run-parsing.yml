@@ -8,6 +8,10 @@
 # - VM uses Debian 12 with Docker installed
 # - SSH key is added to project metadata BEFORE VM starts (ensures key sync at boot)
 # - Uses script file approach: create script → scp to VM → ssh execute
+# - The pipeline runs DETACHED on the VM (GitHub-hosted jobs are capped at 6h):
+#   the VM enforces max_hours, streams its log to gs://<bucket>/runs/<run_id>/,
+#   writes a status file there, and powers itself off when done. This job polls
+#   that status until the pipeline finishes or the job nears GitHub's 6h cap.
 
 name: Run Parsing Pipeline
 
@@ -34,6 +38,11 @@ on:
         required: false
         type: boolean
         default: false
+      max_hours:
+        description: 'Max pipeline runtime on the VM in hours (enforced on the VM, not by GitHub)'
+        required: false
+        type: string
+        default: '12'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -45,7 +54,7 @@ jobs:
   run-parsing:
     name: Run Parsing Pipeline
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max
+    timeout-minutes: 360  # GitHub-hosted cap; pipeline runtime is bounded by max_hours on the VM
 
     permissions:
       contents: read
@@ -209,7 +218,9 @@ jobs:
           fi
 
           # --network=host allows container to access GCE metadata server for Vertex AI ADC
-          docker run --rm --network=host ${GPU_FLAG} \
+          # Named so the detached wrapper can stop it when max_hours is exceeded
+          docker rm -f cag-parsing-run 2>/dev/null || true
+          docker run --rm --name cag-parsing-run --network=host ${GPU_FLAG} \
             -v ${WORK_DIR}/data:/app/data \
             -v ${WORK_DIR}/logs:/app/logs \
             -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
@@ -261,39 +272,125 @@ jobs:
           head -50 /tmp/run_pipeline.sh
           echo "..."
 
-          # Copy script to VM
-          gcloud compute scp /tmp/run_pipeline.sh ${{ env.VM_NAME }}:/tmp/run_pipeline.sh \
+          # Detached wrapper: enforces max_hours, streams the log + status to GCS,
+          # and powers the VM off when finished (independent of this GitHub job)
+          cat > /tmp/run_detached.sh << 'SCRIPT_EOF'
+          #!/bin/bash
+          export HOME="/var/tmp/cag"
+          export DOCKER_CONFIG="${HOME}/.docker"
+          mkdir -p "${DOCKER_CONFIG}"
+          echo '{"credHelpers":{"us-central1-docker.pkg.dev":"gcr","gcr.io":"gcr"}}' > "${DOCKER_CONFIG}/config.json"
+
+          DATA_BUCKET="${DATA_BUCKET}"
+          RUN_ID="${RUN_ID}"
+          KEEP_VM="${KEEP_VM}"
+          MAX_HOURS="${MAX_HOURS}"
+          RUN_DIR=/var/tmp/cag/runs/${RUN_ID}
+          GCS_RUN=gs://${DATA_BUCKET}/runs/${RUN_ID}
+          GCLOUD_IMAGE="gcr.io/google.com/cloudsdktool/google-cloud-cli:stable"
+          # sudo: runs/ may be root-owned (Docker creates missing bind-mount dirs as root)
+          sudo -n mkdir -p ${RUN_DIR}
+          sudo -n chown "$(id -u):$(id -g)" ${RUN_DIR}
+
+          gcs_cp() {
+            docker run --rm --network=host -v ${RUN_DIR}:/run_dir ${GCLOUD_IMAGE} \
+              gsutil -q cp "/run_dir/$1" "${GCS_RUN}/$1" || true
+          }
+          set_status() { echo "$1" > ${RUN_DIR}/status; gcs_cp status; }
+
+          set_status running
+          ( while sleep 300; do gcs_cp pipeline.log; done ) &
+          SYNC_PID=$!
+
+          timeout --kill-after=2m "${MAX_HOURS}h" bash /tmp/run_pipeline.sh > ${RUN_DIR}/pipeline.log 2>&1
+          RC=$?
+
+          kill ${SYNC_PID} 2>/dev/null
+          if [ ${RC} -eq 124 ] || [ ${RC} -eq 137 ]; then
+            echo "Pipeline exceeded ${MAX_HOURS}h limit; stopping container" >> ${RUN_DIR}/pipeline.log
+            docker rm -f cag-parsing-run >> ${RUN_DIR}/pipeline.log 2>&1
+            FINAL="timeout"
+          elif [ ${RC} -eq 0 ]; then
+            FINAL="success"
+          else
+            FINAL="failed:${RC}"
+          fi
+          gcs_cp pipeline.log
+          set_status "${FINAL}"
+
+          if [ "${KEEP_VM}" != "true" ]; then
+            sudo -n poweroff
+          fi
+          SCRIPT_EOF
+
+          sed -i "s|\${DATA_BUCKET}|${{ env.DATA_BUCKET }}|g" /tmp/run_detached.sh
+          sed -i "s|\${RUN_ID}|${{ github.run_id }}|g" /tmp/run_detached.sh
+          sed -i "s|\${KEEP_VM}|${{ inputs.keep_vm_running }}|g" /tmp/run_detached.sh
+          sed -i "s|\${MAX_HOURS}|${{ inputs.max_hours || '12' }}|g" /tmp/run_detached.sh
+
+          # Copy scripts to VM
+          gcloud compute scp /tmp/run_pipeline.sh /tmp/run_detached.sh ${{ env.VM_NAME }}:/tmp/ \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }}
 
       - name: Run Parsing Pipeline
+        id: pipeline
         run: |
-          echo "Running parsing pipeline..."
+          GCS_RUN="gs://${{ env.DATA_BUCKET }}/runs/${{ github.run_id }}"
+          echo "Running parsing pipeline (detached on VM)..."
           echo "  Manifest: ${{ inputs.manifest }}"
           echo "  Skip phases: ${{ inputs.skip_phases }}"
           echo "  Reports: ${{ inputs.reports }}"
+          echo "  Max hours: ${{ inputs.max_hours || '12' }}"
+          echo "  Live log: ${GCS_RUN}/pipeline.log"
 
-          # SSH keep-alives are protocol-level (independent of pipeline output), so a
-          # 5-minute tolerance is enough and detects a lost VM quickly (was 30 min)
-          START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          if ! gcloud compute ssh ${{ env.VM_NAME }} \
+          # Launch detached so the run survives SSH drops and GitHub's 6h job cap
+          gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} \
-            --ssh-flag="-o ServerAliveInterval=30" \
-            --ssh-flag="-o ServerAliveCountMax=10" \
-            --command="bash /tmp/run_pipeline.sh"; then
-            PREEMPTED=$(gcloud compute operations list \
-              --project=${{ env.PROJECT_ID }} \
-              --filter="operationType=compute.instances.preempted AND targetLink~${{ env.VM_NAME }} AND insertTime>=${START}" \
-              --format="value(insertTime)")
-            if [ -n "${PREEMPTED}" ]; then
-              echo "::error::Spot VM was preempted by GCP at ${PREEMPTED}. Not a pipeline error; re-run the workflow."
-            fi
-            exit 1
-          fi
+            --command="setsid nohup bash /tmp/run_detached.sh > /dev/null 2>&1 < /dev/null & echo launched"
+          echo "launched=true" >> $GITHUB_OUTPUT
 
+          # Poll status; stop polling ~20 min before GitHub's 6h cap (build + setup use ~20 min)
+          DEADLINE=$(( $(date +%s) + 300 * 60 ))
+          LAST_LINES=0
+          STATUS=""
+          while [ $(date +%s) -lt ${DEADLINE} ]; do
+            sleep 120
+            STATUS=$(gcloud storage cat "${GCS_RUN}/status" 2>/dev/null || echo "pending")
+            if gcloud storage cp "${GCS_RUN}/pipeline.log" /tmp/pipeline.log --quiet 2>/dev/null; then
+              TOTAL=$(wc -l < /tmp/pipeline.log)
+              if [ ${TOTAL} -gt ${LAST_LINES} ]; then
+                tail -n +$((LAST_LINES + 1)) /tmp/pipeline.log
+                LAST_LINES=${TOTAL}
+              fi
+            fi
+            case "${STATUS}" in
+              success)
+                echo "✅ Pipeline completed successfully"
+                echo "finished=true" >> $GITHUB_OUTPUT
+                exit 0 ;;
+              failed:*|timeout)
+                echo "::error::Pipeline ${STATUS}. Full log: ${GCS_RUN}/pipeline.log"
+                echo "finished=true" >> $GITHUB_OUTPUT
+                exit 1 ;;
+            esac
+            # A stopped VM with a non-final status means it died (e.g. host failure)
+            VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }} --format="value(status)")
+            if [ "${VM_STATUS}" = "TERMINATED" ]; then
+              echo "::error::VM stopped before the pipeline reported a final status (last: ${STATUS})"
+              echo "finished=true" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          done
+
+          echo "::notice::Pipeline still running on the VM (status: ${STATUS}). It continues without this job and powers the VM off when done. Status: ${GCS_RUN}/status"
+          echo "finished=false" >> $GITHUB_OUTPUT
+
+      # Skipped while the detached pipeline is still running (the VM powers itself off)
       - name: Stop Parsing VM
-        if: ${{ !inputs.keep_vm_running && always() }}
+        if: ${{ always() && !inputs.keep_vm_running && steps.pipeline.outputs.finished != 'false' }}
         run: |
           echo "Stopping VM to save costs..."
           gcloud compute instances stop ${{ env.VM_NAME }} \
@@ -308,3 +405,5 @@ jobs:
           echo "**Skipped Phases:** ${{ inputs.skip_phases || 'None' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Reports:** ${{ inputs.reports || 'All' }}" >> $GITHUB_STEP_SUMMARY
           echo "**VM Kept Running:** ${{ inputs.keep_vm_running }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Max Hours:** ${{ inputs.max_hours || '12' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Log / Status:** gs://${{ env.DATA_BUCKET }}/runs/${{ github.run_id }}/" >> $GITHUB_STEP_SUMMARY
