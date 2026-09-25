@@ -1,0 +1,469 @@
+# =============================================================================
+# Run Parsing Pipeline (GPU)
+# =============================================================================
+# GPU variant of run-parsing.yml. Drives a separate VM with an NVIDIA GPU so
+# Docling (Phase 5) runs on CUDA. The CPU workflow and VM are untouched.
+#
+# Key details:
+# - VM runs a Google Deep Learning VM image (driver + NVIDIA Container Toolkit
+#   preinstalled); infra/scripts/setup-gpu-vm.sh adds Docker idempotently
+# - Always runs the container with --gpus all and FAILS if the host GPU or
+#   torch.cuda inside the image is unavailable (never silently falls back to CPU)
+# - Results go to gs://<bucket>/<output_prefix>/..., never to production paths;
+#   processed/manifest.json is never uploaded
+# - Same detached design as the CPU workflow: the VM enforces max_hours,
+#   streams its log + status to gs://<bucket>/runs-gpu/<run_id>/ and powers
+#   itself off; this job polls until done or GitHub's 6h cap nears
+# - VM name/zone are inputs so more GPU VMs (e.g. one per tier) can be added
+
+name: Run Parsing Pipeline (GPU)
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: 'Manifest file name (in gs://bucket/manifests/)'
+        required: true
+        default: 'CAG Main Docs CCDT.xlsx'
+        type: string
+      skip_phases:
+        description: 'Phases to skip (comma-separated, e.g., 10a,10b,10c)'
+        required: false
+        type: string
+        default: ''
+      reports:
+        description: 'Specific report IDs (space-separated, leave empty for all)'
+        required: false
+        type: string
+        default: ''
+      output_prefix:
+        description: 'GCS prefix for results: gs://bucket/<prefix>/processed/<tier>/ etc.'
+        required: true
+        type: string
+        default: 'gpu-test'
+      vm_name:
+        description: 'GPU VM to run on'
+        required: true
+        type: string
+        default: 'cag-parsing-gpu-vm'
+      zone:
+        description: 'Zone of the GPU VM'
+        required: true
+        type: string
+        default: 'us-central1-b'
+      keep_vm_running:
+        description: 'Keep VM running after completion (for debugging)'
+        required: false
+        type: boolean
+        default: false
+      max_hours:
+        description: 'Max pipeline runtime on the VM in hours (enforced on the VM, not by GitHub)'
+        required: false
+        type: string
+        default: '12'
+
+# One run per VM at a time; queued runs wait instead of cancelling a live run
+concurrency:
+  group: run-parsing-gpu-${{ inputs.vm_name }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  ZONE: ${{ inputs.zone }}
+  VM_NAME: ${{ inputs.vm_name }}
+  DATA_BUCKET: cag-data-443e4a28
+  OUTPUT_PREFIX: ${{ inputs.output_prefix }}
+  CONTAINER_NAME: cag-parsing-gpu-run
+
+jobs:
+  run-parsing-gpu:
+    name: Run Parsing Pipeline (GPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # GitHub-hosted cap; pipeline runtime is bounded by max_hours on the VM
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Validate inputs
+        run: |
+          PREFIX="${{ inputs.output_prefix }}"
+          if ! [[ "${PREFIX}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::output_prefix must be a single path segment like 'gpu-test' (got '${PREFIX}')"
+            exit 1
+          fi
+          # Never let GPU output land in the production tree
+          case "${PREFIX}" in
+            raw|processed|batch_jobs|manifests|runs|runs-gpu|logs|extraction_images|entity_graph|canonical|traces)
+              echo "::error::output_prefix '${PREFIX}' collides with a production path"
+              exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build and Push GPU Parsing Image
+        run: |
+          # Separate image name so the CPU workflow's cag-parsing:latest is never touched
+          IMAGE="us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing-gpu:latest"
+          DOCKERFILE=Dockerfile.parsing
+          [ -f Dockerfile.parsing-gpu ] && DOCKERFILE=Dockerfile.parsing-gpu
+          echo "Building GPU parsing image: $IMAGE (from $DOCKERFILE)"
+          docker build -f "$DOCKERFILE" -t "$IMAGE" .
+          echo "Pushing to Artifact Registry..."
+          docker push "$IMAGE"
+          echo "✅ GPU parsing image built and pushed"
+
+      - name: Setup SSH Key
+        run: |
+          # Add the SSH key to project metadata BEFORE starting the VM so it syncs at boot
+          gcloud compute config-ssh --project=${{ env.PROJECT_ID }} --quiet
+
+      - name: Start GPU VM
+        run: |
+          # GPUs stock out: retry instead of masking the error with '|| true'
+          for i in 1 2 3 4 5 6; do
+            STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }} --format="value(status)")
+            echo "VM status: ${STATUS}"
+            if [ "${STATUS}" = "RUNNING" ]; then
+              exit 0
+            fi
+            if [ "${STATUS}" = "TERMINATED" ]; then
+              echo "Starting VM ${{ env.VM_NAME }} (attempt $i)..."
+              gcloud compute instances start ${{ env.VM_NAME }} \
+                --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }} && exit 0
+            fi
+            echo "Not started yet; retrying in 60s (GPU stockout or VM still stopping)"
+            sleep 60
+          done
+          echo "::error::Could not start ${{ env.VM_NAME }} in ${{ env.ZONE }} (likely GPU stockout). Retry later."
+          exit 1
+
+      - name: Wait for VM SSH
+        run: |
+          for i in {1..12}; do
+            echo "Attempt $i: trying SSH..."
+            if gcloud compute ssh ${{ env.VM_NAME }} \
+              --zone=${{ env.ZONE }} \
+              --project=${{ env.PROJECT_ID }} \
+              --command="echo 'VM is ready'" 2>&1; then
+              echo "VM SSH is ready"
+              exit 0
+            fi
+            echo "Attempt $i failed, waiting..."
+            sleep 20
+          done
+          echo "Failed to connect to VM"
+          exit 1
+
+      - name: Prepare GPU host
+        run: |
+          # Idempotent: verifies the driver and installs Docker / NVIDIA runtime only if missing
+          gcloud compute scp infra/scripts/setup-gpu-vm.sh ${{ env.VM_NAME }}:/tmp/setup-gpu-vm.sh \
+            --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }}
+          gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command="sudo -n bash /tmp/setup-gpu-vm.sh"
+
+      - name: Create and copy run script
+        run: |
+          cat > /tmp/run_pipeline.sh << 'SCRIPT_EOF'
+          #!/bin/bash
+          set -e
+
+          # Docker config under a writable HOME (SSH HOME may be stale)
+          export HOME="/var/tmp/cag"
+          export DOCKER_CONFIG="${HOME}/.docker"
+          mkdir -p "${DOCKER_CONFIG}"
+          echo '{"credHelpers":{"us-central1-docker.pkg.dev":"gcr","gcr.io":"gcr"}}' > "${DOCKER_CONFIG}/config.json"
+
+          # Configuration - these are replaced by sed below
+          DATA_BUCKET="${DATA_BUCKET}"
+          PROJECT_ID="${PROJECT_ID}"
+          PROJECT_ID=$(echo "${PROJECT_ID}" | tr -d '[:space:]')
+          MANIFEST="${MANIFEST}"
+          SKIP_ARG="${SKIP_ARG}"
+          REPORTS_ARG="${REPORTS_ARG}"
+          OUTPUT_PREFIX="${OUTPUT_PREFIX}"
+          CONTAINER_NAME="${CONTAINER_NAME}"
+          GCS_OUT="gs://${DATA_BUCKET}/${OUTPUT_PREFIX}"
+
+          echo "============================================="
+          echo "CAG Parsing Pipeline (GPU)"
+          echo "============================================="
+          echo "PROJECT_ID: ${PROJECT_ID}"
+          echo "DATA_BUCKET: ${DATA_BUCKET}"
+          echo "MANIFEST: ${MANIFEST}"
+          echo "SKIP_ARG: ${SKIP_ARG}"
+          echo "REPORTS_ARG: ${REPORTS_ARG}"
+          echo "OUTPUT: ${GCS_OUT}/"
+          echo ""
+
+          # Fail fast: a GPU run must never silently fall back to CPU
+          if ! command -v nvidia-smi &> /dev/null || ! nvidia-smi &> /dev/null; then
+            echo "ERROR: nvidia-smi not available on the host; refusing to run on CPU"
+            exit 2
+          fi
+          echo "🚀 Host GPU: $(nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader)"
+
+          WORK_DIR=/var/tmp/cag
+          mkdir -p ${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
+          mkdir -p ${WORK_DIR}/data/processed/ocred
+          mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
+          mkdir -p ${WORK_DIR}/data/extraction_images/{tables,charts}
+          mkdir -p ${WORK_DIR}/logs/traces/{union,state,local_body}
+
+          # The parsing image is ~32GB unpacked; keep only the current image
+          echo "Removing old images..."
+          docker image prune -f
+          df -h / | tail -1
+
+          GCLOUD_IMAGE="gcr.io/google.com/cloudsdktool/google-cloud-cli:stable"
+          docker pull ${GCLOUD_IMAGE}
+
+          # gsutil via Docker; --network=host reaches the metadata server for auth
+          run_gsutil() {
+            docker run --rm --network=host \
+              -v ${WORK_DIR}:/workspace \
+              ${GCLOUD_IMAGE} \
+              gsutil "$@"
+          }
+
+          # PDFs are read from the shared raw/ cache (read-only); processed state
+          # comes only from the output prefix so production data is never mixed in
+          echo "Syncing data from GCS..."
+          run_gsutil -m rsync -r gs://${DATA_BUCKET}/raw/ /workspace/data/raw/ 2>/dev/null || true
+          run_gsutil -m rsync -r ${GCS_OUT}/processed/ /workspace/data/processed/ 2>/dev/null || true
+
+          echo "Downloading manifest..."
+          run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
+
+          PARSING_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/cag-images/cag-parsing-gpu:latest"
+          echo "Pulling ${PARSING_IMAGE}..."
+          docker pull "${PARSING_IMAGE}" || {
+            echo "ERROR: Failed to pull parsing image ${PARSING_IMAGE}"
+            exit 1
+          }
+          docker image prune -f
+          df -h / | tail -1
+
+          # Fail fast if PyTorch inside the image cannot use the GPU
+          echo "Checking CUDA inside the image..."
+          docker run --rm --gpus all --entrypoint python "${PARSING_IMAGE}" -c "
+          import sys, torch
+          ok = torch.cuda.is_available()
+          print('torch', torch.__version__, 'cuda', torch.version.cuda, 'available', ok,
+                torch.cuda.get_device_name(0) if ok else '')
+          sys.exit(0 if ok else 3)
+          " || { echo "ERROR: torch.cuda not available in image; refusing to run on CPU"; exit 3; }
+
+          echo "Starting parsing pipeline..."
+          docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
+          docker run --rm --name ${CONTAINER_NAME} --network=host --gpus all --shm-size=8g \
+            -v ${WORK_DIR}/data:/app/data \
+            -v ${WORK_DIR}/logs:/app/logs \
+            -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
+            -e DATA_BUCKET=${DATA_BUCKET} \
+            -e GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
+            -e VERTEX_AI_REGION=us-central1 \
+            -e USE_VERTEX_AI=true \
+            -e USE_VERTEX_EMBEDDINGS=true \
+            -e LLM_PROVIDER=gemini \
+            ${PARSING_IMAGE} \
+            manifest.xlsx ${SKIP_ARG} ${REPORTS_ARG}
+
+          # Results go under the output prefix only. processed/manifest.json is
+          # excluded (the CPU run owns it; last writer would win). raw/ is not
+          # uploaded: it was only read from the shared cache.
+          echo "Uploading results to ${GCS_OUT}/ ..."
+          run_gsutil -m rsync -r -x '^manifest\.json$' /workspace/data/processed ${GCS_OUT}/processed/
+          run_gsutil -m rsync -r /workspace/data/batch_jobs ${GCS_OUT}/batch_jobs/
+          run_gsutil -m rsync -r /workspace/data/extraction_images ${GCS_OUT}/extraction_images/ 2>/dev/null || true
+          run_gsutil -m rsync -r /workspace/data/entity_graph ${GCS_OUT}/entity_graph/ 2>/dev/null || true
+          run_gsutil -m rsync -r /workspace/data/canonical ${GCS_OUT}/canonical/ 2>/dev/null || true
+          run_gsutil -m rsync -r /workspace/logs/traces ${GCS_OUT}/traces/ 2>/dev/null || true
+          run_gsutil -m cp /workspace/logs/*.log ${GCS_OUT}/logs/ 2>/dev/null || true
+
+          echo ""
+          echo "============================================="
+          echo "Parsing pipeline (GPU) complete!"
+          echo "============================================="
+          SCRIPT_EOF
+
+          SKIP_ARG=""
+          if [ -n "${{ inputs.skip_phases }}" ]; then
+            SKIP_ARG="--skip ${{ inputs.skip_phases }}"
+          fi
+
+          REPORTS_ARG=""
+          if [ -n "${{ inputs.reports }}" ]; then
+            REPORTS_ARG="--reports ${{ inputs.reports }}"
+          fi
+
+          sed -i "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${DATA_BUCKET}|${{ env.DATA_BUCKET }}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${MANIFEST}|${{ inputs.manifest }}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${SKIP_ARG}|${SKIP_ARG}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${REPORTS_ARG}|${REPORTS_ARG}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${OUTPUT_PREFIX}|${{ env.OUTPUT_PREFIX }}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${CONTAINER_NAME}|${{ env.CONTAINER_NAME }}|g" /tmp/run_pipeline.sh
+
+          chmod +x /tmp/run_pipeline.sh
+
+          echo "Script contents:"
+          head -40 /tmp/run_pipeline.sh
+          echo "..."
+
+          # Detached wrapper: enforces max_hours, streams the log + status to GCS,
+          # and powers the VM off when finished (independent of this GitHub job)
+          cat > /tmp/run_detached.sh << 'SCRIPT_EOF'
+          #!/bin/bash
+          export HOME="/var/tmp/cag"
+          export DOCKER_CONFIG="${HOME}/.docker"
+          mkdir -p "${DOCKER_CONFIG}"
+          echo '{"credHelpers":{"us-central1-docker.pkg.dev":"gcr","gcr.io":"gcr"}}' > "${DOCKER_CONFIG}/config.json"
+
+          DATA_BUCKET="${DATA_BUCKET}"
+          RUN_ID="${RUN_ID}"
+          KEEP_VM="${KEEP_VM}"
+          MAX_HOURS="${MAX_HOURS}"
+          CONTAINER_NAME="${CONTAINER_NAME}"
+          RUN_DIR=/var/tmp/cag/runs-gpu/${RUN_ID}
+          GCS_RUN=gs://${DATA_BUCKET}/runs-gpu/${RUN_ID}
+          GCLOUD_IMAGE="gcr.io/google.com/cloudsdktool/google-cloud-cli:stable"
+          sudo -n mkdir -p ${RUN_DIR}
+          sudo -n chown "$(id -u):$(id -g)" ${RUN_DIR}
+
+          gcs_cp() {
+            docker run --rm --network=host -v ${RUN_DIR}:/run_dir ${GCLOUD_IMAGE} \
+              gsutil -q cp "/run_dir/$1" "${GCS_RUN}/$1" || true
+          }
+          set_status() { echo "$1" > ${RUN_DIR}/status; gcs_cp status; }
+
+          set_status running
+          ( while sleep 300; do gcs_cp pipeline.log; done ) &
+          SYNC_PID=$!
+
+          timeout --kill-after=2m "${MAX_HOURS}h" bash /tmp/run_pipeline.sh > ${RUN_DIR}/pipeline.log 2>&1
+          RC=$?
+
+          kill ${SYNC_PID} 2>/dev/null
+          if [ ${RC} -eq 124 ] || [ ${RC} -eq 137 ]; then
+            echo "Pipeline exceeded ${MAX_HOURS}h limit; stopping container" >> ${RUN_DIR}/pipeline.log
+            docker rm -f ${CONTAINER_NAME} >> ${RUN_DIR}/pipeline.log 2>&1
+            FINAL="timeout"
+          elif [ ${RC} -eq 0 ]; then
+            FINAL="success"
+          else
+            FINAL="failed:${RC}"
+          fi
+          gcs_cp pipeline.log
+          set_status "${FINAL}"
+
+          if [ "${KEEP_VM}" != "true" ]; then
+            sudo -n poweroff
+          fi
+          SCRIPT_EOF
+
+          sed -i "s|\${DATA_BUCKET}|${{ env.DATA_BUCKET }}|g" /tmp/run_detached.sh
+          sed -i "s|\${RUN_ID}|${{ github.run_id }}|g" /tmp/run_detached.sh
+          sed -i "s|\${KEEP_VM}|${{ inputs.keep_vm_running }}|g" /tmp/run_detached.sh
+          sed -i "s|\${MAX_HOURS}|${{ inputs.max_hours || '12' }}|g" /tmp/run_detached.sh
+          sed -i "s|\${CONTAINER_NAME}|${{ env.CONTAINER_NAME }}|g" /tmp/run_detached.sh
+
+          gcloud compute scp /tmp/run_pipeline.sh /tmp/run_detached.sh ${{ env.VM_NAME }}:/tmp/ \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }}
+
+      - name: Run Parsing Pipeline
+        id: pipeline
+        run: |
+          GCS_RUN="gs://${{ env.DATA_BUCKET }}/runs-gpu/${{ github.run_id }}"
+          echo "Running GPU parsing pipeline (detached on VM)..."
+          echo "  VM: ${{ env.VM_NAME }} (${{ env.ZONE }})"
+          echo "  Manifest: ${{ inputs.manifest }}"
+          echo "  Skip phases: ${{ inputs.skip_phases }}"
+          echo "  Reports: ${{ inputs.reports }}"
+          echo "  Output: gs://${{ env.DATA_BUCKET }}/${{ env.OUTPUT_PREFIX }}/"
+          echo "  Max hours: ${{ inputs.max_hours || '12' }}"
+          echo "  Live log: ${GCS_RUN}/pipeline.log"
+
+          gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command="setsid nohup bash /tmp/run_detached.sh > /dev/null 2>&1 < /dev/null & echo launched"
+          echo "launched=true" >> $GITHUB_OUTPUT
+
+          # Poll status; stop polling ~20 min before GitHub's 6h cap
+          DEADLINE=$(( $(date +%s) + 300 * 60 ))
+          LAST_LINES=0
+          STATUS=""
+          while [ $(date +%s) -lt ${DEADLINE} ]; do
+            sleep 120
+            STATUS=$(gcloud storage cat "${GCS_RUN}/status" 2>/dev/null || echo "pending")
+            if gcloud storage cp "${GCS_RUN}/pipeline.log" /tmp/pipeline.log --quiet 2>/dev/null; then
+              TOTAL=$(wc -l < /tmp/pipeline.log)
+              if [ ${TOTAL} -gt ${LAST_LINES} ]; then
+                tail -n +$((LAST_LINES + 1)) /tmp/pipeline.log
+                LAST_LINES=${TOTAL}
+              fi
+            fi
+            case "${STATUS}" in
+              success)
+                echo "✅ Pipeline completed successfully"
+                echo "finished=true" >> $GITHUB_OUTPUT
+                exit 0 ;;
+              failed:*|timeout)
+                echo "::error::Pipeline ${STATUS}. Full log: ${GCS_RUN}/pipeline.log"
+                echo "finished=true" >> $GITHUB_OUTPUT
+                exit 1 ;;
+            esac
+            VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+              --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }} --format="value(status)")
+            if [ "${VM_STATUS}" = "TERMINATED" ]; then
+              echo "::error::VM stopped before the pipeline reported a final status (last: ${STATUS})"
+              echo "finished=true" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          done
+
+          echo "::notice::Pipeline still running on the VM (status: ${STATUS}). It continues without this job and powers the VM off when done. Status: ${GCS_RUN}/status"
+          echo "finished=false" >> $GITHUB_OUTPUT
+
+      # Skipped while the detached pipeline is still running (the VM powers itself off)
+      - name: Stop GPU VM
+        if: ${{ always() && !inputs.keep_vm_running && steps.pipeline.outputs.finished != 'false' }}
+        run: |
+          echo "Stopping GPU VM to save costs..."
+          gcloud compute instances stop ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Parsing Pipeline (GPU) Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**VM:** ${{ env.VM_NAME }} (${{ env.ZONE }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** ${{ inputs.manifest }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Skipped Phases:** ${{ inputs.skip_phases || 'None' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reports:** ${{ inputs.reports || 'All' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Output:** gs://${{ env.DATA_BUCKET }}/${{ env.OUTPUT_PREFIX }}/" >> $GITHUB_STEP_SUMMARY
+          echo "**VM Kept Running:** ${{ inputs.keep_vm_running }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Max Hours:** ${{ inputs.max_hours || '12' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Log / Status:** gs://${{ env.DATA_BUCKET }}/runs-gpu/${{ github.run_id }}/" >> $GITHUB_STEP_SUMMARY
