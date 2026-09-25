@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
+import fitz  # PyMuPDF, for page count
+
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
 if TYPE_CHECKING:
@@ -47,6 +49,7 @@ class LayoutAnalysisService:
         )
         self.table_min_non_empty_cells = config.table_min_non_empty_cells
         self.conversion_timeout = config.conversion_timeout
+        self.conversion_timeout_per_page = config.conversion_timeout_per_page
 
         # Auto-detect accelerator device if set to "auto"
         self.accelerator_device = self._resolve_accelerator_device(config.accelerator_device)
@@ -133,9 +136,12 @@ class LayoutAnalysisService:
                 # Log before conversion starts (helps debug hangs)
                 import os
                 pdf_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
+                with fitz.open(pdf_path) as pdf:
+                    page_count = pdf.page_count
+                timeout = max(self.conversion_timeout, page_count * self.conversion_timeout_per_page)
                 logger.info(
                     f"[{task.report_id}] Starting Docling conversion... "
-                    f"(PDF: {pdf_size_mb:.1f} MB, timeout: {self.conversion_timeout}s)"
+                    f"(PDF: {pdf_size_mb:.1f} MB, {page_count} pages, timeout: {timeout}s)"
                 )
 
                 # Run the conversion with timeout (prevents CI hangs on large PDFs)
@@ -146,12 +152,12 @@ class LayoutAnalysisService:
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(self.converter.convert, source=pdf_path)
                     try:
-                        conversion_result = future.result(timeout=self.conversion_timeout)
+                        conversion_result = future.result(timeout=timeout)
                     except FuturesTimeoutError:
                         elapsed = time.time() - start_time
                         error_msg = (
                             f"Docling conversion timed out after {elapsed:.1f}s "
-                            f"(limit: {self.conversion_timeout}s)"
+                            f"(limit: {timeout}s)"
                         )
                         logger.error(f"[{task.report_id}] {error_msg}")
                         task.error_log.append(error_msg)

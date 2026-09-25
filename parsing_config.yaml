@@ -104,7 +104,10 @@ layout:
 
   # Maximum time (seconds) for Docling conversion before timeout
   # Large PDFs can take 30+ minutes on CPU - set limit to prevent CI hangs
-  conversion_timeout: 1800  # 30 minutes
+  conversion_timeout: 1800  # 30 minutes (floor)
+  # Effective limit = max(conversion_timeout, pages * conversion_timeout_per_page)
+  # Table-heavy reports run ~7-8 s/page on CPU; 426-page 2025_06 needs ~50 min
+  conversion_timeout_per_page: 12
 
 # ==============================================================================
 # PHASE 5.5: TOC RECONCILIATION (FUSE HEURISTIC + DOCLING)

@@ -928,6 +928,8 @@ class AssemblyService:
             # Update existing entry
             for report in self.manifest["reports"]:
                 if report["report_id"] == report_id:
+                    for stale_key in ("failed_phase", "error", "stale_output"):
+                        report.pop(stale_key, None)
                     report.update(
                         {
                             "status": "completed",
@@ -950,17 +952,42 @@ class AssemblyService:
                 }
             )
 
-        # Update totals
-        self.manifest["total_reports"] = len(self.manifest["reports"])
-        self.manifest["total_parent_chunks"] = sum(
-            r["parent_chunks"] for r in self.manifest["reports"]
-        )
-        self.manifest["total_child_chunks"] = sum(
-            r["child_chunks"] for r in self.manifest["reports"]
-        )
-        self.manifest["last_updated"] = datetime.utcnow().isoformat()
+        self._save_manifest()
 
-        # Save manifest
+    def mark_failed(self, report_id: str, phase: str, error: str) -> None:
+        """
+        Record that a report failed in this run.
+
+        The manifest is carried over between runs, so without this a report that
+        fails now keeps an old "completed" entry pointing at a previous run's output.
+        """
+        now = datetime.utcnow().isoformat()
+        entry = next((r for r in self.manifest["reports"] if r["report_id"] == report_id), None)
+        if entry is None:
+            entry = {"report_id": report_id, "parent_chunks": 0, "child_chunks": 0, "output_file": None}
+            self.manifest["reports"].append(entry)
+        entry.update(
+            {
+                "status": "failed",
+                "failed_phase": phase,
+                "error": error[:500],
+                # output_file (if any) is from the last successful run, not this one
+                "stale_output": entry.get("output_file") is not None,
+                "last_updated": now,
+            }
+        )
+        self._save_manifest()
+
+    def _save_manifest(self) -> None:
+        """Recompute totals over completed reports and write the manifest."""
+        reports = self.manifest["reports"]
+        completed = [r for r in reports if r.get("status") == "completed"]
+        self.manifest["total_reports"] = len(reports)
+        self.manifest["completed_reports"] = len(completed)
+        self.manifest["failed_reports"] = len(reports) - len(completed)
+        self.manifest["total_parent_chunks"] = sum(r["parent_chunks"] for r in completed)
+        self.manifest["total_child_chunks"] = sum(r["child_chunks"] for r in completed)
+        self.manifest["last_updated"] = datetime.utcnow().isoformat()
         self._write_json(self.manifest, self.manifest_path)
 
     def get_corpus_stats(self) -> Dict[str, Any]:

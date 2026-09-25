@@ -180,7 +180,17 @@ class LayoutAnalysisConfig:
     Maximum time (seconds) for Docling conversion before timeout.
 
     Large PDFs can take 30+ minutes on CPU. Default 1800s (30 min) prevents
-    CI/CD hangs while allowing most documents to complete.
+    CI/CD hangs while allowing most documents to complete. This is the floor;
+    see conversion_timeout_per_page for large PDFs.
+    """
+
+    conversion_timeout_per_page: int = 12
+    """
+    Per-page timeout budget (seconds); the effective limit is
+    max(conversion_timeout, pages * conversion_timeout_per_page).
+
+    Table-heavy reports convert at ~7-8 s/page on the CPU VM, so a flat 30 min
+    limit fails anything over ~230 pages (2025_06: 426 pages, ~50 min).
     """
 
 

@@ -216,6 +216,8 @@ class PipelineOrchestrator:
         if "10c" not in self.skip:
             self._phase_visual_postprocess()
 
+        self._record_failures_in_manifest()
+
         # Finalize all traces after last enabled phase
         self._finalize_all_traces()
 
@@ -1705,6 +1707,20 @@ class PipelineOrchestrator:
     # ═══════════════════════════════════════════════════════════════════════
     # SUMMARY & LOGGING HELPERS
     # ═══════════════════════════════════════════════════════════════════════
+
+    def _record_failures_in_manifest(self):
+        """Mark reports that failed in phases 1-9 so manifest.json never lists them as completed."""
+        failures = [
+            (phase, task, err)
+            for phase, items in self.state.failed.items()
+            for task, err in items
+        ]
+        if not failures:
+            return
+        manifest_service = AssemblyService(output_dir="data/processed")
+        for phase, task, err in failures:
+            manifest_service.mark_failed(task.report_id, phase, str(err))
+        self._log(f"Manifest: marked {len(failures)} failed report(s)", force=True)
 
     def _print_summary(self):
         """Print comprehensive pipeline summary."""
