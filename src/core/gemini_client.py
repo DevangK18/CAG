@@ -78,17 +78,19 @@ _TRANSIENT_MARKERS = (
 )
 
 
-def generate_with_retry(client=None, max_retries: int = 5, **kwargs):
+def generate_with_retry(client=None, max_retries: int = 8, **kwargs):
     """
     client.models.generate_content with exponential backoff on transient errors.
 
     Agent Platform serves Gemini from shared capacity (Dynamic Shared Quota), so
     429 RESOURCE_EXHAUSTED can occur on paid projects when a model is busy; it is
-    not a fixed quota and succeeds on retry. Empty responses are retried too.
+    not a fixed quota (gemini-3.8-flash has no per-project limit to raise) and
+    succeeds on retry. Busy spells can last several minutes, so the retry window
+    is ~5 min. Empty responses are retried too.
 
     Args:
         client: genai.Client to use (default: shared Agent Platform client)
-        max_retries: Retries after the first attempt (~5s, 10s, 20s, 40s, 80s)
+        max_retries: Retries after the first attempt (~5s, 10s, 20s, 40s, then 60s each)
 
     Returns:
         GenerateContentResponse with non-empty text
@@ -116,7 +118,7 @@ def generate_with_retry(client=None, max_retries: int = 5, **kwargs):
             transient = any(marker in str(e) for marker in _TRANSIENT_MARKERS)
             if not transient or attempt == max_retries:
                 raise
-            delay = 5 * 2 ** attempt * random.uniform(0.8, 1.2)
+            delay = min(5 * 2 ** attempt, 60) * random.uniform(0.8, 1.2)
             logger.warning(f"Gemini call failed ({e}), retry {attempt + 1}/{max_retries} in {delay:.0f}s")
             time.sleep(delay)
 

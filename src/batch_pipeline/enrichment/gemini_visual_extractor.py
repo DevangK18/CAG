@@ -297,6 +297,23 @@ class GeminiVisualExtractor:
 
         return await asyncio.to_thread(generate_with_retry, **kwargs)
 
+    async def _generate_json(self, item_type: str, max_attempts: int = 3, **kwargs) -> Dict:
+        """
+        Generate in JSON mode and parse, re-asking when the response is not valid JSON
+        (truncated or malformed output is non-deterministic and usually succeeds on retry).
+        """
+        config = kwargs.pop("config")
+        config = config.model_copy(update={"response_mime_type": "application/json"})
+        result: Dict = {}
+        for attempt in range(1, max_attempts + 1):
+            response = await self._generate(config=config, **kwargs)
+            result = self._parse_json_response(response.text, item_type)
+            if result.get("success"):
+                return result
+            if attempt < max_attempts:
+                logger.warning(f"Invalid JSON from Gemini ({item_type}), re-requesting {attempt}/{max_attempts - 1}")
+        return result
+
     # ========== SINGLE ITEM EXTRACTION ==========
 
     async def extract_table(
@@ -326,7 +343,8 @@ class GeminiVisualExtractor:
             if context:
                 prompt += f"\n\nCONTEXT:\n{context}"
 
-            response = await self._generate(
+            return await self._generate_json(
+                "table",
                 model=self.model,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
@@ -337,8 +355,6 @@ class GeminiVisualExtractor:
                     max_output_tokens=8192,
                 ),
             )
-
-            return self._parse_json_response(response.text, "table")
 
         except Exception as e:
             logger.error(f"Gemini table extraction failed for {image_path}: {e}")
@@ -370,7 +386,8 @@ class GeminiVisualExtractor:
             if context:
                 prompt += f"\n\nCONTEXT:\n{context}"
 
-            response = await self._generate(
+            return await self._generate_json(
+                "chart",
                 model=self.model,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
@@ -378,11 +395,9 @@ class GeminiVisualExtractor:
                 ],
                 config=types.GenerateContentConfig(
                     temperature=0.1,
-                    max_output_tokens=4096,
+                    max_output_tokens=8192,
                 ),
             )
-
-            return self._parse_json_response(response.text, "chart")
 
         except Exception as e:
             logger.error(f"Gemini chart extraction failed for {image_path}: {e}")
@@ -427,7 +442,8 @@ class GeminiVisualExtractor:
 
             parts.append(types.Part.from_text(text=prompt))
 
-            response = await self._generate(
+            return await self._generate_json(
+                "table",
                 model=self.model,
                 contents=parts,
                 config=types.GenerateContentConfig(
@@ -435,8 +451,6 @@ class GeminiVisualExtractor:
                     max_output_tokens=16384,  # Larger for multi-page tables
                 ),
             )
-
-            return self._parse_json_response(response.text, "table")
 
         except Exception as e:
             logger.error(f"Gemini multi-page extraction failed: {e}")
@@ -667,6 +681,7 @@ class GeminiVisualExtractor:
         pdf_filename = data.get("report_metadata", {}).get("source_filename", "")
         pdf_path = str(Path(pdf_dir) / pdf_filename) if pdf_filename else None
 
+        skipped_non_data = 0
         for chunk in chunks:
             chunk_id = chunk.get("chunk_id", "")
             content_type = chunk.get("content_type", "")
@@ -689,7 +704,7 @@ class GeminiVisualExtractor:
                     image_path = save_block_image(
                         pdf_path=pdf_path,
                         page_num=chunk.get("source_page_physical", 0),
-                        bbox=chunk.get("source_bbox", [0, 0, 100, 100]),
+                        bbox=self._chunk_bbox(chunk) or [0, 0, 100, 100],
                         output_dir=str(self.images_dir / "tables"),
                         report_id=report_id,
                         block_type="table",
@@ -738,6 +753,10 @@ class GeminiVisualExtractor:
                     if visual_subtype not in ("chart", "data_visualization", ""):
                         continue
 
+                if self._is_non_data_image(chunk):
+                    skipped_non_data += 1
+                    continue
+
                 # Try to find or create the image
                 image_path = None
                 if content_path and Path(content_path).exists():
@@ -746,7 +765,7 @@ class GeminiVisualExtractor:
                     image_path = save_block_image(
                         pdf_path=pdf_path,
                         page_num=chunk.get("source_page_physical", 0),
-                        bbox=chunk.get("source_bbox", [0, 0, 100, 100]),
+                        bbox=self._chunk_bbox(chunk) or [0, 0, 100, 100],
                         output_dir=str(self.images_dir / "charts"),
                         report_id=report_id,
                         block_type="chart",
@@ -762,7 +781,32 @@ class GeminiVisualExtractor:
                         "context": self._build_context(chunk),
                     })
 
+        if skipped_non_data:
+            logger.info(f"  {report_id}: skipped {skipped_non_data} signature/emblem/icon images")
         return items
+
+    # Signatures (~120x55 pt), emblems on the cover and icons/QR codes are far smaller than
+    # any real chart (smallest seen: 196x170 pt); in the Sep 2026 Union run all 93 images
+    # under these limits were non-data.
+    NON_DATA_MAX_WIDTH = 170
+    NON_DATA_MAX_HEIGHT = 105
+    COVER_PAGES = 2  # physical pages 0-1: State Emblem and CAG logo
+
+    @staticmethod
+    def _chunk_bbox(chunk: Dict) -> Optional[List[float]]:
+        """Block bbox in PDF points, from metadata.location (Phase 8 layout) or source_bbox."""
+        bbox = chunk.get("source_bbox") or (chunk.get("metadata") or {}).get("location", {}).get("bbox")
+        return bbox if bbox and len(bbox) == 4 else None
+
+    def _is_non_data_image(self, chunk: Dict) -> bool:
+        """True for cover-page emblems and signature-sized images that cannot hold chart data."""
+        if chunk.get("source_page_physical", 0) < self.COVER_PAGES:
+            return True
+        bbox = self._chunk_bbox(chunk)
+        if not bbox:
+            return False
+        width, height = abs(bbox[2] - bbox[0]), abs(bbox[3] - bbox[1])
+        return width < self.NON_DATA_MAX_WIDTH and height < self.NON_DATA_MAX_HEIGHT
 
     def _build_context(self, chunk: Dict) -> str:
         """Build context string from chunk metadata for prompts."""
@@ -900,6 +944,8 @@ class GeminiVisualExtractor:
                 cleaned = "\n".join(lines)
 
             parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict):
+                raise json.JSONDecodeError("Top-level value is not an object", cleaned, 0)
             # Copy pure Gemini response before adding metadata
             data_copy = parsed.copy()
             parsed["success"] = True
