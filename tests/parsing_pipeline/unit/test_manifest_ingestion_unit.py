@@ -323,3 +323,46 @@ class TestLegacyReportIdCheck:
         # No legacy file exists
         result = service._check_legacy_report_id("2025_04_Test_Report")
         assert result is None
+
+
+class TestGovernmentBodyTypeColumn:
+    """The VM copies every manifest to manifest.xlsx, so the column must decide the tier."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("Union", "union"),
+            ("State", "state"),
+            ("Local Bodies", "local_body"),
+            ("Local Body", "local_body"),
+            ("local_body", "local_body"),
+            ("State Government", "state"),
+            ("Unknown", None),
+        ],
+    )
+    def test_normalize_values(self, value, expected):
+        from src.parsing_pipeline.modules.manifest_ingestion_service import normalize_government_body_type
+
+        assert normalize_government_body_type(value) == expected
+
+    def test_local_manifest_named_manifest_xlsx(self, tmp_path):
+        path = tmp_path / "manifest.xlsx"
+        pd.DataFrame([{
+            "SL NO": 1,
+            "Date": "2022-10-31",
+            "Report_No": "06_2022",
+            "Original Title": "Report No.6 of 2022",
+            "Recommended Title": "Performance Audit of City Corporations",
+            "Government Type": "Local Bodies",
+            "State": "Karnataka",
+            "State_code": "KA",
+            "Report Type": "Performance",
+            "Sector": "Urban Local Bodies",
+            "Report PDF": "https://example.com/report.pdf",
+        }]).to_excel(path, index=False)
+
+        service = ManifestIngestionService(raw_data_dir=str(tmp_path / "raw"))
+        df = service.load_manifest(str(path))
+
+        assert service.government_body_type == "local_body"
+        assert service._build_report_id(df.iloc[0]).startswith("KA_2022_06_")

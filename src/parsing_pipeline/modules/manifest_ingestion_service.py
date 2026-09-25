@@ -130,6 +130,24 @@ def detect_government_body_type(manifest_path: str) -> GovernmentBodyType:
         return "union"
 
 
+def normalize_government_body_type(value) -> Optional[GovernmentBodyType]:
+    """
+    Map a manifest "Government Type" value to a tier.
+
+    Manifests write "Union", "State", "Local Bodies", "Local Body", "Union Government"...
+    The column decides the tier on the VM, where every manifest is copied to
+    manifest.xlsx and filename detection falls back to union.
+    """
+    text = re.sub(r"[^a-z]", "", str(value).lower())
+    if text.startswith("local") or text in ("lb", "ulb", "pri"):
+        return "local_body"
+    if text.startswith("state"):
+        return "state"
+    if text.startswith("union") or text.startswith("central"):
+        return "union"
+    return None
+
+
 def infer_audit_category_from_report_type(report_type: str) -> AuditCategory:
     """
     Infer audit_category from Union report_type field.
@@ -273,8 +291,8 @@ class ManifestIngestionService:
             if "Government Body Type" in df.columns:
                 first_value = df["Government Body Type"].dropna().iloc[0] if len(df["Government Body Type"].dropna()) > 0 else None
                 if first_value:
-                    explicit_type = str(first_value).lower().strip().replace(" ", "_")
-                    if explicit_type in ("union", "state", "local_body"):
+                    explicit_type = normalize_government_body_type(first_value)
+                    if explicit_type:
                         prev_type = self.government_body_type
                         self.government_body_type = explicit_type
                         logger.info(f"Government body type overridden by column: {self.government_body_type}")
