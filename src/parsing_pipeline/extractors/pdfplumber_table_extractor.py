@@ -16,12 +16,20 @@ Interface matches TableExtractor exactly:
 """
 
 import logging
+import re
+from collections import Counter
 from typing import List, Optional, Dict, Any, Tuple
 
 import pdfplumber
 from pathlib import Path
 
 from src.core.data_contracts import ExtractedContent
+from src.parsing_pipeline.extractors.text_repair import (
+    decode_cid_shift,
+    has_cid_shift,
+    is_reversed,
+    repair_font_shift,
+)
 from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
 from src.parsing_pipeline.config import get_config, ContentExtractionConfig
 
@@ -47,10 +55,12 @@ class PdfplumberTableExtractor:
         self.config = config
 
         # pdfplumber table_settings tuned for CAG audit reports
-        # CAG tables are typically ruled (have visible lines/borders)
+        # CAG tables are ruled, but the rules are drawn as thin filled rectangles, not
+        # line objects: "lines_strict" ignores rect edges and found almost no tables,
+        # leaving the whitespace fallback to split words across columns.
         self.TABLE_SETTINGS = {
-            "vertical_strategy": "lines_strict",
-            "horizontal_strategy": "lines_strict",
+            "vertical_strategy": "lines",
+            "horizontal_strategy": "lines",
             "snap_tolerance": config.pdfplumber_snap_tolerance,
             "snap_x_tolerance": config.pdfplumber_snap_tolerance,
             "snap_y_tolerance": config.pdfplumber_snap_tolerance,
@@ -156,7 +166,7 @@ class PdfplumberTableExtractor:
         """
         Extract table cells from PDF using pdfplumber.
 
-        Tries lines_strict first (best for ruled tables), then falls back
+        Tries ruling lines and rect edges first (CAG tables are ruled), then falls back
         to text-based detection.
 
         Args:
@@ -176,10 +186,12 @@ class PdfplumberTableExtractor:
 
             page = pdf.pages[page_num]
 
-            # B3 fix: Get page rotation for text reversal handling
+            # pdfplumber returns rotated pages' text in reversed order and in unrotated
+            # coordinates; leave those tables to Docling (Tier 2), which handles rotation
             rotation = page.rotation % 360
             if rotation != 0:
-                logger.debug(f"B3: Table on rotated page {page_num} (rotation={rotation}°)")
+                logger.debug(f"Table on rotated page {page_num} (rotation={rotation}°): deferring to Docling")
+                return None, ""
 
             # Crop to Docling's bounding box
             # pdfplumber uses (x0, top, x1, bottom) — same as our [x0, y0, x1, y1]
@@ -192,23 +204,35 @@ class PdfplumberTableExtractor:
                 )
             )
 
-            # Attempt 1: lines_strict (best for ruled CAG tables)
+            # Attempt 1: ruling lines and rectangle edges (CAG tables are ruled). Some tables
+            # rule only the title/header, so "lines" can return a fragment: keep it only if
+            # it covers the region's text, else take whichever strategy covers more.
+            region_tokens = self._tokens(cropped.extract_text() or "")
+            candidates = []
             tables = cropped.find_tables(table_settings=self.TABLE_SETTINGS)
-
             if tables:
-                raw = tables[0].extract()
+                # Double rules and merged cells leave empty columns/rows; drop them
+                # before judging fill ratio, or valid tables get rejected
+                raw = self._drop_empty_lines([row for t in tables for row in t.extract()])
                 if raw and self._has_meaningful_data(raw):
-                    return self._clean_raw_table(raw, rotation), "lines_strict"
+                    candidates.append((self._coverage(raw, region_tokens), 1, raw, "lines"))
 
             # Attempt 2: text-based fallback (for borderless tables)
-            tables_fb = cropped.find_tables(
-                table_settings=self.TABLE_SETTINGS_FALLBACK
-            )
+            if not candidates or candidates[0][0] < 0.9:
+                tables_fb = cropped.find_tables(table_settings=self.TABLE_SETTINGS_FALLBACK)
+                if tables_fb:
+                    # Whitespace columns cut words ("Typ | e"); stitch them back
+                    vocabulary = set(re.findall(r"[a-z]+", (page.extract_text() or "").lower()))
+                    raw = self._stitch_split_cells(
+                        self._drop_empty_lines(tables_fb[0].extract()), vocabulary
+                    )
+                    if raw and self._has_meaningful_data(raw):
+                        candidates.append((self._coverage(raw, region_tokens), 0, raw, "text_fallback"))
 
-            if tables_fb:
-                raw = tables_fb[0].extract()
-                if raw and self._has_meaningful_data(raw):
-                    return self._clean_raw_table(raw, rotation), "text_fallback"
+            if candidates:
+                # Prefer ruling lines unless the whitespace strategy captures clearly more
+                best = max(candidates, key=lambda c: (round(c[0] + 0.05 * c[1], 2), c[1]))
+                return self._clean_raw_table(best[2], rotation), best[3]
 
             # Attempt 3: Extract ALL text as single-column if table was detected
             # by Docling but pdfplumber can't parse structure
@@ -222,35 +246,66 @@ class PdfplumberTableExtractor:
 
             return None, ""
 
-    # D9-FIX: Reversed word patterns for content-baked reversal detection
-    # These are common English words reversed - their reversed forms are rare/invalid
-    REVERSED_PATTERNS = {
-        "eht", "dna", "rof", "htiw", "morf", "evah", "siht", "taht", "erew", "neeb",
-        "elbaliava", "tegduB", "troper", "tidua", "hkal", "erorc",
-        "tnemnrevoG", "tnemtrapeD", "yrtsinim", "detroper", "devresbo", "dehsilbuP", "toN",
-    }
+    @staticmethod
+    def _tokens(text: str) -> List[str]:
+        """Data values of a table region (amounts, counts); words if it has none."""
+        numbers = re.findall(r"\d[\d,]*\.\d+|\d{1,3}(?:,\d{2,3})+|\d{3,}", text)
+        return numbers if len(numbers) >= 5 else re.findall(r"[A-Za-z]{3,}", text)
 
-    def _detect_cell_reversal(self, text: str) -> bool:
+    def _coverage(self, raw: List[List[Optional[str]]], region_tokens: List[str]) -> float:
+        """Share of the region's words/numbers that ended up in the table cells."""
+        if not region_tokens:
+            return 1.0
+        cells_text = " ".join(cell or "" for row in raw for cell in row)
+        found = Counter(re.findall(r"\d[\d,]*\.\d+|\d{1,3}(?:,\d{2,3})+|\d{3,}|[A-Za-z]{3,}", cells_text))
+        expected = Counter(region_tokens)
+        return sum(min(n, found[t]) for t, n in expected.items()) / sum(expected.values())
+
+    @staticmethod
+    def _stitch_split_cells(raw: List[List[Optional[str]]], vocabulary: set) -> List[List[Optional[str]]]:
         """
-        D9-FIX: Detect if cell text is reversed (content-baked reversal).
+        Move word fragments back into the cell they were cut from.
 
-        Checks for known reversed patterns in the text.
-
-        Args:
-            text: Cell text to check
-
-        Returns:
-            True if text appears to be reversed
+        The whitespace strategy places column boundaries inside words ("Activity Typ" |
+        "e of Non-") and fiscal years ("20" | "17-18 20"). A fragment moves left when the
+        joined word appears on the page and neither piece does on its own.
         """
-        if not text or len(text) < 3:
-            return False
+        stitched = []
+        for row in raw:
+            cells = [c or "" for c in row]
+            for i in range(len(cells) - 1):
+                left, right = cells[i], cells[i + 1]
+                word = re.search(r"([A-Za-z]+)$", left)
+                fragment = re.match(r"([a-z]{1,8})\b", right)
+                if word and fragment:
+                    joined = (word.group(1) + fragment.group(1)).lower()
+                    if (
+                        joined in vocabulary
+                        and word.group(1).lower() not in vocabulary
+                        and fragment.group(1) not in vocabulary
+                    ):
+                        cells[i] = left + fragment.group(1)
+                        cells[i + 1] = right[fragment.end():].lstrip()
+                        continue
+                century = re.search(r"(?:^|\s)(19|20)$", left)
+                if century and re.match(r"\d{2}-\d{2}", right):
+                    cells[i] = left[:century.start(1)].rstrip()
+                    cells[i + 1] = century.group(1) + right
+            stitched.append([c if c else None for c in cells])
+        return stitched
 
-        text_lower = text.lower()
-        # Check for any known reversed pattern
-        for pattern in self.REVERSED_PATTERNS:
-            if pattern.lower() in text_lower:
-                return True
-        return False
+    @staticmethod
+    def _drop_empty_lines(raw: Optional[List[List[Optional[str]]]]) -> List[List[Optional[str]]]:
+        """Remove rows and columns whose cells are all empty."""
+        if not raw:
+            return []
+        filled = lambda cell: cell is not None and cell.strip() != ""
+        rows = [row for row in raw if any(filled(c) for c in row)]
+        if not rows:
+            return []
+        width = max(len(row) for row in rows)
+        keep = [i for i in range(width) if any(i < len(row) and filled(row[i]) for row in rows)]
+        return [[row[i] if i < len(row) else None for i in keep] for row in rows]
 
     def _reverse_cell_text(self, text: str) -> str:
         """
@@ -297,26 +352,15 @@ class PdfplumberTableExtractor:
         Returns:
             Cleaned 2D list of strings
         """
-        # D9-FIX: First pass - detect if table has reversed content (check sample cells)
-        # Sample a few non-empty cells to check for reversal
-        sample_texts = []
-        for row in raw[:min(5, len(raw))]:
-            for cell in row:
-                if cell and len(cell.strip()) > 5:
-                    sample_texts.append(cell)
-                    if len(sample_texts) >= 10:
-                        break
-            if len(sample_texts) >= 10:
-                break
-
-        # Check if any sample cells have reversed patterns
-        needs_reversal = rotation == 270 or rotation == 180
-        if not needs_reversal and sample_texts:
-            for sample in sample_texts:
-                if self._detect_cell_reversal(sample):
-                    needs_reversal = True
-                    logger.debug("D9-FIX: Detected content-baked reversal in table")
-                    break
+        # D9-FIX: Decide reversal on the whole table's text. A single-cell substring
+        # check reversed whole tables because "Profit" contains "rof".
+        table_text = " ".join(cell for row in raw for cell in row if cell)
+        needs_cid_decode = has_cid_shift(table_text)
+        if needs_cid_decode:
+            table_text = decode_cid_shift(table_text)
+        needs_reversal = is_reversed(table_text)
+        if needs_reversal:
+            logger.debug("D9-FIX: Detected content-baked reversal in table")
 
         cleaned = []
         for row in raw:
@@ -325,16 +369,19 @@ class PdfplumberTableExtractor:
                 if cell is None:
                     cleaned_row.append("")
                 else:
+                    if needs_cid_decode:
+                        cell = decode_cid_shift(cell)
                     # Normalize whitespace (pdfplumber preserves newlines within cells)
                     text = " ".join(cell.split())
                     # Strip common artifacts
                     text = text.strip("| \t")
-                    # B3 fix: For rotated pages or D9 content-baked reversal
+                    text = repair_font_shift(text)
                     if needs_reversal and text:
                         text = self._reverse_cell_text(text)
                     cleaned_row.append(text)
             cleaned.append(cleaned_row)
-        return cleaned
+        # Cells holding only decoded spaces leave empty rows/columns
+        return self._drop_empty_lines(cleaned) or cleaned
 
     def _has_meaningful_data(self, raw: List[List[Optional[str]]]) -> bool:
         """

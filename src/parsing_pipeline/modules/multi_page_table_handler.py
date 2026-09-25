@@ -113,6 +113,7 @@ class MultiPageTableHandler:
         tables: List[StructuredTable],
         trace_emitter=None,
         section_page_ranges: Optional[Dict[str, Tuple[int, int]]] = None,
+        contiguous_pairs: Optional[Set[Tuple[str, str]]] = None,
     ) -> List[StructuredTable]:
         """
         Detect table continuations and merge fragments using graph-based transitive closure.
@@ -126,12 +127,18 @@ class MultiPageTableHandler:
             trace_emitter: Optional TraceEmitter for instrumentation
             section_page_ranges: M1 fix - Optional mapping of source_chunk_id to (start_page, end_page)
                                  for accurate missing page detection at section boundaries
+            contiguous_pairs: (prev_table_id, next_table_id) pairs with no heading or body
+                              text between them in reading order. When given, only these
+                              pairs can merge; a new annexure heading always starts a new table.
 
         Returns:
             List of merged tables (fewer items than input if merges occurred)
         """
         emitter = trace_emitter or self._trace_emitter
         self._section_page_ranges = section_page_ranges or {}
+        self._contiguous_pairs = contiguous_pairs
+        # merged table_id -> fragment table_ids, for callers replacing fragments
+        self.merge_groups: Dict[str, List[str]] = {}
 
         if len(tables) < 2:
             self.stats["tables_processed"] = len(tables)
@@ -146,23 +153,21 @@ class MultiPageTableHandler:
         uf = UnionFind(n)
         merge_decisions = []  # For debugging
 
-        for i in range(n):
-            for j in range(i + 1, n):
-                page_gap = sorted_tables[j].source_page_physical - sorted_tables[i].source_page_physical
-                if page_gap > self.MAX_PAGE_GAP:
-                    break  # No point checking further - tables are too far apart
-
-                # Check bidirectional merge (either direction should work)
-                should_merge_ij = self._should_merge(sorted_tables[i], sorted_tables[j])
-                should_merge_ji = self._should_merge(sorted_tables[j], sorted_tables[i])
-
-                if should_merge_ij or should_merge_ji:
-                    uf.union(i, j)
-                    merge_decisions.append((
-                        sorted_tables[i].source_page_physical,
-                        sorted_tables[j].source_page_physical,
-                        "forward" if should_merge_ij else "backward"
-                    ))
+        # Only neighbours in page order can be continuations: comparing all pairs within
+        # MAX_PAGE_GAP chained separate annexures into one 89K-char "table"
+        for i in range(n - 1):
+            j = i + 1
+            if contiguous_pairs is not None and (
+                (sorted_tables[i].table_id, sorted_tables[j].table_id) not in contiguous_pairs
+            ):
+                continue
+            if self._should_merge(sorted_tables[i], sorted_tables[j]):
+                uf.union(i, j)
+                merge_decisions.append((
+                    sorted_tables[i].source_page_physical,
+                    sorted_tables[j].source_page_physical,
+                    "forward",
+                ))
 
         # REMEDIATION §5.1 Phase 2: Group tables by connected component
         components: Dict[int, List[int]] = {}
@@ -217,6 +222,7 @@ class MultiPageTableHandler:
                     )
 
                 merged.append(merged_table)
+                self.merge_groups[merged_table.table_id] = [f.table_id for f in fragments]
                 self.stats["tables_merged"] += 1
                 self.stats["total_fragments_merged"] += len(fragments)
 
@@ -352,10 +358,11 @@ class MultiPageTableHandler:
 
         # M1-FIX: RULE 1a: For CONSECUTIVE pages (gap=1), be very lenient
         # OCR artifacts cause column count variations - if pages are consecutive
-        # and column counts are close (within ±3), always merge
-        # REMEDIATION §5.1: Increased tolerance from ±2 to ±3 to reduce chain breaks
-        # This prevents chain breaks due to minor extraction differences
-        if page_gap == 1 and abs(prev.num_cols - curr.num_cols) <= 3:
+        # and column counts are close (within ±3), merge. Only safe when the caller
+        # confirmed nothing (heading/text) sits between the two tables; without that,
+        # unrelated tables on facing pages merged.
+        contiguity_known = getattr(self, "_contiguous_pairs", None) is not None
+        if contiguity_known and page_gap == 1 and abs(prev.num_cols - curr.num_cols) <= 3:
             logger.debug(
                 f"M1: Merging consecutive pages {prev.source_page_physical}->{curr.source_page_physical} "
                 f"(cols {prev.num_cols}->{curr.num_cols})"
@@ -607,8 +614,14 @@ class MultiPageTableHandler:
 
         base = fragments[0]
 
-        # Collect all rows (skipping repeated headers in subsequent fragments)
-        all_rows = list(base.rows)
+        # Collect all rows (skipping repeated headers in subsequent fragments),
+        # tagging each with its page so split pieces can cite the right page
+        all_rows = [
+            row.model_copy(update={"source_page_physical": row.source_page_physical
+                                   if row.source_page_physical is not None
+                                   else base.source_page_physical})
+            for row in base.rows
+        ]
         all_pages = [base.source_page_physical]
         all_footnotes = list(base.footnotes)
 
@@ -620,7 +633,10 @@ class MultiPageTableHandler:
                 skip_rows = fragment.num_header_rows
 
             # Append non-header rows from this fragment
-            all_rows.extend(fragment.rows[skip_rows:])
+            all_rows.extend(
+                row.model_copy(update={"source_page_physical": fragment.source_page_physical})
+                for row in fragment.rows[skip_rows:]
+            )
 
             # Collect page numbers
             all_pages.append(fragment.source_page_physical)

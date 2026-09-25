@@ -101,6 +101,9 @@ class TableRow(BaseModel):
     row_type: str = Field(
         ..., description="Row classification: 'header', 'data', 'total', 'subtotal'"
     )
+    source_page_physical: Optional[int] = Field(
+        None, description="0-indexed page the row came from (set for multi-page tables)"
+    )
 
 
 class StructuredTable(BaseModel):
@@ -289,7 +292,7 @@ class TableExtractionMetadata(BaseModel):
 
     extraction_method: str = Field(
         ...,
-        description="V2: 'pdfplumber-lines_strict', 'pdfplumber-text_fallback', "
+        description="V2: 'pdfplumber-lines', 'pdfplumber-text_fallback', "
                     "'docling-tableformer', 'gemini-2.5-flash'"
     )
     num_cells_parsed: int = Field(..., description="Total cells processed")

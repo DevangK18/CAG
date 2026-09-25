@@ -11,8 +11,9 @@ PHASE 1 FIXES IMPLEMENTED:
 """
 
 import logging
+import re
 
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Set
 from pathlib import Path
 import hashlib
 
@@ -25,7 +26,14 @@ from src.core.data_contracts import (
 
 logger = logging.getLogger(__name__)
 from src.core.table_contracts import StructuredTable
+from src.parsing_pipeline.config import get_config
 from src.parsing_pipeline.modules.multi_page_table_handler import MultiPageTableHandler
+
+# A line like this between two tables means the second is a new table, not a continuation
+TABLE_TITLE_RE = re.compile(
+    r"^\s*(annexure|appendix|table|statement|exhibit|schedule|chart|figure)\b", re.IGNORECASE
+)
+SENTENCE_END_RE = re.compile(r"(?<=[.;])\s+(?=[A-Z(])")
 
 
 class ChunkingService:
@@ -51,6 +59,7 @@ class ChunkingService:
         """
         self.multi_page_handler = MultiPageTableHandler()
         self._trace_emitter = trace_emitter
+        self.max_child_chars = get_config().chunking.max_child_chunk_chars
         logger.info(
             "ChunkingService initialized for hierarchical chunk creation (Phase 1 + P0-3 applied)."
         )
@@ -94,6 +103,9 @@ class ChunkingService:
                 [],
                 f"Merged {merged_count} multi-page table groups",
             )
+
+        # Split tables/paragraphs too long to embed (each piece keeps its own page)
+        task.extracted_content = self._split_oversized_content(task.extracted_content)
 
         # Create parent chunks from ToC
         parent_chunks = self._create_parent_chunks(task)
@@ -207,6 +219,9 @@ class ChunkingService:
         if not task.extracted_content:
             return 0
 
+        # The handler is reused across reports; its stats and DLQ list must not leak
+        self.multi_page_handler.reset_statistics()
+
         # Extract tables with structured data
         table_items = []
         non_table_items = []
@@ -243,6 +258,7 @@ class ChunkingService:
             structured_tables,
             trace_emitter,
             section_page_ranges=section_page_ranges,
+            contiguous_pairs=self._find_contiguous_table_pairs(task.extracted_content),
         )
 
         # Get statistics
@@ -260,46 +276,27 @@ class ChunkingService:
                 f"  M2-DLQ: {len(stats['dlq_entry_list'])} pages flagged as missing fragments"
             )
 
-        # Rebuild extracted_content list
-        # Create mapping from original table_id to merged table
-        original_to_merged = {}
+        # Rebuild extracted_content: the first fragment of each merged group becomes the
+        # merged table; the other fragments (and only those) are dropped
+        base_to_merged = {}
+        fragment_ids: Set[str] = set()
         for merged_table in merged_tables:
-            if merged_table.is_multi_page:
-                # Extract original table IDs from merged table ID
-                # Format: "table_X_Y_Z_merged"
-                base_id = merged_table.table_id.replace("_merged", "")
-                original_to_merged[base_id] = merged_table
-            else:
-                # Not merged, use as-is
-                original_to_merged[merged_table.table_id] = merged_table
+            group = self.multi_page_handler.merge_groups.get(merged_table.table_id)
+            if group:
+                base_to_merged[group[0]] = merged_table
+                fragment_ids.update(group[1:])
 
-        # Reconstruct extracted_content
         new_extracted_content = []
-        skip_ids = set()  # Track table IDs that were merged (fragments to skip)
-
         for item, structured_table in table_items:
             table_id = structured_table.table_id
-
-            # Check if this table was merged into another
-            if table_id in skip_ids:
-                continue  # Skip fragments that were merged
-
-            # Check if this is a merged table or original
-            if table_id in original_to_merged:
-                merged_table = original_to_merged[table_id]
-
-                # If this is a multi-page merged table, mark fragments for skipping
-                if merged_table.is_multi_page and table_id == merged_table.table_id.replace(
-                    "_merged", ""
-                ):
-                    # This is the base table - use the merged version
-                    # Add fragment IDs to skip set (they're on different pages)
-                    # We'll identify them by checking if their page is in source_pages
-                    # but not the first page
-                    pass  # Fragments will be skipped when encountered
-
-                # Update ExtractedContent with merged table
-                updated_item = ExtractedContent(
+            if table_id in fragment_ids:
+                continue
+            merged_table = base_to_merged.get(table_id)
+            if merged_table is None:
+                new_extracted_content.append(item)
+                continue
+            new_extracted_content.append(
+                ExtractedContent(
                     content_type=item.content_type,
                     content=merged_table.markdown_representation,
                     source_page_physical=merged_table.source_page_physical,
@@ -312,32 +309,145 @@ class ChunkingService:
                     extraction_method=item.extraction_method,
                     extraction_confidence=item.extraction_confidence,
                 )
-                new_extracted_content.append(updated_item)
-
-                # Mark subsequent pages' fragments for skipping
-                if merged_table.is_multi_page:
-                    for page in merged_table.source_pages[1:]:
-                        # Mark any table on this page as skipped (crude but effective)
-                        for other_item, other_table in table_items:
-                            if (
-                                other_table.source_page_physical == page
-                                and other_table.table_id != table_id
-                            ):
-                                skip_ids.add(other_table.table_id)
-            else:
-                # Table not in merge results, keep original
-                new_extracted_content.append(item)
+            )
 
         # Add back non-table items
         new_extracted_content.extend(non_table_items)
 
-        # Sort by page number to maintain order
-        new_extracted_content.sort(key=lambda x: x.source_page_physical)
+        # Restore reading order (page, then vertical position)
+        new_extracted_content.sort(key=self._reading_order_key)
 
         # Update task
         task.extracted_content = new_extracted_content
 
         return stats["tables_merged"]
+
+    @staticmethod
+    def _reading_order_key(item: ExtractedContent) -> Tuple[int, float]:
+        return (item.source_page_physical, item.source_bbox[1] if item.source_bbox else 0)
+
+    @staticmethod
+    def _breaks_table_run(item: ExtractedContent) -> bool:
+        """True if this block between two tables means the second one is a new table."""
+        if item.content_type != "paragraph" and item.content_type != "list":
+            return True  # headers, other tables, figures
+        text = (item.content or "").strip()
+        if TABLE_TITLE_RE.match(text) or text.endswith(":"):
+            return True
+        # Short lines (units, "Contd.", source notes, footnotes) can sit between fragments
+        return len(text) > 200
+
+    def _find_contiguous_table_pairs(
+        self, content: List[ExtractedContent]
+    ) -> Set[Tuple[str, str]]:
+        """
+        Pairs of consecutive tables (reading order) with no heading, caption or body
+        text between them: the only tables that can be one table split across pages.
+        """
+        pairs: Set[Tuple[str, str]] = set()
+        prev_id: Optional[str] = None
+        broken = False
+        for item in sorted(content, key=self._reading_order_key):
+            if item.content_type == "table_markdown" and item.structured_data:
+                table_id = item.structured_data.get("table_id")
+                if prev_id and table_id and not broken:
+                    pairs.add((prev_id, table_id))
+                prev_id, broken = table_id, False
+            elif self._breaks_table_run(item):
+                broken = True
+        return pairs
+
+    def _split_oversized_content(
+        self, content: List[ExtractedContent]
+    ) -> List[ExtractedContent]:
+        """Split tables and paragraphs longer than max_child_chars into embeddable pieces."""
+        result = []
+        for item in content:
+            if len(item.content or "") <= self.max_child_chars:
+                result.append(item)
+            elif item.content_type == "table_markdown":
+                result.extend(self._split_table(item))
+            else:
+                result.extend(self._split_text(item))
+        return result
+
+    def _split_table(self, item: ExtractedContent) -> List[ExtractedContent]:
+        """Split a table into row groups, repeating the header rows in every piece."""
+        table = None
+        if item.structured_data:
+            try:
+                table = StructuredTable(**item.structured_data)
+            except Exception:
+                table = None
+
+        if table is None or not table.rows:
+            return self._split_markdown_table(item)
+
+        headers = [r for r in table.rows if r.row_type == "header"]
+        data_rows = [r for r in table.rows if r.row_type != "header"]
+        render = self.multi_page_handler._regenerate_markdown
+        budget = self.max_child_chars - len(render(headers, table.columns))
+
+        groups, current, size = [], [], 0
+        for row in data_rows:
+            row_len = sum(len(c.cleaned_text) + 3 for c in row.cells) + 2
+            if current and size + row_len > budget:
+                groups.append(current)
+                current, size = [], 0
+            current.append(row)
+            size += row_len
+        if current:
+            groups.append(current)
+
+        pieces = []
+        for n, rows in enumerate(groups, 1):
+            pages = sorted({r.source_page_physical for r in rows if r.source_page_physical is not None})
+            page = pages[0] if pages else item.source_page_physical
+            piece = table.model_copy(update={
+                "table_id": f"{table.table_id}_part{n}",
+                "rows": headers + rows,
+                "num_rows": len(headers) + len(rows),
+                "source_page_physical": page,
+                "source_pages": pages,
+                "markdown_representation": render(headers + rows, table.columns),
+            })
+            pieces.append(item.model_copy(update={
+                "content": piece.markdown_representation,
+                "source_page_physical": page,
+                "structured_data": piece.model_dump(),
+            }))
+        return pieces
+
+    def _split_markdown_table(self, item: ExtractedContent) -> List[ExtractedContent]:
+        """Split a markdown table without structured rows, repeating its header lines."""
+        lines = item.content.split("\n")
+        header, body = lines[:2], lines[2:]
+        budget = self.max_child_chars - sum(len(l) + 1 for l in header)
+        pieces, current, size = [], [], 0
+        for line in body:
+            if current and size + len(line) + 1 > budget:
+                pieces.append(current)
+                current, size = [], 0
+            current.append(line)
+            size += len(line) + 1
+        if current:
+            pieces.append(current)
+        return [
+            item.model_copy(update={"content": "\n".join(header + rows)})
+            for rows in pieces
+        ]
+
+    def _split_text(self, item: ExtractedContent) -> List[ExtractedContent]:
+        """Split long text at sentence boundaries."""
+        pieces, current = [], ""
+        for sentence in SENTENCE_END_RE.split(item.content):
+            if current and len(current) + len(sentence) + 1 > self.max_child_chars:
+                pieces.append(current)
+                current = ""
+            current = f"{current} {sentence}".strip()
+        if current:
+            pieces.append(current)
+        return [item.model_copy(update={"content": text}) for text in pieces]
 
     def _log_distribution_stats(
         self, parent_chunks: List[ParentChunk], child_chunks: List[ChildChunk]

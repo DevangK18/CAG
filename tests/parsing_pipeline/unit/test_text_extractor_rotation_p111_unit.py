@@ -131,41 +131,25 @@ class TestRotatedTextExtraction:
 
         assert result == "Normal text content"
 
-    def test_90_rotation_uses_dict_extraction(self):
-        """90-degree page uses dict-based extraction."""
+    @pytest.mark.parametrize("rotation", [90, 180, 270])
+    def test_rotated_page_uses_displayed_coordinates(self, rotation):
+        """
+        Docling boxes are in displayed (rotated) coordinates; extraction must map them
+        back to unrotated space. Clipping without that cut words at column edges.
+        """
         from src.parsing_pipeline.extractors.text_extractor import TextExtractor
-        extractor = TextExtractor()
-        page = MockPage(rotation=90, text_content="Rotated text")
-        clip_rect = fitz.Rect(0, 0, 100, 100)
 
-        result = extractor._extract_text_with_rotation_handling(page, clip_rect)
+        doc = fitz.open()
+        page = doc.new_page(width=842, height=595)
+        page.insert_text((72, 100), "Implementation of Sub-Projects under Ocean Modelling", fontsize=11)
+        text_rect = page.search_for("Implementation")[0] | page.search_for("Modelling")[0]
+        page.set_rotation(rotation)
+        displayed = text_rect * page.rotation_matrix
+        displayed = fitz.Rect(displayed.x0 - 2, displayed.y0 - 2, displayed.x1 + 2, displayed.y1 + 2)
 
-        # Dict extraction joins spans with spaces
-        assert "Rotated" in result
-        assert "text" in result
+        result = TextExtractor()._extract_text_with_rotation_handling(page, displayed)
 
-    def test_270_rotation_uses_dict_extraction(self):
-        """270-degree page uses dict-based extraction."""
-        from src.parsing_pipeline.extractors.text_extractor import TextExtractor
-        extractor = TextExtractor()
-        page = MockPage(rotation=270, text_content="Another rotated text")
-        clip_rect = fitz.Rect(0, 0, 100, 100)
-
-        result = extractor._extract_text_with_rotation_handling(page, clip_rect)
-
-        assert "Another" in result
-        assert "rotated" in result
-
-    def test_180_rotation_uses_standard_extraction(self):
-        """180-degree page uses standard extraction (text order is fine)."""
-        from src.parsing_pipeline.extractors.text_extractor import TextExtractor
-        extractor = TextExtractor()
-        page = MockPage(rotation=180, text_content="Upside down text")
-        clip_rect = fitz.Rect(0, 0, 100, 100)
-
-        result = extractor._extract_text_with_rotation_handling(page, clip_rect)
-
-        assert result == "Upside down text"
+        assert "Implementation of Sub-Projects under Ocean Modelling" in " ".join(result.split())
 
 
 class TestRotationRedFlag:

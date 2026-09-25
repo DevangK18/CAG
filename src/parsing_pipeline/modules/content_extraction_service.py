@@ -52,7 +52,7 @@ class ContentExtractionService:
 
     # Patterns indicating paragraph continuation
     CONTINUATION_START_PATTERNS = [
-        r"^[a-z]",  # Starts with lowercase
+        r"^(?-i:[a-z])",  # Starts with lowercase (case-sensitive: patterns compile with IGNORECASE)
         r"^[,;:]",  # Starts with continuation punctuation
         r"^\d+\s+(?:per\s+)?cent",  # Continues a percentage
         r"^and\s",  # Starts with conjunction

@@ -221,6 +221,10 @@ chunking:
   # Prevents pathological cases
   max_parent_chunk_pages: 100
 
+  # Longest child chunk; longer tables split by rows (header repeated), text by sentences.
+  # The embedding model reads ~2,048 tokens (~4-8K chars) and silently drops the rest.
+  max_child_chunk_chars: 4000
+
 # ==============================================================================
 # PHASE 9: SEMANTIC ENRICHMENT (FINDINGS, RECOMMENDATIONS)
 # ==============================================================================

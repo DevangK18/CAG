@@ -133,7 +133,7 @@ class ExtractedContent(BaseModel):
     # V2 ADDITION: Extraction provenance
     extraction_method: Optional[str] = Field(
         default=None,
-        description="V2: Extraction tier - 'pdfplumber-lines_strict', 'pdfplumber-text_fallback', "
+        description="V2: Extraction tier - 'pdfplumber-lines', 'pdfplumber-text_fallback', "
                     "'docling-tableformer', 'gemini-2.5-flash', 'image-crop-for-gemini'"
     )
     extraction_confidence: Optional[float] = Field(
@@ -579,7 +579,7 @@ class VisualAssetRegistry(BaseModel):
     )
     extraction_stats: Dict[str, int] = Field(
         default_factory=dict,
-        description="Counts by extraction method: {'pdfplumber-lines_strict': 42, 'docling-tableformer': 15}"
+        description="Counts by extraction method: {'pdfplumber-lines': 42, 'docling-tableformer': 15}"
     )
 
 

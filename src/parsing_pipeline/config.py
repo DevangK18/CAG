@@ -353,6 +353,13 @@ class ChunkingConfig:
     """
 
     max_parent_chunk_pages: int = 100
+
+    max_child_chunk_chars: int = 4000
+    """
+    Longest child chunk; longer tables are split into row groups (header repeated) and
+    longer text at sentence boundaries. text-embedding-005 reads ~2,048 tokens, which is
+    ~4-8K chars (number-heavy tables tokenize densely); the rest is silently dropped.
+    """
     """
     Maximum page range for a single parent chunk.
 

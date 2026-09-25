@@ -10,6 +10,14 @@ from typing import List, Optional
 import re
 
 from src.core.data_contracts import ExtractedContent
+from src.parsing_pipeline.extractors.text_repair import (
+    build_vocabulary,
+    is_letter_spaced,
+    is_reversed,
+    repair_font_shift,
+    respace_letter_spaced,
+    reverse_words,
+)
 from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 
 
@@ -23,7 +31,18 @@ class TextExtractor:
 
     def __init__(self):
         """Initialize with text processing patterns."""
+        self._vocab_cache = {}
         logger.info("TextExtractor initialized with PyMuPDF text extraction.")
+
+    def _vocabulary(self, pdf_path: str):
+        """Word frequencies of the report's normally spaced pages (for re-spacing)."""
+        if pdf_path not in self._vocab_cache:
+            with fitz.open(pdf_path) as doc:
+                pages = [page.get_text("text") for page in doc]
+            self._vocab_cache = {
+                pdf_path: build_vocabulary(" ".join(t for t in pages if not is_letter_spaced(t)))
+            }
+        return self._vocab_cache[pdf_path]
 
     def _normalize_text(self, text: str) -> str:
         """
@@ -128,219 +147,32 @@ class TextExtractor:
         self, page, clip_rect: fitz.Rect, sort: bool = True
     ) -> str:
         """
-        P1-11 + M3: Extract text handling rotated pages.
+        Extract text from a clip region, handling rotated pages.
 
-        For 90°/270° rotated pages, use dict-based extraction to get
-        proper reading order, then filter by clip region.
-
-        M3 fix: Improved handling for all rotation cases including 180°.
+        Docling reports boxes in the displayed (rotated) page space, while PyMuPDF
+        clips in unrotated space. Mapping the clip through the derotation matrix
+        gives correct text and reading order for 90/180/270 pages; the previous
+        span-reversal approach cut words at column edges ("ple Sig cur inte").
 
         Args:
             page: PyMuPDF page object.
-            clip_rect: Clipping rectangle for extraction.
+            clip_rect: Clipping rectangle in displayed page coordinates.
             sort: Whether to sort text by position.
 
         Returns:
-            Extracted text with proper reading order.
+            Extracted text.
         """
-        rotation = self._get_page_rotation(page)
-
-        if rotation == 0:
-            return page.get_text("text", clip=clip_rect, sort=sort)
-
-        if rotation in (90, 270):
-            # Use "dict" extraction which provides block/line/span structure
-            blocks = page.get_text("dict", clip=clip_rect)["blocks"]
-
-            # Extract text from blocks
-            text_parts = []
-            for block in blocks:
-                if block["type"] == 0:  # Text block
-                    for line in block["lines"]:
-                        if rotation == 270:
-                            # M3: Reverse each SPAN with word-boundary awareness
-                            # First try simple character reversal
-                            reversed_spans = []
-                            for span in line["spans"]:
-                                span_text = span["text"]
-                                # If span contains multiple words, reverse each word individually
-                                if ' ' in span_text:
-                                    reversed_spans.append(' '.join(word[::-1] for word in span_text.split()))
-                                else:
-                                    reversed_spans.append(span_text[::-1])
-                            line_text = " ".join(reversed_spans)
-                        else:  # 90°
-                            line_text = " ".join(span["text"] for span in line["spans"])
-                        text_parts.append(line_text)
-
-            return "\n".join(text_parts)
-
-        if rotation == 180:
-            # M3: For 180° rotation, text may appear upside down
-            # PyMuPDF usually handles this, but if text is still reversed,
-            # the _detect_reversed_content fallback will catch it
-            text = page.get_text("text", clip=clip_rect, sort=sort)
-
-            # Check if the text looks reversed (upside down text reads backwards)
-            if self._detect_reversed_content(text):
-                logger.debug(f"M3: Detected reversed content on 180° rotated page, applying correction")
-                return self._reverse_text_content(text)
-
-            return text
-
-        # Fallback for unexpected rotation values
+        if self._get_page_rotation(page):
+            clip_rect = fitz.Rect(clip_rect) * page.derotation_matrix
         return page.get_text("text", clip=clip_rect, sort=sort)
 
-    # D9-FIX: Common reversed word patterns found in CAG reports
-    # These are reversed versions of common English words that appear in audit reports
-    # The reversed forms are RARE/NON-EXISTENT as valid English words
-    # REMEDIATION §3.5: Expanded patterns for education/audit domain
-    REVERSED_WORD_PATTERNS = {
-        # Common functional words (high frequency in any English text)
-        "eht",      # the
-        "dna",      # and (also DNA but rare standalone)
-        "rof",      # for
-        "htiw",     # with
-        "morf",     # from
-        "evah",     # have
-        "siht",     # this
-        "taht",     # that
-        "erew",     # were
-        "neeb",     # been
-        # CAG-specific vocabulary (high frequency in audit reports)
-        "elbaliava",   # available
-        "tegduB",      # Budget
-        "tnemucoD",    # Document
-        "troper",      # report
-        "tidua",       # audit
-        "hkal",        # lakh (Indian unit)
-        "erorc",       # crore (Indian unit)
-        "tnemnrevoG",  # Government
-        "tnemtrapeD",  # Department
-        "yrtsinim",    # ministry
-        "detroper",    # reported
-        "devresbo",    # observed
-        "dehsilbuP",   # Published
-        "toN",         # Not (with capital)
-        # REMEDIATION §3.5: Education domain (OD_2025_05 p152 fix)
-        "stneduts",    # students - key word from OD p152
-        "loohcs",      # school
-        "noitacude",   # education
-        "srehcaet",    # teachers
-        "gniniart",    # training
-        "seiticapac",  # capacities
-        "margorp",     # program
-        "semmargorP",  # Programmes
-        # REMEDIATION §3.5: Audit/finance domain
-        "tcirtsid",    # district
-        "gnidneps",    # spending
-        "deviecer",    # received
-        "detubirtsid", # distributed
-        "noitatnemelp",# implementation (partial)
-        "tnemeganam",  # management
-        "erutidnepxe", # expenditure
-        "secruoser",   # resources
-        "seitivitca",  # activities
-        "stifeneb",    # benefits
-        "serudecorp",  # procedures
-        "stnuocca",    # accounts
-        "ecnanif",     # finance
-        "sdnuf",       # funds
-        "tneiciffe",   # efficient
-        # Note: Don't add short common words that are valid both ways (saw/was, ton/not)
-    }
-
     def _detect_reversed_content(self, text: str) -> bool:
-        """
-        D9-FIX: Detect content-reversed text (no rotation metadata but reversed characters).
-
-        Two-pronged detection:
-        1. Pattern matching: Look for known reversed word patterns common in CAG reports
-        2. Structural heuristic: Unusual lowercase+uppercase transitions (reversed proper nouns)
-
-        Returns True if either signal is strong enough.
-        """
-        if len(text) < 20:
-            return False
-
-        text_lower = text.lower()
-        words = text.split()
-
-        # D9-FIX: Check for known reversed patterns
-        # If we find ANY of the characteristic reversed patterns, flag as reversed
-        # REMEDIATION §3.5: More aggressive detection with expanded pattern set
-        reversed_pattern_count = 0
-        matched_patterns = []
-        for pattern in self.REVERSED_WORD_PATTERNS:
-            # Case-insensitive search for the pattern
-            if pattern.lower() in text_lower:
-                reversed_pattern_count += 1
-                matched_patterns.append(pattern)
-                # If we find 2+ different reversed patterns, high confidence
-                if reversed_pattern_count >= 2:
-                    logger.debug(f"D9: Detected multiple reversed patterns: {matched_patterns}")
-                    return True
-
-        # REMEDIATION §3.5: Lower threshold from 50 to 30 chars for single-pattern detection
-        # Single pattern match with length check (avoid false positives on short text)
-        if reversed_pattern_count >= 1 and len(text) >= 30:
-            logger.debug(f"D9: Detected reversed pattern '{matched_patterns[0]}' in text (len={len(text)})")
-            return True
-
-        # Original heuristic: lowercase followed by uppercase (reversed proper nouns)
-        # This catches Indian proper names like "gnarabaN" (Nabarang)
-        reversed_caps_pattern = re.findall(r'[a-z][A-Z]', text)
-        if len(words) > 3 and len(reversed_caps_pattern) / len(words) > 0.3:
-            logger.debug(f"D9: Detected reversed proper nouns in text")
-            return True
-
-        return False
+        """D9-FIX: Detect word-reversed text (see text_repair.is_reversed)."""
+        return is_reversed(text)
 
     def _reverse_text_content(self, text: str) -> str:
-        """
-        C2 fix: Reverse word-level content to recover readable text.
-
-        When text is detected as reversed (e.g., "stneduts" instead of "students"),
-        this method reverses each word while preserving whitespace and line structure.
-
-        Args:
-            text: Reversed text content
-
-        Returns:
-            Corrected text with words reversed back to normal
-        """
-        lines = text.split('\n')
-        corrected_lines = []
-
-        for line in lines:
-            # Split line into words and non-word tokens (preserve spacing/punctuation)
-            words = line.split()
-            corrected_words = []
-
-            for word in words:
-                # Preserve leading/trailing punctuation
-                leading_punct = ""
-                trailing_punct = ""
-
-                # Extract leading punctuation
-                while word and not word[0].isalnum():
-                    leading_punct += word[0]
-                    word = word[1:]
-
-                # Extract trailing punctuation
-                while word and not word[-1].isalnum():
-                    trailing_punct = word[-1] + trailing_punct
-                    word = word[:-1]
-
-                # Reverse the core word
-                reversed_word = word[::-1] if word else ""
-
-                # Reconstruct with punctuation
-                corrected_words.append(leading_punct + reversed_word + trailing_punct)
-
-            corrected_lines.append(' '.join(corrected_words))
-
-        return '\n'.join(corrected_lines)
+        """C2 fix: Reverse each word back, preserving lines and punctuation."""
+        return reverse_words(text)
 
     def _extract_text_from_bbox(
         self, pdf_path: str, page_num: int, bbox: List[float]
@@ -397,6 +229,10 @@ class TextExtractor:
             # Normalize text (hyphenation, whitespace)
             normalized_text = self._normalize_text(raw_text)
 
+            # Decode lines set in fonts whose glyphs are shifted 29 code points low
+            normalized_text = repair_font_shift(normalized_text)
+
+
             # P2-17: Apply OCR header normalization (fixes Roman numeral corruptions)
             normalized_text = get_ocr_normalizer().normalize_headers(normalized_text)
 
@@ -410,6 +246,10 @@ class TextExtractor:
                 logger.debug(f"C2/M3: Detected reversed content on page {page_num} (rotation={rotation}), applying correction")
                 normalized_text = self._reverse_text_content(normalized_text)
                 content_was_reversed = True
+
+            # Rejoin text whose PDF text layer has spaces between letters
+            if is_letter_spaced(normalized_text):
+                normalized_text = respace_letter_spaced(normalized_text, self._vocabulary(pdf_path))
 
             # Skip if no meaningful text was extracted
             if not normalized_text or normalized_text.isspace():
