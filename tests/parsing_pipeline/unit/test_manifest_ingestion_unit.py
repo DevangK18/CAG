@@ -365,4 +365,5 @@ class TestGovernmentBodyTypeColumn:
         df = service.load_manifest(str(path))
 
         assert service.government_body_type == "local_body"
+        assert service.raw_data_dir == tmp_path / "raw" / "local_body"
         assert service._build_report_id(df.iloc[0]).startswith("KA_2022_06_")

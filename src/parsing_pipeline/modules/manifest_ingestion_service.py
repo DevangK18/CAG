@@ -295,7 +295,12 @@ class ManifestIngestionService:
                     if explicit_type:
                         prev_type = self.government_body_type
                         self.government_body_type = explicit_type
-                        logger.info(f"Government body type overridden by column: {self.government_body_type}")
+                        self.raw_data_dir = self.base_raw_data_dir / explicit_type
+                        self.raw_data_dir.mkdir(parents=True, exist_ok=True)
+                        logger.info(
+                            f"Government body type overridden by column: {self.government_body_type} "
+                            f"(PDF storage directory: {self.raw_data_dir})"
+                        )
 
                         # Trace: Tier override by column
                         self._trace_emitter.emit_decision(
