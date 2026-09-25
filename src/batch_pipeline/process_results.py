@@ -123,7 +123,7 @@ def extract_overview_from_json(json_path: Path) -> dict:
                 "id": f.get("finding_id"),
                 "severity": f.get("severity"),
                 "type": f.get("finding_type"),
-                "amount_crore": f.get("total_amount_inr", 0) / 10000000,
+                "amount_crore": (f.get("monetary_value") or 0) / 1_000_000_000,  # paise -> crore
                 "chapter": f.get("chapter"),
                 "section": f.get("section"),
                 "page": f.get("page"),

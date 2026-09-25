@@ -879,8 +879,15 @@ class SemanticEnrichmentService:
             and not getattr(f, 'is_executive_summary', False)
         ]
 
-        # Calculate monetary totals (excluding duplicates and exec summary)
-        total_monetary = sum(f.total_amount_inr for f in primary_findings)
+        # Headline total: largest amount per primary finding, each distinct amount counted once.
+        # Summing every amount in a finding double-counts outlays, budgets and repeated figures.
+        seen_amounts: set = set()
+        total_monetary = 0
+        for f in primary_findings:
+            amount = f.monetary_value or 0
+            if amount and amount not in seen_amounts:
+                seen_amounts.add(amount)
+                total_monetary += amount
         total_monetary_crore = total_monetary / 10_000_000_00
 
         # Also track raw totals for transparency
@@ -907,7 +914,7 @@ class SemanticEnrichmentService:
             if ft not in findings_by_type:
                 findings_by_type[ft] = {"count": 0, "total_inr": 0}
             findings_by_type[ft]["count"] += 1
-            findings_by_type[ft]["total_inr"] += f.total_amount_inr
+            findings_by_type[ft]["total_inr"] += f.monetary_value or 0
 
         # Convert to crore for readability
         for ft in findings_by_type:
@@ -946,7 +953,7 @@ class SemanticEnrichmentService:
             "findings": {
                 "total_count": len(findings),
                 "primary_count": len(primary_findings),  # R3+R4: Non-duplicate, non-exec-summary
-                "total_monetary_inr": total_monetary,  # R3+R4: Primary findings only
+                "total_monetary_inr": total_monetary,  # Distinct max amount per primary finding
                 "total_monetary_crore": round(total_monetary_crore, 2),
                 "raw_total_monetary_inr": raw_total_monetary,  # R3: Before dedup
                 "raw_total_monetary_crore": round(raw_total_monetary_crore, 2),

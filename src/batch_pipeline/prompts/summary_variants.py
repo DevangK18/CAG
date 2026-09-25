@@ -208,7 +208,7 @@ def build_summary_input(json_data: dict) -> str:
 
 ## Findings Overview
 - Total Findings: {findings_stats.get("total_count", 0)}
-- Total Monetary Impact: ₹{findings_stats.get("total_monetary_crore", 0):,.2f} Crore
+- Amounts cited in findings (largest per finding, de-duplicated; includes outlays and budgets, not an audited loss total): ₹{findings_stats.get("total_monetary_crore", 0):,.2f} Crore
 - By Severity: {json.dumps(findings_stats.get("by_severity", {}))}
 - By Type: {json.dumps({k: v.get("count", 0) for k, v in findings_stats.get("by_type", {}).items()})}
 """)
@@ -220,21 +220,25 @@ def build_summary_input(json_data: dict) -> str:
     findings = enrichment.get("findings", [])
 
     if findings:
-        # Sort by monetary amount (highest first)
+        # Sort by largest single amount (highest first)
         sorted_findings = sorted(
-            findings, key=lambda x: x.get("total_amount_inr", 0), reverse=True
+            findings, key=lambda x: x.get("monetary_value") or 0, reverse=True
         )
 
-        parts.append("\n# DETAILED FINDINGS (sorted by monetary impact)\n")
+        parts.append("\n# DETAILED FINDINGS (sorted by largest amount cited)\n")
 
         for i, f in enumerate(sorted_findings[:25], 1):  # Top 25 findings
-            amount_cr = f.get("total_amount_inr", 0) / 10000000
+            # Quote amounts exactly as the report states them rather than a computed sum
+            amounts = "; ".join(
+                mv.get("raw_text", "").replace("`", "₹").strip()
+                for mv in f.get("monetary_values", [])[:6]
+            ) or "None"
             text = f.get("text", f.get("summary", ""))[:600]
 
             parts.append(f"""
 ## Finding {i} [{f.get("severity", "N/A").upper()}]
 - Type: {f.get("finding_type", "N/A")}
-- Amount: ₹{amount_cr:,.2f} Crore
+- Amounts cited: {amounts}
 - Location: {f.get("chapter", "N/A")} > {f.get("section", "N/A")} (p.{f.get("page", "N/A")})
 
 {text}
@@ -331,6 +335,16 @@ def _get_executive_summary_content(json_data: dict) -> str:
     return "\n\n".join(content[:25])  # Limit to 25 chunks
 
 
+# Appended to every variant. Earlier runs summed every amount in a finding into a
+# "total impact", and policy briefs came back as fill-in forms ("[Date]", "____").
+ACCURACY_RULES = """
+
+## Accuracy Rules (apply to everything above)
+- Quote monetary amounts exactly as the report states them. Never add amounts together into a new total, and never present outlays, budgets or sanctioned costs as losses.
+- Never output fill-in placeholders such as [Date], [Amount], [Name], [XXX], DD/MM/YYYY or blank lines (____). If a detail such as a date, officer or notice number is not in the report data, leave it out or write "not stated in the report".
+"""
+
+
 def get_summary_prompt(variant: str, summary_input: str, json_data: dict) -> str:
     """Get the prompt for a specific summary variant with tier-specific customization."""
 
@@ -347,7 +361,7 @@ def get_summary_prompt(variant: str, summary_input: str, json_data: dict) -> str
         "policy": _get_policy_prompt(tier, state_name),
     }
 
-    return prompts[variant].format(
+    return (prompts[variant] + ACCURACY_RULES).format(
         input=summary_input,
         report_title=meta.get("report_title", "N/A"),
         report_type=meta.get("report_type", "N/A"),
@@ -394,7 +408,7 @@ def _get_executive_prompt_union() -> str:
 - Use sub-headers to group related findings
 
 ### 3. Financial Impact Summary (300-400 words)
-- Total monetary impact across all findings
+- Headline amounts the report itself states as loss, excess or irregular expenditure (quoted, not added together)
 - Breakdown by category (non-compliance, revenue loss, irregular expenditure, etc.)
 - Breakdown by severity (critical ≥₹100 Cr, high ≥₹10 Cr, medium ≥₹1 Cr)
 - Any recurring vs. one-time issues
@@ -460,7 +474,7 @@ def _get_executive_prompt_state(state_name: str = None) -> str:
 - Use sub-headers to group related findings
 
 ### 3. Financial Impact Summary (250-350 words)
-- Total monetary impact across all findings
+- Headline amounts the report itself states as loss, excess or irregular expenditure (quoted, not added together)
 - Breakdown by category (non-compliance, revenue loss, irregular expenditure)
 - Breakdown by severity (critical ≥₹50 Cr, high ≥₹5 Cr, medium ≥₹0.5 Cr)
 - Comparison to state budget allocations where relevant
@@ -529,7 +543,7 @@ def _get_executive_prompt_local(state_name: str = None) -> str:
 - Group by: Financial Management, Scheme Implementation, Institutional Compliance
 
 ### 3. Financial Impact Summary (200-300 words)
-- Total monetary irregularities
+- Headline irregular amounts as stated in the report (quoted, not added together)
 - Breakdown by:
   - Own revenue vs grant funds
   - SFC/CFC grant utilization issues
@@ -1464,7 +1478,7 @@ def _get_policy_prompt_union() -> str:
 - Inter-ministry coordination issues
 
 ### 3. Financial Implications (300-350 words)
-- Total revenue loss or potential recovery amount
+- Revenue loss or recovery amounts as stated in the report (quoted, not added together)
 - Breakdown by category of irregularity
 - Recurring versus one-time financial impact
 - Compound effects and cascading losses
@@ -1504,8 +1518,8 @@ def _get_policy_prompt_union() -> str:
 - Reputational and political risks
 - Legal and regulatory exposure
 
-### 7. Draft ATN Response Template
-Provide an outline for the ministry's formal Action Taken Note:
+### 7. Draft ATN Response Outline
+Outline the ministry's formal Action Taken Note, filled in with this report's paragraph numbers, findings and amounts (not a blank form):
 - Para-wise response structure for PAC
 - Points to be accepted with corrective action
 - Points requiring factual clarification with evidence
@@ -1572,7 +1586,7 @@ def _get_policy_prompt_state(state_name: str = None) -> str:
 - Inter-department coordination issues
 
 ### 3. Financial Implications (300-350 words)
-- Total financial impact on state exchequer
+- Financial impact on the state exchequer as stated in the report (quoted, not added together)
 - Breakdown by category of irregularity
 - Impact on state budget allocations
 - Recurring versus one-time financial impact
@@ -1612,8 +1626,8 @@ def _get_policy_prompt_state(state_name: str = None) -> str:
 - Reputational risks for {state_display} government
 - Legal exposure under state laws
 
-### 7. Draft Response Template
-Provide an outline for the department's formal response:
+### 7. Draft Response Outline
+Outline the department's formal response, filled in with this report's paragraph numbers, findings and amounts (not a blank form):
 - Para-wise response structure for State PAC
 - Points to be accepted with Government Order references
 - Points requiring factual clarification
@@ -1688,7 +1702,7 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 - Record-keeping deficiencies
 
 ### 3. Financial Implications (250-300 words)
-- Total financial irregularities across local bodies
+- Financial irregularities across local bodies as stated in the report (quoted, not added together)
 - Unspent grants and opportunity cost
 - Revenue foregone due to non-collection
 - Recovery potential from local bodies
@@ -1728,14 +1742,15 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 - Central scheme fund release implications
 - 15th Finance Commission grant conditions at risk
 
-### 7. Model Action Templates
+### 7. Model Action Outlines
+Fill each outline with this report's findings, amounts and local bodies (not a blank form).
 
-**A. District Collector Order Template:**
+**A. District Collector Order Outline:**
 - Findings requiring immediate local body action
 - Timeline for compliance
 - Penalty provisions for non-compliance
 
-**B. Panchayat Resolution Format:**
+**B. Panchayat Resolution Outline:**
 - Acknowledgment of audit findings
 - Action plan approved by Gram Sabha
 - Responsible persons and timelines
