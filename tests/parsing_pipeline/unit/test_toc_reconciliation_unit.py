@@ -4,6 +4,7 @@ import pytest
 from difflib import SequenceMatcher
 from unittest.mock import Mock, patch, MagicMock
 
+from src.parsing_pipeline.modules.toc_quality import assess_toc_quality
 from src.parsing_pipeline.modules.toc_reconciliation_service import TOCReconciliationService
 from src.core.data_contracts import DocumentTask
 
@@ -294,46 +295,34 @@ class TestHeadingPositionsFormat:
 
 
 class TestQualityAssessment:
-    """Test quality score computation."""
-
-    def setup_method(self):
-        self.service = TOCReconciliationService()
+    """Test quality score computation (toc_quality.assess_toc_quality)."""
 
     def test_empty_toc_zero_quality(self):
-        """Empty TOC has zero quality."""
-        score = self.service._assess_reconciled_quality([], [])
-        assert score == 0
+        assert assess_toc_quality([]) == 0
 
-    def test_base_quality_for_any_toc(self):
-        """Any TOC gets at least base quality."""
-        toc = [[1, "Chapter I", 5]]
-        score = self.service._assess_reconciled_quality(toc, [])
-        assert score >= 40
-
-    def test_multiple_levels_bonus(self):
-        """Multiple hierarchy levels increase quality."""
+    def test_clean_toc_scores_high(self):
         toc = [
-            [1, "Chapter I", 5],
+            [1, "Preface", 2],
+            [1, "Chapter I Introduction", 5],
             [2, "1.1 Background", 7],
-            [3, "1.1.1 Details", 8],
+            [1, "Chapter II Findings", 12],
+            [2, "2.1 Major Issues", 14],
         ]
-        docling_headers = [
-            {"title": "Chapter I", "page": 5, "y_position": 72.0,
-             "confidence": 0.9, "bbox": [50, 72, 500, 90], "level": 1},
-        ]
-        score = self.service._assess_reconciled_quality(toc, docling_headers)
-        assert score >= 55  # Base + levels bonus
+        assert assess_toc_quality(toc, 20) >= 90
 
-    def test_quality_capped_at_100(self):
-        """Quality score cannot exceed 100."""
-        toc = [[1, f"Chapter {i}", i*5] for i in range(1, 20)]
-        docling_headers = [
-            {"title": f"Chapter {i}", "page": i*5, "y_position": 72.0,
-             "confidence": 0.9, "bbox": [50, 72, 500, 90], "level": 1}
-            for i in range(1, 20)
+    def test_missing_chapters_and_sections_at_l1_score_low(self):
+        toc = [
+            [1, "Chapter 1 Introduction", 5],
+            [1, "1.3 Resources", 7],
+            [1, "1.5 Refunds", 9],
+            [1, "Chapter 6 Execution", 40],
+            [1, "&KDSWHU $ZDUGRI3URMHFWV", 30],
         ]
-        score = self.service._assess_reconciled_quality(toc, docling_headers)
-        assert score <= 100
+        assert assess_toc_quality(toc, 60) < 70
+
+    def test_quality_bounded(self):
+        toc = [[1, f"Chapter {i}", i * 5] for i in range(1, 20)]
+        assert 0 <= assess_toc_quality(toc, 100) <= 100
 
 
 class TestSimilarityMatching:

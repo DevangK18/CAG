@@ -30,13 +30,18 @@ import logging
 from datetime import datetime
 
 from src.core.data_contracts import DocumentTask, TOCQualityMetrics
-from src.parsing_pipeline.modules.toc_table_parser import TOCTableParser, TOCEntry
+from src.parsing_pipeline.extractors.text_repair import repair_font_shift
+from src.parsing_pipeline.modules.printed_toc_parser import parse_printed_toc
+from src.parsing_pipeline.modules.toc_quality import assess_toc_quality
 from src.parsing_pipeline.config import get_config, ScaffoldingConfig
 
 if TYPE_CHECKING:
     from src.parsing_pipeline.instrumentation import TraceEmitter
 
 logger = logging.getLogger(__name__)
+
+# Title ends with a word that takes a number ("Chapter", "Annexure", "No.")
+TITLE_LABEL_END_RE = re.compile(r"\b(chapter|annexure|appendix|part|table|schedule|statement|no\.?)\s*$", re.IGNORECASE)
 
 
 # =============================================================================
@@ -271,7 +276,7 @@ class ScaffoldingService:
         r"^[ivxlc]+$",  # Roman numerals only
         r"^\d{1,3}$",  # Just page numbers
         r"^\(.*\)$",  # Just parenthetical content
-        r"^[a-z]",  # Starts with lowercase
+        r"^(?-i:[a-z])",  # Starts with lowercase (case-sensitive: patterns compile with IGNORECASE)
         r"^\W",  # Starts with non-word char
         r".*\.{4,}.*",  # Dots leader: "Introduction......"
         r"(?i)^balance\s",  # Accounting noise
@@ -281,8 +286,8 @@ class ScaffoldingService:
         # Pattern: Pipe characters indicate table cells
         r".*\|.*\|",  # Contains 2+ pipe characters: "5 | 6 | Pune |"
         # Pattern: City/Place followed by numbers (infrastructure table rows)
-        r"^[\d\s]*[A-Z][a-z]+[-\s][A-Z][a-z]+\s+\d{2,}",  # "Agra-Mumbai 964 24329"
-        r"^\d+\s+[A-Z][a-z]+[-\s]",  # "5 Agra-Mumbai" at start
+        r"(?-i:^[\d\s]*[A-Z][a-z]+[-\s][A-Z][a-z]+\s+\d{2,})",  # "Agra-Mumbai 964 24329"
+        r"(?-i:^\d+\s+[A-Z][a-z]+[-\s])",  # "5 Agra-Mumbai" at start
         # Pattern: Multiple comma-formatted numbers (financial data)
         r"[\d,]{4,}\s+[\d,]{4,}\s+[\d,]{4,}",  # "24,329 25,000 30,000"
         r"\d{1,3}(,\d{3})+.*\d{1,3}(,\d{3})+",  # Two+ comma-separated numbers
@@ -293,8 +298,8 @@ class ScaffoldingService:
         r"(\d{2,}\s+){4,}",  # 4+ consecutive number groups: "964 24329 25 6"
         r"^\d{1,2}\s+\d{2,}[\s,]+\d{2,}",  # "5 964 24329" at start
         # Pattern: Table-like mixed alphanumeric rows
-        r"^[A-Z][a-z]+\s+\d{2,}\s+\d{2,}",  # "Mumbai 964 24329"
-        r"\d{2,}\s+[A-Z][a-z]+\s+\d{2,}",  # "964 Mumbai 24329"
+        r"(?-i:^[A-Z][a-z]+\s+\d{2,}\s+\d{2,})",  # "Mumbai 964 24329"
+        r"(?-i:\d{2,}\s+[A-Z][a-z]+\s+\d{2,})",  # "964 Mumbai 24329"
         # Pattern: Percentage symbols in data
         r"\d+\s*%\s+\d+\s*%",  # Multiple percentages: "25% 30%"
         r"^\d+\s*%",  # Starts with percentage
@@ -473,21 +478,48 @@ class ScaffoldingService:
                 if task.scaffold["toc"]:
                     toc_method = task.scaffold.get("toc_method", "embedded_bookmarks")
 
-                # Phase 2: Fallback to heuristic ToC generation if none found
+                # Phase 2: Printed contents page (chapters, sections, annexures with
+                # printed page numbers). Far more reliable than heading heuristics.
+                if not task.scaffold["toc"]:
+                    printed_toc, printed_confidence = self._extract_printed_toc(doc, task.report_id)
+                    printed_quality = min(
+                        assess_toc_quality(printed_toc, doc.page_count),
+                        int(printed_confidence * 100),
+                    )
+                    if len(printed_toc) >= 5 and printed_quality >= 60:
+                        task.scaffold["toc"] = printed_toc
+                        task.scaffold["toc_method"] = "printed_toc"
+                        task.scaffold["toc_quality"] = printed_quality
+                        toc_method = "printed_toc"
+                        task.error_log.append(
+                            f"Printed TOC used: {len(printed_toc)} entries, quality={printed_quality}"
+                        )
+                        trace_emitter.emit_decision(
+                            "4",
+                            "toc_source",
+                            "printed_toc",
+                            ["embedded_bookmarks", "printed_toc", "heuristic"],
+                            f"{len(printed_toc)} entries, verified {printed_confidence:.2f}, quality {printed_quality}",
+                        )
+
+                # Phase 3: Fallback to heuristic ToC generation if none found
                 if not task.scaffold["toc"]:
                     heuristic_toc, heading_positions = self._generate_heuristic_toc(doc, task.report_id)
                     if heuristic_toc:
                         task.scaffold["toc"] = heuristic_toc
                         task.scaffold["heading_positions"] = heading_positions
+                        # Score it: without a score, later phases defaulted to 50 and
+                        # low-quality TOCs never reached LLM validation
+                        task.scaffold["toc_quality"] = assess_toc_quality(heuristic_toc, doc.page_count)
                         toc_method = "heuristic"
                         task.error_log.append(
                             f"Heuristic ToC generated with {len(heuristic_toc)} entries"
                         )
                         trace_emitter.emit_fallback(
                             "4",
-                            "embedded_bookmarks",
+                            "printed_toc",
                             "heuristic_toc",
-                            "No embedded bookmarks found or quality too low",
+                            "No usable bookmarks or printed contents page",
                         )
 
                     # Check if there was a high rejection alert
@@ -510,68 +542,19 @@ class ScaffoldingService:
                         )
                         self._last_toc_alert = None
 
-                # Phase 2.5: Try printed TOC pre-pass as supplementary signal
-                printed_toc, printed_confidence = self._extract_printed_toc(pdf_path, task.report_id)
-
-                if printed_toc and printed_confidence > 0.5:
-                    current_toc = task.scaffold.get("toc", [])
-                    current_quality = task.scaffold.get("toc_quality", 0)
-
-                    # Infer quality if not explicitly set but TOC exists
-                    # Embedded/heuristic TOCs don't set quality, but if they have entries they're likely decent
-                    if current_toc and current_quality == 0:
-                        # Infer quality based on entry count and structure
-                        if len(current_toc) >= 5:
-                            current_quality = 70  # Assume decent quality if has multiple entries
-                        else:
-                            current_quality = 50  # Medium quality for fewer entries
-
-                    if not current_toc or current_quality < 40:
-                        # No existing TOC or very low quality — use printed TOC as primary
-                        task.scaffold["toc"] = printed_toc
-                        task.scaffold["toc_method"] = "printed_toc_prepass"
-                        task.scaffold["toc_quality"] = int(printed_confidence * 100)
-                        toc_method = "printed_toc"
-                        logger.info(f"[{task.report_id}] Using printed TOC pre-pass as primary ({len(printed_toc)} entries)")
-                        task.error_log.append(
-                            f"Printed TOC pre-pass used as primary: {len(printed_toc)} entries"
-                        )
-                        trace_emitter.emit_decision(
-                            "4",
-                            "toc_source",
-                            "printed_toc_prepass",
-                            ["embedded_bookmarks", "heuristic", "printed_toc"],
-                            f"Current quality {current_quality} < 40, printed confidence {printed_confidence:.2f}",
-                        )
-
-                    elif current_quality < 70 and len(printed_toc) > len(current_toc):
-                        # Medium quality existing TOC but printed has more entries — supplement
-                        # Merge: keep existing, add any printed entries not already present
-                        existing_titles = {entry[1].lower().strip() for entry in current_toc}
-                        new_entries = [
-                            entry for entry in printed_toc
-                            if entry[1].lower().strip() not in existing_titles
-                        ]
-                        if new_entries:
-                            merged = current_toc + new_entries
-                            # Re-sort by page number
-                            merged.sort(key=lambda e: e[2])
-                            task.scaffold["toc"] = merged
-                            task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+printed_supplement"
-                            toc_method = f"{toc_method}+printed_supplement"
-                            logger.info(f"[{task.report_id}] Supplemented TOC with {len(new_entries)} printed entries")
-                            task.error_log.append(
-                                f"TOC supplemented with {len(new_entries)} printed entries"
-                            )
-
                 # Phase 3: Generate page number mappings (always done)
                 task = self._build_page_mappings(task, doc)
 
                 # Track entries before filtering
                 toc_entries_before_filter = len(task.scaffold.get("toc", []))
 
-                # Phase 4: Filter/dedupe ToC for quality
-                if task.scaffold["toc"]:
+                # Phase 4: Filter/dedupe ToC for quality. The candidate filter is for
+                # heuristic headings; printed contents and bookmarks are authoritative
+                # (it dropped "i. Direct Taxes" style sections as lowercase fragments)
+                if task.scaffold["toc"] and toc_method != "heuristic":
+                    filtered = self._dedupe_trusted_toc(task.scaffold["toc"])
+                    task.scaffold["toc"] = filtered
+                elif task.scaffold["toc"]:
                     filtered = self._filter_and_dedupe_toc(task.scaffold["toc"])
                     task.scaffold["toc"] = filtered
                     task.error_log.append(
@@ -638,85 +621,18 @@ class ScaffoldingService:
             return task.local_pdf_path
         return None
 
-    def _extract_printed_toc(self, pdf_path: str, report_id: str = "unknown") -> Tuple[List[List], float]:
+    def _extract_printed_toc(self, doc: fitz.Document, report_id: str = "unknown") -> Tuple[List[List], float]:
         """
-        Pre-pass: Extract TOC by parsing raw text from early pages.
+        Parse the printed contents page into [[level, title, physical_page], ...].
 
-        Opens the PDF directly and feeds lines through TOCTableParser's
-        regex patterns. This runs BEFORE any chunking, solving the
-        chicken-egg problem where the table parser needed chunks that
-        don't exist yet.
-
-        Args:
-            pdf_path: Path to the PDF file
-            report_id: Report identifier for logging
-
-        Returns:
-            Tuple of (toc_entries: List[List], confidence: float)
-            toc_entries format: [[level, title, page_num], ...]
+        Returns the TOC and the share of entries confirmed on their mapped page
+        (see printed_toc_parser.parse_printed_toc).
         """
-        parser = TOCTableParser()
-        entries = []
-        toc_started = False
-        toc_ended = False
-
         try:
-            doc = fitz.open(pdf_path)
-            max_page = min(15, len(doc))  # Only scan first 15 pages
-
-            for page_num in range(max_page):
-                if toc_ended:
-                    break
-
-                page = doc[page_num]
-                text = page.get_text("text")
-                lines = text.split("\n")
-
-                for line in lines:
-                    line = line.strip()
-                    if not line or len(line) < 3:
-                        continue
-
-                    # Detect TOC header
-                    if not toc_started:
-                        line_lower = line.lower().strip()
-                        if line_lower in ("contents", "table of contents", "index", "list of contents"):
-                            toc_started = True
-                            continue
-
-                    # Try to parse as TOC entry
-                    entry = parser._parse_toc_line(line)
-                    if entry:
-                        entries.append(entry)
-                    elif toc_started and len(entries) >= 3:
-                        # If we had a TOC going and hit non-TOC content,
-                        # check if TOC has ended
-                        if parser._is_toc_end(line):
-                            toc_ended = True
-                            break
-
-            doc.close()
-
+            return parse_printed_toc(doc, report_id)
         except Exception as e:
-            logger.warning(f"[{report_id}] Printed TOC pre-pass failed: {e}")
+            logger.warning(f"[{report_id}] Printed TOC parsing failed: {e}")
             return [], 0.0
-
-        if len(entries) < 3:
-            logger.debug(f"[{report_id}] Printed TOC pre-pass: only {len(entries)} entries (min 3)")
-            return [], 0.0
-
-        # Convert TOCEntry objects to standard format
-        toc = [[e.level, e.title, e.page_num] for e in entries]
-
-        # Calculate confidence
-        confidence = parser._calculate_confidence(entries, [])
-
-        logger.info(
-            f"[{report_id}] Printed TOC pre-pass: {len(entries)} entries, "
-            f"confidence={confidence:.2f}"
-        )
-
-        return toc, confidence
 
     def _extract_embedded_toc(
         self,
@@ -772,7 +688,7 @@ class ScaffoldingService:
                         level, title, page = entry[:3]
                         cleaned_title = self._clean_toc_title(title)
                         if cleaned_title:  # Skip empty titles
-                            cleaned_toc.append([level, cleaned_title, page])
+                            cleaned_toc.append([level, cleaned_title, self._bookmark_page(doc, page)])
 
                 task.scaffold["toc"] = cleaned_toc
                 task.scaffold["toc_quality_metrics"] = {
@@ -1061,6 +977,32 @@ class ScaffoldingService:
 
         return filtered
 
+    @staticmethod
+    def _bookmark_page(doc: fitz.Document, page: int) -> int:
+        """
+        0-indexed page for a 1-indexed bookmark target, moved past blank separator pages
+        (merged PDFs point chapter bookmarks at the blank page before the chapter).
+        """
+        index = max(0, min(page - 1, doc.page_count - 1))
+        for candidate in range(index, min(index + 3, doc.page_count)):
+            if doc[candidate].get_text("text").strip():
+                return candidate
+        return index
+
+    def _dedupe_trusted_toc(self, toc: List[List]) -> List[List]:
+        """Clean titles and drop exact (title, page) repeats from a bookmark/printed TOC."""
+        result, seen = [], set()
+        for entry in toc:
+            if len(entry) < 3:
+                continue
+            level, raw_title, page = entry[:3]
+            title = self._clean_toc_title(raw_title)
+            key = (title.lower(), page)
+            if title and key not in seen:
+                seen.add(key)
+                result.append([level, title, page])
+        return result
+
     def _normalize_title(self, title: str) -> str:
         """Normalize ToC titles for comparison."""
         cleaned = " ".join(title.replace("…", ".").split())
@@ -1090,8 +1032,8 @@ class ScaffoldingService:
         if not text:
             return ""
 
-        # Step 1: Normalize whitespace
-        title = " ".join(text.split())
+        # Step 1: Decode font-shifted text, normalize whitespace
+        title = " ".join(repair_font_shift(text).split())
 
         # Step 2: Handle line-ending hyphens
         title = title.replace("-\n", "").replace("-\r", "")
@@ -1099,12 +1041,12 @@ class ScaffoldingService:
         # Step 3: Remove trailing page numbers/ranges
         # Pattern: title followed by space and page number(s)
         # Examples: "Chapter IV 77-99", "Appendix 101", "Contents i-xii"
-        title = re.sub(r"\s+\d+[-–]\d+\s*$", "", title)  # "77-99"
-        title = re.sub(r"\s+\d+\s*$", "", title)  # "77"
-        title = re.sub(
-            r"\s+[ivxlc]+[-–][ivxlc]+\s*$", "", title, flags=re.IGNORECASE
-        )  # "i-xii"
-        title = re.sub(r"\s+[ivxlc]+\s*$", "", title, flags=re.IGNORECASE)  # "xii"
+        # A number right after a label word is part of the title: "Chapter IV", "Annexure 4".
+        # Printed page numbers in front matter are lowercase roman, so "IV" is never stripped.
+        for pattern in (r"\s+\d+[-–]\d+\s*$", r"\s+\d+\s*$", r"\s+[ivxlc]+[-–][ivxlc]+\s*$", r"\s+[ivxlc]+\s*$"):
+            match = re.search(pattern, title)
+            if match and not TITLE_LABEL_END_RE.search(title[:match.start()]):
+                title = title[:match.start()]
 
         # Step 4: Remove dots/leaders before page numbers (if any remain)
         title = re.sub(r"\.{2,}\s*\d*\s*$", "", title)  # "Chapter I..........12"

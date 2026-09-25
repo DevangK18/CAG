@@ -20,7 +20,10 @@ import fitz  # PyMuPDF — already a pipeline dependency
 from src.core.data_contracts import DocumentTask
 from src.parsing_pipeline.config import get_config, TOCReconciliationConfig
 from src.parsing_pipeline.instrumentation import get_noop_emitter
+from src.parsing_pipeline.extractors.text_repair import repair_font_shift
 from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
+from src.parsing_pipeline.modules.printed_toc_parser import roman_to_int
+from src.parsing_pipeline.modules.toc_quality import assess_toc_quality, is_garbage_title
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +161,12 @@ class TOCReconciliationService:
 
         # Step 2: Get current Phase 4 TOC
         current_toc = task.scaffold.get("toc", [])
-        current_quality = task.scaffold.get("toc_quality", 50)
+        total_pages = len(task.layout) if task.layout else 0
+        # Phase 4 may not have scored the TOC; a default of 50 sent one-entry TOCs down
+        # the "medium quality" path
+        current_quality = task.scaffold.get("toc_quality")
+        if current_quality is None:
+            current_quality = assess_toc_quality(current_toc, total_pages)
 
         # P0-02: Handle empty-TOC explicitly (separate branch)
         if not current_toc:
@@ -217,8 +225,20 @@ class TOCReconciliationService:
             heading_positions, docling_headers, reconciled_toc
         )
 
+        # Drop junk entries and derive levels from section numbering
+        reconciled_toc = self._normalize_toc(reconciled_toc)
+
         # P0-02: Deduplicate parents by (normalized_title, page)
         reconciled_toc = self._deduplicate_parents(reconciled_toc)
+
+        # Supplementing must not make a good TOC worse
+        normalized_current = self._normalize_toc(current_toc)
+        if normalized_current and (
+            assess_toc_quality(reconciled_toc, total_pages)
+            < assess_toc_quality(normalized_current, total_pages) - 5
+        ):
+            logger.info(f"[{task.report_id}] Reconciled TOC scored lower; keeping Phase 4 TOC")
+            reconciled_toc, method = self._deduplicate_parents(normalized_current), "kept_phase4"
 
         # P0-04: L1 count sanity check
         l1_count = sum(1 for entry in reconciled_toc if entry[0] == 1)
@@ -245,11 +265,11 @@ class TOCReconciliationService:
         task.scaffold["heading_positions"] = heading_positions
         task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+reconciled_{method}"
 
-        # Update quality score with P0-02 quality cap
-        new_quality = self._assess_reconciled_quality(reconciled_toc, docling_headers)
-        # P0-02: Cap quality at 85 to allow Phase 5.7 to fire on edge cases
-        capped_quality = min(max(current_quality, new_quality), self.QUALITY_CAP)
-        task.scaffold["toc_quality"] = capped_quality
+        # Score the reconciled TOC on its own merits (garbage titles, missing chapters,
+        # sections at chapter level); taking max() with the old score hid bad TOCs.
+        # P0-02: Cap at 85 so Phase 5.7 can still fire on edge cases.
+        new_quality = assess_toc_quality(reconciled_toc, total_pages)
+        task.scaffold["toc_quality"] = min(new_quality, self.QUALITY_CAP)
 
         # Trace: TOC mutation result
         emitter.emit_io(
@@ -388,8 +408,10 @@ class TOCReconciliationService:
             rect.x1 = min(page.rect.width, rect.x1 + 2)
             rect.y1 = min(page.rect.height, rect.y1 + 2)
 
+            if page.rotation:
+                rect = rect * page.derotation_matrix  # Docling boxes are in rotated space
             text = page.get_text("text", clip=rect)
-            return text.strip()
+            return repair_font_shift(text).strip()
 
         except Exception as e:
             logger.debug(f"Text clip failed on page {page_num}: {e}")
@@ -488,7 +510,7 @@ class TOCReconciliationService:
 
             if not matched:
                 new_entries.append([
-                    header["level"], header["title"], header["page"]
+                    self._supplement_level(header, current_toc), header["title"], header["page"]
                 ])
 
         # Trace: Similarity match samples
@@ -502,6 +524,44 @@ class TOCReconciliationService:
             return merged, "supplemented"
 
         return current_toc, "validated"
+
+    def _supplement_level(self, header: Dict, toc: List[List]) -> int:
+        """
+        Level for a Docling header added to a trusted TOC: numbered sections by their
+        numbering, chapters at 1, anything else one level below the entry it falls under.
+        Box height made unnumbered headers ("Milestone payment= 8 per cent") chapters.
+        """
+        title = header["title"]
+        if re.match(r"^chapter\s+[ivx\d]+", title, re.IGNORECASE):
+            return 1
+        numbered = re.match(r"^(\d+(?:\.\d+)+)", title)
+        if numbered:
+            return min(numbered.group(1).count(".") + 1, 4)
+        enclosing = [e for e in toc if e[2] <= header["page"]]
+        return min((enclosing[-1][0] if enclosing else 1) + 1, 4)
+
+    def _normalize_toc(self, toc: List[List]) -> List[List]:
+        """
+        Drop entries that are not headings (garbage/encoding debris, the contents page
+        itself, extra cover-page lines) and set levels of numbered sections from their
+        numbering ("1.3" -> 2, "1.3.2" -> 3) so they never sit at chapter level.
+        """
+        result = []
+        for level, title, page in toc:
+            title = repair_font_shift(str(title)).strip()
+            if is_garbage_title(title):
+                continue
+            if page <= 10 and re.match(r"^(table\s+of\s+)?contents?$|^index$", title, re.IGNORECASE):
+                continue
+            if page <= 1 and any(e[2] <= 1 for e in result):
+                continue  # keep one cover entry
+            numbered = re.match(r"^(\d+(?:\.\d+)+)\.?\s", title)
+            if numbered:
+                level = min(numbered.group(1).count(".") + 1, 4)
+            elif re.match(r"^chapter\s*[-:]?\s*([ivxlc]+|\d+)\b", title, re.IGNORECASE):
+                level = 1
+            result.append([level, title, page])
+        return result
 
     def _merge_medium_quality(
         self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
@@ -608,54 +668,6 @@ class TOCReconciliationService:
                 heading_positions[position_key] = header["y_position"]
 
         return heading_positions
-
-    def _assess_reconciled_quality(
-        self, toc: List[List], docling_headers: List[Dict]
-    ) -> int:
-        """
-        Assess quality of reconciled TOC (0-100).
-
-        Factors:
-        - Number of entries (more = likely more complete)
-        - Multiple hierarchy levels
-        - Sequential page numbers
-        - Proportion validated by Docling
-        """
-        if not toc:
-            return 0
-
-        score = 40  # Base for having any TOC
-
-        # Entry count bonus
-        if len(toc) >= 10:
-            score += 10
-        elif len(toc) >= 5:
-            score += 5
-
-        # Multiple levels
-        levels = set(entry[0] for entry in toc)
-        if len(levels) >= 3:
-            score += 15
-        elif len(levels) >= 2:
-            score += 10
-
-        # Sequential pages
-        pages = [entry[2] for entry in toc]
-        if len(pages) >= 2:
-            sequential = sum(1 for i in range(len(pages) - 1) if pages[i] <= pages[i+1])
-            seq_ratio = sequential / (len(pages) - 1)
-            score += int(seq_ratio * 15)
-
-        # Docling validation ratio
-        if docling_headers:
-            docling_pages = {h["page"] for h in docling_headers}
-            toc_pages = {entry[2] for entry in toc}
-            overlap = len(docling_pages & toc_pages) / max(len(toc_pages), 1)
-            score += int(overlap * 20)
-
-        return min(100, score)
-
-    # ==================== P0-02: Noise Rejection and Deduplication ====================
 
     def _filter_noise_headers(self, headers: List[Dict]) -> List[Dict]:
         """
@@ -789,10 +801,13 @@ class TOCReconciliationService:
         for entry in toc:
             level, title, page = entry[0], entry[1], entry[2]
             if level == 1:
-                # Extract chapter number from "Chapter 3", "3. Introduction", etc.
-                match = re.match(r"(?:Chapter\s+)?(\d+)", title, re.IGNORECASE)
+                # Extract chapter number from "Chapter 3", "Chapter-III", "3. Introduction"
+                match = re.match(r"(?:Chapter\s*[-:]?\s*)?(\d+|[IVXLC]+)\b", title, re.IGNORECASE)
                 if match:
-                    l1_chapter_numbers.add(int(match.group(1)))
+                    token = match.group(1)
+                    number = int(token) if token.isdigit() else roman_to_int(token)
+                    if number:
+                        l1_chapter_numbers.add(number)
 
         # Detect orphan sections
         orphans = []

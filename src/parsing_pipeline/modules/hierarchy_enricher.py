@@ -703,6 +703,12 @@ class HierarchyEnricher:
             "parent_chunk_id": parent.get("chunk_id"),
             "detected_by": "hierarchy_enricher",
             "section_id": section.section_id,
+            # Tier metadata comes from the enclosing parent, not model defaults
+            **{
+                key: parent[key]
+                for key in ("government_body_type", "state_name", "department", "audit_category")
+                if parent.get(key) is not None
+            },
         }
 
     def _assign_children_to_sections(
@@ -815,6 +821,9 @@ def enrich_report_hierarchy(
     return enricher.enrich_hierarchy(parent_chunks, child_chunks, report_id, aggressive, trace_emitter=trace_emitter)
 
 
+OVERSIZED_PARENT_CHILDREN = 80
+
+
 def should_enrich_hierarchy(
     parent_chunks: List[Any],
     child_chunks: List[Any],
@@ -822,10 +831,11 @@ def should_enrich_hierarchy(
     """
     Determine if hierarchy enrichment is needed.
 
-    This function checks three conditions:
+    This function checks four conditions:
     1. Few parents (< 10) - original behavior
     2. Flat hierarchy (< 30% of children have level_2+ hierarchy)
     3. High concentration (> 40% of children assigned to one parent)
+    4. Oversized parent (> OVERSIZED_PARENT_CHILDREN children under one parent)
 
     Args:
         parent_chunks: List of parent chunks (Pydantic objects or dicts)
@@ -833,7 +843,8 @@ def should_enrich_hierarchy(
 
     Returns:
         Tuple of (needs_enrichment: bool, reason: str or None)
-        reason is one of: "few_parents", "flat_hierarchy", "high_concentration", or None
+        reason is one of: "few_parents", "flat_hierarchy", "high_concentration",
+        "oversized_parent", or None
 
     Usage in main.py:
         from modules.hierarchy_enricher import should_enrich_hierarchy
@@ -886,5 +897,11 @@ def should_enrich_hierarchy(
             concentration = max_children / len(child_chunks)
             if concentration > 0.40:  # More than 40% to one parent
                 return True, "high_concentration"
+
+            # Condition 4: Oversized parent. With correct chapter-level TOCs (printed
+            # contents often lists chapters only), one chapter can hold 100+ children
+            # while no single parent reaches 40% of the report.
+            if max_children > OVERSIZED_PARENT_CHILDREN:
+                return True, "oversized_parent"
 
     return False, None

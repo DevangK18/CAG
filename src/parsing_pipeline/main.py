@@ -1096,7 +1096,9 @@ class PipelineOrchestrator:
                                 parent_chunks=task.parent_chunks,
                                 child_chunks=task.child_chunks,
                                 report_id=task.report_id,
-                                aggressive=False,
+                                # Flat or lopsided trees need sub-sections detected even
+                                # when the report already has many parents
+                                aggressive=reason in ("flat_hierarchy", "high_concentration", "oversized_parent"),
                                 trace_emitter=emitter,
                             )
                             task.parent_chunks = enriched_parents
