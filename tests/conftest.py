@@ -31,3 +31,15 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.skip(reason=_known.KNOWN_ERRORS_SKIPPED[item.nodeid]))
         elif item.nodeid in _known.KNOWN_FAILURES:
             item.add_marker(pytest.mark.xfail(reason=_known.KNOWN_FAILURES[item.nodeid], strict=False))
+
+
+# ── No real Google credentials in tests ──────────────────────────────────────
+@pytest.fixture(autouse=True)
+def _anonymous_google_credentials(monkeypatch):
+    """Tests must not depend on the machine's Application Default Credentials (CI has none)."""
+    try:
+        import google.auth
+        from google.auth.credentials import AnonymousCredentials
+    except ImportError:
+        return
+    monkeypatch.setattr(google.auth, "default", lambda *a, **k: (AnonymousCredentials(), "test-project"))
