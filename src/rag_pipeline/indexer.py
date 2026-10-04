@@ -60,13 +60,13 @@ class Indexer:
         self.qdrant_service = QdrantService(self.config)
 
     @staticmethod
-    def _drop_unfinished_reports(json_files, input_path: Path):
+    def _drop_failed_reports(json_files, input_path: Path):
         """
-        Keep only reports that processed/manifest.json lists as completed.
+        Drop reports that processed/manifest.json marks as failed.
 
         A report that failed in its latest run can still have a *_chunks.json from an
-        earlier run; indexing it would serve outdated content. Without a manifest,
-        every file is kept.
+        earlier run. Reports with no manifest entry are kept with a warning: the
+        manifest is shared across runs, so a missing entry is not proof of failure.
         """
         manifest_path = next(
             (p for p in (input_path / "manifest.json", input_path.parent / "manifest.json") if p.exists()),
@@ -76,13 +76,15 @@ class Indexer:
             logger.warning("No manifest.json found; indexing every chunks file")
             return json_files
         reports = json.loads(manifest_path.read_text()).get("reports", [])
-        completed = {r["report_id"] for r in reports if r.get("status") == "completed"}
+        status = {r["report_id"]: r.get("status") for r in reports}
         report_id = lambda f: re.sub(r"_(chunks|enriched)\.json$", "", f.name)
-        kept = [f for f in json_files if report_id(f) in completed]
-        skipped = [report_id(f) for f in json_files if report_id(f) not in completed]
-        if skipped:
-            logger.warning(f"Skipping {len(skipped)} report(s) not completed in {manifest_path}: {skipped}")
-        return kept
+        failed = [report_id(f) for f in json_files if status.get(report_id(f)) == "failed"]
+        unlisted = [report_id(f) for f in json_files if report_id(f) not in status]
+        if failed:
+            logger.warning(f"Skipping {len(failed)} report(s) marked failed in {manifest_path}: {failed}")
+        if unlisted:
+            logger.warning(f"Indexing {len(unlisted)} report(s) with no entry in {manifest_path}: {unlisted}")
+        return [f for f in json_files if status.get(report_id(f)) != "failed"]
 
     def index_all(
         self,
@@ -111,9 +113,9 @@ class Indexer:
         if not json_files:
             raise ValueError(f"No JSON files found in {input_dir}")
 
-        json_files = self._drop_unfinished_reports(json_files, input_path)
+        json_files = self._drop_failed_reports(json_files, input_path)
         if not json_files:
-            raise ValueError(f"No completed reports to index in {input_dir}")
+            raise ValueError(f"No reports to index in {input_dir} (all marked failed)")
 
         logger.info(f"Found {len(json_files)} files to index")
 

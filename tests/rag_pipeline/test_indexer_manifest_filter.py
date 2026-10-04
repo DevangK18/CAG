@@ -1,4 +1,4 @@
-"""The indexer only picks up reports the manifest lists as completed."""
+"""The indexer skips reports the manifest marks as failed."""
 import json
 
 from src.rag_pipeline.indexer import Indexer
@@ -15,16 +15,17 @@ def _files(root, *ids):
     return paths
 
 
-def test_skips_failed_and_unknown_reports(tmp_path):
+def test_skips_failed_keeps_unlisted(tmp_path, caplog):
     files = _files(tmp_path, "A", "B", "C")
     (tmp_path / "manifest.json").write_text(json.dumps({"reports": [
         {"report_id": "A", "status": "completed"},
         {"report_id": "B", "status": "failed"},
     ]}))
-    kept = Indexer._drop_unfinished_reports(files, tmp_path)
-    assert [p.name for p in kept] == ["A_chunks.json"]
+    kept = Indexer._drop_failed_reports(files, tmp_path)
+    assert [p.name for p in kept] == ["A_chunks.json", "C_chunks.json"]
+    assert "no entry" in caplog.text and "'C'" in caplog.text
 
 
 def test_without_manifest_keeps_everything(tmp_path):
     files = _files(tmp_path, "A", "B")
-    assert Indexer._drop_unfinished_reports(files, tmp_path) == files
+    assert Indexer._drop_failed_reports(files, tmp_path) == files
