@@ -71,7 +71,7 @@ class EntityMention(Base):
     recommendation_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     mention_text: Mapped[str] = mapped_column(String(500), nullable=False)
-    page: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    page: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-based physical
 
     finding_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, index=True)
     severity: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)

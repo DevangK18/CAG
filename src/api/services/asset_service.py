@@ -321,6 +321,9 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
     2. FALLBACK: If few formal titles found, extract from image_captions
        that describe charts/graphs (filtering out photos, logos, etc.)
 
+    ChartItem.page is the 0-based physical page, like every API page field;
+    only human-readable titles print page + 1.
+
     Args:
         report_id: The report identifier
         use_cache: Whether to use cached results
@@ -399,7 +402,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
                         title=full_title,
                         type=chart_type,
                         section=section,
-                        page=page + 1,
+                        page=page,
                         analysis=analysis,
                         source_chunk_id=chunk.get("chunk_id"),
                     )
@@ -414,7 +417,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
 
         # Check if this page already has a chart from formal titles
         page_display = page + 1
-        if any(c.page == page_display for c in charts):
+        if any(c.page == page for c in charts):
             continue  # Skip duplicate
 
         # Build title from structured_data or fallback
@@ -447,7 +450,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
             title=title,
             type=chart_type,
             section=section,
-            page=page_display,
+            page=page,
             analysis=analysis,
             source_chunk_id=chunk.get("chunk_id"),
             bbox=chunk.get("source_bbox"),
@@ -479,7 +482,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
             page = chunk.get("source_page_physical", 0)
 
             # Skip if we already have a chart on this page
-            if (page + 1) in seen_pages:
+            if page in seen_pages:
                 continue
 
             # Skip non-chart images (photos, logos, etc.)
@@ -507,7 +510,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
                         title=title,
                         type=chart_type,
                         section=section,
-                        page=page + 1,
+                        page=page,
                         analysis=content[:300] + "..."
                         if len(content) > 300
                         else content,
@@ -515,7 +518,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
                     )
                 )
                 chart_idx += 1
-                seen_pages.add(page + 1)
+                seen_pages.add(page)
 
         # Add caption-based charts
         charts.extend(caption_charts)
@@ -537,7 +540,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
 
 
 def extract_tables(report_id: str, use_cache: bool = True) -> List[TableItem]:
-    """Extract tables from a report."""
+    """Extract tables from a report. TableItem.page is the 0-based physical page."""
     if use_cache and report_id in _tables_cache:
         return _tables_cache[report_id]
 
@@ -577,7 +580,7 @@ def extract_tables(report_id: str, use_cache: bool = True) -> List[TableItem]:
                 id=f"table-{table_idx}",
                 title=title,
                 section=section,
-                page=page + 1,
+                page=page,
                 rows=rows,
                 columns=columns,
                 analysis=analysis,

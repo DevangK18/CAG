@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { getEntityMentions } from '../../lib/api';
-import { formatReportSlug, formatAuditCategory } from '../../utils';
+import { formatReportSlug, formatAuditCategory, toViewerPage } from '../../utils';
 import { useAppStore } from '../../stores/appStore';
 
 interface EntityMentionsTabProps {
@@ -69,8 +69,8 @@ function ReportGroupCard({ group }: { group: ReportGroup }) {
   const hiddenCount = mentionCount - 3;
 
   const handleMentionClick = (mention: Mention) => {
-    if (mention.report_id && mention.page !== undefined) {
-      openHomePdf(mention.report_id, mention.page);
+    if (mention.report_id && mention.page != null) {
+      openHomePdf(mention.report_id, toViewerPage(mention.page));
     }
   };
 
@@ -149,11 +149,11 @@ function ReportGroupCard({ group }: { group: ReportGroup }) {
                 idx < visibleMentions.length - 1 || showExpand
                   ? '1px solid #f3f4f6'
                   : 'none',
-              cursor: mention.page !== undefined ? 'pointer' : 'default',
+              cursor: mention.page != null ? 'pointer' : 'default',
               transition: 'background-color 0.15s',
             }}
             onMouseEnter={(e) => {
-              if (mention.page !== undefined) {
+              if (mention.page != null) {
                 e.currentTarget.style.backgroundColor = '#eff6ff';
               }
             }}
@@ -172,7 +172,7 @@ function ReportGroupCard({ group }: { group: ReportGroup }) {
                 paddingTop: '0.125rem',
               }}
             >
-              {mention.page !== undefined ? `p.${mention.page}` : ''}
+              {mention.page != null ? `p.${toViewerPage(mention.page)}` : ''}
             </div>
 
             {/* Context snippet */}

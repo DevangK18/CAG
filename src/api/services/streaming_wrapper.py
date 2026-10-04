@@ -130,6 +130,8 @@ def _convert_citations(rag_citations: List) -> List[APICitation]:
         # Build citation key that matches what appears in the text
         # Format: "Section X.Y, p.ZZ" - must match LLM output format
         section = c.section or "Unknown Section"
+        # c.page is the 1-based label the LLM cites ("p.N"); like every API
+        # page field, page_physical is the 0-based index (frontend toViewerPage).
         page = c.page
         citation_key = f"{section}, p.{page}"
 
@@ -141,7 +143,7 @@ def _convert_citations(rag_citations: List) -> List[APICitation]:
                 filename=filename,
                 section=section,
                 page_logical=str(page),
-                page_physical=page,  # 1-based page number for react-pdf <Page pageNumber={}>
+                page_physical=max(page - 1, 0),
                 score=c.score,
                 finding_type=c.finding_type,
                 severity=c.severity,

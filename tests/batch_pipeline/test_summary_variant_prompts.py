@@ -189,3 +189,19 @@ def test_prompt_requires_numbers_from_report_data(variant, case):
 def test_example_figure_pattern_catches_old_examples():
     for old in ["₹12,000 Crore—enough", "60% of GPs", "12 crore families", "₹50 Lakh", "100 villages"]:
         assert EXAMPLE_FIGURE.search(old), old
+
+
+def test_summary_input_cites_one_based_pages():
+    from src.batch_pipeline.prompts.summary_variants import build_summary_input
+
+    data = {
+        "report_metadata": {"report_id": "R", "government_body_type": "union"},
+        "semantic_enrichment": {
+            "findings": [{"text": "x", "chapter": "C1", "section": "S1", "page": 0}],
+            "recommendations": [{"text": "y", "chapter": "C2", "page": 4}],
+        },
+        "child_chunks": [{"content_type": "table_markdown", "content": "|a|", "source_page_physical": 9,
+                          "hierarchy": {"level_1": "T"}}],
+    }
+    text = build_summary_input(data)
+    assert "(p.1)" in text and "[C2, p.5]" in text and "(p.10)" in text

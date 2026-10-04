@@ -194,8 +194,11 @@ def build_overview_prompt(json_data: dict) -> str:
     toc_lines = []
     for chunk in json_data.get("parent_chunks", [])[:60]:
         indent = "  " * (chunk.get("toc_level", 1) - 1)
+        # The LLM copies these numbers into topics_covered.page_start/page_end,
+        # which stay 0-based like every stored page; label them as indices so
+        # they are not read as printed page numbers.
         page = chunk.get("page_range_physical", [0])[0]
-        toc_lines.append(f"{indent}{chunk.get('toc_entry', 'N/A')} (p.{page})")
+        toc_lines.append(f"{indent}{chunk.get('toc_entry', 'N/A')} (page index {page})")
     toc_text = "\n".join(toc_lines)
     
     # Extract intro/scope/objectives content
@@ -305,6 +308,7 @@ Create NEUTRAL topic names from the Table of Contents structure:
   }}
 ]
 ```
+page_start and page_end are the "page index" numbers shown in the Table of Contents below. Copy them exactly; do not add or subtract 1.
 
 {topic_guidance}
 
@@ -333,7 +337,7 @@ Extract every distinct organizational, scheme, geographic, and governance entity
   "canonical_form_in_report": "Full official name as it appears most authoritatively in this report",
   "entity_type": "ministry | department | psu | autonomous_body | scheme | state_government | local_body | regulatory_authority | organization | place",
   "aliases_seen": ["all variant spellings, abbreviations, and partial forms seen in this report"],
-  "first_seen_page": physical_page_number,
+  "first_seen_page": page_index_from_the_input,
   "tier_context": "union | state | local_body — which government tier this entity belongs to"
 }}
 ```
@@ -403,7 +407,7 @@ def _get_section_content(json_data: dict, keywords: list[str], max_chunks: int =
             content = chunk.get("content", "")
             if content and len(content) > 30:  # Skip tiny fragments
                 page = chunk.get("source_page_physical", "?")
-                matching.append(f"[Page {page}] {content}")
+                matching.append(f"[page index {page}] {content}")
         
         if len(matching) >= max_chunks:
             break

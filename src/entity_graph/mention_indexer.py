@@ -30,13 +30,15 @@ PAISE_PER_CRORE = 1_000_000_000
 def finding_amount_crore(finding: Dict) -> Optional[float]:
     """Finding amount in crore.
 
-    Prefers the single largest amount (monetary_value_crore); total_amount_inr sums
-    every amount in the chunk and, despite its name, is stored in paise.
+    Prefers the single largest amount (monetary_value_crore); the total sums
+    every amount in the chunk, in paise (total_amount_paise, or its legacy
+    alias total_amount_inr).
     """
     if finding.get("monetary_value_crore"):
         return float(finding["monetary_value_crore"])
-    if finding.get("total_amount_inr"):
-        return float(finding["total_amount_inr"]) / PAISE_PER_CRORE
+    total_paise = finding.get("total_amount_paise") or finding.get("total_amount_inr")
+    if total_paise:
+        return float(total_paise) / PAISE_PER_CRORE
     if finding.get("amount_crore"):
         return float(finding["amount_crore"])
     return None

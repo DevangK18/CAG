@@ -77,8 +77,8 @@ class Citation(BaseModel):
     report_title: str  # e.g., "NHAI Toll Operations..."
     filename: str  # e.g., "2023_07_NHAI_Toll.pdf"
     section: str  # e.g., "Section 3.2.1"
-    page_logical: str  # Page number as shown in PDF (e.g., "36")
-    page_physical: int  # Actual PDF page index (0-based for react-pdf)
+    page_logical: str  # Citation label: 1-based physical page (e.g., "36"), not the printed page
+    page_physical: int  # 0-based physical page index; the frontend converts it for the viewer
     score: Optional[float] = None
     finding_type: Optional[str] = None
     severity: Optional[str] = None
@@ -181,7 +181,7 @@ class ChartItem(BaseModel):
     title: str  # Chart title, e.g., "Figure 2.1: Trend of GDP"
     type: ChartType  # Chart type: bar, line, pie, area
     section: str  # Section reference, e.g., "Chapter 2: Overview"
-    page: int  # Physical page number (1-indexed for display)
+    page: int  # 0-based physical page index; the frontend converts it for display
     analysis: str  # AI-generated analysis/description of the chart
 
     # Optional fields for future enhancements
@@ -208,7 +208,7 @@ class TableItem(BaseModel):
     id: str  # Unique identifier, e.g., "table-1"
     title: str  # Table title/caption
     section: str  # Section reference
-    page: int  # Physical page number (1-indexed for display)
+    page: int  # 0-based physical page index; the frontend converts it for display
     rows: int  # Number of data rows
     columns: int  # Number of columns
     analysis: str  # AI-generated analysis of the table
@@ -410,7 +410,7 @@ class SearchResultFinding(BaseModel):
     chunk_id: str
     report_id: str
     section: str
-    page: int
+    page: int  # 0-based physical page index
     finding_type: Optional[str] = None
     severity: Optional[str] = None
     amount_crore: Optional[float] = None

@@ -155,6 +155,11 @@ VARIANT_INFO = {
 }
 
 
+def _page_label(page, missing="N/A"):
+    """Pages are stored 0-based (physical); readers of a summary see 1-based pages."""
+    return page + 1 if isinstance(page, int) else missing
+
+
 def build_summary_input(json_data: dict) -> str:
     """
     Build optimized input for summary generation.
@@ -217,7 +222,7 @@ def build_summary_input(json_data: dict) -> str:
 ## Finding {i} [{f.get("severity", "N/A").upper()}]
 - Type: {f.get("finding_type", "N/A")}
 - Amounts cited: {amounts}
-- Location: {f.get("chapter", "N/A")} > {f.get("section", "N/A")} (p.{f.get("page", "N/A")})
+- Location: {f.get("chapter", "N/A")} > {f.get("section", "N/A")} (p.{_page_label(f.get("page"))})
 
 {text}
 """)
@@ -237,10 +242,9 @@ def build_summary_input(json_data: dict) -> str:
         for i, r in enumerate(recs[:20], 1):  # Top 20 recommendations
             text = r.get("text", r.get("summary", ""))
             chapter = r.get("chapter", "")
-            page = r.get("page", "")
             parts.append(f"{i}. {text}")
             if chapter:
-                parts.append(f"   [{chapter}, p.{page}]")
+                parts.append(f"   [{chapter}, p.{_page_label(r.get('page'), '')}]")
             parts.append("")
     else:
         parts.append("\n# RECOMMENDATIONS: No structured recommendations extracted.\n")
@@ -267,10 +271,9 @@ def build_summary_input(json_data: dict) -> str:
     if tables:
         parts.append("\n# KEY TABLES\n")
         for t in tables:
-            page = t.get("source_page_physical", "N/A")
             hierarchy = t.get("hierarchy", {})
             section = list(hierarchy.values())[-1] if hierarchy else "Unknown Section"
-            parts.append(f"\n**Table from {section} (p.{page})**")
+            parts.append(f"\n**Table from {section} (p.{_page_label(t.get('source_page_physical'))})**")
             parts.append(t.get("content", "")[:1200])  # Truncate large tables
 
     # ═══════════════════════════════════════════════════════════════════════

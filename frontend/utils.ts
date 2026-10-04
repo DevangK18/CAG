@@ -197,6 +197,19 @@ export function formatAmountCrore(amount: number): string {
 }
 
 /**
+ * Convert a 0-based physical page from the API to the 1-based page the PDF
+ * viewer and page labels use.
+ *
+ * Every API page field (citation page_physical, search snippet, entity
+ * mention/finding, overview topic, chart and table page) is the 0-based
+ * physical page. This is the only place it is converted; store state
+ * (pdfPage, homePdfPanel.page, pdfHighlight.page) holds viewer pages.
+ */
+export function toViewerPage(physicalPage: number): number {
+  return physicalPage + 1;
+}
+
+/**
  * Format tier for display
  * Converts tier values to human-readable format
  *

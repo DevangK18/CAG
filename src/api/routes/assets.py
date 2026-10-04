@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 @router.get("/{report_id}/charts", response_model=ChartsResponse)
 async def get_report_charts(
     report_id: str,
-    page: Optional[int] = Query(None, description="Filter by page number (1-indexed)"),
+    page: Optional[int] = Query(None, description="Filter by physical page (0-based)"),
     chart_type: Optional[str] = Query(None, description="Filter by chart type (bar, line, pie, area)"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of charts to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination")
@@ -39,13 +39,13 @@ async def get_report_charts(
     - Title (e.g., "Figure 2.1: Trend of GDP")
     - Type (bar, line, pie, area, unknown)
     - Section reference
-    - Page number (1-indexed)
+    - Physical page (0-based; the frontend adds 1 for the viewer)
     - AI-generated analysis/description
     
     Use the page number with the PDF viewer to navigate to the chart.
     
     **Query Parameters:**
-    - `page`: Filter charts on a specific page (1-indexed)
+    - `page`: Filter charts on a specific physical page (0-based)
     - `chart_type`: Filter by chart type (bar, line, pie, area)
     - `limit`: Maximum results (default 50)
     - `offset`: Pagination offset
@@ -110,7 +110,7 @@ async def get_report_charts(
 @router.get("/{report_id}/tables", response_model=TablesResponse)
 async def get_report_tables(
     report_id: str,
-    page: Optional[int] = Query(None, description="Filter by page number (1-indexed)"),
+    page: Optional[int] = Query(None, description="Filter by physical page (0-based)"),
     min_rows: Optional[int] = Query(None, ge=1, description="Minimum number of rows"),
     min_columns: Optional[int] = Query(None, ge=1, description="Minimum number of columns"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of tables to return"),
@@ -122,7 +122,7 @@ async def get_report_tables(
     Returns a list of tables with:
     - Title (e.g., "Table 2.1: Budget vs Actuals")
     - Section reference  
-    - Page number (1-indexed)
+    - Physical page (0-based; the frontend adds 1 for the viewer)
     - Dimensions (rows × columns)
     - Column headers (if extractable)
     - Brief analysis
@@ -130,7 +130,7 @@ async def get_report_tables(
     Use the page number with the PDF viewer to navigate to the table.
     
     **Query Parameters:**
-    - `page`: Filter tables on a specific page (1-indexed)
+    - `page`: Filter tables on a specific physical page (0-based)
     - `min_rows`: Filter by minimum row count
     - `min_columns`: Filter by minimum column count
     - `limit`: Maximum results (default 50)

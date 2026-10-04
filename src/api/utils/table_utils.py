@@ -62,10 +62,10 @@ def disambiguate_table_names(tables: list[dict]) -> list[dict]:
                     table["display_caption"] = clean_table_caption(struct_title)
                     continue
 
-            # Try 2: Append page number
+            # Try 2: Append page number (page is 0-based; the label is 1-based)
             page = table.get("page")
-            if page:
-                disambiguated = f"{clean_cap} (Page {page})"
+            if page is not None:
+                disambiguated = f"{clean_cap} (Page {page + 1})"
                 if disambiguated not in seen_captions:
                     table["display_caption"] = disambiguated
                     seen_captions[disambiguated] = 1

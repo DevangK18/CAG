@@ -192,6 +192,18 @@ def _build_executive_summary(metadata: dict, semantic: dict) -> str:
     return "Executive summary not available."
 
 
+def _format_monetary_impact(semantic: dict) -> Optional[str]:
+    """Headline amount as "₹X crore", or None when the report has none."""
+    stats = (semantic.get("statistics") or {}).get("findings") or {}
+    total = stats.get("total_monetary_crore")
+    if total is None:
+        # Legacy key; no current producer writes monetary_statistics.
+        total = (semantic.get("monetary_statistics") or {}).get("total_amount_crore")
+    if isinstance(total, (int, float)) and total > 0:
+        return f"₹{total:,.2f} crore"
+    return None
+
+
 def _load_reports():
     """Load all report metadata from processed JSON files."""
     global _reports_cache, _initialized, _total_charts, _total_tables, _findings_cache
@@ -282,13 +294,7 @@ def _load_reports():
                 if text:
                     recommendations.append(text[:500])
 
-            # Calculate monetary impact
-            monetary_stats = semantic.get("monetary_statistics", {})
-            total_amount = monetary_stats.get("total_amount_crore", 0)
-            if isinstance(total_amount, (int, float)) and total_amount > 0:
-                monetary_impact = f"₹{total_amount:,.2f} crore"
-            else:
-                monetary_impact = None
+            monetary_impact = _format_monetary_impact(semantic)
 
             # Build filename with subfolder prefix for nested directory structure
             # e.g., if file is in data/processed/union/, PDF will be in data/raw/union/

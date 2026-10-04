@@ -957,7 +957,7 @@ class RetrievalService:
                         chunk_id=child.chunk_id,
                         report_id=report_id,
                         section=section,
-                        page=child.page_physical or 0,
+                        page=child.page_physical or 0,  # 0-based; the frontend converts
                         snippet=snippet_text,
                         finding_type=finding_type,
                         severity=child.severity,
