@@ -101,7 +101,8 @@ def test_mark_failed_quarantines_old_output(tmp_path):
     svc.mark_failed("X", "ocr", "timeout")
     assert not (out / "state" / "X_chunks.json").exists()
     assert (out / "state" / "X_chunks.json.stale").exists()
-    entry = next(r for r in json.loads((out / "manifest.json").read_text())["reports"] if r["report_id"] == "X")
+    # The tier comes from where the old output was found
+    entry = next(r for r in json.loads((out / "state" / "manifest.json").read_text())["reports"] if r["report_id"] == "X")
     assert entry["status"] == "failed" and entry["stale_output"] is True
     assert sorted(entry["quarantined_files"]) == ["state/X_chunks.json.stale", "state/X_overview.json.stale"]
 

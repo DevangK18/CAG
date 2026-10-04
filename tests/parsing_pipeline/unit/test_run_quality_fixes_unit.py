@@ -100,14 +100,18 @@ class TestManifestFailures:
         service.mark_failed("old", "layout_analysis", "Docling conversion timed out")
         service.mark_failed("new", "triage", "bad pdf")
 
-        manifest = json.loads((out / "manifest.json").read_text())
+        # Failures go to the tier manifest; the legacy shared file is only read
+        manifest = json.loads((out / "union" / "manifest.json").read_text())
         entries = {r["report_id"]: r for r in manifest["reports"]}
         assert entries["old"]["status"] == "failed"
-        assert entries["old"]["stale_output"] is True
+        assert entries["old"]["stale_output"] is True  # the legacy entry had output
         assert entries["new"]["status"] == "failed"
         assert entries["new"]["stale_output"] is False
-        assert manifest["completed_reports"] == 1
-        assert manifest["total_parent_chunks"] == 10
+        assert manifest["failed_reports"] == 2 and manifest["completed_reports"] == 0
+
+        from src.core.processed_manifest import load_report_entries
+        merged = load_report_entries(out)
+        assert merged["old"]["status"] == "failed" and merged["ok"]["status"] == "completed"
 
 
 # ==================== Second audit: A-M ====================

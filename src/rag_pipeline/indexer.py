@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Dict, Any, List
 from tqdm import tqdm
 
+from src.core.processed_manifest import load_report_entries
+
 try:
     from ..core.config import RAGConfig
     from .embedding_service import EmbeddingService
@@ -62,28 +64,23 @@ class Indexer:
     @staticmethod
     def _drop_failed_reports(json_files, input_path: Path):
         """
-        Drop reports that processed/manifest.json marks as failed.
+        Drop reports that the processed manifests mark as failed.
 
         A report that failed in its latest run can still have a *_chunks.json from an
-        earlier run. Reports with no manifest entry are kept with a warning: the
-        manifest is shared across runs, so a missing entry is not proof of failure.
+        earlier run. Reports with no manifest entry are kept with a warning: a missing
+        entry is not proof of failure.
         """
-        manifest_path = next(
-            (p for p in (input_path / "manifest.json", input_path.parent / "manifest.json") if p.exists()),
-            None,
-        )
-        if manifest_path is None:
-            logger.warning("No manifest.json found; indexing every chunks file")
+        status = {rid: r.get("status") for rid, r in load_report_entries(input_path).items()}
+        if not status:
+            logger.warning("No processed manifest found; indexing every chunks file")
             return json_files
-        reports = json.loads(manifest_path.read_text()).get("reports", [])
-        status = {r["report_id"]: r.get("status") for r in reports}
         report_id = lambda f: re.sub(r"_(chunks|enriched)\.json$", "", f.name)
         failed = [report_id(f) for f in json_files if status.get(report_id(f)) == "failed"]
         unlisted = [report_id(f) for f in json_files if report_id(f) not in status]
         if failed:
-            logger.warning(f"Skipping {len(failed)} report(s) marked failed in {manifest_path}: {failed}")
+            logger.warning(f"Skipping {len(failed)} report(s) marked failed in the manifest: {failed}")
         if unlisted:
-            logger.warning(f"Indexing {len(unlisted)} report(s) with no entry in {manifest_path}: {unlisted}")
+            logger.warning(f"Indexing {len(unlisted)} report(s) with no manifest entry: {unlisted}")
         return [f for f in json_files if status.get(report_id(f)) != "failed"]
 
     def index_all(
