@@ -330,12 +330,18 @@ jobs:
 
           # A report that failed this run has its previous output quarantined locally
           # (renamed *.stale); remove the original from GCS so it is not served
-          QUARANTINED=$(docker run --rm -v ${WORK_DIR}:/workspace ${GCLOUD_IMAGE} python3 -c '
+          # Read the list with the parsing image (the gcloud image has no Python)
+          if ! QUARANTINED=$(docker run --rm --entrypoint python3 -v ${WORK_DIR}:/workspace ${PARSING_IMAGE} -c '
           import json, pathlib
           s = pathlib.Path("/workspace/logs/run_summary_${RUN_ID}.json")
           for f in (json.loads(s.read_text()).get("quarantined_files") or []) if s.exists() else []:
               print(f)
-          ')
+          '); then
+            echo "ERROR: could not read the run summary; quarantined outputs were not removed from GCS"
+            QUARANTINED=""
+            # Keep the pipeline's own code; only a clean run is turned into a failure
+            if [ ${PIPELINE_RC} -eq 0 ]; then PIPELINE_RC=13; fi
+          fi
           for f in ${QUARANTINED}; do
             echo "Removing stale output from GCS: ${OUTPUT_PREFIX}/processed/${f}"
             run_gsutil -q rm "${GCS_OUT}/processed/${f}" || echo "  (not in GCS)"
