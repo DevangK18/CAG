@@ -153,8 +153,13 @@ class PipelineOrchestrator:
         report_filter: list = None,
         workers: int = 1,
         trace: bool = False,
+        run_id: Optional[str] = None,
     ):
         self.manifest_path = manifest_path
+        self.run_id = run_id or resolve_run_id()
+        self.started_at = datetime.now()
+        self.fatal_error: Optional[str] = None
+        self.exit_code = 0
         self.skip = set(skip_phases or [])
         self.quiet = quiet
         self.report_filter = report_filter
@@ -183,8 +188,8 @@ class PipelineOrchestrator:
         self.cache_dir = Path("data/raw/.cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    async def run(self):
-        """Run the complete pipeline with phase skipping support."""
+    async def run(self) -> int:
+        """Run the complete pipeline with phase skipping support. Returns the process exit code."""
         self._print_header()
 
         # Phases 1-3 with smart caching
@@ -194,7 +199,9 @@ class PipelineOrchestrator:
             self._log(
                 "No documents ready for processing. Pipeline terminating.", force=True
             )
-            return
+            self.exit_code = self._compute_exit_code()
+            self._write_run_summary()
+            return self.exit_code
 
         # Phases 4-9: Either parallel or sequential based on --workers flag
         if self.workers > 1:
@@ -222,7 +229,10 @@ class PipelineOrchestrator:
         self._finalize_all_traces()
 
         # Print comprehensive summary
+        self.exit_code = self._compute_exit_code()
         self._print_summary()
+        self._write_run_summary()
+        return self.exit_code
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASES 1-3: SMART CACHING
@@ -239,6 +249,7 @@ class PipelineOrchestrator:
             all_tasks = await manifest_service.process_manifest(self.manifest_path)
         except Exception as e:
             self._log(f"Critical error in manifest ingestion: {e}", force=True)
+            self.fatal_error = f"manifest ingestion failed: {e}"
             return
 
         # Apply report filter if provided
@@ -247,6 +258,11 @@ class PipelineOrchestrator:
             self._log(
                 f"Filtered to {len(all_tasks)} reports: {', '.join(self.report_filter)}"
             )
+            missing = sorted(set(self.report_filter) - {t.report_id for t in all_tasks})
+            if missing:
+                self._log(f"Not in manifest: {', '.join(missing)}", force=True)
+        if not all_tasks:
+            self.fatal_error = "no reports selected (empty manifest or --reports matched nothing)"
 
         # Start trace for each task after tier detection is available
         # NOTE (Fix 1, Round 5): Multi-report batches now work correctly with per-report contexts.
@@ -1852,16 +1868,8 @@ class PipelineOrchestrator:
         else:
             print("Phase 10c (Visual Post-Processing): NOT RUN")
 
-        # Final success evaluation
-        final_success = (
-            self.state.successful_triaged
-            and len(self.state.scaffold_complete) == len(self.state.successful_triaged)
-            and len(self.state.layout_complete) == len(self.state.scaffold_complete)
-            and len(self.state.content_complete) == len(self.state.layout_complete)
-            and len(self.state.chunking_complete) == len(self.state.content_complete)
-            and len(self.state.assembly_complete) == len(self.state.chunking_complete)
-            and len(self.state.enrichment_complete) == len(self.state.assembly_complete)
-        )
+        # Final success evaluation (same rule as the exit code)
+        final_success = self.exit_code == 0
 
         if final_success:
             print("\n🎉 FULL PIPELINE COMPLETE! End-to-end processing successful!")
@@ -1879,6 +1887,93 @@ class PipelineOrchestrator:
                 print(f"\n⚠️  Pipeline completed with issues: {', '.join(issues_found)}")
             else:
                 print("\n⚠️  Pipeline completed with partial success")
+
+    def _report_statuses(self) -> List[dict]:
+        """Per-report outcome: completed, failed (with phase) or incomplete (last phase reached)."""
+        failed = {
+            task.report_id: (phase, str(err))
+            for phase, items in self.state.failed.items()
+            for task, err in items
+        }
+        stages = [
+            ("triage", self.state.successful_triaged),
+            ("scaffolding", self.state.scaffold_complete),
+            ("layout_analysis", self.state.layout_complete),
+            ("content_extraction", self.state.content_complete),
+            ("chunking", self.state.chunking_complete),
+            ("assembly", self.state.assembly_complete),
+            ("enrichment", self.state.enrichment_complete),
+        ]
+        reached = {}
+        for stage, tasks in stages:
+            for task in tasks:
+                reached[task.report_id] = stage
+        statuses = []
+        for task in self.state.tasks or []:
+            rid = task.report_id
+            if rid in failed:
+                phase, err = failed[rid]
+                statuses.append({"report_id": rid, "status": "failed", "phase": phase, "error": err[:500]})
+            elif reached.get(rid) == "enrichment":
+                statuses.append({"report_id": rid, "status": "completed"})
+            else:
+                statuses.append({"report_id": rid, "status": "incomplete", "last_phase": reached.get(rid)})
+        return statuses
+
+    def _phase10_shortfalls(self) -> List[str]:
+        """Requested Phase 10 steps that did not complete (10a counts once submitted)."""
+        shortfalls = []
+        if not self.state.enrichment_complete:
+            return shortfalls
+        if "10a" not in self.skip and not (self.state.phase10a_completed or self.state.phase10a_submitted):
+            shortfalls.append("10a")
+        if "10b" not in self.skip and not self.state.phase10b_completed:
+            shortfalls.append("10b")
+        if "10c" not in self.skip and not self.state.phase10c_completed:
+            shortfalls.append("10c")
+        return shortfalls
+
+    def _compute_exit_code(self) -> int:
+        """0 = every selected report completed; 1 = some report or phase failed; 2 = nothing ran."""
+        if self.fatal_error or not self.state.tasks:
+            return 2
+        statuses = self._report_statuses()
+        if any(s["status"] != "completed" for s in statuses) or self._phase10_shortfalls():
+            return 1
+        return 0
+
+    def _write_run_summary(self) -> Path:
+        """Write logs/run_summary_<run_id>.json so the workflow (and humans) can see what happened."""
+        statuses = self._report_statuses()
+        summary = {
+            "run_id": self.run_id,
+            "started_at": self.started_at.isoformat(timespec="seconds"),
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+            "manifest": str(self.manifest_path),
+            "report_filter": self.report_filter,
+            "skipped_phases": sorted(self.skip),
+            "exit_code": self.exit_code,
+            "fatal_error": self.fatal_error,
+            "reports": {
+                "selected": len(self.state.tasks or []),
+                "completed": sum(s["status"] == "completed" for s in statuses),
+                "failed": sum(s["status"] == "failed" for s in statuses),
+                "incomplete": sum(s["status"] == "incomplete" for s in statuses),
+            },
+            "phase10": {
+                "10a": "skipped" if "10a" in self.skip else (
+                    "completed" if self.state.phase10a_completed
+                    else "submitted" if self.state.phase10a_submitted else "not_run"),
+                "10b": "skipped" if "10b" in self.skip else ("completed" if self.state.phase10b_completed else "not_run"),
+                "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
+            },
+            "report_status": statuses,
+        }
+        path = Path("logs") / f"run_summary_{self.run_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
+        self._log(f"Run summary: {path} (exit code {self.exit_code})", force=True)
+        return path
 
     def _log(self, msg: str, force: bool = False):
         """Print message unless quiet mode suppresses it."""
@@ -2113,7 +2208,7 @@ Examples:
             manifest_path = str(default_manifest.resolve())
         else:
             print(f"Error: Manifest file not found: {args.manifest_path}")
-            return
+            return 2
     else:
         manifest_path = str(manifest_file.resolve())
 
@@ -2125,9 +2220,10 @@ Examples:
         report_filter=args.reports,
         workers=args.workers,
         trace=args.trace,
+        run_id=args.run_id,
     )
-    await orchestrator.run()
+    return await orchestrator.run()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))
