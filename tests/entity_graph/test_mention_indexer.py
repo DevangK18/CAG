@@ -97,7 +97,7 @@ class TestIndexReport:
                         "entities_mentioned": ["NHAI"],
                         "finding_type": "loss_of_revenue",
                         "severity": "high",
-                        "total_amount_inr": 640000000,  # ₹64 crore
+                        "total_amount_inr": 64_000_000_000,  # ₹64 crore in paise
                         "page": 36,
                     }
                 ]
@@ -129,7 +129,7 @@ class TestIndexReport:
             assert mention.mention_text == "NHAI"
             assert mention.finding_type == "loss_of_revenue"
             assert mention.severity == "high"
-            assert mention.amount_crore == 64.0  # converted from INR
+            assert mention.amount_crore == 64.0  # converted from paise
             assert mention.page == 36
 
         finally:
@@ -358,3 +358,17 @@ class TestRefreshEntityCounts:
         assert entity.mention_count == 3
         assert entity.finding_count == 2  # 2 have finding_id
         assert entity.report_count == 2  # 2 distinct reports
+
+
+class TestFindingAmountCrore:
+    def test_prefers_monetary_value_crore(self):
+        from src.entity_graph.mention_indexer import finding_amount_crore
+        assert finding_amount_crore({"monetary_value_crore": 3.15, "total_amount_inr": 99_000_000_000}) == 3.15
+
+    def test_total_amount_inr_is_paise(self):
+        from src.entity_graph.mention_indexer import finding_amount_crore
+        assert finding_amount_crore({"total_amount_inr": 1_000_000_000}) == 1.0
+
+    def test_no_amount(self):
+        from src.entity_graph.mention_indexer import finding_amount_crore
+        assert finding_amount_crore({}) is None

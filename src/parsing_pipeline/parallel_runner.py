@@ -224,7 +224,10 @@ def _process_task_phases_4_to_9(
         # ─────────────────────────────────────────────────────────────────────
         # PHASE 7.5: HIERARCHY ENRICHMENT
         # ─────────────────────────────────────────────────────────────────────
-        from src.parsing_pipeline.modules.hierarchy_enricher import should_enrich_hierarchy
+        from src.parsing_pipeline.modules.hierarchy_enricher import (
+            aggressive_for_reason,
+            should_enrich_hierarchy,
+        )
 
         if task.parent_chunks and task.child_chunks:
             should_enrich, reason = should_enrich_hierarchy(task.parent_chunks, task.child_chunks)
@@ -233,7 +236,7 @@ def _process_task_phases_4_to_9(
                     parent_chunks=task.parent_chunks,
                     child_chunks=task.child_chunks,
                     report_id=task.report_id,
-                    aggressive=False,
+                    aggressive=aggressive_for_reason(reason),
                 )
                 task.parent_chunks = enriched_parents
                 task.child_chunks = enriched_children

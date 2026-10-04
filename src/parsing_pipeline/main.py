@@ -75,7 +75,9 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import List, Optional
+
+from src.core.gemini_client import log_usage_summary, reset_usage
 
 # Import services from modules
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
@@ -99,6 +101,7 @@ from src.parsing_pipeline.modules.semantic_enrichment_service import (
 )
 from src.parsing_pipeline.modules.hierarchy_enricher import (
     HierarchyEnricher,
+    aggressive_for_reason,
     should_enrich_hierarchy,
 )
 from src.parsing_pipeline.modules.toc_reconciliation_service import (
@@ -114,6 +117,11 @@ from src.core.data_contracts import ParentChunk, ChildChunk, DocumentTask
 
 # Import instrumentation
 from src.parsing_pipeline.instrumentation import ReportMetadata
+
+# Process exit codes. 1 (uncaught exception) and 2 (argparse) are Python's own.
+EXIT_OK = 0
+EXIT_PARTIAL = 3
+EXIT_NOTHING_SELECTED = 4
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -153,8 +161,14 @@ class PipelineOrchestrator:
         report_filter: list = None,
         workers: int = 1,
         trace: bool = False,
+        run_id: Optional[str] = None,
     ):
         self.manifest_path = manifest_path
+        self.run_id = run_id or resolve_run_id()
+        self.started_at = datetime.now()
+        self.fatal_error: Optional[str] = None
+        self.missing_report_ids: List[str] = []
+        self.exit_code = EXIT_OK
         self.skip = set(skip_phases or [])
         self.quiet = quiet
         self.report_filter = report_filter
@@ -183,8 +197,9 @@ class PipelineOrchestrator:
         self.cache_dir = Path("data/raw/.cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    async def run(self):
-        """Run the complete pipeline with phase skipping support."""
+    async def run(self) -> int:
+        """Run the complete pipeline with phase skipping support. Returns the process exit code."""
+        reset_usage()
         self._print_header()
 
         # Phases 1-3 with smart caching
@@ -194,7 +209,9 @@ class PipelineOrchestrator:
             self._log(
                 "No documents ready for processing. Pipeline terminating.", force=True
             )
-            return
+            self.exit_code = self._compute_exit_code()
+            self._write_run_summary()
+            return self.exit_code
 
         # Phases 4-9: Either parallel or sequential based on --workers flag
         if self.workers > 1:
@@ -222,7 +239,10 @@ class PipelineOrchestrator:
         self._finalize_all_traces()
 
         # Print comprehensive summary
+        self.exit_code = self._compute_exit_code()
         self._print_summary()
+        self._write_run_summary()
+        return self.exit_code
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASES 1-3: SMART CACHING
@@ -239,6 +259,7 @@ class PipelineOrchestrator:
             all_tasks = await manifest_service.process_manifest(self.manifest_path)
         except Exception as e:
             self._log(f"Critical error in manifest ingestion: {e}", force=True)
+            self.fatal_error = f"manifest ingestion failed: {e}"
             return
 
         # Apply report filter if provided
@@ -247,6 +268,12 @@ class PipelineOrchestrator:
             self._log(
                 f"Filtered to {len(all_tasks)} reports: {', '.join(self.report_filter)}"
             )
+            missing = sorted(set(self.report_filter) - {t.report_id for t in all_tasks})
+            if missing:
+                self.missing_report_ids = missing
+                self._log(f"Not in manifest: {', '.join(missing)}", force=True)
+        if not all_tasks:
+            self.fatal_error = "no reports selected (empty manifest or --reports matched nothing)"
 
         # Start trace for each task after tier detection is available
         # NOTE (Fix 1, Round 5): Multi-report batches now work correctly with per-report contexts.
@@ -1098,11 +1125,22 @@ class PipelineOrchestrator:
                                 report_id=task.report_id,
                                 # Flat or lopsided trees need sub-sections detected even
                                 # when the report already has many parents
-                                aggressive=reason in ("flat_hierarchy", "high_concentration", "oversized_parent"),
+                                aggressive=aggressive_for_reason(reason),
                                 trace_emitter=emitter,
                             )
                             task.parent_chunks = enriched_parents
                             task.child_chunks = enriched_children
+                            outcome = enricher.last_outcome or {}
+                            if outcome.get("status") == "rejected":
+                                # Safety valve kept the Phase 7 hierarchy unchanged
+                                self._log(
+                                    f"             ⚠ Enrichment rejected, kept Phase 7 hierarchy: "
+                                    f"{outcome.get('problems')}",
+                                    force=True,
+                                )
+                                skipped_count += 1
+                                emitter.set_phase_status("7.5", "skipped")
+                                continue
                             enriched_count += 1
                             self._log(
                                 f"             ✓ {len(enriched_parents)} parents, {len(enriched_children)} children"
@@ -1283,6 +1321,11 @@ class PipelineOrchestrator:
                 findings_count, recs_count, entities_count = propagate_semantic_enrichment_to_chunks(
                     assembled_data["child_chunks"],
                     assembled_data["semantic_enrichment"],
+                )
+
+                # Red flags from phases 1-9 travel with the output (tracing or not)
+                assembled_data.setdefault("processing_stats", {})["red_flags"] = (
+                    emitter.get_red_flags(task.report_id)
                 )
 
                 # Save enriched output (overwrite the original)
@@ -1473,6 +1516,7 @@ class PipelineOrchestrator:
                             json.dump(tracker, f, indent=2)
 
                         self.state.phase10a_completed = merged > 0
+                        self._record_phase10a_losses(service, report_ids, merge_failed)
                         self._log(
                             f"\n✅ Phase 10a complete: {merged} overview(s) created, "
                             f"{merge_failed} failed",
@@ -1586,6 +1630,7 @@ class PipelineOrchestrator:
                     )
                     self.state.phase10b_completed = True
                     self.state.chunk_files = chunk_files
+                    self._record_phase10b_losses(gemini_extractor, job_id)
 
                     # P1-14a: Validate hydration completion
                     self._validate_phase_10b_completion(chunk_files)
@@ -1852,16 +1897,8 @@ class PipelineOrchestrator:
         else:
             print("Phase 10c (Visual Post-Processing): NOT RUN")
 
-        # Final success evaluation
-        final_success = (
-            self.state.successful_triaged
-            and len(self.state.scaffold_complete) == len(self.state.successful_triaged)
-            and len(self.state.layout_complete) == len(self.state.scaffold_complete)
-            and len(self.state.content_complete) == len(self.state.layout_complete)
-            and len(self.state.chunking_complete) == len(self.state.content_complete)
-            and len(self.state.assembly_complete) == len(self.state.chunking_complete)
-            and len(self.state.enrichment_complete) == len(self.state.assembly_complete)
-        )
+        # Final success evaluation (same rule as the exit code)
+        final_success = self.exit_code == EXIT_OK
 
         if final_success:
             print("\n🎉 FULL PIPELINE COMPLETE! End-to-end processing successful!")
@@ -1879,6 +1916,138 @@ class PipelineOrchestrator:
                 print(f"\n⚠️  Pipeline completed with issues: {', '.join(issues_found)}")
             else:
                 print("\n⚠️  Pipeline completed with partial success")
+
+    def _report_statuses(self) -> List[dict]:
+        """Per-report outcome: completed, failed (with phase) or incomplete (last phase reached)."""
+        failed = {
+            task.report_id: (phase, str(err))
+            for phase, items in self.state.failed.items()
+            for task, err in items
+        }
+        stages = [
+            ("triage", self.state.successful_triaged),
+            ("scaffolding", self.state.scaffold_complete),
+            ("layout_analysis", self.state.layout_complete),
+            ("content_extraction", self.state.content_complete),
+            ("chunking", self.state.chunking_complete),
+            ("assembly", self.state.assembly_complete),
+            ("enrichment", self.state.enrichment_complete),
+        ]
+        reached = {}
+        for stage, tasks in stages:
+            for task in tasks:
+                reached[task.report_id] = stage
+        statuses = []
+        for task in self.state.tasks or []:
+            rid = task.report_id
+            if rid in failed:
+                phase, err = failed[rid]
+                statuses.append({"report_id": rid, "status": "failed", "phase": phase, "error": err[:500]})
+            elif reached.get(rid) == "enrichment":
+                statuses.append({"report_id": rid, "status": "completed"})
+            else:
+                statuses.append({"report_id": rid, "status": "incomplete", "last_phase": reached.get(rid)})
+        return statuses
+
+    def _phase10_shortfalls(self) -> List[str]:
+        """Requested Phase 10 steps that did not complete (10a counts once submitted)."""
+        shortfalls = []
+        if not self.state.enrichment_complete:
+            return shortfalls
+        if "10a" not in self.skip and not (self.state.phase10a_completed or self.state.phase10a_submitted):
+            shortfalls.append("10a")
+        if "10b" not in self.skip and not self.state.phase10b_completed:
+            shortfalls.append("10b")
+        if "10c" not in self.skip and not self.state.phase10c_completed:
+            shortfalls.append("10c")
+        return shortfalls
+
+    def _record_phase10a_losses(self, service, report_ids: List[str], merge_failed: int) -> None:
+        """Count summary variants and overviews that were not produced, per report."""
+        from src.batch_pipeline.prompts.summary_variants import VARIANTS
+
+        losses = self.state.phase10_losses.setdefault("10a", {})
+        for report_id in report_ids:
+            lost = {}
+            path = service.get_summary_output_path(report_id)
+            if path.exists():
+                data = json.loads(path.read_text())
+                missing = [v for v in VARIANTS if v not in (data.get("variants") or {})]
+            else:
+                missing = list(VARIANTS)
+            if missing:
+                lost["summary_variants"] = missing
+            if not service.get_overview_output_path(report_id).exists():
+                lost["llm_overview"] = True
+            if lost:
+                losses[report_id] = lost
+        if merge_failed:
+            self.state.phase10_losses["10a_overview_merge_failed"] = merge_failed
+
+    def _record_phase10b_losses(self, extractor, job_id: str) -> None:
+        """Visual items (tables/charts) that failed after retries, from the 10b job tracker."""
+        tracker_path = extractor.visual_extraction_dir / f"{job_id}.json"
+        if tracker_path.exists():
+            errors = json.loads(tracker_path.read_text()).get("error_count", 0)
+            if errors:
+                self.state.phase10_losses["10b_items_failed"] = errors
+
+    def _compute_exit_code(self) -> int:
+        """
+        EXIT_OK: every selected report and requested phase completed in full.
+        EXIT_PARTIAL: a report failed, a requested Phase 10 step or item was lost, or a
+            requested report ID is not in the manifest.
+        EXIT_NOTHING_SELECTED: no report was selected.
+        Codes 1 and 2 are left to Python (uncaught crash) and argparse (bad arguments).
+        """
+        if self.fatal_error or not self.state.tasks:
+            return EXIT_NOTHING_SELECTED
+        statuses = self._report_statuses()
+        if (
+            any(s["status"] != "completed" for s in statuses)
+            or self._phase10_shortfalls()
+            or self.state.phase10_losses
+            or self.missing_report_ids
+        ):
+            return EXIT_PARTIAL
+        return EXIT_OK
+
+    def _write_run_summary(self) -> Path:
+        """Write logs/run_summary_<run_id>.json so the workflow (and humans) can see what happened."""
+        statuses = self._report_statuses()
+        summary = {
+            "run_id": self.run_id,
+            "started_at": self.started_at.isoformat(timespec="seconds"),
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+            "manifest": str(self.manifest_path),
+            "report_filter": self.report_filter,
+            "skipped_phases": sorted(self.skip),
+            "exit_code": self.exit_code,
+            "fatal_error": self.fatal_error,
+            "missing_report_ids": self.missing_report_ids,
+            "reports": {
+                "selected": len(self.state.tasks or []),
+                "completed": sum(s["status"] == "completed" for s in statuses),
+                "failed": sum(s["status"] == "failed" for s in statuses),
+                "incomplete": sum(s["status"] == "incomplete" for s in statuses),
+            },
+            "phase10": {
+                "10a": "skipped" if "10a" in self.skip else (
+                    "completed" if self.state.phase10a_completed
+                    else "submitted" if self.state.phase10a_submitted else "not_run"),
+                "10b": "skipped" if "10b" in self.skip else ("completed" if self.state.phase10b_completed else "not_run"),
+                "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
+            },
+            "phase10_losses": self.state.phase10_losses,
+            "report_status": statuses,
+            "red_flags": self.state.trace_emitter.get_red_flags(),
+            "gemini_usage": log_usage_summary(),
+        }
+        path = Path("logs") / f"run_summary_{self.run_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
+        self._log(f"Run summary: {path} (exit code {self.exit_code})", force=True)
+        return path
 
     def _log(self, msg: str, force: bool = False):
         """Print message unless quiet mode suppresses it."""
@@ -1940,19 +2109,46 @@ class PipelineOrchestrator:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def setup_logging(debug: bool = False):
+SKIPPABLE_PHASES = ("5.5", "5.7", "10a", "10b", "10c")
+
+
+def parse_skip_phases(values) -> list:
+    """Accept "--skip 10a 10b" and "--skip 10a,10b" (the workflow passes commas)."""
+    phases = [p.strip() for v in values or [] for p in v.split(",") if p.strip()]
+    unknown = sorted(set(phases) - set(SKIPPABLE_PHASES))
+    if unknown:
+        raise ValueError(
+            f"unknown phase(s) in --skip: {', '.join(unknown)} "
+            f"(choose from {', '.join(SKIPPABLE_PHASES)})"
+        )
+    return phases
+
+
+def resolve_run_id(cli_value: Optional[str] = None) -> str:
+    """Run ID for log and summary file names: --run-id, then RUN_ID / GITHUB_RUN_ID, then a timestamp."""
+    return (
+        cli_value
+        or os.environ.get("RUN_ID")
+        or os.environ.get("GITHUB_RUN_ID")
+        or datetime.now().strftime("local-%Y%m%d-%H%M%S")
+    )
+
+
+def setup_logging(debug: bool = False, run_id: Optional[str] = None):
     """
-    Configure root logger with console and rotating file handlers.
+    Configure root logger with a console handler and one log file per run.
 
     Args:
         debug: If True, set all loggers to DEBUG level. Otherwise, WARNING for noisy libs.
+        run_id: Included in the log file name so concurrent or same-day runs never share a file.
     """
     # Create logs directory
     logs_dir = Path("logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate log filename with date
-    log_filename = logs_dir / f"parsing_pipeline_{datetime.now().strftime('%Y%m%d')}.log"
+    # One file per run: a shared daily file mixed concurrent runs and tiers
+    run_id = run_id or resolve_run_id()
+    log_filename = logs_dir / f"parsing_pipeline_{datetime.now().strftime('%Y%m%d')}_{run_id}.log"
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -1971,13 +2167,8 @@ def setup_logging(debug: bool = False):
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
-    # Rotating file handler (10MB per file, keep 5 backups)
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_filename,
-        maxBytes=10 * 1024 * 1024,  # 10 MB
-        backupCount=5,
-        encoding='utf-8'
-    )
+    # Plain file handler: size-based rotation split long runs across files
+    file_handler = logging.FileHandler(log_filename, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
         '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -2025,9 +2216,9 @@ Examples:
     parser.add_argument(
         "--skip",
         nargs="*",
-        choices=["5.5", "5.7", "10a", "10b", "10c"],
         default=[],
-        help="Skip optional phases (space-separated)",
+        help="Skip optional phases: " + ", ".join(SKIPPABLE_PHASES)
+             + " (space- or comma-separated)",
     )
     parser.add_argument(
         "--quiet",
@@ -2054,6 +2245,12 @@ Examples:
              "Recommended: min(cpu_count/2, 4) due to ~2-4GB memory per worker.",
     )
     parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Run identifier for log and summary file names "
+             "(default: $RUN_ID, $GITHUB_RUN_ID or a timestamp)",
+    )
+    parser.add_argument(
         "--trace",
         action="store_true",
         help="Enable trace instrumentation. Emits detailed per-report markdown traces "
@@ -2061,6 +2258,10 @@ Examples:
     )
 
     args = parser.parse_args()
+    try:
+        args.skip = parse_skip_phases(args.skip)
+    except ValueError as e:
+        parser.error(str(e))
 
     # Handle --trace flag constraints
     if args.trace and args.workers > 1:
@@ -2068,7 +2269,8 @@ Examples:
         args.workers = 1
 
     # Setup logging (must be done early, before any loggers are used)
-    setup_logging(debug=args.debug)
+    args.run_id = resolve_run_id(args.run_id)
+    setup_logging(debug=args.debug, run_id=args.run_id)
 
     # Validate manifest path
     manifest_file = Path(args.manifest_path)
@@ -2080,7 +2282,7 @@ Examples:
             manifest_path = str(default_manifest.resolve())
         else:
             print(f"Error: Manifest file not found: {args.manifest_path}")
-            return
+            return EXIT_NOTHING_SELECTED
     else:
         manifest_path = str(manifest_file.resolve())
 
@@ -2092,9 +2294,10 @@ Examples:
         report_filter=args.reports,
         workers=args.workers,
         trace=args.trace,
+        run_id=args.run_id,
     )
-    await orchestrator.run()
+    return await orchestrator.run()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))

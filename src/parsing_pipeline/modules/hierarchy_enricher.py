@@ -14,9 +14,21 @@ FIXED VERSION 3 (2025-12-26):
 - NEW: Added lowercase lettered patterns at Level 2 (for Direct Taxes reports)
 - NEW: Added aggressive parameter to enrich_hierarchy method
 - NEW: Fixed concentration issue by detecting sub-sections within large chapters
+
+2026-10 (B-7.5-01/02/03):
+- Each parent scans only its own members (parent_chunk_id), not its page range
+- Detected sections are de-duplicated report-wide; IDs include the enclosing
+  parent; a section must be deeper than its parent (no invented L1 parents)
+- Safety valve: duplicate IDs, children outside their parent's pages or a
+  lopsided result -> WARNING and the input is returned unchanged
+- Post-sync touches only re-parented children
+- Trigger thresholds are named constants; ``aggressive_for_reason`` is the
+  single place that maps a trigger reason to the ``aggressive`` flag
 """
 
+import copy
 import re
+from difflib import SequenceMatcher
 from typing import List, Dict, Tuple, Optional, Set, Any, Union
 from dataclasses import dataclass, field, is_dataclass, asdict
 from collections import defaultdict, Counter
@@ -26,6 +38,29 @@ import hashlib
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 
 logger = logging.getLogger(__name__)
+
+# ── Phase 7.5 trigger thresholds (should_enrich_hierarchy) ──
+FEW_PARENTS_THRESHOLD = 10  # fewer parents than this -> "few_parents"
+FLAT_DEEP_RATE_THRESHOLD = 0.30  # share of children with level_2+ below this -> "flat_hierarchy"
+HIGH_CONCENTRATION_THRESHOLD = 0.40  # one parent above this share -> "high_concentration"
+OVERSIZED_PARENT_CHILDREN = 80  # one parent above this many children -> "oversized_parent"
+
+# Trigger reasons that run detection in aggressive mode. Both runners must
+# derive the flag through aggressive_for_reason() so they behave the same.
+AGGRESSIVE_REASONS = frozenset({"flat_hierarchy", "high_concentration", "oversized_parent"})
+
+# Reports with this many parents or fewer always use aggressive detection
+SEVERELY_FLAT_MAX_PARENTS = 3
+
+# ── Phase 7.5 safety valve ──
+VALVE_PAGE_TOLERANCE = 1  # re-parented child may sit this many pages outside its parent
+VALVE_MAX_CHILD_SHARE = HIGH_CONCENTRATION_THRESHOLD  # max share of children per parent / level_1
+EXISTING_TITLE_SIMILARITY = 0.85  # detected section duplicates an existing parent at/above this
+
+
+def aggressive_for_reason(reason: Optional[str]) -> bool:
+    """The ``aggressive`` flag for a should_enrich_hierarchy() reason."""
+    return reason in AGGRESSIVE_REASONS
 
 
 def safe_get(obj: Any, key: str, default: Any = None) -> Any:
@@ -61,6 +96,7 @@ class DetectedSection:
     bbox: Optional[List[float]] = None
     parent_chunk_id: str = ""
     confidence: float = 1.0
+    chunk_id: str = ""  # set when the sub-parent is created
 
 
 class HierarchyEnricher:
@@ -230,6 +266,9 @@ class HierarchyEnricher:
         self.max_section_title_length = max_section_title_length
         self.detect_in_paragraphs = detect_in_paragraphs
         self._trace_emitter = trace_emitter or get_noop_emitter()
+        # Outcome of the last enrich_hierarchy() call:
+        # {"status": "applied" | "no_change" | "rejected" | "skipped", ...}
+        self.last_outcome: Dict[str, Any] = {"status": "skipped"}
 
         # Compile patterns
         self._section_patterns = {}
@@ -256,24 +295,34 @@ class HierarchyEnricher:
         parent_chunks: List[Any],
         child_chunks: List[Any],
         report_id: str = "unknown",
-        aggressive: bool = False,  # NEW PARAMETER
+        aggressive: bool = False,
         trace_emitter=None,
-    ) -> Tuple[List[Dict], List[Dict]]:
+    ) -> Tuple[List[Any], List[Any]]:
         """
         Enrich flat hierarchy by detecting sub-sections.
+
+        Each parent scans only its own members (children whose
+        ``parent_chunk_id`` is that parent), so every child is examined once.
+        Detected sections are de-duplicated report-wide, get IDs that include
+        the enclosing parent, and must sit strictly below the enclosing
+        parent's level. The result is validated (``_validate_enrichment``);
+        if validation fails, the input is returned unchanged.
 
         Args:
             parent_chunks: Existing parent (TOC) chunks (dict or dataclass)
             child_chunks: Content chunks with parent references (dict or dataclass)
             report_id: Report identifier for logging
             aggressive: If True, use aggressive detection even with many parents
-                       (used for flat hierarchies and high concentration)
+                       (see ``aggressive_for_reason``)
             trace_emitter: Optional TraceEmitter for instrumentation
 
         Returns:
-            Tuple of (enriched_parent_chunks, updated_child_chunks) as dicts
+            Tuple of (enriched_parent_chunks, updated_child_chunks) as dicts,
+            or the inputs exactly as given when nothing changed or the safety
+            valve rejected the result.
         """
         emitter = trace_emitter or self._trace_emitter
+        self.last_outcome = {"status": "skipped", "reason": "no input"}
 
         if not parent_chunks or not child_chunks:
             return (
@@ -281,32 +330,32 @@ class HierarchyEnricher:
                 [to_dict(c) for c in child_chunks] if child_chunks else [],
             )
 
-        # Convert all inputs to dicts for processing
+        # Convert inputs to dicts. Dict inputs are shared, never mutated:
+        # children are deep-copied before any change, so the caller's lists
+        # stay a valid pre-7.5 hierarchy for the safety-valve fallback.
         parent_dicts = [to_dict(p) for p in parent_chunks]
         child_dicts = [to_dict(c) for c in child_chunks]
+        total_children = len(child_dicts)
 
-        # Check if this is a severely flat hierarchy (needs aggressive detection)
-        # OR if aggressive mode was explicitly requested
-        is_severely_flat = (
-            len(parent_dicts) <= 3 or aggressive
-        )
-
+        is_severely_flat = len(parent_dicts) <= SEVERELY_FLAT_MAX_PARENTS or aggressive
         if is_severely_flat:
             reason = (
                 "explicitly requested" if aggressive else f"{len(parent_dicts)} parents"
             )
             logger.info(f"[{report_id}] Aggressive hierarchy detection ({reason})")
 
-        # Build parent lookup
         parent_lookup = {p.get("chunk_id"): p for p in parent_dicts}
 
-        # Trace: Parent distribution sample (top 5 by child count)
-        parent_child_counts = Counter()
+        # Membership: parent_chunk_id -> its children
+        members: Dict[str, List[Dict]] = defaultdict(list)
         for c in child_dicts:
-            pid = c.get("parent_chunk_id", "")
-            parent_child_counts[pid] += 1
+            members[c.get("parent_chunk_id", "")].append(c)
 
-        top_parents = parent_child_counts.most_common(5)
+        # Trace: Parent distribution sample (top 5 by child count)
+        top_parents = sorted(
+            ((pid, len(kids)) for pid, kids in members.items()),
+            key=lambda x: -x[1],
+        )[:5]
         if top_parents:
             parent_distribution = [
                 {
@@ -318,33 +367,38 @@ class HierarchyEnricher:
             ]
             emitter.emit_sample("7.5", "parent_distribution", parent_distribution)
 
-        # Track new parents and updates
-        new_parents = []
-        child_updates = {}  # chunk_id -> new parent_chunk_id
+        existing_index = self._build_existing_parent_index(parent_dicts)
 
-        # Process each parent
-        for parent in parent_dicts:
+        # ── Pass 1: detect sections per parent, over its own members only ──
+        # dedup key -> (section, enclosing parent, parent order)
+        candidates: Dict[Tuple[int, str], Tuple[DetectedSection, Dict, int]] = {}
+        members_in_range: Dict[str, List[Dict]] = {}
+        skipped = Counter()
+
+        for order, parent in enumerate(parent_dicts):
             parent_id = parent.get("chunk_id", "")
             page_start, page_end = self._get_page_range(parent)
-
             if page_start < 0 or page_end < 0:
                 continue
 
-            # Get children in this parent's range
-            children_in_range = self._get_children_in_range(
-                child_dicts, page_start, page_end
-            )
-
-            if not children_in_range:
+            # Only members inside the parent's own pages are scanned and moved;
+            # members placed by Phase 7's nearest-parent fallback stay put.
+            kids = [
+                c
+                for c in members.get(parent_id, [])
+                if (p := self._get_child_page(c)) is not None and page_start <= p <= page_end
+            ]
+            if not kids:
                 continue
-
-            # NEW: Check if this parent has high concentration
-            # If it has many children, we should definitely try to enrich
-            parent_child_count = len(children_in_range)
-            total_children = len(child_dicts)
-            parent_concentration = (
-                parent_child_count / total_children if total_children > 0 else 0
+            kids.sort(
+                key=lambda c: (
+                    self._get_child_page(c) or 0,
+                    self._get_child_y_position(c) or 0,
+                )
             )
+            members_in_range[parent_id] = kids
+
+            parent_concentration = len(members.get(parent_id, [])) / total_children
 
             # Trace: Red flag for high concentration (>50%)
             if parent_concentration > 0.50:
@@ -354,7 +408,7 @@ class HierarchyEnricher:
                     {
                         "parent_id": parent_id[:50],
                         "parent_title": parent.get("toc_entry", "")[:50],
-                        "child_count": parent_child_count,
+                        "child_count": len(members.get(parent_id, [])),
                         "percentage": round(parent_concentration * 100, 1),
                     },
                 )
@@ -362,78 +416,288 @@ class HierarchyEnricher:
             # Force aggressive mode for parents with >30% of all children
             use_aggressive = is_severely_flat or parent_concentration > 0.30
 
-            # Detect sub-sections (use aggressive mode for flat hierarchies and concentrated parents)
-            detected_sections = self._detect_sections(
-                children_in_range, parent, report_id, aggressive=use_aggressive
+            detected = self._detect_sections(
+                kids, parent, report_id, aggressive=use_aggressive
             )
 
-            if detected_sections:
-                # Create new parent chunks for detected sections
-                for section in detected_sections:
-                    new_parent = self._create_sub_parent(section, parent, report_id)
-                    new_parents.append(new_parent)
+            parent_level = self._get_level(parent)
+            for section in detected:
+                # No invented roots or siblings: a sub-section must be deeper
+                # than the parent it is found in.
+                if section.level <= parent_level:
+                    skipped["not_deeper_than_parent"] += 1
+                    continue
+                if self._matches_existing_parent(section, existing_index):
+                    skipped["duplicates_existing_parent"] += 1
+                    continue
+                key = self._dedup_key(section)
+                prev = candidates.get(key)
+                if prev is None:
+                    candidates[key] = (section, parent, order)
+                elif self._is_narrower(parent, order, prev[1], prev[2]):
+                    candidates[key] = (section, parent, order)
+                    skipped["duplicate_heading"] += 1
+                else:
+                    skipped["duplicate_heading"] += 1
 
-                # Update child assignments
-                section_assignments = self._assign_children_to_sections(
-                    children_in_range, detected_sections, parent_id
+        # ── Pass 2: create sub-parents and re-assign members ──
+        sections_by_parent: Dict[str, List[DetectedSection]] = defaultdict(list)
+        for section, parent, _ in candidates.values():
+            sections_by_parent[parent.get("chunk_id", "")].append(section)
+
+        new_parents: List[Dict] = []
+        child_updates: Dict[str, str] = {}  # child chunk_id -> new parent chunk_id
+        used_ids: Set[str] = set(parent_lookup)
+
+        for parent in parent_dicts:
+            parent_id = parent.get("chunk_id", "")
+            sections = sections_by_parent.get(parent_id)
+            if not sections:
+                continue
+
+            kept_sections = []
+            for section in sections:
+                section.chunk_id = self._sub_parent_id(section, parent_id, report_id)
+                if section.chunk_id in used_ids:
+                    skipped["id_collision"] += 1
+                    continue
+                used_ids.add(section.chunk_id)
+                kept_sections.append(section)
+            if not kept_sections:
+                continue
+
+            kids = members_in_range.get(parent_id, [])
+            assignments = self._assign_children_to_sections(kids, kept_sections)
+            child_updates.update(assignments)
+
+            kids_by_section: Dict[str, List[Dict]] = defaultdict(list)
+            for c in kids:
+                sid = assignments.get(c.get("chunk_id", ""))
+                if sid:
+                    kids_by_section[sid].append(c)
+
+            for section in kept_sections:
+                new_parents.append(
+                    self._create_sub_parent(
+                        section, parent, report_id, kids_by_section.get(section.chunk_id, [])
+                    )
                 )
-                child_updates.update(section_assignments)
 
-        # Apply child updates
+        if skipped:
+            logger.info(f"[{report_id}] Hierarchy Enricher: skipped detections {dict(skipped)}")
+
+        if not new_parents:
+            logger.info(f"[{report_id}] Hierarchy Enricher: no sub-sections added")
+            self.last_outcome = {"status": "no_change", "skipped": dict(skipped)}
+            return parent_dicts, child_dicts
+
+        # Apply child updates (deep copies; input children are never mutated)
+        new_parent_lookup = {p["chunk_id"]: p for p in new_parents}
         updated_children = []
         for child in child_dicts:
             child_id = child.get("chunk_id", "")
             if child_id in child_updates:
-                child = child.copy()
-                new_parent_id = child_updates[child_id]
-                child["parent_chunk_id"] = new_parent_id
-
-                # Update hierarchy metadata
-                self._update_child_hierarchy(
-                    child, new_parent_id, new_parents
-                )
-
+                child = copy.deepcopy(child)
+                child["parent_chunk_id"] = child_updates[child_id]
             updated_children.append(child)
 
-        # Combine parents
         enriched_parents = parent_dicts + new_parents
-
-        # Trace: Enrichment result
-        emitter.emit_io(
-            "7.5",
-            {"parents_before": len(parent_dicts), "children_before": len(child_dicts)},
-            {
-                "parents_after": len(enriched_parents),
-                "new_parents": len(new_parents),
-                "reassignments": len(child_updates),
-            },
-        )
 
         logger.info(
             f"[{report_id}] Hierarchy Enricher: Added {len(new_parents)} sub-sections, "
             f"updated {len(child_updates)} child assignments"
         )
 
-        # ── POST-PROCESS: Force-sync child hierarchies to final parent state ──
-        # This fixes timing issues where _update_child_hierarchy() ran before
-        # parent hierarchy was fully built (e.g., missing inherited levels).
-        parent_lookup_final = {p.get("chunk_id"): p for p in enriched_parents}
+        # ── POST-SYNC: copy the final hierarchy onto re-parented children only ──
+        # Children that enrichment did not move keep their hierarchy (B-7.5-02).
         synced = 0
         for child in updated_children:
-            pid = child.get("parent_chunk_id", "")
-            parent = parent_lookup_final.get(pid)
+            if child.get("chunk_id", "") not in child_updates:
+                continue
+            parent = new_parent_lookup.get(child.get("parent_chunk_id", ""))
             if not parent:
                 continue
             parent_h = parent.get("hierarchy", {})
             if child.get("hierarchy") != parent_h:
-                child["hierarchy"] = parent_h.copy()
-                if isinstance(child.get("metadata"), dict):
-                    child["metadata"]["hierarchy"] = parent_h.copy()
+                child["hierarchy"] = dict(parent_h)
                 synced += 1
+            if isinstance(child.get("metadata"), dict):
+                child["metadata"]["hierarchy"] = dict(parent_h)
         if synced > 0:
-            logger.info(f"[{report_id}] Hierarchy post-sync: fixed {synced} child↔parent mismatches")
+            logger.info(f"[{report_id}] Hierarchy post-sync: updated {synced} re-parented children")
 
+        # ── SAFETY VALVE: never emit a corrupted hierarchy ──
+        problems = self._validate_enrichment(
+            parent_dicts, child_dicts, enriched_parents, updated_children, set(child_updates)
+        )
+        if problems:
+            logger.warning(
+                f"[{report_id}] Hierarchy enrichment rejected, keeping pre-7.5 hierarchy "
+                f"({len(parent_dicts)} parents, {total_children} children): " + "; ".join(problems)
+            )
+            emitter.emit_red_flag(
+                "7.5",
+                "hierarchy_enrichment_rejected",
+                {"problems": problems, "new_parents": len(new_parents), "reassignments": len(child_updates)},
+            )
+            self.last_outcome = {"status": "rejected", "problems": problems}
+            return parent_chunks, child_chunks
+
+        # Trace: Enrichment result
+        emitter.emit_io(
+            "7.5",
+            {"parents_before": len(parent_dicts), "children_before": total_children},
+            {
+                "parents_after": len(enriched_parents),
+                "new_parents": len(new_parents),
+                "reassignments": len(child_updates),
+            },
+        )
+        self.last_outcome = {
+            "status": "applied",
+            "new_parents": len(new_parents),
+            "reassignments": len(child_updates),
+            "skipped": dict(skipped),
+        }
         return enriched_parents, updated_children
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Dedup and validation helpers
+    # ─────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_level(parent: Dict) -> int:
+        try:
+            return int(parent.get("toc_level") or 1)
+        except (TypeError, ValueError):
+            return 1
+
+    @staticmethod
+    def _normalize_title(text: str) -> str:
+        return " ".join(re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).split())
+
+    @classmethod
+    def _title_words(cls, text: str) -> str:
+        """Normalised title without section numbers (for similarity)."""
+        t = cls._normalize_title(text)
+        return " ".join(w for w in t.split() if not re.fullmatch(r"[0-9]+", w))
+
+    def _dedup_key(self, section: DetectedSection) -> Tuple[int, str]:
+        """Report-wide identity of a detected heading: page + normalised title."""
+        return (section.page_physical, self._normalize_title(section.title))
+
+    def _build_existing_parent_index(self, parents: List[Dict]) -> List[Tuple[int, int, str, str]]:
+        """(start, end, raw title, title words) for every existing parent."""
+        index = []
+        for p in parents:
+            start, end = self._get_page_range(p)
+            title = str(p.get("toc_entry") or "")
+            index.append((start, end, title, self._title_words(title)))
+        return index
+
+    def _matches_existing_parent(
+        self, section: DetectedSection, existing_index: List[Tuple[int, int, str, str]]
+    ) -> bool:
+        """True if the section is already a parent on (or next to) its page.
+
+        Dotted section numbers ("1.2", "5.6.1") match when an existing parent
+        title carries the same number anywhere ("Organisational setup of PRIs
+        1.2"). Other sections match on title similarity >= 0.85.
+        """
+        page = section.page_physical
+        sid = (section.section_id or "").rstrip(".")
+        number_re = (
+            re.compile(rf"(?<![\d.]){re.escape(sid)}(?![\d]|\.\d)") if "." in sid else None
+        )
+        words = self._title_words(section.title)
+        for start, end, title, title_words in existing_index:
+            if start < 0 or not (start - 1 <= page <= end + 1):
+                continue
+            if number_re is not None:
+                if number_re.search(title):
+                    return True
+            elif words and title_words and (
+                SequenceMatcher(None, words, title_words).ratio() >= EXISTING_TITLE_SIMILARITY
+            ):
+                return True
+        return False
+
+    def _is_narrower(self, parent: Dict, order: int, other: Dict, other_order: int) -> bool:
+        """True if ``parent`` is more specific than ``other`` (narrowest wins)."""
+
+        def rank(p: Dict, o: int) -> Tuple[int, int, int]:
+            start, end = self._get_page_range(p)
+            return (end - start, -self._get_level(p), o)
+
+        return rank(parent, order) < rank(other, other_order)
+
+    def _validate_enrichment(
+        self,
+        parents_in: List[Dict],
+        children_in: List[Dict],
+        parents_out: List[Dict],
+        children_out: List[Dict],
+        reparented: Set[str],
+    ) -> List[str]:
+        """Return the list of failed checks (empty when the result is safe)."""
+        problems = []
+
+        # 1. Unique parent IDs
+        ids = [p.get("chunk_id") for p in parents_out]
+        dup_ids = sum(1 for n in Counter(ids).values() if n > 1)
+        if dup_ids:
+            problems.append(f"{dup_ids} duplicate parent ids ({len(ids)} parents, {len(set(ids))} unique)")
+
+        # 2. Every re-parented child inside its new parent's pages (+/- tolerance).
+        #    Children enrichment did not move are unchanged from the input.
+        lookup = {p.get("chunk_id"): p for p in parents_out}
+        tol = VALVE_PAGE_TOLERANCE
+        outside = 0
+        for c in children_out:
+            if c.get("chunk_id", "") not in reparented:
+                continue
+            p = lookup.get(c.get("parent_chunk_id"))
+            page = self._get_child_page(c)
+            if p is None or page is None:
+                outside += 1
+                continue
+            start, end = self._get_page_range(p)
+            if not (start - tol <= page <= end + tol):
+                outside += 1
+        if outside:
+            problems.append(
+                f"{outside} of {len(reparented)} re-parented children outside their parent's pages (+/-{tol})"
+            )
+
+        # 3. No single parent, and no single top-level section, holding more
+        #    than a sane share of all children (unless the input already did).
+        total = len(children_out) or 1
+
+        def max_share(children: List[Dict], key) -> Tuple[float, Any]:
+            counts = Counter(key(c) for c in children)
+            if not counts:
+                return 0.0, None
+            k, n = counts.most_common(1)[0]
+            return n / total, k
+
+        def top_level(c: Dict) -> Any:
+            h = c.get("hierarchy")
+            return h.get("level_1") if isinstance(h, dict) else None
+
+        for label, key in (
+            ("parent", lambda c: c.get("parent_chunk_id")),
+            ("level_1 section", top_level),
+        ):
+            share_in, _ = max_share(children_in, key)
+            share_out, k = max_share(children_out, key)
+            allowed = max(VALVE_MAX_CHILD_SHARE, share_in)
+            if share_out > allowed + 1e-9:
+                problems.append(
+                    f"one {label} ({str(k)[:60]!r}) holds {share_out:.0%} of children "
+                    f"(limit {allowed:.0%})"
+                )
+
+        return problems
 
     def _get_page_range(self, parent: Dict) -> Tuple[int, int]:
         """Extract page range from parent chunk."""
@@ -441,27 +705,6 @@ class HierarchyEnricher:
         if isinstance(page_range, (list, tuple)) and len(page_range) >= 2:
             return page_range[0], page_range[1]
         return -1, -1
-
-    def _get_children_in_range(
-        self, children: List[Dict], page_start: int, page_end: int
-    ) -> List[Dict]:
-        """Get children within a page range."""
-        result = []
-
-        for child in children:
-            page = self._get_child_page(child)
-            if page is not None and page_start <= page <= page_end:
-                result.append(child)
-
-        # Sort by page and vertical position
-        result.sort(
-            key=lambda c: (
-                self._get_child_page(c) or 0,
-                self._get_child_y_position(c) or 0,
-            )
-        )
-
-        return result
 
     def _get_child_page(self, child: Dict) -> Optional[int]:
         """Get page number from child chunk."""
@@ -474,13 +717,22 @@ class HierarchyEnricher:
                 if page is not None:
                     return page
 
-        # Try direct fields
-        page = (
-            child.get("source_page_physical")
-            or child.get("page_physical")
-            or child.get("page_start")
-        )
-        return page
+        # Try direct fields (page 0 is valid, so test for None, not truthiness)
+        for key in ("source_page_physical", "page_physical", "page_start"):
+            page = child.get(key)
+            if page is not None:
+                return page
+        return None
+
+    def _get_child_page_logical(self, child: Dict) -> str:
+        """Get the printed page label from a child chunk."""
+        meta = child.get("metadata", {})
+        if isinstance(meta, dict):
+            loc = meta.get("location", {})
+            if isinstance(loc, dict) and loc.get("page_logical"):
+                return str(loc["page_logical"])
+        value = child.get("source_page_logical")
+        return str(value) if value else ""
 
     def _get_child_y_position(self, child: Dict) -> Optional[float]:
         """Get Y position from child chunk."""
@@ -653,22 +905,34 @@ class HierarchyEnricher:
 
         return detected
 
+    @staticmethod
+    def _sub_parent_id(section: DetectedSection, enclosing_parent_id: str, report_id: str) -> str:
+        """Chunk ID for a detected section. Includes the enclosing parent, so the
+        same heading text under two different parents never shares an ID."""
+        hash_input = (
+            f"{report_id}:{enclosing_parent_id}:{section.section_id}:"
+            f"{section.title}:{section.page_physical}"
+        )
+        chunk_hash = hashlib.md5(hash_input.encode()).hexdigest()[:8]
+        section_id_safe = re.sub(r"[^a-zA-Z0-9]", "_", section.section_id)[:20]
+        title_safe = re.sub(r"[^a-zA-Z0-9]", "_", section.title)[:20]
+        return f"{report_id}_parent_L{section.level}_{section_id_safe or title_safe}_{chunk_hash}"
+
     def _create_sub_parent(
         self,
         section: DetectedSection,
         parent: Dict,
         report_id: str,
+        assigned_children: Optional[List[Dict]] = None,
     ) -> Dict:
-        """Create a new parent chunk for a detected section."""
-        # Generate unique chunk ID
-        hash_input = (
-            f"{report_id}:{section.section_id}:{section.title}:{section.page_physical}"
-        )
-        chunk_hash = hashlib.md5(hash_input.encode()).hexdigest()[:8]
+        """Create a new parent chunk for a detected section.
 
-        section_id_safe = re.sub(r"[^a-zA-Z0-9]", "_", section.section_id)[:20]
-        title_safe = re.sub(r"[^a-zA-Z0-9]", "_", section.title)[:20]
-        chunk_id = f"{report_id}_parent_L{section.level}_{section_id_safe or title_safe}_{chunk_hash}"
+        The page range runs from the heading page to the last page of the
+        children assigned to it (always within the enclosing parent's members).
+        """
+        chunk_id = section.chunk_id or self._sub_parent_id(
+            section, parent.get("chunk_id", ""), report_id
+        )
 
         # Build hierarchy from detected section structure, not from a single mega-parent
         parent_hierarchy = parent.get("hierarchy", {})
@@ -676,29 +940,33 @@ class HierarchyEnricher:
             parent_hierarchy = {}
 
         # Only inherit levels ABOVE the detected section's level
-        # AND only if they make structural sense
         hierarchy = {}
         for key, value in parent_hierarchy.items():
             if key.startswith("level_"):
                 try:
                     level_num = int(key.split("_")[1])
-                    # Only inherit levels strictly above this section's level
                     if level_num < section.level:
                         hierarchy[key] = value
                 except (IndexError, ValueError):
-                    # Skip malformed level keys
                     pass
 
         # Add the detected section at its level
         hierarchy[f"level_{section.level}"] = section.title
+
+        end_page, end_logical = section.page_physical, section.page_logical
+        for c in assigned_children or []:
+            page = self._get_child_page(c)
+            if page is not None and page > end_page:
+                end_page = page
+                end_logical = self._get_child_page_logical(c) or end_logical
 
         return {
             "chunk_id": chunk_id,
             "report_id": report_id,
             "toc_entry": section.title,
             "toc_level": section.level,
-            "page_range_physical": [section.page_physical, section.page_physical],
-            "page_range_logical": [section.page_logical, section.page_logical],
+            "page_range_physical": [section.page_physical, end_page],
+            "page_range_logical": [section.page_logical, end_logical],
             "hierarchy": hierarchy,
             "parent_chunk_id": parent.get("chunk_id"),
             "detected_by": "hierarchy_enricher",
@@ -715,32 +983,29 @@ class HierarchyEnricher:
         self,
         children: List[Dict],
         sections: List[DetectedSection],
-        fallback_parent_id: str,
     ) -> Dict[str, str]:
         """
-        Assign children to their nearest detected section.
+        Assign each child to the nearest preceding detected section.
+
+        ``children`` must be the members of the parent the sections were
+        detected in. Children before the first section are not re-assigned.
 
         Returns:
-            Dict mapping child_id -> new_parent_id
+            Dict mapping child_id -> section chunk_id
         """
         if not sections:
             return {}
 
-        # Sort sections by page
         sorted_sections = sorted(
             sections, key=lambda s: (s.page_physical, s.bbox[1] if s.bbox else 0)
         )
 
         assignments = {}
-
         for child in children:
-            child_id = child.get("chunk_id", "")
             child_page = self._get_child_page(child) or 0
             child_y = self._get_child_y_position(child) or 0
 
-            # Find the section this child belongs to
             assigned_section = None
-
             for section in sorted_sections:
                 if section.page_physical < child_page:
                     assigned_section = section
@@ -750,51 +1015,9 @@ class HierarchyEnricher:
                         assigned_section = section
 
             if assigned_section:
-                # Build new parent ID (must match what _create_sub_parent generates)
-                report_id = child.get(
-                    "report_id",
-                    fallback_parent_id.split("_parent_")[0]
-                    if "_parent_" in fallback_parent_id
-                    else "unknown",
-                )
-                hash_input = f"{report_id}:{assigned_section.section_id}:{assigned_section.title}:{assigned_section.page_physical}"
-                chunk_hash = hashlib.md5(hash_input.encode()).hexdigest()[:8]
-                section_id_safe = re.sub(
-                    r"[^a-zA-Z0-9]", "_", assigned_section.section_id
-                )[:20]
-                title_safe = re.sub(r"[^a-zA-Z0-9]", "_", assigned_section.title)[:20]
-                new_parent_id = f"{report_id}_parent_L{assigned_section.level}_{section_id_safe or title_safe}_{chunk_hash}"
-
-                assignments[child_id] = new_parent_id
+                assignments[child.get("chunk_id", "")] = assigned_section.chunk_id
 
         return assignments
-
-    def _update_child_hierarchy(
-        self,
-        child: Dict,
-        new_parent_id: str,
-        new_parents: List[Dict],
-    ) -> None:
-        """Update child's hierarchy metadata."""
-        # Find the new parent
-        new_parent = None
-        for p in new_parents:
-            if p.get("chunk_id") == new_parent_id:
-                new_parent = p
-                break
-
-        if not new_parent:
-            return
-
-        # Write to top-level "hierarchy" field (read by assembly service)
-        new_hierarchy = new_parent.get("hierarchy", {})
-        if isinstance(new_hierarchy, dict):
-            child["hierarchy"] = new_hierarchy.copy()  # ← CORRECT LOCATION
-
-        # Also update metadata for consistency
-        if "metadata" not in child or not isinstance(child.get("metadata"), dict):
-            child["metadata"] = {}
-        child["metadata"]["hierarchy"] = new_hierarchy.copy()
 
 
 def enrich_report_hierarchy(
@@ -815,13 +1038,12 @@ def enrich_report_hierarchy(
         trace_emitter: Optional TraceEmitter for instrumentation
 
     Returns:
-        Tuple of (enriched_parents, updated_children) as dicts
+        Tuple of (enriched_parents, updated_children); the inputs unchanged
+        if the safety valve rejects the result
     """
     enricher = HierarchyEnricher(trace_emitter=trace_emitter)
     return enricher.enrich_hierarchy(parent_chunks, child_chunks, report_id, aggressive, trace_emitter=trace_emitter)
 
-
-OVERSIZED_PARENT_CHILDREN = 80
 
 
 def should_enrich_hierarchy(
@@ -831,10 +1053,10 @@ def should_enrich_hierarchy(
     """
     Determine if hierarchy enrichment is needed.
 
-    This function checks four conditions:
-    1. Few parents (< 10) - original behavior
-    2. Flat hierarchy (< 30% of children have level_2+ hierarchy)
-    3. High concentration (> 40% of children assigned to one parent)
+    This function checks four conditions (thresholds are module constants):
+    1. Few parents (< FEW_PARENTS_THRESHOLD)
+    2. Flat hierarchy (< FLAT_DEEP_RATE_THRESHOLD of children have level_2+ hierarchy)
+    3. High concentration (> HIGH_CONCENTRATION_THRESHOLD of children under one parent)
     4. Oversized parent (> OVERSIZED_PARENT_CHILDREN children under one parent)
 
     Args:
@@ -846,19 +1068,17 @@ def should_enrich_hierarchy(
         reason is one of: "few_parents", "flat_hierarchy", "high_concentration",
         "oversized_parent", or None
 
-    Usage in main.py:
-        from modules.hierarchy_enricher import should_enrich_hierarchy
-
+    Usage (both runners):
         needs_enrichment, enrich_reason = should_enrich_hierarchy(
             task.parent_chunks, task.child_chunks
         )
         if needs_enrichment:
-            # Run enrichment with aggressive mode for flat/concentrated hierarchies
-            aggressive_mode = enrich_reason in ["flat_hierarchy", "high_concentration"]
-            ...
+            parents, children = enricher.enrich_hierarchy(
+                ..., aggressive=aggressive_for_reason(enrich_reason)
+            )
     """
     # Condition 1: Few parents (original logic)
-    if len(parent_chunks) < 10:
+    if len(parent_chunks) < FEW_PARENTS_THRESHOLD:
         return True, "few_parents"
 
     # Condition 2: Flat hierarchy (children don't have deep links)
@@ -877,7 +1097,7 @@ def should_enrich_hierarchy(
                 deep_count += 1
 
         deep_rate = deep_count / len(child_chunks) if child_chunks else 0
-        if deep_rate < 0.30:  # Less than 30% have nested hierarchy
+        if deep_rate < FLAT_DEEP_RATE_THRESHOLD:
             return True, "flat_hierarchy"
 
     # Condition 3: High concentration (most children assigned to one parent)
@@ -895,7 +1115,7 @@ def should_enrich_hierarchy(
         if parent_counts:
             max_children = parent_counts.most_common(1)[0][1]
             concentration = max_children / len(child_chunks)
-            if concentration > 0.40:  # More than 40% to one parent
+            if concentration > HIGH_CONCENTRATION_THRESHOLD:
                 return True, "high_concentration"
 
             # Condition 4: Oversized parent. With correct chapter-level TOCs (printed

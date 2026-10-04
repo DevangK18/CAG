@@ -24,6 +24,24 @@ logger = logging.getLogger(__name__)
 # Alias resolver
 # =============================================================================
 
+PAISE_PER_CRORE = 1_000_000_000
+
+
+def finding_amount_crore(finding: Dict) -> Optional[float]:
+    """Finding amount in crore.
+
+    Prefers the single largest amount (monetary_value_crore); total_amount_inr sums
+    every amount in the chunk and, despite its name, is stored in paise.
+    """
+    if finding.get("monetary_value_crore"):
+        return float(finding["monetary_value_crore"])
+    if finding.get("total_amount_inr"):
+        return float(finding["total_amount_inr"]) / PAISE_PER_CRORE
+    if finding.get("amount_crore"):
+        return float(finding["amount_crore"])
+    return None
+
+
 class AliasResolver:
     """Maps raw mentions to canonical entity IDs.
 
@@ -253,10 +271,7 @@ def index_report(report_path: Path) -> int:
                 eid = resolver.resolve(raw)
                 if eid is None:
                     continue
-                amount_crore = None
-                amt = finding.get("total_amount_inr") or finding.get("amount_crore")
-                if amt:
-                    amount_crore = float(amt) / 10_000_000 if amt > 1000 else float(amt)
+                amount_crore = finding_amount_crore(finding)
 
                 m = EntityMention(
                     entity_id=eid,
