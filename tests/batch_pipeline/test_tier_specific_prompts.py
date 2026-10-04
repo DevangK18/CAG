@@ -59,6 +59,13 @@ class TestTierContext:
         local = TIER_CONTEXT["local_body"]
         assert "₹10 Crore" in local["financial_scale"]["critical"]
 
+    @pytest.mark.parametrize("tier", ["union", "state", "local_body"])
+    def test_no_example_amounts_or_headlines(self, tier):
+        """D-10a-07: example amounts and headlines leaked into summaries."""
+        ctx = TIER_CONTEXT[tier]
+        assert "headline_examples" not in ctx
+        assert not any(k.startswith("example") or k == "relatable" for k in ctx["financial_scale"])
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # EXECUTIVE PROMPT TESTS
@@ -117,9 +124,10 @@ class TestJournalistPrompt:
     """Tests for tier-specific journalist prompts."""
 
     def test_union_references_national_papers(self):
-        """Union journalist prompt should reference national newspapers."""
+        """Union journalist prompt should frame for a national paper, without naming one."""
         prompt = _get_journalist_prompt("union")
-        assert "Hindu" in prompt or "Indian Express" in prompt or "Times of India" in prompt
+        assert "national newspaper" in prompt
+        assert "Hindu" not in prompt and "Times of India" not in prompt
 
     def test_state_references_regional_papers(self):
         """State journalist prompt should reference regional newspapers."""
@@ -145,11 +153,12 @@ class TestJournalistPrompt:
 class TestSimplePrompt:
     """Tests for tier-specific simple prompts."""
 
-    def test_union_has_national_scale_examples(self):
-        """Union simple prompt should have national-scale financial examples."""
+    def test_union_has_no_example_amounts(self):
+        """D-10a-07: "12 crore families" leaked from the old example into union summaries."""
         prompt = _get_simple_prompt("union")
-        # Should have large amounts typical of Union
-        assert "₹12,000 Crore" in prompt or "₹10,000 Crore" in prompt or "crore families" in prompt.lower()
+        assert "national" in prompt.lower()
+        assert "₹12,000 Crore" not in prompt
+        assert "crore families" not in prompt.lower()
 
     def test_state_has_state_scale_examples(self):
         """State simple prompt should have state-scale financial examples."""

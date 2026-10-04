@@ -1455,13 +1455,15 @@ class PipelineOrchestrator:
                     GeminiVisualExtractor,
                 )
 
-                # Find all chunk files for visual extraction
-                chunk_files = [
-                    Path(task.assembled_output_path)
-                    for task in self.state.enrichment_complete
-                    if task.assembled_output_path
-                    and Path(task.assembled_output_path).exists()
-                ]
+                # Chunk files grouped by PDF directory: PDFs live under data/raw/<tier>/
+                # and the extractor joins pdf_dir with the bare source_filename
+                by_pdf_dir: Dict[str, List[Path]] = {}
+                for task in self.state.enrichment_complete:
+                    path = task.assembled_output_path
+                    if path and Path(path).exists():
+                        pdf_dir = str(Path(task.local_pdf_path).parent) if task.local_pdf_path else "data/raw"
+                        by_pdf_dir.setdefault(pdf_dir, []).append(Path(path))
+                chunk_files = [p for files in by_pdf_dir.values() for p in files]
 
                 if chunk_files:
                     self._log(
@@ -1469,15 +1471,19 @@ class PipelineOrchestrator:
                     )
                     emitter = self.state.trace_emitter
                     gemini_extractor = GeminiVisualExtractor(trace_emitter=emitter)
-                    job_id = await gemini_extractor.submit_visual_extraction_job(
-                        json_files=chunk_files,
-                        pdf_dir="data/raw",
-                        skip_existing=True,
-                        trace_emitter=emitter,
-                    )
+                    job_ids = []
+                    for pdf_dir, files in by_pdf_dir.items():
+                        job_ids.append(await gemini_extractor.submit_visual_extraction_job(
+                            json_files=files,
+                            pdf_dir=pdf_dir,
+                            skip_existing=True,
+                            trace_emitter=emitter,
+                        ))
                     self.state.phase10b_completed = True
                     self.state.chunk_files = chunk_files
-                    self._record_phase10b_losses(gemini_extractor, job_id)
+                    for job_id in job_ids:
+                        self._record_phase10b_losses(gemini_extractor, job_id)
+                    job_id = ", ".join(job_ids)
 
                     # P1-14a: Validate hydration completion
                     self._validate_phase_10b_completion(chunk_files)
@@ -1846,7 +1852,8 @@ class PipelineOrchestrator:
         if tracker_path.exists():
             errors = json.loads(tracker_path.read_text()).get("error_count", 0)
             if errors:
-                self.state.phase10_losses["10b_items_failed"] = errors
+                losses = self.state.phase10_losses
+                losses["10b_items_failed"] = losses.get("10b_items_failed", 0) + errors
 
     def _compute_exit_code(self) -> int:
         """
