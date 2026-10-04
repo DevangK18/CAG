@@ -7,7 +7,6 @@ Tier 3 in the hybrid extraction strategy — processes:
 3. All chart/figure images for structured data extraction
 
 Uses google-genai SDK with async processing and rate limiting.
-Follows the batch pattern established by chart_extractor.py.
 
 Folder Structure:
     data/batch_jobs/

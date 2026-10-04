@@ -1,33 +1,12 @@
 """
-P2-1 LLM-Augmented Enrichment Package.
+Phase 10b/10c visual enrichment.
 
-This package provides intelligent LLM-powered enrichment for CAG audit reports,
-building on Phase 1's algorithmic foundation.
+- GeminiVisualExtractor: chart and table extraction via Gemini on Vertex AI
+- visual_post_processor: hydrates extracted visuals back into the chunks
 
-Architecture:
-- EnrichmentRouter: Decides which chunks need LLM processing
-- GeminiVisualExtractor: Visual extraction via Gemini/Vertex AI
-- EnrichmentService: Main orchestrator coordinating enrichment
-
-Default: Uses Gemini via Vertex AI for GCP credit billing.
 Billing: GCP project (Agent Platform) via src.core.gemini_client.
 """
 
-from .enrichment_router import EnrichmentRouter, EnrichmentTask, RoutingDecision
-from .enrichment_service import EnrichmentService
 from .gemini_visual_extractor import GeminiVisualExtractor
 
-# Optional: OpenAI batch service (only if openai package installed)
-try:
-    from .openai_batch import OpenAIBatchService
-except ImportError:
-    OpenAIBatchService = None  # type: ignore
-
-__all__ = [
-    "EnrichmentRouter",
-    "EnrichmentTask",
-    "RoutingDecision",
-    "EnrichmentService",
-    "GeminiVisualExtractor",
-    "OpenAIBatchService",
-]
+__all__ = ["GeminiVisualExtractor"]

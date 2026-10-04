@@ -25,11 +25,6 @@ BROKEN_IMPORT_FILES = [
 
 # Test node ID -> reason
 KNOWN_FAILURES = {
-    'tests/batch_pipeline/test_chart_extractor.py::test_build_vision_request_structure': 'chart prompt template raises KeyError (CLI-only extractor)',
-    'tests/batch_pipeline/test_chart_extractor.py::test_end_to_end_chart_extraction_workflow': 'chart prompt template raises KeyError (CLI-only extractor)',
-    'tests/batch_pipeline/test_chart_extractor.py::test_submit_chart_extraction_batch_success': 'chart prompt template raises KeyError (CLI-only extractor)',
-    'tests/batch_pipeline/test_enrichment_router.py::TestEnrichmentRouter::test_report_type_routing': 'expects OpenAI/Anthropic routing; the router now skips them',
-    'tests/batch_pipeline/test_enrichment_router.py::TestEnrichmentRouter::test_route_implicit_finding_to_openai': 'expects OpenAI/Anthropic routing; the router now skips them',
     'tests/entity_graph/test_canonicalizer.py::TestCanonicalizeViaLLM::test_end_to_end_canonicalization': 'patches an attribute the canonicalizer module no longer has',
     'tests/entity_graph/test_canonicalizer.py::TestCanonicalizeViaLLM::test_handles_llm_failure_gracefully': 'patches an attribute the canonicalizer module no longer has',
     'tests/parsing_pipeline/unit/test_entity_hardening_unit.py::TestCleanEntityFilter::test_lowercase_start_rejected': 'tests a private SemanticEnrichmentService method that no longer exists',
@@ -75,10 +70,6 @@ KNOWN_FAILURES = {
     'tests/parsing_pipeline/unit/test_temporal_extractor_unit.py::test_extract_audit_period_from_to_pattern': 'fiscal-year expectations differ from the current extractor',
     'tests/parsing_pipeline/unit/test_temporal_extractor_unit.py::test_extract_temporal_metadata_with_intro_sections': 'fiscal-year expectations differ from the current extractor',
     'tests/parsing_pipeline/unit/test_temporal_extractor_unit.py::test_extract_temporal_metadata_without_section_classifications': 'fiscal-year expectations differ from the current extractor',
-    'tests/parsing_pipeline/unit/test_toc_llm_validator_unit.py::TestGetClient::test_get_client_lazy_initialization': 'expects the old Claude Haiku client',
-    'tests/parsing_pipeline/unit/test_toc_llm_validator_unit.py::TestGetClient::test_get_client_reuses_instance': 'expects the old Claude Haiku client',
-    'tests/parsing_pipeline/unit/test_toc_llm_validator_unit.py::TestTOCLLMValidatorInit::test_default_parameters': 'expects the old Claude Haiku client',
-    'tests/parsing_pipeline/unit/test_toc_llm_validator_unit.py::TestValidateTOCIntegration::test_validate_toc_success': 'expects the old Claude Haiku client',
     'tests/parsing_pipeline/unit/test_toc_reconciliation_unit.py::TestP004L1CountCheck::test_max_l1_count_constant': 'count and red-flag expectations differ from current reconciliation',
     'tests/parsing_pipeline/unit/test_toc_reconciliation_unit.py::TestP004OrphanDetection::test_detect_orphan_section': 'count and red-flag expectations differ from current reconciliation',
     'tests/rag_pipeline/test_ask_comparative.py::TestAskComparativeBackwardCompatibility::test_works_without_entity_graph_config': 'needs entity-graph tables the test database does not create',

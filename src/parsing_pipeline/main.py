@@ -12,10 +12,10 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
 ## Available Flags
 
     manifest_path       Required. Path to Excel manifest file
-    --skip              Skip optional phases. Choices: 5.5, 5.7, 10a, 10b, 10c
+    --skip              Skip optional phases. Choices: 5.5, 10a, 10b, 10c
     --quiet             Only show phase results, not per-document progress
     --reports           Filter to specific report IDs (space-separated)
-    --trace             Enable trace instrumentation (implies --workers 1)
+    --trace             Enable trace instrumentation
 
 ## Examples
 
@@ -24,7 +24,7 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
 
     # Skip specific phases
     python -m src.parsing_pipeline.main "Newtest.xlsx" --skip 10a 10b 10c
-    python -m src.parsing_pipeline.main "Newtest.xlsx" --skip 5.5 5.7
+    python -m src.parsing_pipeline.main "Newtest.xlsx" --skip 5.5
 
     # Quiet mode (less output)
     python -m src.parsing_pipeline.main "Newtest.xlsx" --quiet
@@ -38,7 +38,6 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
 ## Phase Reference
 
     5.5     TOC Reconciliation (fuses heuristic + Docling detections)
-    5.7     LLM TOC Validation (Gemini for low-quality TOCs)
     10a     Overview & Summary Generation (Gemini via Vertex AI)
     10b     Visual Extraction (Gemini for tables/charts)
     10c     Visual Post-Processing
@@ -107,7 +106,6 @@ from src.parsing_pipeline.modules.hierarchy_enricher import (
 from src.parsing_pipeline.modules.toc_reconciliation_service import (
     TOCReconciliationService,
 )
-from src.parsing_pipeline.modules.toc_llm_validator import TOCLLMValidator
 
 # Import pipeline state management
 from src.parsing_pipeline.pipeline_state import PipelineState
@@ -159,7 +157,6 @@ class PipelineOrchestrator:
         skip_phases: list = None,
         quiet: bool = False,
         report_filter: list = None,
-        workers: int = 1,
         trace: bool = False,
         run_id: Optional[str] = None,
     ):
@@ -174,7 +171,6 @@ class PipelineOrchestrator:
         self.skip = set(skip_phases or [])
         self.quiet = quiet
         self.report_filter = report_filter
-        self.workers = workers
         self.trace = trace
         self.state = PipelineState()
 
@@ -215,13 +211,7 @@ class PipelineOrchestrator:
             self._write_run_summary()
             return self.exit_code
 
-        # Phases 4-9: Either parallel or sequential based on --workers flag
-        if self.workers > 1:
-            # Parallel execution across multiple processes
-            self._run_phases_4_to_9_parallel()
-        else:
-            # Sequential execution (default, byte-identical output)
-            self._run_phases_4_to_9_sequential()
+        self._run_phases_4_to_9()
 
         # Phase 10a: Overview & Summary (optional)
         if "10a" not in self.skip:
@@ -585,42 +575,11 @@ class PipelineOrchestrator:
             )
 
     # ═══════════════════════════════════════════════════════════════════════
-    # PHASE 4: SCAFFOLDING
-    # ═══════════════════════════════════════════════════════════════════════
-    # PHASES 4-9: PARALLEL OR SEQUENTIAL DISPATCH
+    # PHASES 4-9
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _run_phases_4_to_9_parallel(self):
-        """Run phases 4-9 in parallel using ProcessPoolExecutor."""
-        from src.parsing_pipeline.parallel_runner import run_parallel
-
-        self._log(f"\n{'='*60}", force=True)
-        self._log(f"PARALLEL MODE: {self.workers} workers", force=True)
-        self._log(f"{'='*60}", force=True)
-
-        # Run parallel execution
-        parallel_state = run_parallel(
-            tasks=self.state.successful_triaged,
-            skip_phases=self.skip,
-            quiet=self.quiet,
-            workers=self.workers,
-            output_dir="data/processed",
-        )
-
-        # Merge parallel state into our state
-        self.state.scaffold_complete = parallel_state.scaffold_complete
-        self.state.layout_complete = parallel_state.layout_complete
-        self.state.content_complete = parallel_state.content_complete
-        self.state.chunking_complete = parallel_state.chunking_complete
-        self.state.assembly_complete = parallel_state.assembly_complete
-        self.state.enrichment_complete = parallel_state.enrichment_complete
-
-        # Merge failures
-        for phase, failures in parallel_state.failed.items():
-            self.state.failed[phase].extend(failures)
-
-    def _run_phases_4_to_9_sequential(self):
-        """Run phases 4-9 sequentially (default behavior)."""
+    def _run_phases_4_to_9(self):
+        """Run phases 4-9 sequentially."""
         # Phase 4: Scaffolding
         self._phase_scaffolding()
 
@@ -630,10 +589,6 @@ class PipelineOrchestrator:
         # Phase 5.5: TOC Reconciliation (optional)
         if "5.5" not in self.skip:
             self._phase_toc_reconciliation()
-
-        # Phase 5.7: LLM TOC Validation (optional)
-        if "5.7" not in self.skip:
-            self._phase_llm_toc_validation()
 
         # Phase 6: Content Extraction
         self._phase_content_extraction()
@@ -789,86 +744,6 @@ class PipelineOrchestrator:
             f"✓ Reconciliation: {reconciled_count}/{len(self.state.layout_complete)} documents updated",
             force=True,
         )
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # PHASE 5.7: LLM TOC VALIDATION
-    # ═══════════════════════════════════════════════════════════════════════
-
-    def _phase_llm_toc_validation(self):
-        """Phase 5.7: LLM TOC Validation (low-quality TOCs only)."""
-        self._phase_header("5.7", "LLM TOC VALIDATION (LOW-QUALITY ONLY)")
-        emitter = self.state.trace_emitter
-
-        # Gemini runs on GCP Agent Platform, so it needs a GCP project (billing target)
-        if os.environ.get("GOOGLE_CLOUD_PROJECT"):
-            llm_validator = TOCLLMValidator(trace_emitter=emitter)
-            llm_validated_count = 0
-            llm_skipped_count = 0
-
-            for i, task in enumerate(self.state.layout_complete, 1):
-                # Switch to this report's trace context (Fix 1: per-report isolation)
-                emitter.set_current_report(task.report_id)
-
-                with emitter.phase_timer("5.7"):
-                    if llm_validator.should_validate(task, trace_emitter=emitter):
-                        prev_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
-                        prev_entries = len(task.scaffold.get("toc", [])) if task.scaffold else 0
-
-                        self._log(
-                            f"  [{i:2d}/{len(self.state.layout_complete)}] LLM validating {task.report_id}"
-                        )
-                        task.scaffold = llm_validator.validate_toc(task, trace_emitter=emitter)
-                        llm_validated_count += 1
-
-                        new_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
-                        new_entries = len(task.scaffold.get("toc", [])) if task.scaffold else 0
-
-                        emitter.emit_io(
-                            "5.7",
-                            {"toc_entries": prev_entries, "quality": prev_quality},
-                            {"toc_entries": new_entries, "quality": new_quality},
-                        )
-                        emitter.emit_decision(
-                            "5.7",
-                            "llm_validation",
-                            "validated",
-                            ["validated", "skipped"],
-                            f"Quality below threshold",
-                        )
-                        emitter.set_phase_status("5.7", "success")
-                    else:
-                        llm_skipped_count += 1
-                        emitter.emit_decision(
-                            "5.7",
-                            "llm_validation",
-                            "skipped",
-                            ["validated", "skipped"],
-                            f"Quality above threshold or disabled",
-                        )
-                        emitter.set_phase_status("5.7", "skipped")
-
-            self._log(
-                f"✓ LLM Validation: {llm_validated_count} validated, {llm_skipped_count} skipped",
-                force=True,
-            )
-        else:
-            self._log("⚠ SKIPPED: GOOGLE_CLOUD_PROJECT not set", force=True)
-            self._log(
-                "  Set GOOGLE_CLOUD_PROJECT to enable Gemini LLM validation for low-quality TOCs"
-            )
-            # Emit skipped status for all reports
-            for task in self.state.layout_complete:
-                # Switch to this report's trace context (Fix 1: per-report isolation)
-                emitter.set_current_report(task.report_id)
-
-                emitter.emit_decision(
-                    "5.7",
-                    "llm_validation",
-                    "skipped",
-                    ["validated", "skipped"],
-                    "GOOGLE_CLOUD_PROJECT not set",
-                )
-                emitter.set_phase_status("5.7", "skipped")
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 6: CONTENT EXTRACTION
@@ -1439,8 +1314,7 @@ class PipelineOrchestrator:
         """
         Phase 10a: Overview & Summary Generation.
 
-        Gemini (default): direct concurrent calls, completes within this run.
-        Claude (USE_CLAUDE_BATCH=true): async Batch API, finish with process_results.
+        Gemini on Vertex AI: direct concurrent calls, completes within this run.
         """
         self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
 
@@ -1481,7 +1355,7 @@ class PipelineOrchestrator:
                     service = BatchService(trace_emitter=emitter)
                     logger.info("Phase 10a: BatchService initialized, submitting batches...")
 
-                    # Gemini: runs to completion here. Claude: submits async batches.
+                    # Gemini calls run to completion here
                     overview_batch_id = service.submit_overview_batch(json_files)
                     summary_batch_id = service.submit_summary_batch(json_files)
                     hierarchical_batch_id = service.submit_hierarchical_batch(json_files)
@@ -1495,36 +1369,26 @@ class PipelineOrchestrator:
                         hierarchical_batch_id=hierarchical_batch_id,
                     )
 
-                    if service.use_claude:
-                        self.state.phase10a_submitted = True
+                    # Outputs are already on disk; build final overview files now
+                    from src.batch_pipeline.process_results import build_final_overviews
 
-                        self._log(f"\n✅ Phase 10a batch jobs submitted!", force=True)
-                        self._log(f"   Overview Batch: {overview_batch_id}")
-                        self._log(f"   Summary Batch:  {summary_batch_id}")
-                        self._log(f"   RAPTOR Batch:   {hierarchical_batch_id}")
-                        self._log(f"   Job Tracker:    {phase10_tracker_path}")
-                        self._log("   Finish with: python -m src.batch_pipeline.process_results")
-                    else:
-                        # Gemini outputs are already on disk; build final overview files now
-                        from src.batch_pipeline.process_results import build_final_overviews
+                    merged, merge_failed = build_final_overviews(service, report_ids)
 
-                        merged, merge_failed = build_final_overviews(service, report_ids)
+                    with open(phase10_tracker_path) as f:
+                        tracker = json.load(f)
+                    tracker["status"] = "completed"
+                    tracker["completed_at"] = datetime.now().isoformat()
+                    with open(phase10_tracker_path, "w") as f:
+                        json.dump(tracker, f, indent=2)
 
-                        with open(phase10_tracker_path) as f:
-                            tracker = json.load(f)
-                        tracker["status"] = "completed"
-                        tracker["completed_at"] = datetime.now().isoformat()
-                        with open(phase10_tracker_path, "w") as f:
-                            json.dump(tracker, f, indent=2)
-
-                        self.state.phase10a_completed = merged > 0
-                        self._record_phase10a_losses(service, report_ids, merge_failed)
-                        self._log(
-                            f"\n✅ Phase 10a complete: {merged} overview(s) created, "
-                            f"{merge_failed} failed",
-                            force=True,
-                        )
-                        self._log(f"   Job Tracker: {phase10_tracker_path}")
+                    self.state.phase10a_completed = merged > 0
+                    self._record_phase10a_losses(service, report_ids, merge_failed)
+                    self._log(
+                        f"\n✅ Phase 10a complete: {merged} overview(s) created, "
+                        f"{merge_failed} failed",
+                        force=True,
+                    )
+                    self._log(f"   Job Tracker: {phase10_tracker_path}")
                 else:
                     self._log("No JSON files found for Phase 10a processing.")
 
@@ -2107,8 +1971,6 @@ class PipelineOrchestrator:
             print(f"Skipping phases: {', '.join(sorted(self.skip))}")
         if self.report_filter:
             print(f"Report filter: {len(self.report_filter)} reports")
-        if self.workers > 1:
-            print(f"Mode: PARALLEL ({self.workers} workers for phases 4-9)")
         if self.trace:
             print(f"Mode: TRACE (emitting markdown traces to {self.state.trace_emitter.output_dir})")
         if self.quiet:
@@ -2121,7 +1983,7 @@ class PipelineOrchestrator:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-SKIPPABLE_PHASES = ("5.5", "5.7", "10a", "10b", "10c")
+SKIPPABLE_PHASES = ("5.5", "10a", "10b", "10c")
 
 
 def parse_skip_phases(values) -> list:
@@ -2215,7 +2077,7 @@ Examples:
 
   # Skip specific phases
   python -m src.parsing_pipeline.main "Newtest.xlsx" --skip 10a 10b 10c
-  python -m src.parsing_pipeline.main "Newtest.xlsx" --skip 5.5 5.7
+  python -m src.parsing_pipeline.main "Newtest.xlsx" --skip 5.5
 
   # Quiet mode (less output)
   python -m src.parsing_pipeline.main "Newtest.xlsx" --quiet
@@ -2249,14 +2111,6 @@ Examples:
         help="Enable debug logging for all loggers including third-party libraries",
     )
     parser.add_argument(
-        "--workers",
-        type=int,
-        default=1,
-        metavar="N",
-        help="Number of parallel workers for phases 4-9 (default: 1 = sequential). "
-             "Recommended: min(cpu_count/2, 4) due to ~2-4GB memory per worker.",
-    )
-    parser.add_argument(
         "--run-id",
         default=None,
         help="Run identifier for log and summary file names "
@@ -2266,7 +2120,7 @@ Examples:
         "--trace",
         action="store_true",
         help="Enable trace instrumentation. Emits detailed per-report markdown traces "
-             "documenting decisions, fallbacks, and I/O. Implies --workers 1.",
+             "documenting decisions, fallbacks, and I/O.",
     )
 
     args = parser.parse_args()
@@ -2274,11 +2128,6 @@ Examples:
         args.skip = parse_skip_phases(args.skip)
     except ValueError as e:
         parser.error(str(e))
-
-    # Handle --trace flag constraints
-    if args.trace and args.workers > 1:
-        print(f"Note: --trace requires sequential execution. Overriding --workers {args.workers} to 1.")
-        args.workers = 1
 
     # Setup logging (must be done early, before any loggers are used)
     args.run_id = resolve_run_id(args.run_id)
@@ -2304,7 +2153,6 @@ Examples:
         skip_phases=args.skip,
         quiet=args.quiet,
         report_filter=args.reports,
-        workers=args.workers,
         trace=args.trace,
         run_id=args.run_id,
     )
