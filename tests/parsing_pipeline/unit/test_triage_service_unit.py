@@ -682,3 +682,129 @@ def test_p0_05_union_2025_4_without_p0_05_fails(mock_fitz_doc, mock_path, sample
     # Without P0-05: samples first 10 pages (all front-matter with 10 chars)
     # Mean = 10 < 150 → scanned (WRONG classification)
     assert result.classification == "scanned"
+
+
+# ==================== A-1-06: IMAGE-ONLY PAGES ====================
+
+
+def _pdf_with_pages(path, pages):
+    """pages: list of (text, full_page_image) tuples."""
+    import fitz
+
+    doc = fitz.open()
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 20, 20), False)
+    pix.clear_with(200)
+    png = pix.tobytes("png")
+    for text, image in pages:
+        page = doc.new_page()
+        if image:
+            page.insert_image(page.rect, stream=png)
+        if text:
+            page.insert_text((40, 30), text, fontsize=6)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def _task_for(path):
+    return DocumentTask(
+        report_id="img_test", source_url="", local_pdf_path=str(path), initial_metadata={},
+    )
+
+
+def test_scan_with_running_header_classified_scanned(tmp_path):
+    header = "Report of the Comptroller and Auditor General of India on Local Bodies " * 3
+    pdf = _pdf_with_pages(tmp_path / "scan.pdf", [(header, True)] * 5)
+    result = TriageService(sample_mid_document=False).triage_document(_task_for(pdf))
+    assert result.classification == "scanned"
+
+
+def test_text_pages_without_images_stay_native(tmp_path):
+    header = "Report of the Comptroller and Auditor General of India on Local Bodies " * 3
+    pdf = _pdf_with_pages(tmp_path / "native.pdf", [(header, False)] * 5)
+    result = TriageService(sample_mid_document=False).triage_document(_task_for(pdf))
+    assert result.classification == "native_text"
+
+
+# ==================== A-1-04 / C-R-10: TRIAGE CACHE ====================
+
+
+from src.parsing_pipeline.modules.triage_service import TriageCache
+
+
+@pytest.fixture
+def cache(tmp_path):
+    return TriageCache(tmp_path / ".cache", text_threshold=150, sample_pages=10)
+
+
+def _cached_task(tmp_path, classification):
+    pdf = _pdf_with_pages(tmp_path / "r.pdf", [("text", False)] * 2)
+    task = _task_for(pdf)
+    task.classification = classification
+    return task
+
+
+def test_cache_hit_native(tmp_path, cache):
+    task = _cached_task(tmp_path, "native_text")
+    cache.store_triage(task)
+
+    fresh = _task_for(task.local_pdf_path)
+    hit = cache.load(fresh)
+    assert hit is not None
+    assert hit.classification == "native_text"
+    assert hit.processing_status == "triage_complete"
+
+
+def test_cache_miss_when_pdf_changes(tmp_path, cache):
+    task = _cached_task(tmp_path, "native_text")
+    cache.store_triage(task)
+    _pdf_with_pages(tmp_path / "r.pdf", [("other text", False)] * 3)
+
+    assert TriageCache(cache.cache_dir, 150, 10).load(_task_for(task.local_pdf_path)) is None
+
+
+def test_cache_miss_when_threshold_changes(tmp_path, cache):
+    task = _cached_task(tmp_path, "native_text")
+    cache.store_triage(task)
+    assert TriageCache(cache.cache_dir, 200, 10).load(_task_for(task.local_pdf_path)) is None
+
+
+def test_legacy_cache_without_hash_is_a_miss(tmp_path, cache):
+    import json
+
+    task = _cached_task(tmp_path, "native_text")
+    (cache.cache_dir / "img_test_triage.json").write_text(
+        json.dumps({"classification": "native_text", "timestamp": "2026-01-01"})
+    )
+    assert cache.load(task) is None
+
+
+def test_scanned_hit_restores_ocred_path(tmp_path, cache):
+    task = _cached_task(tmp_path, "scanned")
+    ocred = _pdf_with_pages(tmp_path / "r_ocred.pdf", [("recognised text on the page", False)] * 2)
+    task.ocred_pdf_path = str(ocred)
+    cache.store_triage(task)
+    cache.store_ocr(task)
+
+    hit = cache.load(_task_for(task.local_pdf_path))
+    assert hit.processing_status == "ocr_complete"
+    assert hit.ocred_pdf_path == str(ocred)
+
+
+def test_scanned_miss_when_ocred_pdf_missing(tmp_path, cache):
+    task = _cached_task(tmp_path, "scanned")
+    ocred = _pdf_with_pages(tmp_path / "r_ocred.pdf", [("recognised text on the page", False)] * 2)
+    task.ocred_pdf_path = str(ocred)
+    cache.store_triage(task)
+    cache.store_ocr(task)
+    ocred.unlink()
+
+    fresh = _task_for(task.local_pdf_path)
+    assert cache.load(fresh) is None
+    assert fresh.ocred_pdf_path is None
+
+
+def test_scanned_miss_without_ocr_marker(tmp_path, cache):
+    task = _cached_task(tmp_path, "scanned")
+    cache.store_triage(task)
+    assert cache.load(_task_for(task.local_pdf_path)) is None

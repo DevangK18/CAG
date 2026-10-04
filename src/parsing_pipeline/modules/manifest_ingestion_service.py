@@ -13,13 +13,16 @@ FILE NAMING UPDATE:
 - Example: 2017_10_Performance_Audit_of_Union_Government_Schemes_for_Flood_Control.pdf
 """
 
+import asyncio
 import logging
 import pandas as pd
 import httpx
 import re
+from collections import Counter
 from pathlib import Path
-from tenacity import retry, stop_after_attempt, wait_exponential
-from typing import List, Literal, Optional, Any, Dict
+from typing import Iterable, List, Literal, Optional, Any, Dict, Set, Tuple
+
+import fitz  # PyMuPDF
 from src.core.data_contracts import DocumentTask
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 
@@ -99,6 +102,27 @@ GovernmentBodyType = Literal["union", "state", "local_body"]
 # Audit category literals
 AuditCategory = Literal["compliance", "performance", "financial", "revenue", "commercial", "atir"]
 
+# Annual Technical Inspection Reports. Manifests carry no Audit Category column,
+# so ATIRs are recognised from the title ("ATI report on...") or the cover (A-1-03)
+ATIR_PATTERN = re.compile(
+    r"\bannual\s+technical\s+inspection\b|\bATIR\b|\bATI\s+report\b", re.IGNORECASE
+)
+ATIR_REPORT_TYPE = "Annual Technical Inspection Report"
+# Pages read for the cover-text fallback (HP_2022's cover text starts on page 3)
+ATIR_COVER_PAGES = 3
+
+# "Report of 2017", "Report No. 6 of 2025", "Report No. 3 of the year 2024"
+REPORT_DESIGNATION_YEAR = re.compile(
+    r"\breport\s+(?:no\.?\s*\d+\s+)?of\s+(?:the\s+year\s+)?(\d{4})\b", re.IGNORECASE
+)
+
+
+def is_atir_text(*texts: Any) -> bool:
+    """True if any of the texts names an Annual Technical Inspection Report."""
+    return any(
+        isinstance(t, str) and ATIR_PATTERN.search(t) for t in texts
+    )
+
 
 def detect_government_body_type(manifest_path: str) -> GovernmentBodyType:
     """
@@ -117,6 +141,12 @@ def detect_government_body_type(manifest_path: str) -> GovernmentBodyType:
     """
     filename = Path(manifest_path).stem.lower()
 
+    if "state" in filename and "union" in filename:
+        logger.warning(
+            f"Manifest filename '{filename}' names both state and union; assuming union "
+            f"unless the Government Type column says otherwise"
+        )
+
     # Check for local body patterns first (more specific)
     if "local_body" in filename or "local-body" in filename or "localbody" in filename:
         return "local_body"
@@ -128,6 +158,14 @@ def detect_government_body_type(manifest_path: str) -> GovernmentBodyType:
     else:
         # Default to union for legacy filenames and explicit union manifests
         return "union"
+
+
+def tier_source_from_filename(manifest_path: str) -> str:
+    """Whether detect_government_body_type matched a pattern or fell back to union."""
+    filename = Path(manifest_path).stem.lower()
+    if any(word in filename for word in ("local", "state", "union")):
+        return "manifest filename"
+    return "default"
 
 
 def normalize_government_body_type(value) -> Optional[GovernmentBodyType]:
@@ -160,7 +198,9 @@ def infer_audit_category_from_report_type(report_type: str) -> AuditCategory:
     """
     report_type_lower = report_type.lower() if report_type else ""
 
-    if "performance" in report_type_lower:
+    if "atir" in report_type_lower or "annual technical inspection" in report_type_lower:
+        return "atir"
+    elif "performance" in report_type_lower:
         return "performance"
     elif "compliance" in report_type_lower:
         return "compliance"
@@ -197,6 +237,8 @@ class ManifestIngestionService:
         # Multi-tier state (set during load_manifest)
         self.government_body_type: GovernmentBodyType = "union"
         self.current_state_name: Optional[str] = None
+        # Where the manifest tier came from; recorded per row as tier_source
+        self.tier_source: str = "default"
         self._trace_emitter = trace_emitter or get_noop_emitter()
 
     def load_manifest(self, manifest_path: str) -> pd.DataFrame:
@@ -219,6 +261,7 @@ class ManifestIngestionService:
             # Detect government body type from filename first
             filename = Path(manifest_path).stem.lower()
             self.government_body_type = detect_government_body_type(manifest_path)
+            self.tier_source = tier_source_from_filename(manifest_path)
             logger.info(f"Detected government body type: {self.government_body_type}")
 
             # Trace: Tier detection decision
@@ -287,14 +330,26 @@ class ManifestIngestionService:
             rename_map = {k: v for k, v in column_mapping.items() if k in df.columns}
             df.rename(columns=rename_map, inplace=True)
 
-            # Check for explicit Government Body Type column override
+            # Check for explicit Government Body Type column override.
+            # Every row counts: the manifest tier is the most common one, and each
+            # row keeps its own tier (A-1-05)
+            row_tiers = None
             if "Government Body Type" in df.columns:
-                first_value = df["Government Body Type"].dropna().iloc[0] if len(df["Government Body Type"].dropna()) > 0 else None
-                if first_value:
-                    explicit_type = normalize_government_body_type(first_value)
+                row_tiers = df["Government Body Type"].map(
+                    lambda v: normalize_government_body_type(v) if pd.notna(v) else None
+                )
+                tier_counts = Counter(t for t in row_tiers if t)
+                if len(tier_counts) > 1:
+                    logger.warning(
+                        f"Manifest mixes tiers {dict(tier_counts)}; each row uses its own "
+                        f"Government Type, rows without one use the most common tier"
+                    )
+                if tier_counts:
+                    explicit_type = tier_counts.most_common(1)[0][0]
                     if explicit_type:
                         prev_type = self.government_body_type
                         self.government_body_type = explicit_type
+                        self.tier_source = "majority of manifest rows"
                         self.raw_data_dir = self.base_raw_data_dir / explicit_type
                         self.raw_data_dir.mkdir(parents=True, exist_ok=True)
                         logger.info(
@@ -329,6 +384,17 @@ class ManifestIngestionService:
 
             # Drop empty rows
             df = df.dropna(how="all").dropna(subset=["SL NO"])
+
+            # Per-row tier; rows with no usable Government Type get the manifest tier
+            if row_tiers is not None:
+                own = row_tiers.reindex(df.index)
+                df["_tier"] = own.fillna(self.government_body_type)
+                df["_tier_source"] = own.notna().map(
+                    {True: "Government Type column", False: self.tier_source}
+                )
+            else:
+                df["_tier"] = self.government_body_type
+                df["_tier_source"] = self.tier_source
 
             # Log metadata availability
             metadata_cols = ["Report No", "Ministry", "Department", "Report Type", "Sector", "Date", "State Name", "Audit Category"]
@@ -384,8 +450,9 @@ class ManifestIngestionService:
                 if not val or val == "-":
                     return None
 
-                # Handle "Report No. 15 of 2025" format (already correct)
-                if "of" in val.lower():
+                # Handle "Report No. 15 of 2025" format (already correct).
+                # A bare "of" test also matched values like "Report of 2017" (A-1-06)
+                if re.search(r"\d+\s+of\s+\d{4}", val, re.IGNORECASE):
                     return val
 
                 # Handle slash formats: "2025/15" or "15/2025"
@@ -508,12 +575,13 @@ class ManifestIngestionService:
         # Clean Audit Category
         if "Audit Category" in df.columns:
 
+            # Blank stays None so _build_metadata can still detect ATIRs and infer the rest
             def clean_audit_category(val):
                 if pd.isna(val):
-                    return "compliance"  # Default
+                    return None
                 val_str = str(val).strip().lower()
                 if val_str == "-" or val_str == "":
-                    return "compliance"
+                    return None
                 # Normalize known values
                 category_mapping = {
                     "compliance": "compliance",
@@ -609,6 +677,46 @@ class ManifestIngestionService:
             sanitized = sanitized[:max_length].rstrip("_")
         return sanitized
 
+    @staticmethod
+    def _row_value(row: pd.Series, key: str) -> Optional[str]:
+        """Stripped cell value, or None for missing, blank or "-"."""
+        val = row.get(key)
+        if val is None or (not isinstance(val, str) and pd.isna(val)):
+            return None
+        val = str(val).strip()
+        return val if val and val != "-" else None
+
+    def _row_tier(self, row: pd.Series) -> GovernmentBodyType:
+        """The row's own tier (set by load_manifest), else the manifest tier."""
+        tier = self._row_value(row, "_tier")
+        return tier if tier in ("union", "state", "local_body") else self.government_body_type
+
+    def _raw_dir_for(self, tier: str) -> Path:
+        raw_dir = self.base_raw_data_dir / tier
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        return raw_dir
+
+    def _is_atir_by_title(self, row: pd.Series) -> bool:
+        return is_atir_text(
+            self._row_value(row, "Title"), self._row_value(row, "Recommended Title")
+        )
+
+    def _audit_category(self, row: pd.Series, tier: str) -> str:
+        """
+        Precedence: the Audit Category column, then an ATIR title, then Report Type.
+
+        Union reports keep the Report Type inference only.
+        """
+        report_type = self._row_value(row, "Report Type") or ""
+        if tier == "union":
+            return infer_audit_category_from_report_type(report_type)
+        explicit = self._row_value(row, "Audit Category")
+        if explicit:
+            return explicit.lower()
+        if self._is_atir_by_title(row):
+            return "atir"
+        return infer_audit_category_from_report_type(report_type)
+
     def _build_metadata(self, row: pd.Series, title: str) -> dict:
         """
         Build complete metadata dict with multi-tier support.
@@ -634,6 +742,8 @@ class ManifestIngestionService:
                 return None
             return str(val).strip()
 
+        tier = self._row_tier(row)
+
         # Base metadata (all tiers)
         metadata = {
             # Required fields
@@ -647,19 +757,17 @@ class ManifestIngestionService:
             "Sector": safe_get("Sector"),
             "Date": safe_get("Date"),
             # Multi-tier fields
-            "government_body_type": self.government_body_type,
+            "government_body_type": tier,
+            "tier_source": self._row_value(row, "_tier_source") or self.tier_source,
+            "audit_category": self._audit_category(row, tier),
         }
 
         # Tier-specific fields
-        if self.government_body_type == "union":
+        if tier == "union":
             # Union reports use Ministry, not Department
             metadata["Ministry"] = safe_get("Ministry")
             # Backward compatibility: also set Department to Ministry value
             metadata["Department"] = metadata["Ministry"]
-            # Infer audit_category from Report Type for Union
-            metadata["audit_category"] = infer_audit_category_from_report_type(
-                metadata["Report Type"]
-            )
             metadata["state_name"] = None
             metadata["department"] = None  # Lowercase for multi-tier field
             metadata["report_subtype"] = None
@@ -668,23 +776,20 @@ class ManifestIngestionService:
             state_name = safe_get_optional("State Name")
             metadata["state_name"] = state_name
             metadata["department"] = safe_get_optional("Department")
-            # BUG FIX 2: Infer audit_category from Report Type if Audit Category column is missing
-            audit_category_val = safe_get_optional("Audit Category")
-            if audit_category_val:
-                metadata["audit_category"] = audit_category_val.lower()
-            else:
-                # Infer from Report Type (same as Union logic)
-                metadata["audit_category"] = infer_audit_category_from_report_type(
-                    metadata["Report Type"]
-                )
             metadata["report_subtype"] = safe_get_optional("Report Subtype")
             # Set Ministry to state name for compatibility
             metadata["Ministry"] = state_name or "Unknown"
             metadata["Department"] = metadata["department"] or "Unknown"
 
+        if metadata["audit_category"] == "atir":
+            # The column says "Compliance"; Phase 9 picks its profile from this
+            metadata["Report Type"] = ATIR_REPORT_TYPE
+
         return metadata
 
-    def _build_report_id(self, row: pd.Series) -> str:
+    def _build_report_id(
+        self, row: pd.Series, atir: Optional[bool] = None, designation_year: bool = True
+    ) -> str:
         """
         Build report ID from Report_No and Recommended Title.
 
@@ -694,19 +799,28 @@ class ManifestIngestionService:
         - State with report no: {ST}_{year}_{no}_{sanitized_title}
           Example: OD_2025_05_School_Education_Odisha
         - State without report no: {ST}_{year}_{sanitized_title}
-        - Local Body ATIR: {ST}_ATIR_{year_range}_{sanitized_title}
+        - State/Local Body ATIR: {ST}_ATIR_{year}_{sanitized_title}
           Example: MH_ATIR_2019_Local_Bodies_Maharashtra
         - Local Body with report no: {ST}_{year}_{no}_{sanitized_title}
 
+        The year is the report's own: from Report No, else the "Report of YYYY"
+        designation in the original title, else the Date column.
+
         Args:
             row: DataFrame row with report metadata
+            atir: Force the ATIR decision (cover-text detection); None decides
+                from the Audit Category column and the title
+            designation_year: False rebuilds the ID used before ATIR detection,
+                which took the year from Date
 
         Returns:
             Sanitized report ID string
         """
+        tier = self._row_tier(row)
+
         # Get state code for State/Local reports
         state_code = None
-        if self.government_body_type in ("state", "local_body"):
+        if tier in ("state", "local_body"):
             # BUG FIX 1: First check for explicit State Code column
             state_code_val = row.get("State Code")
             if pd.notna(state_code_val) and str(state_code_val).strip():
@@ -724,9 +838,8 @@ class ManifestIngestionService:
                         # Fallback: first 2 chars uppercase
                         state_code = state_name_str[:2].upper()
 
-        # Get audit category for ATIR detection
-        audit_category = row.get("Audit Category", "")
-        is_atir = str(audit_category).lower() == "atir" if pd.notna(audit_category) else False
+        # ATIR detection reads the computed category, not only the raw column (A-1-03)
+        is_atir = atir if atir is not None else self._audit_category(row, tier) == "atir"
 
         # Get Report_No (raw, before transformation to "X of YYYY" format)
         report_no_raw = row.get("Report No", "")
@@ -759,6 +872,12 @@ class ManifestIngestionService:
                 # Clean for use in ID
                 report_no_raw = report_no_str.replace("/", "_").replace(" ", "_")
 
+        # Fallback: the "Report of 2017" designation; Date is the publication year
+        if not year_part and designation_year:
+            designation = REPORT_DESIGNATION_YEAR.search(str(self._row_value(row, "Title") or ""))
+            if designation:
+                year_part = designation.group(1)
+
         # Fallback: Get year from Date column
         if not year_part:
             date_val = row.get("Date", "")
@@ -785,7 +904,7 @@ class ManifestIngestionService:
         sanitized_title = self._sanitize_filename(str(rec_title), max_length=80)
 
         # Build report ID based on tier
-        if self.government_body_type == "union":
+        if tier == "union":
             # Union format: {year}_{num}_{title} or {year}_{title}
             if num_part:
                 report_id = f"{year_part}_{num_part}_{sanitized_title}"
@@ -796,8 +915,8 @@ class ManifestIngestionService:
                 sl_no = int(row.get('SL NO', 0))
                 report_id = f"{year_part}_{sl_no:02d}_{sanitized_title}"
 
-        elif self.government_body_type == "local_body" and is_atir:
-            # Local Body ATIR format: {ST}_ATIR_{year}_{title}
+        elif is_atir:
+            # ATIR format: {ST}_ATIR_{year}_{title}
             if state_code:
                 report_id = f"{state_code}_ATIR_{year_part}_{sanitized_title}"
             else:
@@ -863,7 +982,9 @@ class ManifestIngestionService:
             # Don't raise - just warn for now to avoid breaking existing workflows
             # In production, this could be upgraded to an assertion
 
-    def _check_legacy_report_id(self, canonical_report_id: str) -> Optional[Path]:
+    def _check_legacy_report_id(
+        self, canonical_report_id: str, raw_dir: Optional[Path] = None
+    ) -> Optional[Path]:
         """
         P0-06: Check if a legacy format file exists for this report.
 
@@ -871,6 +992,7 @@ class ManifestIngestionService:
 
         Args:
             canonical_report_id: The canonical (zero-padded) report ID
+            raw_dir: Directory to look in (default: the manifest tier's directory)
 
         Returns:
             Path to legacy file if it exists, None otherwise
@@ -888,20 +1010,139 @@ class ManifestIngestionService:
         )
 
         if legacy_id != canonical_report_id:
-            legacy_path = self.raw_data_dir / f"{legacy_id}.pdf"
+            legacy_path = (raw_dir or self.raw_data_dir) / f"{legacy_id}.pdf"
             if legacy_path.exists():
                 return legacy_path
 
         return None
 
-    @retry(
-        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10)
-    )
+    # Download retries: transport errors and 5xx only, with exponential backoff
+    DOWNLOAD_ATTEMPTS = 3
+    DOWNLOAD_RETRY_BASE_WAIT = 4.0
+    MAX_CONCURRENT_DOWNLOADS = 5
+
+    def _find_existing_pdf(
+        self, row: pd.Series, report_id: str, raw_dir: Path
+    ) -> Tuple[Optional[Path], Optional[str]]:
+        """Resolve a PDF already on disk: exact ID, legacy ID, pre-ATIR ID, then title names."""
+        local_path = raw_dir / f"{report_id}.pdf"
+        if local_path.exists():
+            return local_path, "exact"
+
+        # P0-06: Fallback check for legacy format (without zero-padding)
+        # e.g., 2025_4_title.pdf instead of 2025_04_title.pdf
+        legacy_path = self._check_legacy_report_id(report_id, raw_dir)
+        if legacy_path and legacy_path.exists():
+            logger.info(f"  P0-06: Found PDF with legacy format: {legacy_path.name[:60]}...")
+            return legacy_path, "legacy_format_fallback"
+
+        # PDFs saved before ATIR detection carry the old ID
+        if "_ATIR_" in report_id:
+            old_id = self._build_report_id(row, atir=False, designation_year=False)
+            pre_atir_path = raw_dir / f"{old_id}.pdf"
+            if pre_atir_path.exists():
+                logger.info(f"  Found PDF under its pre-ATIR ID: {pre_atir_path.name[:60]}...")
+                return pre_atir_path, "pre_atir_id_fallback"
+
+        # Fallback: manually downloaded PDFs named after a title
+        for column, strategy in (
+            ("Title", "original_title_fallback"),  # "Title" is mapped from "Original Title"
+            ("Recommended Title", "recommended_title_fallback"),
+        ):
+            name = self._row_value(row, column)
+            if name:
+                try:
+                    candidate = raw_dir / f"{name}.pdf"
+                    if candidate.exists():
+                        logger.info(f"  Found PDF with {column}: {candidate.name[:60]}...")
+                        return candidate, strategy
+                except (OSError, ValueError):
+                    continue  # titles with "/" or over-long names are not file names
+
+        return None, None
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code >= 500
+        return isinstance(exc, httpx.TransportError)
+
+    async def _fetch_pdf(self, client: httpx.AsyncClient, url: str, local_path: Path) -> None:
+        """
+        Download url to local_path, retrying transient failures.
+
+        Writes to a .part file and renames it, so an interrupted download never
+        sits at local_path where the next run would take it as "exact" (A-1-06).
+        """
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        part_path = local_path.with_name(local_path.name + ".part")
+        for attempt in range(1, self.DOWNLOAD_ATTEMPTS + 1):
+            try:
+                async with client.stream("GET", url, headers=headers) as response:
+                    response.raise_for_status()
+                    with open(part_path, "wb") as f:
+                        async for chunk in response.aiter_bytes():
+                            f.write(chunk)
+                part_path.replace(local_path)
+                return
+            except Exception as e:
+                part_path.unlink(missing_ok=True)
+                if attempt == self.DOWNLOAD_ATTEMPTS or not self._is_retryable(e):
+                    raise
+                wait = min(self.DOWNLOAD_RETRY_BASE_WAIT * 2 ** (attempt - 1), 10)
+                logger.warning(
+                    f"  Download attempt {attempt} failed ({e}); retrying in {wait:.0f}s"
+                )
+                await asyncio.sleep(wait)
+
+    def _apply_cover_atir(
+        self, row: pd.Series, report_id: str, metadata: dict, pdf_path: Path
+    ) -> Tuple[str, dict]:
+        """
+        Last ATIR check for local body reports: the cover text.
+
+        Only when neither an Audit Category column nor the title decided it.
+        """
+        if (
+            metadata.get("government_body_type") != "local_body"
+            or metadata.get("audit_category") == "atir"
+            or self._row_value(row, "Audit Category")
+        ):
+            return report_id, metadata
+        try:
+            with fitz.open(str(pdf_path)) as doc:
+                cover = " ".join(
+                    doc[i].get_text() for i in range(min(ATIR_COVER_PAGES, doc.page_count))
+                )
+        except Exception as e:
+            logger.debug(f"  Cover read failed for {pdf_path}: {e}")
+            return report_id, metadata
+        if not is_atir_text(cover):
+            return report_id, metadata
+        metadata = {**metadata, "audit_category": "atir", "Report Type": ATIR_REPORT_TYPE}
+        new_id = self._build_report_id(row, atir=True)
+        logger.info(f"  ATIR detected from cover text: {report_id} -> {new_id}")
+        return new_id, metadata
+
+    def _candidate_report_ids(self, row: pd.Series) -> Set[str]:
+        """IDs a row can end up with, computed without touching the PDF."""
+        ids = {self._build_report_id(row)}
+        # The cover check may still turn a local body report into an ATIR
+        if (
+            self._row_tier(row) == "local_body"
+            and not self._row_value(row, "Audit Category")
+            and self._audit_category(row, "local_body") != "atir"
+        ):
+            ids.add(self._build_report_id(row, atir=True))
+        return ids
+
     async def _download_pdf(
         self, client: httpx.AsyncClient, row: pd.Series
     ) -> DocumentTask:
         """
-        Download a single PDF report with complete metadata.
+        Resolve or download a single PDF report with complete metadata.
 
         PHASE 3 FIX: Now passes all metadata fields to DocumentTask.
         FILE NAMING UPDATE: Uses Report_No_Recommended_Title format.
@@ -911,17 +1152,19 @@ class ManifestIngestionService:
             row: Row from manifest DataFrame
 
         Returns:
-            DocumentTask instance
+            DocumentTask instance (processing_status="failed_download" on failure)
         """
         url = row["Report PDF"]
         title = row["Title"]
+        tier = self._row_tier(row)
+        raw_dir = self._raw_dir_for(tier)
 
         # Build report ID using new naming convention
         rec_title = row.get("Recommended Title", "")
         if pd.isna(rec_title) or str(rec_title).strip() == "":
             rec_title = row.get("Title", "untitled")
         report_id = self._build_report_id(row)
-        local_path = self.raw_data_dir / f"{report_id}.pdf"
+        local_path = raw_dir / f"{report_id}.pdf"
 
         # Trace: Report ID generation
         self._trace_emitter.emit(
@@ -930,85 +1173,54 @@ class ManifestIngestionService:
             {
                 "raw_title": str(rec_title)[:50],
                 "report_id": report_id,
-                "tier": self.government_body_type,
+                "tier": tier,
             },
         )
 
+        # Build complete metadata dict
+        metadata = self._build_metadata(row, title)
+
         # Check if PDF already exists (primary or fallback filenames)
-        existing_pdf_path = None
-        match_strategy = None
-
-        if local_path.exists():
-            existing_pdf_path = local_path
-            match_strategy = "exact"
-        else:
-            # P0-06: Fallback check for legacy format (without zero-padding)
-            # e.g., 2025_4_title.pdf instead of 2025_04_title.pdf
-            legacy_path = self._check_legacy_report_id(report_id)
-            if legacy_path and legacy_path.exists():
-                existing_pdf_path = legacy_path
-                match_strategy = "legacy_format_fallback"
-                logger.info(f"  P0-06: Found PDF with legacy format: {legacy_path.name[:60]}...")
-
-            # Fallback: Check for Original Title filename (for manually downloaded PDFs)
-            if not existing_pdf_path:
-                original_title = row.get("Title", "")  # "Title" is mapped from "Original Title"
-                if not pd.isna(original_title) and original_title:
-                    original_title_path = self.raw_data_dir / f"{original_title}.pdf"
-                    if original_title_path.exists():
-                        existing_pdf_path = original_title_path
-                        match_strategy = "original_title_fallback"
-                        logger.info(f"  Found PDF with Original Title: {original_title_path.name[:60]}...")
+        existing_pdf_path, match_strategy = self._find_existing_pdf(row, report_id, raw_dir)
 
         if existing_pdf_path:
-            # File already exists, skip download and return task
-            metadata = self._build_metadata(row, title)
-
             # Trace: PDF resolution decision
             self._trace_emitter.emit_decision(
                 "1",
                 "pdf_resolution",
                 match_strategy,
-                ["exact", "legacy_format_fallback", "original_title_fallback", "download"],
+                ["exact", "legacy_format_fallback", "pre_atir_id_fallback",
+                 "original_title_fallback", "recommended_title_fallback", "download"],
                 f"Found existing PDF at {str(existing_pdf_path)[-50:]}",
             )
-
-            return DocumentTask(
-                report_id=report_id,
-                source_url=url,
-                local_pdf_path=str(existing_pdf_path),
-                initial_metadata=metadata,
-            )
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-
-        # Build complete metadata dict
-        metadata = self._build_metadata(row, title)
-
-        # Log metadata for debugging
-        if self.government_body_type == "union":
-            logger.debug(
-                f"  Metadata for {report_id}: "
-                f"Report No='{metadata['Report No']}', "
-                f"Ministry='{metadata.get('Ministry', 'N/A')}', "
-                f"Type='{metadata['Report Type']}'"
-            )
+            pdf_path = existing_pdf_path
         else:
             logger.debug(
                 f"  Metadata for {report_id}: "
                 f"State='{metadata.get('state_name', 'N/A')}', "
-                f"Dept='{metadata.get('department', 'N/A')}', "
+                f"Ministry='{metadata.get('Ministry', 'N/A')}', "
                 f"Category='{metadata.get('audit_category', 'N/A')}'"
             )
-
-        try:
-            async with client.stream("GET", url, headers=headers) as response:
-                response.raise_for_status()
-                with open(local_path, "wb") as f:
-                    async for chunk in response.aiter_bytes():
-                        f.write(chunk)
+            try:
+                await self._fetch_pdf(client, url, local_path)
+            except Exception as e:
+                # Trace: PDF resolution - failed
+                self._trace_emitter.emit_decision(
+                    "1",
+                    "pdf_resolution",
+                    "download_failed",
+                    ["exact", "original_title_fallback", "download", "download_failed"],
+                    f"Download failed: {str(e)[:100]}",
+                )
+                logger.error(f"  [{report_id}] Download failed: {e}")
+                return DocumentTask(
+                    report_id=report_id,
+                    source_url=url,
+                    local_pdf_path="",
+                    initial_metadata=metadata,
+                    processing_status="failed_download",
+                    error_log=[f"Download failed after retries: {str(e)}"],
+                )
 
             # Trace: PDF resolution - downloaded
             self._trace_emitter.emit_decision(
@@ -1018,58 +1230,60 @@ class ManifestIngestionService:
                 ["exact", "original_title_fallback", "download"],
                 f"Downloaded from {url[:50]}",
             )
+            pdf_path = local_path
 
-            return DocumentTask(
-                report_id=report_id,
-                source_url=url,
-                local_pdf_path=str(local_path),
-                initial_metadata=metadata,  # Now includes all fields
-            )
-        except Exception as e:
-            # Trace: PDF resolution - failed
-            self._trace_emitter.emit_decision(
-                "1",
-                "pdf_resolution",
-                "download_failed",
-                ["exact", "original_title_fallback", "download", "download_failed"],
-                f"Download failed: {str(e)[:100]}",
-            )
+        report_id, metadata = self._apply_cover_atir(row, report_id, metadata, pdf_path)
 
-            failed_task = DocumentTask(
-                report_id=report_id,
-                source_url=url,
-                local_pdf_path="",
-                initial_metadata=metadata,
-                processing_status="failed_download",
-                error_log=[f"Download failed after retries: {str(e)}"],
-            )
-            return failed_task
+        return DocumentTask(
+            report_id=report_id,
+            source_url=url,
+            local_pdf_path=str(pdf_path),
+            initial_metadata=metadata,  # Now includes all fields
+        )
 
-    async def process_manifest(self, manifest_path: str) -> List[DocumentTask]:
+    async def process_manifest(
+        self, manifest_path: str, report_filter: Optional[Iterable[str]] = None
+    ) -> List[DocumentTask]:
         """
         Main method to process the manifest and download PDFs.
 
         Args:
             manifest_path: Path to the Excel manifest
+            report_filter: Report IDs to keep. Rows are filtered before any PDF is
+                resolved or downloaded (A-1-02); the caller still checks the final
+                IDs, since the cover-text ATIR check can change an ID.
 
         Returns:
-            List of DocumentTask objects
+            List of DocumentTask objects, in manifest order
         """
         df = self.load_manifest(manifest_path)
-        tasks = []
+        rows = [row for _, row in df.iterrows()]
+
+        if report_filter:
+            wanted = set(report_filter)
+            rows = [row for row in rows if self._candidate_report_ids(row) & wanted]
+            logger.info(f"Report filter: {len(rows)}/{len(df)} manifest rows selected")
 
         # Limit concurrent connections to avoid overwhelming the server
-        limits = httpx.Limits(max_connections=5, max_keepalive_connections=5)
+        limits = httpx.Limits(
+            max_connections=self.MAX_CONCURRENT_DOWNLOADS,
+            max_keepalive_connections=self.MAX_CONCURRENT_DOWNLOADS,
+        )
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_DOWNLOADS)
+
         async with httpx.AsyncClient(limits=limits, timeout=30.0) as client:
-            for _, row in df.iterrows():
-                task = await self._download_pdf(client, row)
-                tasks.append(task)
+
+            async def resolve(row):
+                async with semaphore:
+                    return await self._download_pdf(client, row)
+
+            tasks = list(await asyncio.gather(*(resolve(row) for row in rows)))
 
         # Log summary
         successful = [t for t in tasks if t.processing_status != "failed_download"]
         failed = [t for t in tasks if t.processing_status == "failed_download"]
         logger.info(
-            f"Ingestion complete: {len(successful)} downloads successful, {len(failed)} failed."
+            f"Ingestion complete: {len(successful)} PDFs ready, {len(failed)} failed."
         )
         logger.info(f"Government body type: {self.government_body_type}")
         logger.info(f"PDF storage directory: {self.raw_data_dir}")

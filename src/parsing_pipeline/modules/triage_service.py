@@ -1,10 +1,16 @@
+import hashlib
+import json
+import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 import statistics
 import fitz  # PyMuPDF
 from src.core.data_contracts import DocumentTask
 from src.parsing_pipeline.config import get_config, TriageConfig
 from src.parsing_pipeline.instrumentation import get_noop_emitter
+
+logger = logging.getLogger(__name__)
 
 
 class TriageService:
@@ -18,6 +24,9 @@ class TriageService:
     BORDERLINE_BAND_LOW = 0.4  # Widened from 0.7
     BORDERLINE_BAND_HIGH = 1.5  # Widened from 1.3
     MID_DOCUMENT_START_PAGE = 10  # Start sampling from page 10 for heavy front-matter skip
+    # A scan whose pages carry only a running header must not pass as native (A-1-06)
+    IMAGE_PAGE_COVERAGE = 0.8  # Images cover at least this share of the page...
+    IMAGE_PAGE_MAX_CHARS = 300  # ...and the page has fewer chars: count it as 0
 
     def __init__(
         self,
@@ -118,14 +127,24 @@ class TriageService:
                 char_count = sum(1 for char in text if not char.isspace())
                 pages_examined += 1
 
+                # A page image with a little text (header, page number) is a scan
+                image_only = (
+                    self.BLANK_PAGE_THRESHOLD <= char_count < self.IMAGE_PAGE_MAX_CHARS
+                    and self._image_coverage(page) >= self.IMAGE_PAGE_COVERAGE
+                )
+
                 page_char_counts.append({
                     "page": page_num,
                     "char_count": char_count,
                     "is_blank": char_count < self.BLANK_PAGE_THRESHOLD,
+                    "image_only": image_only,
                 })
 
+                if image_only:
+                    # Counted as an empty page, but kept in the sample (not skipped as blank)
+                    sampled_char_counts.append(0)
                 # P0-05: Skip blank pages for the char count sample
-                if self.skip_blank_pages:
+                elif self.skip_blank_pages:
                     if char_count >= self.BLANK_PAGE_THRESHOLD:
                         sampled_char_counts.append(char_count)
                 else:
@@ -209,3 +228,145 @@ class TriageService:
             task.processing_status = "failed_triage"
 
         return task
+
+    @staticmethod
+    def _image_coverage(page) -> float:
+        """Share of the page area covered by images (0.0 if it can't be measured)."""
+        try:
+            rect = page.rect
+            area = rect.width * rect.height
+            if area <= 0:
+                return 0.0
+            covered = 0.0
+            for info in page.get_image_info():
+                bbox = fitz.Rect(info["bbox"]) & rect
+                if not bbox.is_empty:
+                    covered += bbox.width * bbox.height
+            return min(covered / area, 1.0)
+        except Exception:
+            return 0.0
+
+
+class TriageCache:
+    """
+    Phase 2-3 cache markers ({report_id}_triage.json / _ocr.json), valid only
+    for the same PDF content and triage settings (A-1-04, C-R-10).
+
+    A scanned report is a hit only if its OCR'd PDF is still there and complete,
+    so a hit can never fall back to the image-only original.
+    """
+
+    def __init__(
+        self,
+        cache_dir,
+        text_threshold: Optional[int] = None,
+        sample_pages: Optional[int] = None,
+        config: Optional[TriageConfig] = None,
+    ):
+        if config is None:
+            config = get_config().triage
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.text_threshold = text_threshold if text_threshold is not None else config.text_threshold
+        self.sample_pages = sample_pages if sample_pages is not None else config.sample_pages
+        self._hashes: Dict[Tuple[str, int, float], str] = {}
+
+    def pdf_sha256(self, pdf_path) -> str:
+        """Content hash, memoised per (path, size, mtime) within this run."""
+        path = Path(pdf_path)
+        stat = path.stat()
+        key = (str(path.resolve()), stat.st_size, stat.st_mtime)
+        if key not in self._hashes:
+            digest = hashlib.sha256()
+            with open(path, "rb") as f:
+                for block in iter(lambda: f.read(1 << 20), b""):
+                    digest.update(block)
+            self._hashes[key] = digest.hexdigest()
+        return self._hashes[key]
+
+    def _triage_file(self, report_id: str) -> Path:
+        return self.cache_dir / f"{report_id}_triage.json"
+
+    def _ocr_file(self, report_id: str) -> Path:
+        return self.cache_dir / f"{report_id}_ocr.json"
+
+    def _fingerprint(self, task: DocumentTask) -> Dict[str, Any]:
+        return {
+            "pdf_sha256": self.pdf_sha256(task.local_pdf_path),
+            "text_threshold": self.text_threshold,
+            "sample_pages": self.sample_pages,
+        }
+
+    @staticmethod
+    def _read(path: Path) -> Optional[Dict[str, Any]]:
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def load(self, task: DocumentTask) -> Optional[DocumentTask]:
+        """
+        Restore classification (and the OCR'd path) from the cache.
+
+        Returns the updated task on a hit, None on a miss. A miss leaves the
+        task untouched, so it can go through triage and OCR as new.
+        """
+        if not task.local_pdf_path or not Path(task.local_pdf_path).exists():
+            return None
+        triage = self._read(self._triage_file(task.report_id))
+        if not triage:
+            return None
+        fingerprint = self._fingerprint(task)
+        if any(triage.get(k) != v for k, v in fingerprint.items()):
+            logger.info(f"[{task.report_id}] Triage cache is stale (PDF or settings changed)")
+            return None
+
+        classification = triage.get("classification")
+        if classification == "native_text":
+            task.classification = classification
+            task.processing_status = "triage_complete"
+            return task
+        if classification != "scanned":
+            return None
+
+        ocr = self._read(self._ocr_file(task.report_id))
+        ocred_path = (ocr or {}).get("ocred_pdf_path")
+        if not ocr or ocr.get("pdf_sha256") != fingerprint["pdf_sha256"] or not ocred_path:
+            return None
+        # Imported here: ocr_service is only needed for scanned hits
+        from src.parsing_pipeline.modules.ocr_service import OCRService
+
+        if not OCRService.is_complete_output(task.local_pdf_path, ocred_path):
+            logger.warning(
+                f"[{task.report_id}] OCR cache points to a missing or incomplete file "
+                f"({ocred_path}); re-running OCR"
+            )
+            return None
+        task.classification = classification
+        task.ocred_pdf_path = str(ocred_path)
+        task.processing_status = "ocr_complete"
+        return task
+
+    def store_triage(self, task: DocumentTask) -> None:
+        with open(self._triage_file(task.report_id), "w") as f:
+            json.dump(
+                {
+                    "classification": task.classification,
+                    **self._fingerprint(task),
+                    "timestamp": datetime.now().isoformat(),
+                },
+                f,
+            )
+
+    def store_ocr(self, task: DocumentTask) -> None:
+        with open(self._ocr_file(task.report_id), "w") as f:
+            json.dump(
+                {
+                    "status": "ocr_complete",
+                    "ocred_pdf_path": task.ocred_pdf_path,
+                    "pdf_sha256": self.pdf_sha256(task.local_pdf_path),
+                    "timestamp": datetime.now().isoformat(),
+                },
+                f,
+            )

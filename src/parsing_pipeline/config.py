@@ -61,17 +61,21 @@ class OCRConfig:
 
     timeout: int = 600
     """
-    Maximum OCR processing time in seconds (10 minutes default).
-
-    Large documents (200+ pages) may need higher timeout.
+    Minimum OCR time in seconds; the limit is max(timeout, pages * timeout_per_page).
     """
 
-    output_type: str = "pdfa"
+    timeout_per_page: int = 8
+    """Seconds per page; effective limit = max(timeout, pages * timeout_per_page)."""
+
+    output_type: str = "pdf"
     """
-    OCRmyPDF output format. 'pdfa' creates PDF/A archival format.
+    OCRmyPDF output format. 'pdf' skips the PDF/A conversion nothing downstream needs.
 
     Options: 'pdfa', 'pdf', 'pdfa-1', 'pdfa-2', 'pdfa-3'
     """
+
+    optimize: Optional[int] = None
+    """ocrmypdf --optimize level (None = ocrmypdf default)."""
 
     force_ocr: bool = True
     """
