@@ -12,7 +12,7 @@ from enum import Enum
 from src.core.data_contracts import Finding
 from src.parsing_pipeline.modules.enrichment.monetary_processor import (
     MonetaryProcessor,
-    MonetaryValue,
+    PAISE_PER_CRORE,
 )
 from src.parsing_pipeline.modules import report_type_profiles
 from src.parsing_pipeline.modules import semantic_patterns
@@ -79,6 +79,9 @@ class FindingExtractor:
         r"despite|lapsed|irregular|unwarranted|unjustified|infructuous)",
         re.IGNORECASE | re.DOTALL
     )
+
+    # A lakh/crore magnitude, money or not (acceptance signal only)
+    MAGNITUDE_PATTERN = re.compile(r"(?<![A-Za-z\d])\d[\d,]*(?:\.\d+)?\s*(?:crore|lakh)\b", re.IGNORECASE)
 
     # P0-07: Map deficiency keywords to finding types
     DEFICIENCY_TO_TYPE_MAP = {
@@ -768,15 +771,20 @@ class FindingExtractor:
             # Check if this looks like a finding
             # P0-07: Pass government_body_type for tier-specific taxonomy gates
             finding_type = self._detect_finding_type(content, government_body_type)
-            # P0-01: Use extract_monetary_values_with_preference to apply
-            # explicit-total preference heuristic
-            monetary_values = self._monetary_processor.extract_monetary_values_with_preference(content)
+            # Rupee amounts with their context; one is marked primary (M9-M11)
+            classified = [
+                cv for cv in self._monetary_processor.extract_with_context(content)
+                if cv.value.currency == "INR"
+            ]
+            monetary_values = [cv.value for cv in classified]
 
             # Decision logic: Use confidence score from semantic matcher
             is_finding_by_confidence = confidence_score >= self.finding_confidence_threshold
 
             # Legacy indicators (for backward compatibility)
-            has_monetary = len(monetary_values) > 0
+            # Quantities in lakh/crore ("3.51 lakh students were deprived") are not
+            # money, but they still mark a quantified finding, as they did before
+            has_monetary = bool(monetary_values) or bool(self.MAGNITUDE_PATTERN.search(content))
             has_finding_type = finding_type != FindingType.OTHER
             has_indicator = any(p.search(content) for p in self._finding_indicators)
 
@@ -792,12 +800,16 @@ class FindingExtractor:
 
             finding_counter += 1
 
-            # Calculate total monetary value
-            total_amount = sum(mv.normalized_inr for mv in monetary_values)
+            # The primary impact amount drives monetary_value and severity; the
+            # total sums only impact amounts, so context and "of which" parts
+            # no longer inflate it (M9, M10)
+            primary = next((cv for cv in classified if cv.is_primary), None)
+            primary_paise = primary.value.normalized_paise if primary else None
+            total_amount = self._monetary_processor.impact_total_paise(classified)
 
             # Determine severity based on amount (tier-specific thresholds)
             severity = self._calculate_severity(
-                total_amount, finding_type, government_body_type
+                primary_paise or 0, finding_type, government_body_type
             )
 
             # P1-13: Extract source attribution from chunk and parent
@@ -818,18 +830,9 @@ class FindingExtractor:
             # Extract pattern types from matches
             pattern_types = [match.pattern_type for match in patterns_matched]
 
-            # P0-01: Calculate max single monetary value for severity computation
-            # monetary_value = max single amount (in paise)
-            # monetary_value_crore = monetary_value / 1e9 (derived)
-            max_monetary_value = (
-                max(mv.normalized_inr for mv in monetary_values)
-                if monetary_values
-                else None
-            )
-            max_monetary_crore = (
-                round(max_monetary_value / 1_000_000_000, 2)
-                if max_monetary_value
-                else None
+            primary_crore = (
+                # 4 places so amounts under ₹50,000 do not round to 0
+                round(primary_paise / PAISE_PER_CRORE, 4) if primary_paise else None
             )
 
             # R4: Detect if finding is from executive summary section
@@ -848,11 +851,16 @@ class FindingExtractor:
                 summary=summary,
                 finding_type=finding_type.value,
                 severity=severity.value,
-                monetary_values=[mv.to_dict() for mv in monetary_values],
+                monetary_values=[
+                    {**cv.value.to_dict(), "context": cv.context.value, "is_primary": cv.is_primary}
+                    for cv in classified
+                ],
+                # *_inr and bare monetary_value are aliases of the *_paise fields
+                total_amount_paise=total_amount,
                 total_amount_inr=total_amount,
-                # P0-01: Single monetary value fields (max amount from monetary_values)
-                monetary_value=max_monetary_value,
-                monetary_value_crore=max_monetary_crore,
+                monetary_value_paise=primary_paise,
+                monetary_value=primary_paise,
+                monetary_value_crore=primary_crore,
                 confidence=confidence_score,
                 pattern_types=pattern_types,
                 chapter=chapter,
@@ -1016,7 +1024,7 @@ class FindingExtractor:
 
     def _calculate_severity(
         self,
-        total_amount_inr: int,
+        amount_paise: int,
         finding_type: FindingType,
         government_body_type: str = "union",
     ) -> Severity:
@@ -1024,7 +1032,7 @@ class FindingExtractor:
         Calculate severity based on amount and finding type using tier-specific thresholds.
 
         Args:
-            total_amount_inr: Total monetary amount in paise
+            amount_paise: Primary impact amount in paise (not the sum, M10)
             finding_type: Type of finding
             government_body_type: "union", "state", or "local_body"
 
@@ -1032,7 +1040,7 @@ class FindingExtractor:
             Severity level
         """
         # Convert paise to crore for comparison
-        amount_crore = total_amount_inr / 10_000_000_00
+        amount_crore = amount_paise / PAISE_PER_CRORE
 
         # Get tier-specific thresholds from config
         thresholds = self.severity_thresholds.get(

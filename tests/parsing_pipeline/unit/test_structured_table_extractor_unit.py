@@ -475,3 +475,80 @@ class TestEdgeCases:
 
         # Should still parse, treating missing cell as empty
         assert structured is not None
+
+
+class TestTableMonetaryUnit:
+    """B-6-11: cells take the table's "(₹ in crore)" unit; plain numbers elsewhere are numbers."""
+
+    @pytest.fixture
+    def extractor(self):
+        return StructuredTableExtractor()
+
+    def _extract(self, extractor, markdown):
+        return extractor.extract(
+            markdown_table=markdown, table_id="t", source_chunk_id="c",
+            source_page_physical=1, source_bbox=[0, 0, 100, 100],
+        )
+
+    def test_caption_unit_applies_to_cells(self, extractor):
+        markdown = """Table 3.2: Savings (₹ in crore)
+| Grant | Budget | Savings | No. of schemes |
+| --- | --- | --- | --- |
+| Education | 847.71 | 12.50 | 14 |"""
+        t = self._extract(extractor, markdown)
+        budget, savings, schemes = t.rows[1].cells[1:4]
+        assert budget.data_type == CellDataType.CURRENCY
+        assert budget.unit == "crore"
+        assert budget.normalized_value == pytest.approx(847.71 * 10**9)  # was 84,771 paise
+        assert savings.normalized_value == pytest.approx(12.50 * 10**9)
+        # a count column stays a count
+        assert schemes.data_type == CellDataType.INTEGER
+        assert schemes.normalized_value == 14.0
+
+    def test_header_unit_per_column(self, extractor):
+        markdown = """| District | Amount (₹ in lakh) | Works |
+| --- | --- | --- |
+| Gaya | 91.14 | 12 |"""
+        t = self._extract(extractor, markdown)
+        amount, works = t.rows[1].cells[1:3]
+        assert amount.unit == "lakh"
+        assert amount.normalized_value == pytest.approx(91.14 * 10**7)
+        assert works.data_type == CellDataType.INTEGER
+
+    def test_lakh_crore_unit(self, extractor):
+        markdown = """(₹ in lakh crore)
+| Year | Debt | Liabilities |
+| --- | --- | --- |
+| 2022-23 | 155.77 | 160.10 |"""
+        t = self._extract(extractor, markdown)
+        debt = t.rows[1].cells[1]
+        assert debt.unit == "lakh crore"
+        assert debt.normalized_value == pytest.approx(155.77 * 10**14)
+
+    def test_no_unit_plain_number_is_not_currency(self, extractor):
+        markdown = """| District | Schools |
+| --- | --- |
+| Puri | 2019 |"""
+        t = self._extract(extractor, markdown)
+        cell = t.rows[1].cells[1]
+        assert cell.data_type == CellDataType.INTEGER
+        assert cell.unit is None
+
+    def test_explicit_cell_unit_wins(self, extractor):
+        markdown = """(₹ in crore)
+| Item | Value |
+| --- | --- |
+| Loss | ₹ 45 lakh |"""
+        t = self._extract(extractor, markdown)
+        cell = t.rows[1].cells[1]
+        assert cell.unit == "lakh"
+        assert cell.normalized_value == pytest.approx(45 * 10**7)
+
+    def test_rupee_header_without_unit(self, extractor):
+        markdown = """| Item | Amount (₹) | Paid (₹) |
+| --- | --- | --- |
+| Fee | 5,000 | 4,000 |"""
+        t = self._extract(extractor, markdown)
+        cell = t.rows[1].cells[1]
+        assert cell.data_type == CellDataType.CURRENCY
+        assert cell.normalized_value == pytest.approx(5000 * 100)

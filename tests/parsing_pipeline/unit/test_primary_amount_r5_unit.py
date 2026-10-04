@@ -99,8 +99,8 @@ class TestFindingImpactPriority:
         assert primary[0].value.amount == 10.0
         assert primary[0].context == MonetaryContext.FINDING_IMPACT
 
-    def test_multiple_finding_impacts_highest_is_primary(self, processor):
-        """When multiple FINDING_IMPACT, highest amount should be primary."""
+    def test_multiple_finding_impacts_first_is_primary(self, processor):
+        """When multiple FINDING_IMPACT with equal cues, the first mention is primary."""
         text = (
             "Audit noticed excess expenditure of ₹ 5 crore and avoidable "
             "expenditure of ₹ 12 crore."
@@ -108,8 +108,8 @@ class TestFindingImpactPriority:
         classified = processor.extract_with_context(text)
         primary = [c for c in classified if c.is_primary]
         assert len(primary) == 1
-        # Higher amount (₹12 crore) should be primary
-        assert primary[0].value.amount == 12.0
+        # CAG states the lead impact first (better match with the gold labels)
+        assert primary[0].value.amount == 5.0
 
 
 class TestRecoveryDuePriority:
@@ -298,11 +298,12 @@ class TestPrimaryAmountOnlyOne:
         primary_count = sum(1 for c in classified if c.is_primary)
         assert primary_count == 1
 
-    def test_primary_survives_deduplication(self, processor):
-        """Primary flag should be set after deduplication."""
+    def test_repeated_amount_keeps_one_primary(self, processor):
+        """A repeated figure is kept per mention (M6), with one primary."""
         text = "Loss of ₹ 10 crore. Another loss of ₹ 10.0 crore was also there."
         classified = processor.extract_with_context(text)
-        # Should deduplicate to 1 amount
-        assert len(classified) == 1
-        assert classified[0].is_primary is True
+        assert len(classified) == 2
+        assert [c.is_primary for c in classified] == [True, False]
+        # ...and counts once in the impact total
+        assert processor.impact_total_paise(classified) == 10 * 10**9
 

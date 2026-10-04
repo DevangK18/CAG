@@ -416,11 +416,10 @@ class TestMultipleAmounts:
         # At least one should be FINDING_IMPACT (shortfall)
         assert MonetaryContext.FINDING_IMPACT in contexts
 
-    def test_deduplication_with_context(self, processor):
-        """Similar amounts should be deduplicated even with context."""
+    def test_repeated_mentions_each_classified(self, processor):
+        """Each mention is its own value (M6: no value dedup) with its own context."""
         text = "Loss of ₹ 10 crore. This loss of ₹ 10.0 crore was significant."
         classified = processor.extract_with_context(text)
-        # Should deduplicate to 1 amount
-        assert len(classified) == 1
-        assert classified[0].context == MonetaryContext.FINDING_IMPACT
+        assert len(classified) == 2
+        assert all(c.context == MonetaryContext.FINDING_IMPACT for c in classified)
 

@@ -112,8 +112,24 @@ class StructuredTableExtractor:
     ]
     STATUS_KEYWORDS = ["status", "compliance", "progress", "achievement", "completion"]
 
+    # B-6-11: table/column unit context, e.g. "(₹ in crore)", "Amount (Rs. in lakh)"
+    TABLE_UNIT_PATTERN = re.compile(
+        r"(?:₹|`|Rs\.?|INR|amount|figures?)\s*(?:in\s+)?(?:₹\s*)?"
+        r"(lakh\s+crore|crore|lakh|lac|thousand)s?\b"
+        r"|\(\s*in\s+(?:₹\s*)?(lakh\s+crore|crore|lakh|lac|thousand)s?\s*\)",
+        re.IGNORECASE,
+    )
+    # A column header that names money without a unit: values are rupees
+    MONEY_HEADER_PATTERN = re.compile(r"₹|`|\bRs\b\.?|\bINR\b|\bamount\b", re.IGNORECASE)
+    # Columns that hold counts, shares or years even inside a "(₹ in crore)" table
+    NON_MONEY_HEADER_PATTERN = re.compile(
+        r"\b(?:no|nos|number|count|sl|s\.\s*no|per\s*cent|percentage|year|years|ratio|units?)\b|%|\bno\.",
+        re.IGNORECASE,
+    )
+
     # Currency unit to paise multipliers
     CURRENCY_MULTIPLIERS = {
+        "lakh crore": 10**14,  # 1 lakh crore = 10^12 rupees
         "crore": 100_00_00_000,  # 1 crore = 10^9 paise
         "cr": 100_00_00_000,
         "lakh": 100_00_000,  # 1 lakh = 10^7 paise
@@ -166,8 +182,14 @@ class StructuredTableExtractor:
         # Step 3: Classify columns
         columns = self._classify_columns(raw_data, num_header_rows)
 
-        # Step 4: Parse cells with type detection
-        rows = self._parse_rows(raw_data, columns, num_header_rows)
+        # Step 4: Parse cells with type detection. B-6-11: plain numbers are money
+        # only in a column with a monetary unit, and then take that unit
+        table_unit = self._detect_table_unit(markdown_table, raw_data[:num_header_rows])
+        column_units = [self._column_money_unit(col, table_unit) for col in columns]
+        for col, unit in zip(columns, column_units):
+            if unit and col.dominant_data_type in (CellDataType.INTEGER, CellDataType.DECIMAL):
+                col.dominant_data_type = CellDataType.CURRENCY
+        rows = self._parse_rows(raw_data, columns, num_header_rows, column_units)
 
         # Step 5: Extract metadata
         title = self._extract_title(markdown_table)
@@ -209,7 +231,12 @@ class StructuredTableExtractor:
         Returns:
             2D list of cell strings (empty list on failure)
         """
-        lines = [line.strip() for line in markdown.strip().split("\n") if line.strip()]
+        # Lines without a pipe are captions such as "Table 3.2 (₹ in crore)": they
+        # are read by _extract_title / _detect_table_unit, not parsed as rows
+        lines = [
+            line.strip() for line in markdown.strip().split("\n")
+            if line.strip() and "|" in line
+        ]
 
         if len(lines) < 2:
             return []
@@ -217,7 +244,7 @@ class StructuredTableExtractor:
         rows = []
         for i, line in enumerate(lines):
             # Skip separator row (second line with ---)
-            if i == 1 and re.match(r"^\|[\s\-:|]+\|$", line):
+            if i == 1 and re.match(r"^\|?[\s\-:|]+\|?$", line):
                 continue
 
             # Parse cell values
@@ -408,7 +435,11 @@ class StructuredTableExtractor:
     # ==================== ROW PARSING ====================
 
     def _parse_rows(
-        self, raw_data: List[List[str]], columns: List[TableColumn], num_header_rows: int
+        self,
+        raw_data: List[List[str]],
+        columns: List[TableColumn],
+        num_header_rows: int,
+        column_units: Optional[List[Optional[str]]] = None,
     ) -> List[TableRow]:
         """
         Parse all rows with cell type detection and classification.
@@ -439,6 +470,11 @@ class StructuredTableExtractor:
                     raw_text=raw_text,
                     column=columns[col_idx] if col_idx < len(columns) else None,
                     row_type=row_type,
+                    money_unit=(
+                        column_units[col_idx]
+                        if column_units and col_idx < len(column_units) and row_type != "header"
+                        else None
+                    ),
                 )
                 cells.append(cell)
 
@@ -477,6 +513,7 @@ class StructuredTableExtractor:
         raw_text: str,
         column: Optional[TableColumn],
         row_type: str,
+        money_unit: Optional[str] = None,
     ) -> TableCell:
         """
         Parse a single cell with type detection and value extraction.
@@ -487,6 +524,7 @@ class StructuredTableExtractor:
             raw_text: Raw cell text
             column: Column metadata (for type hints)
             row_type: Row classification
+            money_unit: Monetary unit of the column ("crore", "lakh", "rupee") or None
 
         Returns:
             TableCell object
@@ -507,9 +545,9 @@ class StructuredTableExtractor:
             semantic_type = CellSemanticType.DATA
 
         # Detect data type and parse value
-        data_type = self._detect_cell_data_type(cleaned_text)
+        data_type = self._detect_cell_data_type(cleaned_text, money_unit)
         parsed_value, unit, normalized_value = self._parse_cell_value(
-            cleaned_text, data_type, column
+            cleaned_text, data_type, column, money_unit
         )
 
         return TableCell(
@@ -526,12 +564,14 @@ class StructuredTableExtractor:
 
     # ==================== CELL TYPE DETECTION ====================
 
-    def _detect_cell_data_type(self, text: str) -> CellDataType:
+    def _detect_cell_data_type(self, text: str, money_unit: Optional[str] = None) -> CellDataType:
         """
         Detect data type of cell content.
 
         Args:
             text: Cleaned cell text
+            money_unit: Column monetary unit; without one, a plain number is a
+                number, not currency (B-6-11)
 
         Returns:
             CellDataType enum value
@@ -548,7 +588,7 @@ class StructuredTableExtractor:
             return CellDataType.PERCENTAGE
 
         # Check currency
-        if self._parse_currency(text)[0] is not None:
+        if self._parse_currency(text, allow_plain=money_unit is not None)[0] is not None:
             return CellDataType.CURRENCY
 
         # Check date
@@ -566,7 +606,11 @@ class StructuredTableExtractor:
         return CellDataType.TEXT
 
     def _parse_cell_value(
-        self, text: str, data_type: CellDataType, column: Optional[TableColumn]
+        self,
+        text: str,
+        data_type: CellDataType,
+        column: Optional[TableColumn],
+        money_unit: Optional[str] = None,
     ) -> Tuple[Optional[Union[str, int, float]], Optional[str], Optional[float]]:
         """
         Parse cell value based on detected type.
@@ -585,6 +629,9 @@ class StructuredTableExtractor:
         if data_type == CellDataType.CURRENCY:
             amount, unit = self._parse_currency(text)
             if amount is not None:
+                # B-6-11: "847.71" in a "(₹ in crore)" column is 847.71 crore
+                if unit is None and money_unit and money_unit != "rupee":
+                    unit = money_unit
                 normalized = self._normalize_currency(amount, unit)
                 return (amount, unit, normalized)
 
@@ -615,7 +662,9 @@ class StructuredTableExtractor:
 
     # ==================== CURRENCY PARSING ====================
 
-    def _parse_currency(self, text: str) -> Tuple[Optional[float], Optional[str]]:
+    def _parse_currency(
+        self, text: str, allow_plain: bool = True
+    ) -> Tuple[Optional[float], Optional[str]]:
         """
         Parse Indian currency formats.
 
@@ -627,11 +676,14 @@ class StructuredTableExtractor:
 
         Args:
             text: Cell text
+            allow_plain: Also read plain and "(23.45)" numbers as currency
 
         Returns:
             Tuple of (amount, unit) or (None, None)
         """
         for pattern, pattern_type in self.CURRENCY_PATTERNS:
+            if not allow_plain and pattern_type in ("plain_number", "negative_paren"):
+                continue
             match = re.match(pattern, text, re.IGNORECASE)
             if match:
                 try:
@@ -749,6 +801,44 @@ class StructuredTableExtractor:
             if "|" not in line and line.strip():
                 return line.strip()
         return None
+
+    def _detect_table_unit(
+        self, markdown: str, header_rows: List[List[str]]
+    ) -> Optional[str]:
+        """B-6-11: Unit stated for the whole table, in its caption or header rows."""
+        caption = " ".join(line for line in markdown.split("\n") if "|" not in line)
+        match = self.TABLE_UNIT_PATTERN.search(caption)
+        if match:
+            return self._canonical_unit(match.group(1) or match.group(2))
+        # A header cell holding only the unit, e.g. "| (₹ in crore) | | |"; a unit
+        # inside a column header ("Amount (₹ in lakh)") belongs to that column only
+        for row in header_rows:
+            for cell in row:
+                match = self.TABLE_UNIT_PATTERN.search(cell)
+                if match and len(cell.strip(" ()*")) <= len(match.group(0)) + 2:
+                    return self._canonical_unit(match.group(1) or match.group(2))
+        return None
+
+    def _column_money_unit(
+        self, column: TableColumn, table_unit: Optional[str]
+    ) -> Optional[str]:
+        """B-6-11: Monetary unit of a column, or None if its plain numbers are not money."""
+        header = " ".join(column.header_hierarchy or [column.header_text or ""])
+        match = self.TABLE_UNIT_PATTERN.search(header)
+        if match:
+            return self._canonical_unit(match.group(1) or match.group(2))
+        if self.NON_MONEY_HEADER_PATTERN.search(header):
+            return None
+        if table_unit:
+            return table_unit
+        if self.MONEY_HEADER_PATTERN.search(header):
+            return "rupee"
+        return None
+
+    @staticmethod
+    def _canonical_unit(unit: str) -> str:
+        unit = re.sub(r"\s+", " ", unit.lower())
+        return "lakh" if unit == "lac" else unit
 
     def _detect_monetary_unit(
         self, markdown: str, rows: List[TableRow]

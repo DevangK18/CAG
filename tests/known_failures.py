@@ -15,8 +15,6 @@ BROKEN_IMPORT_FILES = [
 # Test node ID -> reason
 KNOWN_FAILURES = {
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_classify_column_time_period': 'expectations predate the current table header/column-type rules (fidelity PR: table extraction)',
-    'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_detect_cell_type_decimal': 'expectations predate the current table header/column-type rules (fidelity PR: table extraction)',
-    'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_detect_cell_type_integer': 'expectations predate the current table header/column-type rules (fidelity PR: table extraction)',
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_extract_entities': 'expectations predate the current table header/column-type rules (fidelity PR: table extraction)',
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_extract_simple_table': 'expectations predate the current table header/column-type rules (fidelity PR: table extraction)',
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_get_column_values': 'expectations predate the current table header/column-type rules (fidelity PR: table extraction)',

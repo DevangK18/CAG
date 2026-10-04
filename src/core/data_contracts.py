@@ -14,7 +14,7 @@ PHASE 5 ADDITIONS:
 """
 
 from typing import List, Optional, Literal, Dict, Tuple, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from enum import Enum
 from dataclasses import dataclass, field
@@ -342,13 +342,37 @@ class SectionTypeEnum(str, Enum):
     OTHER = "other"
 
 
+def _sync_aliases(data: Any, pairs: List[Tuple[str, str]]) -> Any:
+    """Fill a new money field from its old alias, or the alias from the new field.
+
+    Readers get both names whichever one the producer wrote (alias rule, PR 6).
+    """
+    if not isinstance(data, dict):
+        return data
+    data = dict(data)
+    for new, old in pairs:
+        if data.get(new) is None and data.get(old) is not None:
+            data[new] = data[old]
+        elif data.get(new) is not None and data.get(old) in (None, 0):
+            data[old] = data[new]
+    return data
+
+
 class MonetaryValue(BaseModel):
     """Structured representation of monetary amounts."""
 
     raw_text: str = Field(..., description="Original text: '₹847.71 crore'")
     amount: float = Field(..., description="Numeric value: 847.71")
-    unit: str = Field(..., description="Unit: 'crore', 'lakh', 'thousand'")
-    normalized_inr: int = Field(..., description="Normalized to INR (paise)")
+    unit: str = Field(..., description="Unit: 'lakh crore', 'crore', 'lakh', 'thousand', 'rupees'")
+    normalized_paise: Optional[int] = Field(None, description="Amount in paise")
+    normalized_inr: Optional[int] = Field(
+        None, description="Deprecated alias of normalized_paise (the value is paise, not rupees)"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_paise_alias(cls, data: Any) -> Any:
+        return _sync_aliases(data, [("normalized_paise", "normalized_inr")])
 
 
 class Finding(BaseModel):
@@ -363,15 +387,23 @@ class Finding(BaseModel):
     monetary_values: List[Dict] = Field(
         default_factory=list, description="List of MonetaryValue dicts"
     )
-    total_amount_inr: int = Field(
-        default=0, description="Sum of all monetary values (in paise)"
+    # Money fields are paise (1e9 paise = ₹1 crore). The *_inr / bare names are
+    # deprecated aliases of the *_paise names and always hold the same value.
+    total_amount_paise: int = Field(
+        default=0,
+        description="Sum of the impact amounts (paise), nested 'of which' parts excluded",
     )
-    # P0-01: Single monetary value fields (max amount from monetary_values)
+    total_amount_inr: int = Field(
+        default=0, description="Deprecated alias of total_amount_paise (paise, not rupees)"
+    )
+    monetary_value_paise: Optional[int] = Field(
+        default=None, description="Primary impact amount (paise)"
+    )
     monetary_value: Optional[int] = Field(
-        default=None, description="P0-01: Max single monetary amount (in paise)"
+        default=None, description="Deprecated alias of monetary_value_paise (paise)"
     )
     monetary_value_crore: Optional[float] = Field(
-        default=None, description="P0-01: Max single monetary amount (in crore, derived from monetary_value)"
+        default=None, description="Primary impact amount in crore (monetary_value_paise / 1e9)"
     )
     # P1-2: Enhanced semantic pattern matching fields
     confidence: float = Field(
@@ -394,6 +426,14 @@ class Finding(BaseModel):
     entities_mentioned: List[str] = Field(
         default_factory=list, description="Schemes, programs, etc."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_money_aliases(cls, data: Any) -> Any:
+        return _sync_aliases(
+            data,
+            [("total_amount_paise", "total_amount_inr"), ("monetary_value_paise", "monetary_value")],
+        )
 
     # M2 fix: Alias for section field for clarity (source_section is more descriptive)
     @property
