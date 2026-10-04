@@ -297,3 +297,66 @@ class TestReportProfiles:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestDetectionFromRealMetadataKeys:
+    """C-9-02: manifest metadata uses "Title"/"Report Type", report_metadata uses snake_case."""
+
+    def _task(self, metadata, toc=None):
+        return DocumentTask(
+            report_id="r", source_url="", local_pdf_path="",
+            initial_metadata=metadata, scaffold={"toc": toc} if toc is not None else None,
+        )
+
+    def test_atir_from_audit_category(self):
+        task = self._task({
+            "Title": "Report on Local Bodies", "Report Type": "Annual Technical Inspection Report",
+            "government_body_type": "local_body", "audit_category": "atir",
+        })
+        assert report_type_profiles.detect_report_type(task) == "atir"
+
+    def test_atir_from_manifest_title_key(self):
+        task = self._task({
+            "Title": "Government of Himachal Pradesh: Annual Technical Inspection Report on PRIs",
+            "Report Type": "Compliance Audit",
+            "government_body_type": "local_body", "audit_category": "compliance",
+        })
+        assert report_type_profiles.detect_report_type(task) == "atir"
+
+    def test_atir_from_recommended_title(self):
+        task = self._task({
+            "Title": "Report on PRIs", "Recommended Title": "ATI report on PRIs in Himachal Pradesh",
+            "government_body_type": "local_body", "audit_category": "compliance",
+        })
+        assert report_type_profiles.detect_report_type(task) == "atir"
+
+    def test_report_metadata_dict(self):
+        report_metadata = {
+            "report_title": "School Education in Odisha",
+            "report_type": "Performance Audit",
+            "government_body_type": "state",
+            "audit_category": "performance",
+        }
+        assert report_type_profiles.detect_report_type(report_metadata) == "state_performance"
+
+    def test_manifest_report_type_key(self):
+        task = self._task({
+            "Title": "Union Government Accounts", "Report Type": "Financial Audit",
+            "government_body_type": "union", "audit_category": "financial",
+        })
+        assert report_type_profiles.detect_report_type(task) == "financial"
+
+    def test_unknown_report_type_falls_through_to_title(self):
+        task = self._task({"Title": "Performance Audit of PMGSY", "Report Type": "Unknown"})
+        assert report_type_profiles.detect_report_type(task) == "performance"
+
+    def test_toc_entries_as_lists(self):
+        toc = [
+            [1, "Introduction", 1],
+            [1, "Financial Statements", 10],
+            [2, "Audit Opinion", 25],
+            [2, "Notes to Accounts", 40],
+        ]
+        task = self._task({"Title": "Audit Report"}, toc=toc)
+        assert report_type_profiles.detect_report_type(task) == "financial"
+        assert report_type_profiles.detect_report_type({"Title": "Audit Report"}, toc) == "financial"

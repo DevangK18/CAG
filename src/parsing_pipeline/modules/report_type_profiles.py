@@ -8,7 +8,8 @@ report-type aware semantic enrichment without requiring LLM calls.
 Part of Phase 1 Enhancement (P1-1: Report Type Adaptation)
 """
 
-from typing import Dict, List, Optional, Any
+import re
+from typing import Dict, List, Optional, Any, Union
 from src.core.data_contracts import DocumentTask
 
 
@@ -200,38 +201,66 @@ REPORT_PROFILES: Dict[str, Dict[str, Any]] = {
 # REPORT TYPE DETECTION
 # ═══════════════════════════════════════════════════════════════════════
 
-def detect_report_type(task: DocumentTask) -> str:
+def _first_text(metadata: Dict[str, Any], *keys: str) -> str:
+    """First non-empty string among keys (manifest and report_metadata names differ)."""
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip() and value.strip() != "Unknown":
+            return value.strip()
+    return ""
+
+
+def detect_report_type(
+    task_or_metadata: Union[DocumentTask, Dict[str, Any]],
+    toc_entries: Optional[List[Any]] = None,
+) -> str:
     """
     Detect report type from metadata and content signals.
 
+    Accepts a DocumentTask (reads initial_metadata and scaffold["toc"]) or a
+    metadata dict: the manifest's initial_metadata ("Title", "Report Type") or
+    the assembled report_metadata ("report_title", "report_type").
+
     Priority order:
-    1. ATIR (most specific - local_body + atir category)
+    1. ATIR (most specific - atir category, or the title names one)
     2. STATE_COMMERCIAL (state + commercial)
     3. STATE_PERFORMANCE (state + performance)
-    4. Explicit metadata report_type field
+    4. Explicit metadata report type field
     5. Title-based detection (Union reports, or State reports matching by title)
     6. ToC-based detection
     7. Default to "general"
 
     Args:
-        task: DocumentTask with metadata and scaffold
+        task_or_metadata: DocumentTask, or a metadata dict
+        toc_entries: TOC entries when passing a dict ([level, title, page] or dicts)
 
     Returns:
         Report type: "atir", "state_commercial", "state_performance",
                      "compliance", "performance", "financial", or "general"
     """
-    metadata = task.initial_metadata or {}
+    if isinstance(task_or_metadata, dict):
+        metadata = task_or_metadata
+    else:
+        metadata = task_or_metadata.initial_metadata or {}
+        if toc_entries is None and task_or_metadata.scaffold:
+            toc_entries = task_or_metadata.scaffold.get("toc")
 
     # Get tier-specific fields
-    government_body_type = metadata.get("government_body_type", "union")
-    audit_category = metadata.get("audit_category", "compliance")
-    title = metadata.get("report_title", "").lower()
+    government_body_type = metadata.get("government_body_type") or "union"
+    audit_category = (metadata.get("audit_category") or "compliance").lower()
+    # "Title"/"Recommended Title" come from the manifest; "report_title" from assembly (C-9-02)
+    title = " ".join(
+        t for t in (
+            _first_text(metadata, "Title", "report_title"),
+            _first_text(metadata, "Recommended Title"),
+        ) if t
+    ).lower()
+    report_type = _first_text(metadata, "Report Type", "report_type")
 
     # Priority 1: ATIR (most specific)
     if (
-        "atir" in title
-        or "annual technical inspection" in title
-        or (government_body_type == "local_body" and audit_category == "atir")
+        audit_category == "atir"
+        or re.search(r"\batir\b|annual\s+technical\s+inspection|\bati\s+report\b", title)
     ):
         return "atir"
 
@@ -246,10 +275,10 @@ def detect_report_type(task: DocumentTask) -> str:
     if government_body_type == "state" and audit_category == "performance":
         return "state_performance"
 
-    # Priority 4: Check explicit metadata report_type field
-    if "report_type" in metadata and metadata["report_type"]:
-        detected = normalize_report_type(metadata["report_type"])
-        if detected in REPORT_PROFILES:
+    # Priority 4: Check explicit metadata report type field
+    if report_type:
+        detected = normalize_report_type(report_type)
+        if detected in REPORT_PROFILES and detected != "general":
             return detected
 
     # Priority 5: Analyze title (works for Union + some State reports)
@@ -258,8 +287,8 @@ def detect_report_type(task: DocumentTask) -> str:
         return title_type
 
     # Priority 6: Analyze ToC structure
-    if task.scaffold and "toc" in task.scaffold:
-        toc_type = _detect_from_toc(task.scaffold["toc"])
+    if toc_entries:
+        toc_type = _detect_from_toc(toc_entries)
         if toc_type != "general":
             return toc_type
 
@@ -327,17 +356,24 @@ def _detect_from_title(title: str) -> str:
     return "general"
 
 
-def _detect_from_toc(toc_entries: List[Dict[str, Any]]) -> str:
+def _toc_entry_title(entry: Any) -> str:
+    # Scaffold entries are [level, title, page]; older callers passed dicts
+    if isinstance(entry, dict):
+        title = entry.get("title", "")
+    elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+        title = entry[1]
+    else:
+        return ""
+    return title.lower() if isinstance(title, str) else ""
+
+
+def _detect_from_toc(toc_entries: List[Any]) -> str:
     """
     Detect report type from Table of Contents structure.
 
     Analyzes ToC entries for keywords specific to each report type.
     """
-    toc_text = " ".join([
-        entry.get("title", "").lower()
-        for entry in toc_entries
-        if isinstance(entry, dict)
-    ])
+    toc_text = " ".join(_toc_entry_title(entry) for entry in toc_entries)
 
     # Count signals for each type
     compliance_signals = _count_compliance_signals(toc_text)

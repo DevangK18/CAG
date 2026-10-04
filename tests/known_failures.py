@@ -16,7 +16,6 @@ BROKEN_IMPORT_FILES = [
     "parsing_pipeline/integrations/test_scaffolding_service_integration.py",
     "parsing_pipeline/integrations/test_triage_service_integration.py",
     "parsing_pipeline/unit/test_layout_analysis_service_unit.py",
-    "parsing_pipeline/unit/test_ocr_service_unit.py",
     "parsing_pipeline/unit/test_scaffolding_service_unit.py",
     "parsing_pipeline/unit/test_table_extractor_unit.py",
     "parsing_pipeline/unit/test_text_extractor_unit.py",
@@ -51,11 +50,6 @@ KNOWN_FAILURES = {
     'tests/parsing_pipeline/unit/test_entity_hardening_unit.py::TestEntityDeduplication::test_case_insensitive_deduplication': 'tests a private SemanticEnrichmentService method that no longer exists',
     'tests/parsing_pipeline/unit/test_entity_hardening_unit.py::TestEntityDeduplication::test_no_false_deduplication': 'tests a private SemanticEnrichmentService method that no longer exists',
     'tests/parsing_pipeline/unit/test_entity_hardening_unit.py::TestEntityDeduplication::test_shorter_subsumed_by_longer': 'tests a private SemanticEnrichmentService method that no longer exists',
-    'tests/parsing_pipeline/unit/test_manifest_ingestion_unit.py::test_download_pdf_success[asyncio]': 'expects the old report-ID format and fiscal-year mapping',
-    'tests/parsing_pipeline/unit/test_manifest_ingestion_unit.py::test_sanitize_filename[CAF\\xc9-cafe]': 'expects the old report-ID format and fiscal-year mapping',
-    'tests/parsing_pipeline/unit/test_manifest_ingestion_unit.py::test_sanitize_filename[Cleanliness Report-cleanliness_report]': 'expects the old report-ID format and fiscal-year mapping',
-    'tests/parsing_pipeline/unit/test_manifest_ingestion_unit.py::test_sanitize_filename[Report 123!-report_123]': 'expects the old report-ID format and fiscal-year mapping',
-    'tests/parsing_pipeline/unit/test_manifest_ingestion_unit.py::test_sanitize_filename[Test & Trial-test__trial]': 'expects the old report-ID format and fiscal-year mapping',
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_classify_column_time_period': 'expectations predate the current table header/column-type rules',
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_detect_cell_type_decimal': 'expectations predate the current table header/column-type rules',
     'tests/parsing_pipeline/unit/test_structured_table_extractor_unit.py::TestStructuredTableExtractor::test_detect_cell_type_integer': 'expectations predate the current table header/column-type rules',
@@ -87,5 +81,4 @@ KNOWN_FAILURES = {
 
 # Errors outside the test call (setup/teardown) cannot be xfailed; skipped instead
 KNOWN_ERRORS_SKIPPED = {
-    'tests/parsing_pipeline/unit/test_manifest_ingestion_unit.py::test_download_pdf_network_error[asyncio]': 'network mock fails at teardown (unused httpx responses); an xfail marker cannot cover teardown errors',
 }

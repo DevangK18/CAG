@@ -33,12 +33,18 @@ ocr:
   # Note: Hindi requires tesseract-lang-hin package
   language: "eng"
 
-  # Maximum OCR processing time (seconds)
-  # Large docs (200+ pages) may need higher timeout
+  # Minimum OCR time (seconds); effective limit = max(timeout, pages * timeout_per_page)
   timeout: 600
 
+  # ~3.4 s/page on an e2-standard-4 plus 1-2 min for the final PDF steps
+  timeout_per_page: 8
+
   # OCRmyPDF output format: 'pdfa', 'pdf', 'pdfa-1', 'pdfa-2', 'pdfa-3'
-  output_type: "pdfa"
+  # 'pdf' skips the slow Ghostscript PDF/A pass; nothing downstream needs PDF/A
+  output_type: "pdf"
+
+  # ocrmypdf --optimize level; 0 disables optimisation (faster on image-heavy scans)
+  optimize: 0
 
   # Force OCR even if text layer exists
   force_ocr: true

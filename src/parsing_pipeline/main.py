@@ -82,7 +82,7 @@ from src.core.gemini_client import log_usage_summary, reset_usage
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
     ManifestIngestionService,
 )
-from src.parsing_pipeline.modules.triage_service import TriageService
+from src.parsing_pipeline.modules.triage_service import TriageCache, TriageService
 from src.parsing_pipeline.modules.ocr_service import OCRService
 from src.parsing_pipeline.modules.scaffolding_service import ScaffoldingService
 from src.parsing_pipeline.modules.layout_analysis_service import LayoutAnalysisService
@@ -197,6 +197,7 @@ class PipelineOrchestrator:
         # Cache directory
         self.cache_dir = Path("data/raw/.cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.triage_cache = TriageCache(self.cache_dir)
 
     async def run(self) -> int:
         """Run the complete pipeline with phase skipping support. Returns the process exit code."""
@@ -251,7 +252,10 @@ class PipelineOrchestrator:
         manifest_service = ManifestIngestionService(raw_data_dir="data/raw")
 
         try:
-            all_tasks = await manifest_service.process_manifest(self.manifest_path)
+            # Filter rows before any PDF is resolved or downloaded (A-1-02)
+            all_tasks = await manifest_service.process_manifest(
+                self.manifest_path, report_filter=self.report_filter
+            )
         except Exception as e:
             self._log(f"Critical error in manifest ingestion: {e}", force=True)
             self.fatal_error = f"manifest ingestion failed: {e}"
@@ -359,10 +363,9 @@ class PipelineOrchestrator:
         new_tasks = []
 
         for task in all_tasks:
-            cache_status = self._check_cached_state(task)
-            if cache_status:
-                # Reconstruct from cache
-                cached_task = self._reconstruct_from_cache(task, cache_status)
+            # Valid only for the same PDF content; a scanned hit needs a complete OCR'd PDF
+            cached_task = self.triage_cache.load(task)
+            if cached_task:
                 cached_tasks.append(cached_task)
 
                 # Emit retrospective Phase 2-3 events for cached tasks
@@ -418,63 +421,6 @@ class PipelineOrchestrator:
         else:
             self._log(f"✓ {total_ready}/{len(all_tasks)} reports ready for Phase 4")
 
-    def _check_cached_state(self, task: DocumentTask) -> dict:
-        """Check if task is fully cached. Returns cache status dict or None."""
-        # Check 1: PDF exists
-        pdf_path = Path(task.local_pdf_path)
-        if not pdf_path.exists():
-            return None
-
-        # Check 2: Triage cache exists
-        triage_cache = self.cache_dir / f"{task.report_id}_triage.json"
-        if not triage_cache.exists():
-            return None
-
-        try:
-            with open(triage_cache) as f:
-                triage_data = json.load(f)
-        except Exception:
-            return None
-
-        classification = triage_data.get("classification")
-
-        # Check 3: If scanned, OCR cache must exist
-        if classification == "scanned":
-            ocr_cache = self.cache_dir / f"{task.report_id}_ocr.json"
-            if not ocr_cache.exists():
-                return None
-            try:
-                with open(ocr_cache) as f:
-                    ocr_data = json.load(f)
-                return {"triage": triage_data, "ocr": ocr_data}
-            except Exception:
-                return None
-
-        return {"triage": triage_data}
-
-    def _reconstruct_from_cache(
-        self, task: DocumentTask, cache_status: dict
-    ) -> DocumentTask:
-        """Reconstruct a task from cache markers."""
-        triage_data = cache_status["triage"]
-        classification = triage_data["classification"]
-
-        # Set classification and status
-        task.classification = classification
-
-        if classification == "scanned":
-            # Check if OCR'd PDF exists - use the correct path pattern
-            # OCR service saves to: data/processed/ocred/{report_id}_ocred.pdf
-            ocr_output_dir = Path("data/processed/ocred")
-            ocred_path = ocr_output_dir / f"{task.report_id}_ocred.pdf"
-            if ocred_path.exists():
-                task.ocred_pdf_path = str(ocred_path)
-            task.processing_status = "ocr_complete"
-        else:
-            task.processing_status = "triage_complete"
-
-        return task
-
     async def _process_new_tasks(self, new_tasks: list):
         """Process new tasks through phases 2-3 (triage and OCR)."""
         emitter = self.state.trace_emitter
@@ -493,11 +439,11 @@ class PipelineOrchestrator:
 
                 if result.classification == "native_text":
                     triaged_native.append(result)
-                    self._write_triage_cache(result)
+                    self.triage_cache.store_triage(result)
                     emitter.set_phase_status("2", "success")
                 elif result.classification == "scanned":
                     triaged_scanned.append(result)
-                    self._write_triage_cache(result)
+                    self.triage_cache.store_triage(result)
                     emitter.set_phase_status("2", "success")
                 else:
                     self.state.failed["triage"].append(
@@ -523,7 +469,7 @@ class PipelineOrchestrator:
 
                     if result.processing_status == "ocr_complete":
                         ocred_successful.append(result)
-                        self._write_ocr_cache(result)
+                        self.triage_cache.store_ocr(result)
                         emitter.set_phase_status("3", "success")
                     else:
                         self.state.failed["ocr"].append(
@@ -535,8 +481,10 @@ class PipelineOrchestrator:
                         emitter.emit_error("3", result.error_log[-1] if result.error_log else "Unknown")
                         emitter.set_phase_status("3", "failed")
 
+            ocr_mark = "✓" if len(ocred_successful) == len(triaged_scanned) else "✗"
             self._log(
-                f"✓ OCR: {len(ocred_successful)}/{len(triaged_scanned)} successful"
+                f"{ocr_mark} OCR: {len(ocred_successful)}/{len(triaged_scanned)} successful",
+                force=ocr_mark == "✗",
             )
 
             # Red flag for high OCR failure rate
@@ -556,26 +504,6 @@ class PipelineOrchestrator:
         self.state.triaged_scanned = triaged_scanned
         self.state.ocred_successful = ocred_successful
         self.state.successful_triaged.extend(triaged_native + ocred_successful)
-
-    def _write_triage_cache(self, task: DocumentTask):
-        """Write triage cache marker."""
-        cache_file = self.cache_dir / f"{task.report_id}_triage.json"
-        with open(cache_file, "w") as f:
-            json.dump(
-                {
-                    "classification": task.classification,
-                    "timestamp": datetime.now().isoformat(),
-                },
-                f,
-            )
-
-    def _write_ocr_cache(self, task: DocumentTask):
-        """Write OCR cache marker."""
-        cache_file = self.cache_dir / f"{task.report_id}_ocr.json"
-        with open(cache_file, "w") as f:
-            json.dump(
-                {"status": "ocr_complete", "timestamp": datetime.now().isoformat()}, f
-            )
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASES 4-9
@@ -1192,6 +1120,7 @@ class PipelineOrchestrator:
                     report_metadata=assembled_data["report_metadata"],
                     parent_chunks=assembled_data["parent_chunks"],
                     child_chunks=assembled_data["child_chunks"],
+                    task=task,  # report type (ATIR, state_*) comes from the manifest metadata
                     trace_emitter=emitter,
                 )
 
