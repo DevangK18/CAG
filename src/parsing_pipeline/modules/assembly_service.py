@@ -954,7 +954,7 @@ class AssemblyService:
 
         self._save_manifest()
 
-    def mark_failed(self, report_id: str, phase: str, error: str) -> None:
+    def mark_failed(self, report_id: str, phase: str, error: str) -> List[str]:
         """
         Record that a report failed in this run.
 
@@ -979,6 +979,7 @@ class AssemblyService:
             }
         )
         self._save_manifest()
+        return quarantined
 
     def _quarantine_outputs(self, report_id: str) -> List[str]:
         """
