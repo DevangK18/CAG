@@ -23,13 +23,19 @@ done
 for f in $(gcloud storage ls "gs://$BUCKET/gpu-test/processed/union/" | grep -E '\.json$'); do
   fetch "$f" "$OUT/gpuchunks/$(basename "$f")"
 done
-# PDFs for every report that has output (state/local PDFs may sit under raw/union/)
+# PDFs for every report that has output. A PDF may sit under another tier's folder
+# (raw/union/ before 782d9d0) or under its published file name (source_filename).
 for c in "$OUT"/chunks/*_chunks.json; do
   rid=$(basename "$c" _chunks.json)
   [ -s "$OUT/pdfs/$rid.pdf" ] && continue
-  for tier in union state local_body; do
-    if fetch "gs://$BUCKET/raw/$tier/$rid.pdf" "$OUT/pdfs/$rid.pdf" 2>/dev/null; then break; fi
-    rm -f "$OUT/pdfs/$rid.pdf"
+  src=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["report_metadata"].get("source_filename") or "")' "$c")
+  for name in "$rid.pdf" "$src"; do
+    [ -z "$name" ] && continue
+    for tier in union state local_body; do
+      if fetch "gs://$BUCKET/raw/$tier/$name" "$OUT/pdfs/$rid.pdf" 2>/dev/null; then break 2; fi
+      rm -f "$OUT/pdfs/$rid.pdf"
+    done
   done
+  [ -s "$OUT/pdfs/$rid.pdf" ] || echo "no PDF found for $rid" >&2
 done
 echo "chunks: $(ls "$OUT"/chunks/*_chunks.json | wc -l)  pdfs: $(ls "$OUT"/pdfs/*.pdf | wc -l)"
