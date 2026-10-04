@@ -284,11 +284,11 @@ class ContentExtractionService:
             if cropped_image:
                 image_path = content_type_dir / f"{basename}.png"
                 cropped_image.save(image_path)
-                logger.error(f"SAVED FAILED EXTRACTION: {label} → {image_path}")
+                logger.warning(f"Saved failed extraction to the DLQ: {label} → {image_path}")
 
         except Exception as e:
             # Don't let DLQ saving fail break the pipeline
-            logger.error(f"Warning: Failed to save failed extraction info: {e}")
+            logger.warning(f"Failed to save failed extraction info: {e}")
 
     def _route_block(
         self, block: Dict, pdf_path: str, page_num: int, report_id: str, is_scanned: bool,
@@ -403,7 +403,7 @@ class ContentExtractionService:
 
                     # Tier 1 failed, try Tier 2 (Docling)
                     if block.get("docling_table_markdown"):
-                        logger.error(f"  Native PDF: pdfplumber failed, using Docling (page {page_num}) - Tier 2")
+                        logger.info(f"  Native PDF: pdfplumber failed, using Docling (page {page_num}) - Tier 2")
                         # Trace: Fallback from Tier 1 to Tier 2
                         if emitter:
                             emitter.emit_fallback(
@@ -420,7 +420,8 @@ class ContentExtractionService:
                         )
 
                     # Both Tier 1 and 2 failed, use Tier 3
-                    logger.error(f"  Native PDF: pdfplumber + Docling failed, saving for Gemini (page {page_num}) - Tier 3")
+                    # A routing decision, not an error: Tier 3 exists for these tables
+                    logger.warning(f"  Native PDF: pdfplumber + Docling failed, saving for Gemini (page {page_num}) - Tier 3")
                     # Trace: Fallback to Tier 3
                     if emitter:
                         emitter.emit_fallback(
@@ -640,7 +641,7 @@ class ContentExtractionService:
             structured_data = structured_table.model_dump() if structured_table else None
 
         except Exception as e:
-            logger.error(f"    Warning: Structured extraction failed for Docling table: {e}")
+            logger.warning(f"    Structured extraction failed for Docling table: {e}")
             structured_data = None
 
         return ExtractedContent(
@@ -1057,7 +1058,7 @@ class ContentExtractionService:
             if hasattr(self.table_extractor, "shutdown"):
                 self.table_extractor.shutdown()
         except Exception as e:
-            logger.error(f"Warning: TableExtractor shutdown failed: {e}")
+            logger.warning(f"TableExtractor shutdown failed: {e}")
 
         # V2: VisualAssetExtractor removed — no Florence-2 cleanup needed
         # TextExtractor doesn't need special cleanup

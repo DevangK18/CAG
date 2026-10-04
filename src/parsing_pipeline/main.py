@@ -74,7 +74,7 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from src.core.gemini_client import log_usage_summary, reset_usage
 
@@ -94,7 +94,8 @@ from src.parsing_pipeline.modules.assembly_service import (
     AssemblyService,
     propagate_semantic_enrichment_to_chunks,
 )
-from src.parsing_pipeline.modules.validation_service import ValidationService
+from src.parsing_pipeline.modules.validation_service import run_quality_checks
+from src.parsing_pipeline.quality import summarize as summarize_quality
 from src.parsing_pipeline.modules.semantic_enrichment_service import (
     SemanticEnrichmentService,
 )
@@ -167,6 +168,8 @@ class PipelineOrchestrator:
         self.missing_report_ids: List[str] = []
         # Outputs renamed *.stale this run (paths relative to data/processed, original names)
         self.quarantined_files: List[str] = []
+        # report_id -> compact preflight result for the run summary
+        self.quality_summaries: Dict[str, dict] = {}
         self.exit_code = EXIT_OK
         self.skip = set(skip_phases or [])
         self.quiet = quiet
@@ -302,7 +305,7 @@ class PipelineOrchestrator:
                         "tier_detection",
                         task.initial_metadata.get("government_body_type", "union"),
                         ["union", "state", "local_body"],
-                        f"Detected from manifest filename pattern",
+                        task.initial_metadata.get("tier_source") or "manifest Government Type column",
                     )
 
                     # File resolution decision
@@ -803,7 +806,7 @@ class PipelineOrchestrator:
                     figures = sum(
                         1
                         for c in (result.extracted_content or [])
-                        if c.content_type == "figure"
+                        if c.content_type == "image_caption" and c.layout_label != "Table"
                     )
                     self._log(
                         f"             ✓ {content_count} blocks ({tables} tables, {figures} figures)"
@@ -842,15 +845,16 @@ class PipelineOrchestrator:
                 len(t.extracted_content) if t.extracted_content else 0
                 for t in self.state.content_complete
             )
+            # Same rules as the per-report counts above
+            all_content = [c for t in self.state.content_complete for c in (t.extracted_content or [])]
             total_tables = sum(
-                sum(1 for c in (t.extracted_content or []) if c.content_type == "table")
-                for t in self.state.content_complete
+                1 for c in all_content
+                if c.content_type in ("table", "table_markdown")
+                or (c.content_type == "image_caption" and c.layout_label == "Table")
             )
             total_figures = sum(
-                sum(
-                    1 for c in (t.extracted_content or []) if c.content_type == "figure"
-                )
-                for t in self.state.content_complete
+                1 for c in all_content
+                if c.content_type == "image_caption" and c.layout_label != "Table"
             )
             self._log(f"\nTotal extracted across corpus:")
             self._log(f"  Content blocks: {total_content}")
@@ -1079,7 +1083,9 @@ class PipelineOrchestrator:
         """Phase 8: Document Assembly & Output."""
         self._phase_header("8", "DOCUMENT ASSEMBLY & OUTPUT")
         emitter = self.state.trace_emitter
-        assembly_service = AssemblyService(output_dir="data/processed", trace_emitter=emitter)
+        assembly_service = AssemblyService(
+            output_dir="data/processed", trace_emitter=emitter, run_id=self.run_id
+        )
 
         self._log(
             f"Assembling final JSON outputs for {len(self.state.chunking_complete)} documents..."
@@ -1114,7 +1120,7 @@ class PipelineOrchestrator:
                     )
 
                     task.assembled_output_path = output_path
-                    task.processing_status = "assembly_complete"
+                    task.processing_status = "assembled"
 
                     self._log(
                         f"             ✓ {len(parent_chunks)} parents, {len(child_chunks)} children → {Path(output_path).name}"
@@ -1161,7 +1167,7 @@ class PipelineOrchestrator:
         """Phase 9: Semantic Enrichment."""
         self._phase_header("9", "SEMANTIC ENRICHMENT")
         service = SemanticEnrichmentService()
-        validation_service = ValidationService()
+        manifest_service = AssemblyService(output_dir="data/processed", run_id=self.run_id)
         emitter = self.state.trace_emitter
 
         self._log(
@@ -1205,9 +1211,34 @@ class PipelineOrchestrator:
                     emitter.get_red_flags(task.report_id)
                 )
 
-                # Save enriched output (overwrite the original)
-                with open(task.assembled_output_path, "w", encoding="utf-8") as f:
+                metadata = assembled_data["report_metadata"]
+                metadata["processing_status"] = "enriched"
+                metadata["phases_completed"] = self._phases_completed()
+                metadata["pipeline_run_id"] = self.run_id
+                assembled_data["processing_stats"]["processing_status"] = "enriched"
+
+                # Preflight checks on the final output; never raises
+                quality = run_quality_checks(assembled_data, self._pdf_for_checks(task))
+                assembled_data["processing_stats"]["quality"] = quality
+                self.quality_summaries[task.report_id] = summarize_quality(quality)
+
+                # Write the working file, then rename it to the final *_chunks.json:
+                # a run stopped mid-write never leaves a partial final file
+                working_path = Path(task.assembled_output_path)
+                final_path = AssemblyService.final_output_path(working_path)
+                with open(working_path, "w", encoding="utf-8") as f:
                     json.dump(assembled_data, f, indent=2, ensure_ascii=False)
+                os.replace(working_path, final_path)
+                task.assembled_output_path = str(final_path)
+                task.processing_status = "enriched"
+                manifest_service.mark_completed(
+                    task.report_id,
+                    metadata.get("government_body_type", "union"),
+                    final_path,
+                    parent_chunks=len(assembled_data["parent_chunks"]),
+                    child_chunks=len(assembled_data["child_chunks"]),
+                    quality_status=self.quality_summaries[task.report_id].get("status"),
+                )
 
                 # Store enrichment stats for summary
                 stats = enrichment.statistics
@@ -1217,6 +1248,11 @@ class PipelineOrchestrator:
                     f"             ✓ {stats['findings']['total_count']} findings, "
                     f"{stats['recommendations']['total_count']} recommendations, "
                     f"₹{stats['findings']['total_monetary_crore']:,.2f} crore"
+                )
+                summary = self.quality_summaries[task.report_id]
+                self._log(
+                    f"             quality {summary.get('status')}: "
+                    f"{summary.get('fail', 0)} FAIL, {summary.get('warn', 0)} WARN"
                 )
 
                 self.state.enrichment_complete.append(task)
@@ -1236,75 +1272,20 @@ class PipelineOrchestrator:
             len(self.state.assembly_complete),
         )
 
-        # Comprehensive validation
-        if self.state.enrichment_complete:
-            self._log(
-                "\n  Running comprehensive validation (including Phase 4 features)..."
-            )
-            validation_summary = {
-                "total_validated": 0,
-                "avg_score": 0,
-                "p4_features": {
-                    "footnotes_found": 0,
-                    "boxes_detected": 0,
-                    "exec_summaries_parsed": 0,
-                    "visual_assets_registered": 0,
-                },
-            }
+    def _phases_completed(self) -> List[str]:
+        """Phases that ran for a report reaching the end of Phase 9."""
+        phases = ["1", "2", "3", "4", "5"]
+        if "5.5" not in self.skip:
+            phases.append("5.5")
+        return phases + ["6", "7", "7.5", "8", "9"]
 
-            for task in self.state.enrichment_complete[
-                :3
-            ]:  # Validate first 3 as sample
-                try:
-                    with open(task.assembled_output_path, "r", encoding="utf-8") as f:
-                        report_data = json.load(f)
-
-                    validation_result = validation_service.validate_report(
-                        report_data=report_data,
-                        enrichment_data=report_data.get("semantic_enrichment"),
-                    )
-
-                    validation_summary["total_validated"] += 1
-                    validation_summary["avg_score"] += validation_result.get(
-                        "overall_score", 0
-                    )
-
-                    # Track P4 features
-                    if report_data.get("footnote_index"):
-                        validation_summary["p4_features"]["footnotes_found"] += 1
-                    if report_data.get("semantic_enrichment", {}).get("box_elements"):
-                        validation_summary["p4_features"]["boxes_detected"] += 1
-                    if report_data.get("semantic_enrichment", {}).get(
-                        "executive_summary_index"
-                    ):
-                        validation_summary["p4_features"]["exec_summaries_parsed"] += 1
-                    if report_data.get("visual_asset_registry"):
-                        validation_summary["p4_features"][
-                            "visual_assets_registered"
-                        ] += 1
-
-                except Exception as e:
-                    self._log(f"    ⚠ Validation failed for {task.report_id}: {e}")
-
-            if validation_summary["total_validated"] > 0:
-                avg = (
-                    validation_summary["avg_score"]
-                    / validation_summary["total_validated"]
-                )
-                self._log(f"  Sample validation score: {avg:.1f}/100 (RAG readiness)")
-                self._log(f"  Phase 4 features detected:")
-                self._log(
-                    f"    • Footnotes: {validation_summary['p4_features']['footnotes_found']}/{validation_summary['total_validated']} reports"
-                )
-                self._log(
-                    f"    • Box elements: {validation_summary['p4_features']['boxes_detected']}/{validation_summary['total_validated']} reports"
-                )
-                self._log(
-                    f"    • Executive summaries: {validation_summary['p4_features']['exec_summaries_parsed']}/{validation_summary['total_validated']} reports"
-                )
-                self._log(
-                    f"    • Visual registries: {validation_summary['p4_features']['visual_assets_registered']}/{validation_summary['total_validated']} reports"
-                )
+    @staticmethod
+    def _pdf_for_checks(task) -> Optional[str]:
+        """The PDF layout and extraction read: the OCR'd copy when there is one."""
+        ocred = getattr(task, "ocred_pdf_path", None)
+        if ocred and Path(ocred).exists():
+            return ocred
+        return task.local_pdf_path
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 10a: OVERVIEW & SUMMARY GENERATION
@@ -1630,9 +1611,10 @@ class PipelineOrchestrator:
         ]
         if not failures:
             return
-        manifest_service = AssemblyService(output_dir="data/processed")
+        manifest_service = AssemblyService(output_dir="data/processed", run_id=self.run_id)
         for phase, task, err in failures:
-            moved = manifest_service.mark_failed(task.report_id, phase, str(err))
+            tier = (getattr(task, "initial_metadata", None) or {}).get("government_body_type")
+            moved = manifest_service.mark_failed(task.report_id, phase, str(err), tier=tier)
             self.quarantined_files.extend(p[: -len(".stale")] for p in moved)
         self._log(f"Manifest: marked {len(failures)} failed report(s)", force=True)
 
@@ -1913,10 +1895,12 @@ class PipelineOrchestrator:
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
             "phase10_losses": self.state.phase10_losses,
-            # The workflow deletes exactly these objects from GCS processed/
+            # The workflow moves exactly these objects from GCS processed/ to quarantine/<run_id>/
             "quarantined_files": self.quarantined_files,
             "report_status": statuses,
             "red_flags": self.state.trace_emitter.get_red_flags(),
+            # report_id -> {status, fail, warn, word_recall, number_recall} from the preflight checks
+            "quality": self.quality_summaries,
             "gemini_usage": log_usage_summary(),
         }
         path = Path("logs") / f"run_summary_{self.run_id}.json"

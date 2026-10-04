@@ -120,6 +120,21 @@ jobs:
           echo "Failed to connect to VM"
           exit 1
 
+      # A second run would wipe the data directory and overwrite the scripts of the
+      # active one; the VM must not be stopped by this job either
+      - name: Refuse to start while a run is active
+        id: guard
+        run: |
+          ACTIVE=$(gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='if pgrep -f "[r]un_detached.sh" >/dev/null || [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then echo busy; else echo idle; fi' | tail -1)
+          if [ "${ACTIVE}" != "idle" ]; then
+            echo "busy=true" >> $GITHUB_OUTPUT
+            echo "::error::A parsing run is already active on ${{ env.VM_NAME }} (check: ${ACTIVE}). Wait for it to finish."
+            exit 1
+          fi
+
       - name: Create and copy run script
         run: |
           # Create the script locally
@@ -158,6 +173,13 @@ jobs:
           echo "DOCKER_CONFIG: ${DOCKER_CONFIG}"
           echo ""
 
+          # Never run beside another parsing container: the wipe below would delete its data
+          if [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then
+            echo "ERROR: a parsing container is already running on this VM"
+            docker ps --filter name=cag-parsing
+            exit 14
+          fi
+
           # Use /var/tmp for Container-Optimized OS (root is read-only)
           WORK_DIR=/var/tmp/cag
           # Start from the GCS state every run: anything deleted or quarantined in GCS
@@ -167,7 +189,7 @@ jobs:
           echo "Setting up work directory: ${WORK_DIR}"
           mkdir -p ${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
           mkdir -p ${WORK_DIR}/data/processed/ocred
-          mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
+          mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction}
           mkdir -p ${WORK_DIR}/data/extraction_images/{tables,charts}
           mkdir -p ${WORK_DIR}/logs/traces/{union,state,local_body}
 
@@ -253,8 +275,8 @@ jobs:
           fi
 
           echo "Uploading results to GCS..."
-          # Quarantined *.stale files stay on the VM
-          run_gsutil -m rsync -r -x '.*\.stale$' /workspace/data/processed gs://${DATA_BUCKET}/processed/
+          # Quarantined *.stale files and Phase 8 working files (*.working) stay on the VM
+          run_gsutil -m rsync -r -x '.*\.stale$|.*\.working$' /workspace/data/processed gs://${DATA_BUCKET}/processed/
           run_gsutil -m rsync -r /workspace/data/raw gs://${DATA_BUCKET}/raw/
           run_gsutil -m rsync -r /workspace/data/batch_jobs gs://${DATA_BUCKET}/batch_jobs/
           run_gsutil -m rsync -r /workspace/data/extraction_images gs://${DATA_BUCKET}/extraction_images/ 2>/dev/null || true
@@ -266,7 +288,8 @@ jobs:
           run_gsutil -m rsync -r /workspace/data/dead_letter_queue gs://${DATA_BUCKET}/dead_letter_queue/ 2>/dev/null || true
 
           # A report that failed this run has its previous output quarantined locally
-          # (renamed *.stale); remove the original from GCS so the API stops serving it
+          # (renamed *.stale); move the GCS original to quarantine/<run_id>/ so the API
+          # stops serving it
           # Read the list with the parsing image (the gcloud image has no Python)
           if ! QUARANTINED=$(docker run --rm --entrypoint python3 -v ${WORK_DIR}:/workspace ${PARSING_IMAGE} -c '
           import json, pathlib
@@ -274,14 +297,14 @@ jobs:
           for f in (json.loads(s.read_text()).get("quarantined_files") or []) if s.exists() else []:
               print(f)
           '); then
-            echo "ERROR: could not read the run summary; quarantined outputs were not removed from GCS"
+            echo "ERROR: could not read the run summary; quarantined outputs were not moved in GCS"
             QUARANTINED=""
             # Keep the pipeline's own code; only a clean run is turned into a failure
             if [ ${PIPELINE_RC} -eq 0 ]; then PIPELINE_RC=13; fi
           fi
           for f in ${QUARANTINED}; do
-            echo "Removing stale output from GCS: processed/${f}"
-            run_gsutil -q rm "gs://${DATA_BUCKET}/processed/${f}" || echo "  (not in GCS)"
+            echo "Quarantining stale output in GCS: processed/${f} -> quarantine/${RUN_ID}/processed/${f}"
+            run_gsutil -q mv "gs://${DATA_BUCKET}/processed/${f}" "gs://${DATA_BUCKET}/quarantine/${RUN_ID}/processed/${f}" || echo "  (not in GCS)"
           done
 
           echo ""
@@ -449,7 +472,7 @@ jobs:
 
       # Skipped while the detached pipeline is still running (the VM powers itself off)
       - name: Stop Parsing VM
-        if: ${{ always() && !inputs.keep_vm_running && steps.pipeline.outputs.finished != 'false' }}
+        if: ${{ always() && !inputs.keep_vm_running && steps.guard.outputs.busy != 'true' && steps.pipeline.outputs.finished != 'false' }}
         run: |
           echo "Stopping VM to save costs..."
           gcloud compute instances stop ${{ env.VM_NAME }} \

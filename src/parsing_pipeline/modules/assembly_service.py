@@ -8,12 +8,19 @@ UPDATED: Added report_year extraction for RAG pipeline compatibility.
 import logging
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from src.core.data_contracts import DocumentTask, ParentChunk, ChildChunk
+from src.core.processed_manifest import TIERS, load_report_entries, tier_manifest_path
+
+# Phase 8 writes {report_id}_chunks.json.working; Phase 9 writes the final
+# {report_id}_chunks.json. A run that stops in between never leaves a final file
+# without enrichment, and the workflows do not upload working files.
+WORKING_SUFFIX = ".working"
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +34,7 @@ class AssemblyService:
     2. Resolve logical page numbers from page_map
     3. Build complete hierarchy objects
     4. Serialize to Phase 2-ready JSON format
-    5. Write output files and maintain corpus manifest
+    5. Write the Phase 8 working file and maintain the per-tier manifests
 
     UPDATED: Now extracts report_year as integer for RAG filtering.
     """
@@ -52,38 +59,45 @@ class AssemblyService:
         re.compile(r"^-+$"),
     ]
 
-    def __init__(self, output_dir: str = "data/processed", trace_emitter=None):
+    def __init__(
+        self,
+        output_dir: str = "data/processed",
+        trace_emitter=None,
+        run_id: Optional[str] = None,
+    ):
         """
         Initialize the assembly service.
 
         Args:
             output_dir: Directory for output JSON files
             trace_emitter: Optional TraceEmitter for Phase 8 instrumentation
+            run_id: Pipeline run recorded in manifest entries (default: $RUN_ID)
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._trace_emitter = trace_emitter
+        self.run_id = run_id or os.environ.get("RUN_ID")
 
-        # Manifest file tracks all assembled documents
-        self.manifest_path = self.output_dir / "manifest.json"
-        self.manifest = self._load_or_create_manifest()
+        # One manifest per tier (processed/{tier}/manifest.json), loaded on first use
+        self._manifests: Dict[str, Dict[str, Any]] = {}
 
         logger.info(f"AssemblyService initialized. Output: {self.output_dir}")
 
-    def _load_or_create_manifest(self) -> Dict[str, Any]:
-        """Load existing manifest or create new one."""
-        if self.manifest_path.exists():
-            with open(self.manifest_path, "r") as f:
-                return json.load(f)
-        else:
-            return {
-                "corpus_version": "1.0",
-                "generation_timestamp": datetime.utcnow().isoformat(),
-                "total_reports": 0,
-                "total_parent_chunks": 0,
-                "total_child_chunks": 0,
-                "reports": [],
-            }
+    def _manifest(self, tier: str) -> Dict[str, Any]:
+        """Load a tier's manifest, or start a new one."""
+        if tier not in self._manifests:
+            path = tier_manifest_path(self.output_dir, tier)
+            if path.exists():
+                with open(path, "r") as f:
+                    self._manifests[tier] = json.load(f)
+            else:
+                self._manifests[tier] = {
+                    "corpus_version": "2.0",
+                    "government_body_type": tier,
+                    "created_at": datetime.utcnow().isoformat(),
+                    "reports": [],
+                }
+        return self._manifests[tier]
 
     def _extract_report_year(self, task: DocumentTask) -> Optional[int]:
         """
@@ -179,11 +193,11 @@ class AssemblyService:
             task: Fully processed DocumentTask
             parent_chunks: List of parent chunks
             child_chunks: List of child chunks
-            skip_manifest: If True, skip updating corpus manifest (for parallel execution)
+            skip_manifest: If True, do not record the report in the tier manifest
             trace_emitter: Optional TraceEmitter for Phase 8 instrumentation
 
         Returns:
-            Path to output JSON file
+            Path to the working JSON file; Phase 9 writes the final file from it
         """
         emitter = trace_emitter or self._trace_emitter
         logger.info(f"Assembling document: {task.report_id}")
@@ -285,12 +299,19 @@ class AssemblyService:
         government_body_type = task.initial_metadata.get("government_body_type", "union")
         tier_dir = self.output_dir / government_body_type
         tier_dir.mkdir(parents=True, exist_ok=True)
-        output_path = tier_dir / f"{task.report_id}_chunks.json"
+        output_path = tier_dir / f"{task.report_id}_chunks.json{WORKING_SUFFIX}"
+        assembled_data["report_metadata"]["processing_status"] = "assembled"
         self._write_json(assembled_data, output_path)
 
-        # Update manifest (skipped in parallel mode - done in main process)
         if not skip_manifest:
-            self._update_manifest(task.report_id, parent_chunks, child_chunks, output_path)
+            self._update_manifest(
+                task.report_id,
+                government_body_type,
+                status="assembled",
+                parent_chunks=len(parent_chunks),
+                child_chunks=len(child_chunks),
+                output_path=output_path,
+            )
 
         logger.info(f"Assembly complete: {output_path}")
 
@@ -903,83 +924,85 @@ class AssemblyService:
             # FIX: Added default=json_serial to handle Pandas Timestamps
             json.dump(data, f, indent=2, ensure_ascii=False, default=json_serial)
 
+    @staticmethod
+    def final_output_path(working_path) -> Path:
+        """The final *_chunks.json for a Phase 8 working file."""
+        working_path = Path(working_path)
+        name = working_path.name
+        if name.endswith(WORKING_SUFFIX):
+            name = name[: -len(WORKING_SUFFIX)]
+        return working_path.with_name(name)
+
+    def _entry(self, report_id: str, tier: str) -> Dict[str, Any]:
+        """A report's entry in its tier manifest, created if missing."""
+        reports = self._manifest(tier)["reports"]
+        entry = next((r for r in reports if r["report_id"] == report_id), None)
+        if entry is None:
+            entry = {"report_id": report_id, "parent_chunks": 0, "child_chunks": 0, "output_path": None}
+            reports.append(entry)
+        return entry
+
     def _update_manifest(
         self,
         report_id: str,
-        parent_chunks: List[ParentChunk],
-        child_chunks: List[ChildChunk],
-        output_path: Path,
-    ) -> None:
-        """
-        Update corpus-level manifest with document stats.
+        tier: str,
+        status: str,
+        output_path: Optional[Path] = None,
+        **fields: Any,
+    ) -> Dict[str, Any]:
+        """Record a report's status in its tier manifest and save it."""
+        entry = self._entry(report_id, tier)
+        for stale_key in ("failed_phase", "error", "stale_output", "quarantined_files"):
+            entry.pop(stale_key, None)
+        entry.update(fields)
+        entry.update(
+            {
+                "status": status,
+                "government_body_type": tier,
+                "run_id": self.run_id,
+                "last_updated": datetime.utcnow().isoformat(),
+            }
+        )
+        if output_path is not None:
+            # Relative to processed/, so a consumer can locate the file
+            entry["output_path"] = str(self.final_output_path(output_path).relative_to(self.output_dir))
+        self._save_manifest(tier)
+        return entry
 
-        Args:
-            report_id: Report identifier
-            parent_chunks: List of parent chunks
-            child_chunks: List of child chunks
-            output_path: Path to output file
-        """
-        # Check if report already exists in manifest
-        existing_reports = [
-            r for r in self.manifest["reports"] if r["report_id"] == report_id
-        ]
+    def mark_completed(self, report_id: str, tier: str, output_path, **fields: Any) -> Dict[str, Any]:
+        """Phase 9 wrote the final output: the report is complete."""
+        return self._update_manifest(report_id, tier, "completed", output_path=Path(output_path), **fields)
 
-        if existing_reports:
-            # Update existing entry
-            for report in self.manifest["reports"]:
-                if report["report_id"] == report_id:
-                    for stale_key in ("failed_phase", "error", "stale_output"):
-                        report.pop(stale_key, None)
-                    report.update(
-                        {
-                            "status": "completed",
-                            "parent_chunks": len(parent_chunks),
-                            "child_chunks": len(child_chunks),
-                            "output_file": output_path.name,
-                            "last_updated": datetime.utcnow().isoformat(),
-                        }
-                    )
-        else:
-            # Add new entry
-            self.manifest["reports"].append(
-                {
-                    "report_id": report_id,
-                    "status": "completed",
-                    "parent_chunks": len(parent_chunks),
-                    "child_chunks": len(child_chunks),
-                    "output_file": output_path.name,
-                    "last_updated": datetime.utcnow().isoformat(),
-                }
-            )
-
-        self._save_manifest()
-
-    def mark_failed(self, report_id: str, phase: str, error: str) -> List[str]:
+    def mark_failed(
+        self, report_id: str, phase: str, error: str, tier: Optional[str] = None
+    ) -> List[str]:
         """
         Record that a report failed in this run.
 
-        The manifest is carried over between runs, so without this a report that
-        fails now keeps an old "completed" entry pointing at a previous run's output.
+        Output from an earlier run is renamed *.stale so the indexer and API stop
+        serving it; the entry says whether such output existed.
         """
-        now = datetime.utcnow().isoformat()
-        entry = next((r for r in self.manifest["reports"] if r["report_id"] == report_id), None)
-        if entry is None:
-            entry = {"report_id": report_id, "parent_chunks": 0, "child_chunks": 0, "output_file": None}
-            self.manifest["reports"].append(entry)
+        previous = load_report_entries(self.output_dir).get(report_id, {})
+        tier = tier or previous.get("government_body_type") or self._tier_of_outputs(report_id) or "union"
         quarantined = self._quarantine_outputs(report_id)
-        entry.update(
-            {
-                "status": "failed",
-                "failed_phase": phase,
-                "error": error[:500],
-                # output_file (if any) is from the last successful run, not this one
-                "stale_output": entry.get("output_file") is not None or bool(quarantined),
-                "quarantined_files": quarantined,
-                "last_updated": now,
-            }
+        had_output = bool(previous.get("output_path") or previous.get("output_file"))
+        self._update_manifest(
+            report_id,
+            tier,
+            "failed",
+            failed_phase=phase,
+            error=error[:500],
+            # output_path (if any) is from the last successful run, not this one
+            stale_output=had_output or bool(quarantined),
+            quarantined_files=quarantined,
         )
-        self._save_manifest()
         return quarantined
+
+    def _tier_of_outputs(self, report_id: str) -> Optional[str]:
+        for tier in TIERS:
+            if any((self.output_dir / tier).glob(f"{report_id}_*.json*")):
+                return tier
+        return None
 
     def _quarantine_outputs(self, report_id: str) -> List[str]:
         """
@@ -998,32 +1021,29 @@ class AssemblyService:
             logger.warning(f"Quarantined stale output for failed report {report_id}: {moved}")
         return moved
 
-    def _save_manifest(self) -> None:
-        """Recompute totals over completed reports and write the manifest."""
-        reports = self.manifest["reports"]
+    def _save_manifest(self, tier: str) -> None:
+        """Recompute totals over completed reports and write the tier manifest."""
+        manifest = self._manifest(tier)
+        reports = manifest["reports"]
         completed = [r for r in reports if r.get("status") == "completed"]
-        self.manifest["total_reports"] = len(reports)
-        self.manifest["completed_reports"] = len(completed)
-        self.manifest["failed_reports"] = len(reports) - len(completed)
-        self.manifest["total_parent_chunks"] = sum(r["parent_chunks"] for r in completed)
-        self.manifest["total_child_chunks"] = sum(r["child_chunks"] for r in completed)
-        self.manifest["last_updated"] = datetime.utcnow().isoformat()
-        self._write_json(self.manifest, self.manifest_path)
+        manifest["total_reports"] = len(reports)
+        manifest["completed_reports"] = len(completed)
+        manifest["failed_reports"] = sum(1 for r in reports if r.get("status") == "failed")
+        manifest["total_parent_chunks"] = sum(r.get("parent_chunks", 0) for r in completed)
+        manifest["total_child_chunks"] = sum(r.get("child_chunks", 0) for r in completed)
+        manifest["last_updated"] = datetime.utcnow().isoformat()
+        path = tier_manifest_path(self.output_dir, tier)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_json(manifest, path)
 
     def get_corpus_stats(self) -> Dict[str, Any]:
-        """
-        Get current corpus statistics from manifest.
-
-        Returns:
-            Dictionary with corpus-level statistics
-        """
+        """Statistics over the tier manifests this service has written."""
+        reports = [r for m in self._manifests.values() for r in m["reports"]]
         return {
-            "total_reports": self.manifest["total_reports"],
-            "total_parent_chunks": self.manifest["total_parent_chunks"],
-            "total_child_chunks": self.manifest["total_child_chunks"],
-            "reports_completed": len(
-                [r for r in self.manifest["reports"] if r["status"] == "completed"]
-            ),
+            "total_reports": len(reports),
+            "total_parent_chunks": sum(r.get("parent_chunks", 0) for r in reports),
+            "total_child_chunks": sum(r.get("child_chunks", 0) for r in reports),
+            "reports_completed": sum(1 for r in reports if r.get("status") == "completed"),
         }
 
 

@@ -10,7 +10,8 @@
 # - Always runs the container with --gpus all and FAILS if the host GPU or
 #   torch.cuda inside the image is unavailable (never silently falls back to CPU)
 # - Results go to gs://<bucket>/<output_prefix>/..., never to production paths;
-#   processed/manifest.json is never uploaded
+#   the legacy processed/manifest.json is never uploaded
+# - Refuses to start while another run is active on the VM
 # - Same detached design as the CPU workflow: the VM enforces max_hours,
 #   streams its log + status to gs://<bucket>/runs-gpu/<run_id>/ and powers
 #   itself off; this job polls until done or GitHub's 6h cap nears
@@ -170,6 +171,21 @@ jobs:
           echo "Failed to connect to VM"
           exit 1
 
+      # A second run would wipe the data directory and overwrite the scripts of the
+      # active one; the VM must not be stopped by this job either
+      - name: Refuse to start while a run is active
+        id: guard
+        run: |
+          ACTIVE=$(gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='if pgrep -f "[r]un_detached.sh" >/dev/null || [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then echo busy; else echo idle; fi' | tail -1)
+          if [ "${ACTIVE}" != "idle" ]; then
+            echo "busy=true" >> $GITHUB_OUTPUT
+            echo "::error::A parsing run is already active on ${{ env.VM_NAME }} (check: ${ACTIVE}). Wait for it to finish."
+            exit 1
+          fi
+
       - name: Prepare GPU host
         run: |
           # Idempotent: verifies the driver and installs Docker / NVIDIA runtime only if missing
@@ -216,6 +232,13 @@ jobs:
           echo "OUTPUT: ${GCS_OUT}/"
           echo ""
 
+          # Never run beside another parsing container: the wipe below would delete its data
+          if [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then
+            echo "ERROR: a parsing container is already running on this VM"
+            docker ps --filter name=cag-parsing
+            exit 14
+          fi
+
           # Fail fast: a GPU run must never silently fall back to CPU
           if ! command -v nvidia-smi &> /dev/null || ! nvidia-smi &> /dev/null; then
             echo "ERROR: nvidia-smi not available on the host; refusing to run on CPU"
@@ -230,7 +253,7 @@ jobs:
           sudo -n rm -rf "${WORK_DIR:?}/data" "${WORK_DIR:?}/logs"
           mkdir -p ${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
           mkdir -p ${WORK_DIR}/data/processed/ocred
-          mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
+          mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction}
           mkdir -p ${WORK_DIR}/data/extraction_images/{tables,charts}
           mkdir -p ${WORK_DIR}/logs/traces/{union,state,local_body}
 
@@ -314,11 +337,12 @@ jobs:
             docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
           fi
 
-          # Results go under the output prefix only. processed/manifest.json is
-          # excluded (the CPU run owns it; last writer would win). raw/ is not
-          # uploaded: it was only read from the shared cache.
+          # Results go under the output prefix only. The legacy processed/manifest.json
+          # is excluded (the per-tier manifests replace it); *.stale and Phase 8
+          # working files stay on the VM. raw/ is not uploaded: it was only read from
+          # the shared cache.
           echo "Uploading results to ${GCS_OUT}/ ..."
-          run_gsutil -m rsync -r -x '^manifest\.json$|.*\.stale$' /workspace/data/processed ${GCS_OUT}/processed/
+          run_gsutil -m rsync -r -x '^manifest\.json$|.*\.stale$|.*\.working$' /workspace/data/processed ${GCS_OUT}/processed/
           run_gsutil -m rsync -r /workspace/data/batch_jobs ${GCS_OUT}/batch_jobs/
           run_gsutil -m rsync -r /workspace/data/extraction_images ${GCS_OUT}/extraction_images/ 2>/dev/null || true
           run_gsutil -m rsync -r /workspace/data/entity_graph ${GCS_OUT}/entity_graph/ 2>/dev/null || true
@@ -329,7 +353,8 @@ jobs:
           run_gsutil -m rsync -r /workspace/data/dead_letter_queue ${GCS_OUT}/dead_letter_queue/ 2>/dev/null || true
 
           # A report that failed this run has its previous output quarantined locally
-          # (renamed *.stale); remove the original from GCS so it is not served
+          # (renamed *.stale); move the GCS original to quarantine/<run_id>/ under the
+          # output prefix so it is not served
           # Read the list with the parsing image (the gcloud image has no Python)
           if ! QUARANTINED=$(docker run --rm --entrypoint python3 -v ${WORK_DIR}:/workspace ${PARSING_IMAGE} -c '
           import json, pathlib
@@ -337,14 +362,14 @@ jobs:
           for f in (json.loads(s.read_text()).get("quarantined_files") or []) if s.exists() else []:
               print(f)
           '); then
-            echo "ERROR: could not read the run summary; quarantined outputs were not removed from GCS"
+            echo "ERROR: could not read the run summary; quarantined outputs were not moved in GCS"
             QUARANTINED=""
             # Keep the pipeline's own code; only a clean run is turned into a failure
             if [ ${PIPELINE_RC} -eq 0 ]; then PIPELINE_RC=13; fi
           fi
           for f in ${QUARANTINED}; do
-            echo "Removing stale output from GCS: ${OUTPUT_PREFIX}/processed/${f}"
-            run_gsutil -q rm "${GCS_OUT}/processed/${f}" || echo "  (not in GCS)"
+            echo "Quarantining stale output in GCS: ${OUTPUT_PREFIX}/processed/${f} -> ${OUTPUT_PREFIX}/quarantine/${RUN_ID}/processed/${f}"
+            run_gsutil -q mv "${GCS_OUT}/processed/${f}" "${GCS_OUT}/quarantine/${RUN_ID}/processed/${f}" || echo "  (not in GCS)"
           done
 
           echo ""
@@ -513,7 +538,7 @@ jobs:
 
       # Skipped while the detached pipeline is still running (the VM powers itself off)
       - name: Stop GPU VM
-        if: ${{ always() && !inputs.keep_vm_running && steps.pipeline.outputs.finished != 'false' }}
+        if: ${{ always() && !inputs.keep_vm_running && steps.guard.outputs.busy != 'true' && steps.pipeline.outputs.finished != 'false' }}
         run: |
           echo "Stopping GPU VM to save costs..."
           gcloud compute instances stop ${{ env.VM_NAME }} \
