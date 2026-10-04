@@ -336,6 +336,26 @@ class SemanticEnrichmentConfig:
 
 
 @dataclass
+class GeminiConfig:
+    """Shared limiter for every Gemini call in the run (src/core/gemini_limiter.py)."""
+
+    max_concurrency: int = 16
+    """Requests in flight across the run; halves on a 429 and grows back on success."""
+
+    phase9_concurrency: int = 4
+    phase10a_concurrency: int = 8
+    phase10b_concurrency: int = 8
+    """Requests in flight per phase, so one phase cannot take every slot."""
+
+    phase10a_deadline_minutes: int = 180
+    phase10b_deadline_minutes: int = 180
+    """
+    Time budget per phase. Requests after it fail fast and count as Phase 10
+    losses instead of running into the workflow's max_hours. 0 = no budget.
+    """
+
+
+@dataclass
 class InstrumentationConfig:
     """Trace instrumentation configuration for pipeline observability."""
 
@@ -374,6 +394,7 @@ class ParsingPipelineConfig:
     content_extraction: ContentExtractionConfig = field(default_factory=ContentExtractionConfig)
     chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
     semantic_enrichment: SemanticEnrichmentConfig = field(default_factory=SemanticEnrichmentConfig)
+    gemini: GeminiConfig = field(default_factory=GeminiConfig)
     instrumentation: InstrumentationConfig = field(default_factory=InstrumentationConfig)
 
     @classmethod

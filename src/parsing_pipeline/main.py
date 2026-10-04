@@ -62,6 +62,7 @@ Content Extraction → Chunking → Assembly → Semantic Enrichment → Overvie
 """
 
 import os
+from contextlib import contextmanager
 
 # DISABLING TOKENIZERS PARALLELISM
 # Must be set before transformers/tokenizers are imported
@@ -202,6 +203,7 @@ class PipelineOrchestrator:
     async def run(self) -> int:
         """Run the complete pipeline with phase skipping support. Returns the process exit code."""
         reset_usage()
+        self._configure_gemini()
         self._print_header()
 
         # Phases 1-3 with smart caching
@@ -219,11 +221,13 @@ class PipelineOrchestrator:
 
         # Phase 10a: Overview & Summary (optional)
         if "10a" not in self.skip:
-            self._phase_overview_summary()
+            with self._gemini_budget("phase10a"):
+                self._phase_overview_summary()
 
         # Phase 10b: Visual Extraction (optional)
         if "10b" not in self.skip:
-            await self._phase_visual_extraction()
+            with self._gemini_budget("phase10b"):
+                await self._phase_visual_extraction()
 
         # Phase 10c: Visual Post-processing (optional)
         if "10c" not in self.skip:
@@ -1201,6 +1205,44 @@ class PipelineOrchestrator:
             len(self.state.assembly_complete),
         )
 
+    def _configure_gemini(self) -> None:
+        """One limiter for every Gemini call in this run (Phase 9 validation, 10a, 10b)."""
+        from src.core.gemini_limiter import configure_limiter
+        from src.parsing_pipeline.config import get_config
+
+        cfg = get_config().gemini
+        configure_limiter(
+            max_concurrency=cfg.max_concurrency,
+            group_caps={
+                "phase9": cfg.phase9_concurrency,
+                "phase10a": cfg.phase10a_concurrency,
+                "phase10b": cfg.phase10b_concurrency,
+            },
+        )
+
+    @contextmanager
+    def _gemini_budget(self, group: str):
+        """Apply the phase's time budget to its Gemini calls while the phase runs."""
+        from src.core.gemini_limiter import get_limiter
+        from src.parsing_pipeline.config import get_config
+
+        minutes = getattr(get_config().gemini, f"{group}_deadline_minutes", 0)
+        limiter = get_limiter()
+        limiter.set_deadline(group, minutes * 60 if minutes else None)
+        try:
+            yield
+        finally:
+            limiter.set_deadline(group, None)
+
+    @staticmethod
+    def _limiter_stats() -> dict:
+        """429s seen, the lowest concurrency reached and time spent waiting for a slot."""
+        from src.core.gemini_limiter import get_limiter
+
+        stats = dict(get_limiter().stats)
+        stats["wait_s"] = round(stats["wait_s"], 1)
+        return stats
+
     def _phases_completed(self) -> List[str]:
         """Phases that ran for a report reaching the end of Phase 9."""
         phases = ["1", "2", "3", "4", "5"]
@@ -1750,13 +1792,14 @@ class PipelineOrchestrator:
         """Count summary variants and overviews that were not produced, per report."""
         from src.batch_pipeline.prompts.summary_variants import VARIANTS
 
-        losses = self.state.phase10_losses.setdefault("10a", {})
+        losses = {}
         for report_id in report_ids:
             lost = {}
             path = service.get_summary_output_path(report_id)
             if path.exists():
-                data = json.loads(path.read_text())
-                missing = [v for v in VARIANTS if v not in (data.get("variants") or {})]
+                variants = json.loads(path.read_text()).get("variants") or {}
+                # A stale variant is an earlier run's text kept in place of a lost one
+                missing = [v for v in VARIANTS if v not in variants or variants[v].get("stale")]
             else:
                 missing = list(VARIANTS)
             if missing:
@@ -1772,6 +1815,9 @@ class PipelineOrchestrator:
                     lost["section_summaries"] = stats["sections_failed"]
             if lost:
                 losses[report_id] = lost
+        # Only real losses: an empty entry would still make the run partial
+        if losses:
+            self.state.phase10_losses.setdefault("10a", {}).update(losses)
         if merge_failed:
             self.state.phase10_losses["10a_overview_merge_failed"] = merge_failed
 
@@ -1838,6 +1884,7 @@ class PipelineOrchestrator:
             # report_id -> {status, fail, warn, word_recall, number_recall} from the preflight checks
             "quality": self.quality_summaries,
             "gemini_usage": log_usage_summary(),
+            "gemini_limiter": self._limiter_stats(),
         }
         path = Path("logs") / f"run_summary_{self.run_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)

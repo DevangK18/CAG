@@ -93,6 +93,11 @@ _TRANSIENT_MARKERS = (
 )
 
 
+def is_transient(error) -> bool:
+    """A busy model, timeout or empty reply: worth another attempt later."""
+    return any(marker in str(error) for marker in _TRANSIENT_MARKERS)
+
+
 def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = None, **kwargs):
     """
     client.models.generate_content with exponential backoff on transient errors.
@@ -102,6 +107,10 @@ def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = 
     not a fixed quota (gemini-3.8-flash has no per-project limit to raise) and
     succeeds on retry. Busy spells can last several minutes, so the retry window
     is ~5 min. Empty responses are retried too.
+
+    Every attempt takes a slot from the process-wide limiter (gemini_limiter): a
+    429 here lowers concurrency and cools down every caller, and the group's
+    deadline (the tag prefix, e.g. "phase10b") stops further attempts.
 
     Args:
         client: genai.Client to use (default: shared Agent Platform client)
@@ -121,14 +130,23 @@ def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = 
     """
     import random
 
+    from src.core.gemini_limiter import GeminiDeadlineExceeded, get_limiter, group_for_tag, is_throttle
+
     tag = tag or _caller_module()
     model = kwargs.get("model")
     tokens = _empty_tokens()
     started = time.monotonic()
     client = client or get_gemini_client()
+    limiter = get_limiter()
+    group = group_for_tag(tag)
     for attempt in range(max_retries + 1):
         try:
-            response = client.models.generate_content(**kwargs)
+            with limiter.slot(group) as slot:
+                try:
+                    response = client.models.generate_content(**kwargs)
+                except Exception as e:
+                    slot["throttled"] = is_throttle(e)
+                    raise
             _add_tokens(tokens, _tokens_from_response(response))
             if not response.text:
                 finish_reason = (
@@ -142,14 +160,18 @@ def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = 
                     latency_s=time.monotonic() - started, success=True)
             return response
         except Exception as e:
-            transient = any(marker in str(e) for marker in _TRANSIENT_MARKERS)
-            if not transient or attempt == max_retries:
+            if not is_transient(e) or attempt == max_retries:
                 _record(model, tag, tokens, retries=attempt,
                         latency_s=time.monotonic() - started, success=False, error=e)
                 raise
             delay = min(5 * 2 ** attempt, 60) * random.uniform(0.8, 1.2)
             logger.warning(f"Gemini call failed ({e}), retry {attempt + 1}/{max_retries} in {delay:.0f}s")
-            time.sleep(delay)
+            try:
+                limiter.backoff(delay, group)
+            except GeminiDeadlineExceeded as deadline_error:
+                _record(model, tag, tokens, retries=attempt,
+                        latency_s=time.monotonic() - started, success=False, error=deadline_error)
+                raise deadline_error from e
 
 
 def get_client_mode() -> Optional[str]:

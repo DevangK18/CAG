@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from typing import Optional, List
 from enum import Enum
 
+from src.core.phase10_models import Phase10ModelConfig
+
 # Load environment variables
 try:
     from dotenv import load_dotenv
@@ -361,9 +363,9 @@ class HierarchicalConfig:
 
     enabled: bool = True
 
-    # Models for summary generation - Gemini for GCP credit billing
-    chapter_model: str = "gemini-3.5-flash-lite"
-    section_model: str = "gemini-3.5-flash-lite"
+    # Models for summary generation come from Phase10ModelConfig
+    chapter_model: str = field(default_factory=lambda: Phase10ModelConfig().chapter_summary)
+    section_model: str = field(default_factory=lambda: Phase10ModelConfig().section_summary)
 
     # Max tokens for summaries
     chapter_max_tokens: int = 500  # 3-5 sentences
