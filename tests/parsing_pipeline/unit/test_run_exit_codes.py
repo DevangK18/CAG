@@ -191,3 +191,50 @@ def test_lost_chapter_and_section_summaries_counted(tmp_path, monkeypatch):
     orch._record_phase10a_losses(service, ["A"], merge_failed=0)
     assert orch.state.phase10_losses["10a"]["A"] == {"chapter_summaries": 2, "section_summaries": 5}
     assert orch._compute_exit_code() == EXIT_PARTIAL
+
+
+def test_phase10a_orchestration_runs_to_completion(tmp_path, monkeypatch):
+    """Drives _phase_overview_summary with a fake BatchService (no Gemini calls)."""
+    import src.batch_pipeline.batch_service as bs
+    import src.batch_pipeline.process_results as pr
+    from src.batch_pipeline.prompts.summary_variants import VARIANTS
+
+    orch = _orch(tmp_path, monkeypatch)
+    chunks = tmp_path / "A_chunks.json"
+    chunks.write_text("{}")
+    (task,) = _complete(orch, "A")
+    task.assembled_output_path = str(chunks)
+
+    class FakeService:
+        def __init__(self, trace_emitter=None):
+            pass
+
+        def submit_overview_batch(self, files):
+            return "gemini_sync_1"
+
+        submit_summary_batch = submit_hierarchical_batch = submit_overview_batch
+
+        def create_job_tracker(self, **kwargs):
+            path = tmp_path / "tracker.json"
+            path.write_text(json.dumps(kwargs))
+            return path
+
+        def get_summary_output_path(self, rid):
+            path = tmp_path / f"{rid}_sum.json"
+            path.write_text(json.dumps({"variants": {v: {} for v in VARIANTS}}))
+            return path
+
+        def get_overview_output_path(self, rid):
+            path = tmp_path / f"{rid}_ov.json"
+            path.write_text("{}")
+            return path
+
+        def get_hierarchical_output_path(self, rid):
+            return tmp_path / "missing.json"
+
+    monkeypatch.setattr(bs, "BatchService", FakeService)
+    monkeypatch.setattr(pr, "build_final_overviews", lambda service, ids: (len(ids), 0))
+    orch._phase_overview_summary()
+    assert orch.state.phase10a_completed
+    assert json.loads((tmp_path / "tracker.json").read_text())["status"] == "completed"
+    assert not orch.state.phase10_losses.get("10a")

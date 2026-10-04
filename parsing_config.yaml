@@ -47,17 +47,6 @@ ocr:
 # PHASE 4: DOCUMENT SCAFFOLDING (TOC EXTRACTION)
 # ==============================================================================
 scaffolding:
-  # Minimum TOC entries to accept embedded TOC
-  # Raising this: Stricter validation, may reject short TOCs
-  # Lowering this: Accept shorter TOCs, risk of false positives
-  embedded_toc_min_entries: 3
-
-  # Alert if TOC rejection rate exceeds this fraction (0.25 = 25%)
-  toc_rejection_alert_threshold: 0.25
-
-  # Minimum quality score (0-100) to accept a TOC
-  min_toc_quality_score: 20
-
   # Bookmark quality scoring (catches garbage PDF-merger bookmarks)
   # Minimum score (0-1 range, multiplied by 100) to accept PDF bookmarks
   bookmark_quality_threshold: 0.6
@@ -133,61 +122,11 @@ toc_reconciliation:
   quality_medium_threshold: 40
 
 # ==============================================================================
-# PHASE 5.7: LLM TOC VALIDATION (LAST RESORT)
-# ==============================================================================
-llm_validation:
-  # Enable LLM validation for low-quality TOCs
-  # Set to false to skip (saves ~$0.005-0.01 per report)
-  enabled: true
-
-  # Gemini model: 'gemini-3.8-flash' (cost-efficient, 1M context)
-  model: "gemini-3.8-flash"
-
-  # Max chars of document text to send to LLM
-  # 8000 chars covers first ~15 pages
-  max_input_chars: 8000
-
-  # Only validate TOCs with quality below this threshold
-  # Higher: More reports validated (higher API costs)
-  # Lower: Only tail cases
-  quality_threshold: 50
-
-  # Max PDF pages to extract text from
-  max_pages_to_extract: 15
-
-# ==============================================================================
 # PHASE 6: CONTENT EXTRACTION (TABLES, TEXT, IMAGES)
 # ==============================================================================
 content_extraction:
   # ============================================================================
-  # PDFMUX INTELLIGENT ROUTING (Option D Hybrid Approach)
-  # ============================================================================
-  # Enable pdfmux for smart PDF routing and self-healing extraction
-  # pdfmux benchmarks: 0.911 TEDS (table accuracy) vs Docling 0.887
-  pdfmux:
-    enabled: false  # Disabled: Legacy 3-tier pipeline extracts more tables
-
-    # Quality level: "fast", "standard", "high"
-    # standard: Best balance of speed and accuracy for CAG reports
-    quality: "standard"
-
-    # Minimum confidence to accept extraction without re-routing
-    # Lower = more permissive, Higher = stricter quality gate
-    min_confidence: 0.85
-
-    # Action when confidence is below threshold
-    # "reroute": Try alternative extractor, "flag": Accept but flag for review
-    on_low_confidence: "reroute"
-
-    # Use pdfmux for table extraction routing (replaces manual tier logic)
-    use_for_tables: true
-
-    # Use pdfmux for full document processing (text + tables + layout)
-    # When false, only uses pdfmux table routing; text extraction uses PyMuPDF
-    use_for_full_document: false
-
-  # ============================================================================
-  # PDFPLUMBER TABLE SETTINGS (Tier 1 - still used by pdfmux internally)
+  # PDFPLUMBER TABLE SETTINGS (Tier 1)
   # ============================================================================
   pdfplumber_snap_tolerance: 5
   pdfplumber_join_tolerance: 5
@@ -216,10 +155,6 @@ chunking:
   # Raising this: Stricter matching, fewer false merges
   # Lowering this: More lenient, risk of merging unrelated tables
   multi_page_table_column_similarity_threshold: 0.8
-
-  # Maximum page range for a single parent chunk
-  # Prevents pathological cases
-  max_parent_chunk_pages: 100
 
   # Longest child chunk; longer tables split by rows (header repeated), text by sentences.
   # The embedding model reads ~2,048 tokens (~4-8K chars) and silently drops the rest.
@@ -254,18 +189,11 @@ semantic_enrichment:
   # P3: Raised from 0.4 to 0.5 - lower confidence findings go to LLM validation
   finding_confidence_threshold: 0.5
 
-  # Minimum monetary value for high severity (₹1 lakh in paise)
-  min_monetary_value_for_high_severity: 10000000
-
 # ==============================================================================
 # TRACE INSTRUMENTATION (DEBUGGING & OBSERVABILITY)
 # ==============================================================================
 instrumentation:
-  # Master switch for trace instrumentation
-  # When false, all TraceEmitter methods are no-ops (zero overhead)
-  # Enable via --trace CLI flag or set to true here
-  enabled: false
-
+  # Tracing is switched on with the --trace CLI flag
   # Directory for trace markdown files
   # Each report generates: {report_id}_trace_{date}.md
   output_dir: "logs/traces"
@@ -288,18 +216,12 @@ instrumentation:
 #    - triage.text_threshold: 100 (fewer OCR operations)
 #    - layout.confidence_threshold: 0.7 (fewer blocks)
 #    - layout.tableformer_mode: "FAST"
-#    - llm_validation.enabled: false (skip API calls)
 #
 # 2. Higher accuracy (slower):
 #    - triage.text_threshold: 200 (more aggressive OCR)
 #    - layout.confidence_threshold: 0.60 (more blocks)
 #    - toc_reconciliation.similarity_threshold: 0.70 (stricter matching)
-#    - llm_validation.quality_threshold: 60 (validate more reports)
 #
-# 3. Cost reduction:
-#    - llm_validation.enabled: false (no API costs)
-#    - llm_validation.quality_threshold: 40 (validate fewer reports)
-#
-# 4. GPU acceleration:
+# 3. GPU acceleration:
 #    - layout.accelerator_device: "mps" (Apple Silicon)
 #    - layout.accelerator_device: "cuda" (NVIDIA GPU)

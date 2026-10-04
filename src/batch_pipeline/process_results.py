@@ -23,9 +23,9 @@ Output Structure:
     └── {report_id}_overview.json (merged final overview)
 
 Usage:
-    python -m services.batch_pipeline.process_results
-    python -m services.batch_pipeline.process_results --job data/batch_jobs/jobs/job_20250131.json
-    python -m services.batch_pipeline.process_results --force
+    python -m src.batch_pipeline.process_results
+    python -m src.batch_pipeline.process_results --job data/batch_jobs/jobs/job_20250131.json
+    python -m src.batch_pipeline.process_results --force
 """
 
 import argparse
@@ -256,150 +256,10 @@ def main():
         action="store_true",
         help="Skip processing summary batch results",
     )
-    parser.add_argument(
-        "--enrichment",
-        action="store_true",
-        help="Process P2-1 enrichment results instead of Phase 10",
-    )
-    parser.add_argument(
-        "--chart-extraction",
-        action="store_true",
-        help="Process P2-2 chart extraction results instead of Phase 10",
-    )
 
     args = parser.parse_args()
 
-    # ENRICHMENT MODE: Process enrichment results
-    if args.enrichment:
-        from .enrichment.enrichment_service import EnrichmentService
-
-        enrichment_service = EnrichmentService()
-
-        # Find enrichment job tracker
-        if args.job:
-            job_id = Path(args.job).stem
-        else:
-            # Get most recent enrichment job
-            job_files = sorted(enrichment_service.enrichment_dir.glob("enrichment_*.json"), reverse=True)
-            job_files = [f for f in job_files if not f.name.endswith("_mapping.json") and not f.name.endswith("_enrichment.json")]
-            job_id = job_files[0].stem if job_files else None
-
-        if not job_id:
-            print("❌ No enrichment job tracker found.")
-            print("   Run 'python -m src.batch_pipeline.submit_jobs --enrichment' first.")
-            sys.exit(1)
-
-        # Load tracker to check status
-        tracker_path = enrichment_service.enrichment_dir / f"{job_id}.json"
-        with open(tracker_path) as f:
-            tracker = json.load(f)
-
-        if tracker["status"] not in ["ready_for_processing", "completed"] and not args.force:
-            print("❌ Enrichment job not ready for processing.")
-            print(f"   Status: {tracker['status']}")
-            print("   Run 'python -m src.batch_pipeline.check_status --enrichment' to check progress.")
-            print("   Or use --force to process anyway.")
-            sys.exit(1)
-
-        print("=" * 60)
-        print("PHASE 2 - P2-1: PROCESS ENRICHMENT RESULTS")
-        print("=" * 60)
-        print(f"\nJob ID: {job_id}")
-        print(f"Status: {tracker['status']}")
-
-        # Process results
-        try:
-            summary = enrichment_service.process_enrichment_results(job_id)
-
-            print("\n" + "=" * 60)
-            print("✅ ENRICHMENT PROCESSING COMPLETE")
-            print("=" * 60)
-            print(f"\nTotal successes: {summary['success']}")
-            print(f"Total failures: {summary['failed']}")
-            print(f"\nPer-report results:")
-            for report_summary in summary['reports']:
-                print(f"  • {report_summary['report_id']}")
-                print(f"    Success: {report_summary['success']}, Errors: {report_summary['errors']}")
-                print(f"    File: {report_summary['output_file']}")
-        except Exception as e:
-            print(f"\n❌ Error processing results: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-
-        return
-
-    # CHART EXTRACTION MODE: Process chart extraction results
-    if args.chart_extraction:
-        from .enrichment.chart_extractor import ChartExtractorService
-
-        chart_service = ChartExtractorService()
-
-        # Find chart extraction job tracker
-        if args.job:
-            job_id = Path(args.job).stem
-        else:
-            # Get most recent chart extraction job
-            job_files = sorted(chart_service.chart_extraction_dir.glob("chart_extraction_*.json"), reverse=True)
-            job_files = [f for f in job_files if not f.name.endswith("_mapping.json") and not f.name.endswith("_charts.json")]
-            job_id = job_files[0].stem if job_files else None
-
-        if not job_id:
-            print("❌ No chart extraction job tracker found.")
-            print("   Run 'python -m src.batch_pipeline.submit_jobs --chart-extraction' first.")
-            sys.exit(1)
-
-        # Load tracker to check status
-        tracker_path = chart_service.chart_extraction_dir / f"{job_id}.json"
-        with open(tracker_path) as f:
-            tracker = json.load(f)
-
-        if tracker["status"] not in ["ready_for_processing", "completed"] and not args.force:
-            print("❌ Chart extraction job not ready for processing.")
-            print(f"   Status: {tracker['status']}")
-            print("   Run 'python -m src.batch_pipeline.check_status --chart-extraction' to check progress.")
-            print("   Or use --force to process anyway.")
-            sys.exit(1)
-
-        print("=" * 60)
-        print("PHASE 2 - P2-2: PROCESS CHART EXTRACTION RESULTS")
-        print("=" * 60)
-        print(f"\nJob ID: {job_id}")
-        print(f"Status: {tracker['status']}")
-
-        # Process results
-        try:
-            summary = chart_service.process_chart_results(job_id)
-
-            print("\n" + "=" * 60)
-            print("✅ CHART EXTRACTION PROCESSING COMPLETE")
-            print("=" * 60)
-            print(f"\nResults Summary:")
-            print(f"   Successful: {summary.get('success', 0)}")
-            print(f"   Errors: {summary.get('errors', 0)}")
-            print(f"   Low Confidence: {summary.get('low_confidence', 0)}")
-            print(f"   Reports Updated: {summary.get('reports_updated', 0)}")
-            print(f"   Chart Chunks Updated: {summary.get('chunks_updated', 0)}")
-
-            print(f"\n📁 Output Files:")
-            print(f"   Updated JSONs: data/processed/*_chunks.json")
-            print(f"   Chart Results: data/batch_jobs/chart_extraction/{{report_id}}_charts.json")
-
-            print(f"\n💡 Next Steps:")
-            print(f"   - Updated child_chunks now have structured_data for charts")
-            print(f"   - Charts are queryable via API endpoints")
-            print(f"   - Use RAG pipeline to re-index updated reports")
-
-        except Exception as e:
-            print(f"\n❌ Error processing results: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-
-        return
-
-    # PHASE 10 MODE: Original batch results processing
-    # Import here to avoid loading anthropic during --help
+    # Imported here to keep --help fast
     from .batch_service import BatchService
 
     service = BatchService()
@@ -412,7 +272,7 @@ def main():
 
     if not tracker_path or not tracker_path.exists():
         print("❌ No job tracker found.")
-        print("   Run 'python -m services.batch_pipeline.submit_jobs' first.")
+        print("   Run 'python -m src.batch_pipeline.submit_jobs' first.")
         print(f"   Expected location: data/batch_jobs/jobs/job_*.json")
         sys.exit(1)
 

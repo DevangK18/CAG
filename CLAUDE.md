@@ -88,15 +88,7 @@ DATA_DIR=/app/data              # Local data directory
 |-----------|-------|---------------------------|
 | Chat/RAG | gemini-3.5-flash | $1.50 / $9.00 |
 | Batch Summaries | gemini-3.5-flash | $1.50 / $9.00 |
-| TOC Validation | gemini-3.6-flash | $0.75 / $3.75 to 2026-12-31, then $1.50 / $7.50 |
 | Embeddings | text-embedding-005 | $0.00625 |
-
-### Claude Batch Mode (Optional)
-
-```bash
-USE_CLAUDE_BATCH=true           # Use Claude for batch summaries
-ANTHROPIC_API_KEY=...           # Required for Claude
-```
 
 ## GCP Deployment
 
@@ -124,7 +116,7 @@ ANTHROPIC_API_KEY=...           # Required for Claude
 
 ## Key Features
 
-- **TOC Extraction:** Phase 4 bucketing → Phase 5.5 reconciliation → Phase 5.7 LLM validation
+- **TOC Extraction:** Phase 4 bucketing → Phase 5.5 reconciliation
 - **Table Extraction:** pdfplumber → Docling TableFormer → Gemini fallback (0.911 TEDS)
 - **Semantic Enrichment:** Finding classification, severity tiers, 87+ regex patterns
 - **RAG:** Hybrid dense+BM25 search, Cohere reranking, parent-child chunking

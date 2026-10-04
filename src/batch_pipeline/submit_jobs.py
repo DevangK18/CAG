@@ -3,12 +3,12 @@
 CLI: Submit Phase 10 batch jobs for existing JSON chunk files.
 
 Usage:
-    python -m services.batch_pipeline.submit_jobs
-    python -m services.batch_pipeline.submit_jobs --dir data/processed
-    python -m services.batch_pipeline.submit_jobs --files report1.json report2.json
-    python -m services.batch_pipeline.submit_jobs --overview-only
-    python -m services.batch_pipeline.submit_jobs --summary-only
-    python -m services.batch_pipeline.submit_jobs --dry-run
+    python -m src.batch_pipeline.submit_jobs
+    python -m src.batch_pipeline.submit_jobs --dir data/processed
+    python -m src.batch_pipeline.submit_jobs --files report1.json report2.json
+    python -m src.batch_pipeline.submit_jobs --overview-only
+    python -m src.batch_pipeline.submit_jobs --summary-only
+    python -m src.batch_pipeline.submit_jobs --dry-run
 """
 
 import argparse
@@ -50,28 +50,6 @@ def main():
         action="store_true",
         help="Show what would be submitted without actually submitting",
     )
-    parser.add_argument(
-        "--enrichment",
-        action="store_true",
-        help="Submit P2-1 LLM enrichment batch (finding extraction) instead of Phase 10",
-    )
-    parser.add_argument(
-        "--chart-extraction",
-        action="store_true",
-        help="Submit P2-2 chart extraction batch (Claude Vision) instead of Phase 10",
-    )
-    parser.add_argument(
-        "--report-type",
-        type=str,
-        default="general",
-        choices=["compliance", "performance", "financial", "general"],
-        help="Report type for enrichment routing (default: general)",
-    )
-    parser.add_argument(
-        "--force-reextract",
-        action="store_true",
-        help="For chart extraction: Re-extract charts even if structured_data exists",
-    )
 
     args = parser.parse_args()
 
@@ -98,12 +76,7 @@ def main():
 
     # Display what we found
     print("=" * 60)
-    if args.enrichment:
-        print("PHASE 2 - P2-1: SUBMIT ENRICHMENT BATCH")
-    elif args.chart_extraction:
-        print("PHASE 2 - P2-2: SUBMIT CHART EXTRACTION BATCH")
-    else:
-        print("PHASE 10: SUBMIT BATCH JOBS")
+    print("PHASE 10: SUBMIT BATCH JOBS")
     print("=" * 60)
     print(f"\nFound {len(json_files)} reports to process:")
 
@@ -125,82 +98,7 @@ def main():
             )
         return
 
-    # ENRICHMENT MODE: Submit P2-1 LLM enrichment batch
-    if args.enrichment:
-        from .enrichment.enrichment_service import EnrichmentService
-
-        print("\n" + "-" * 40)
-        print("📤 Submitting P2-1 Enrichment Batch...")
-        print("-" * 40)
-
-        enrichment_service = EnrichmentService()
-        job_id = enrichment_service.submit_enrichment_batch(
-            json_files,
-            skip_already_enriched=True,
-            report_type=args.report_type
-        )
-
-        print("\n" + "=" * 60)
-        print("✅ ENRICHMENT BATCH SUBMITTED SUCCESSFULLY")
-        print("=" * 60)
-        print(f"\nJob ID: {job_id}")
-        print(f"Report Type: {args.report_type}")
-        print(f"\n📁 Output Structure:")
-        print(f"   Job Tracker:  data/batch_jobs/enrichment/{job_id}.json")
-        print(f"   ID Mapping:   data/batch_jobs/enrichment/{job_id}_mapping.json")
-        print(f"   Results:      data/batch_jobs/enrichment/{{report_id}}_enrichment.json")
-        print("\n" + "-" * 40)
-        print("Next steps:")
-        print("-" * 40)
-        print("  1. Check status:")
-        print("     poetry run python -m src.batch_pipeline.check_status --enrichment")
-        print("")
-        print("  2. When complete, process results:")
-        print("     poetry run python -m src.batch_pipeline.process_results --enrichment")
-        return
-
-    # CHART EXTRACTION MODE: Submit P2-2 chart extraction batch
-    if args.chart_extraction:
-        from .enrichment.chart_extractor import ChartExtractorService
-
-        print("\n" + "-" * 40)
-        print("📤 Submitting P2-2 Chart Extraction Batch...")
-        print("-" * 40)
-
-        chart_service = ChartExtractorService()
-        job_id = chart_service.submit_chart_extraction_batch(
-            json_files,
-            skip_existing=(not args.force_reextract),
-            force_reextract=args.force_reextract
-        )
-
-        if not job_id:
-            print("\n⚠️  No charts to extract")
-            return
-
-        print("\n" + "=" * 60)
-        print("✅ CHART EXTRACTION BATCH SUBMITTED SUCCESSFULLY")
-        print("=" * 60)
-        print(f"\nJob ID: {job_id}")
-        print(f"\n📁 Output Structure:")
-        print(f"   Job Tracker:  data/batch_jobs/chart_extraction/{job_id}.json")
-        print(f"   ID Mapping:   data/batch_jobs/chart_extraction/{job_id}_mapping.json")
-        print(f"   Results:      data/batch_jobs/chart_extraction/{{report_id}}_charts.json")
-        print("\n" + "-" * 40)
-        print("Next steps:")
-        print("-" * 40)
-        print("  1. Check status:")
-        print("     poetry run python -m src.batch_pipeline.check_status --chart-extraction")
-        print("")
-        print("  2. Or watch continuously:")
-        print("     poetry run python -m src.batch_pipeline.check_status --chart-extraction --watch")
-        print("")
-        print("  3. When complete, process results:")
-        print("     poetry run python -m src.batch_pipeline.process_results --chart-extraction")
-        return
-
-    # PHASE 10 MODE: Original overview/summary batches
-    # Import here to avoid loading anthropic client during --help
+    # Imported here to keep --help fast
     from .batch_service import BatchService
 
     # Initialize service
@@ -258,13 +156,13 @@ def main():
         print("Next steps:")
         print("-" * 40)
         print("  1. Check status:")
-        print("     poetry run python -m services.batch_pipeline.check_status")
+        print("     poetry run python -m src.batch_pipeline.check_status")
         print("")
         print("  2. Or watch continuously:")
-        print("     poetry run python -m services.batch_pipeline.check_status --watch")
+        print("     poetry run python -m src.batch_pipeline.check_status --watch")
         print("")
         print("  3. When complete, process results:")
-        print("     poetry run python -m services.batch_pipeline.process_results")
+        print("     poetry run python -m src.batch_pipeline.process_results")
     else:
         print("\n❌ No batches were submitted successfully.")
         sys.exit(1)

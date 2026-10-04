@@ -1,11 +1,10 @@
 """
-Batch Processing Service for Phase 10 - Gemini Native with Claude Fallback.
+Batch Processing Service for Phase 10 (Gemini on Vertex AI).
 
 Key Features:
 - Default to Gemini for GCP credit billing
 - File-based job tracking (no database required)
 - Organized folder structure for outputs
-- Claude Batch API fallback available via USE_CLAUDE_BATCH=true
 
 Phase 10a consists of three batch jobs:
 1. Overview extraction (overview_batch) - Report-level metadata
@@ -24,10 +23,9 @@ Folder Structure:
     └── hierarchical/                          # RAPTOR summaries
         └── {report_id}_hierarchical.json
 
-Default: Gemini (3.1 Pro / Flash) via direct concurrent calls, billed to GCP credits.
-Gemini jobs complete synchronously: outputs are written at generation time and the
+Gemini (3.1 Pro / Flash) via direct concurrent calls, billed to GCP credits.
+Jobs complete synchronously: outputs are written at generation time and the
 returned batch_id is "gemini_sync_<timestamp>" (no polling or result download needed).
-Set USE_CLAUDE_BATCH=true to use the async Anthropic Batch API instead.
 """
 
 import os
@@ -64,7 +62,6 @@ except ImportError:
         return NoopEmitter()
 
 # Feature flag for batch processing mode
-USE_CLAUDE_BATCH = os.getenv("USE_CLAUDE_BATCH", "false").lower() == "true"
 
 
 def _short_id(report_id: str, prefix: str = "") -> str:
@@ -106,15 +103,12 @@ class BatchService:
     """
     Manages batch processing operations for Phase 10.
 
-    Default: Uses Gemini for GCP credit billing.
-    Fallback: Set USE_CLAUDE_BATCH=true to use Anthropic Batch API.
+    Uses Gemini on Vertex AI (GCP credit billing). Calls run synchronously, so each
+    submit_* method has written its outputs by the time it returns.
 
     Usage:
         service = BatchService()
         batch_id = service.submit_overview_batch(json_files)
-        # ... wait for completion ...
-        status = service.get_batch_status(batch_id)
-        results = service.get_batch_results(batch_id)
     """
 
     def __init__(
@@ -132,30 +126,12 @@ class BatchService:
             trace_emitter: Optional TraceEmitter for Phase 10a instrumentation.
                           If None, uses noop emitter (no overhead).
         """
-        self.use_claude = USE_CLAUDE_BATCH
         self._trace_emitter = trace_emitter or get_noop_emitter()
 
-        # Initialize clients based on mode
-        if self.use_claude:
-            import anthropic
-            self.client = anthropic.Anthropic()
-            self._gemini_client = None
-            logger.info("BatchService initialized with Claude Batch API")
-        else:
-            from src.core.gemini_client import get_gemini_client
+        from src.core.gemini_client import get_gemini_client
 
-            self._gemini_client = get_gemini_client()
-            logger.info("BatchService initialized with GCP Agent Platform")
-            self.client = None  # No Anthropic client needed
-
-        # Trace: Emit client mode selection decision
-        self._trace_emitter.emit_decision(
-            "10a",
-            "batch_client_mode",
-            "claude" if self.use_claude else "gemini",
-            ["claude", "gemini"],
-            f"USE_CLAUDE_BATCH={USE_CLAUDE_BATCH}",
-        )
+        self._gemini_client = get_gemini_client()
+        logger.info("BatchService initialized with GCP Agent Platform")
 
         # Base directories
         self.batch_jobs_dir = Path(batch_jobs_dir)
@@ -171,29 +147,16 @@ class BatchService:
         self.overviews_dir.mkdir(parents=True, exist_ok=True)
         self.summaries_dir.mkdir(parents=True, exist_ok=True)
 
-        # Model configuration
-        if self.use_claude:
-            # Claude models with Extended Thinking
-            self.models = {
-                "overview": "claude-sonnet-5",
-                "executive": "claude-sonnet-5",
-                "journalist": "claude-opus-5",
-                "deep_dive": "claude-opus-5",
-                "simple": "claude-sonnet-5",
-                "policy": "claude-sonnet-5",
-            }
-        else:
-            # Gemini models via Vertex AI (GCP project billing)
-            # Use Pro for high-reasoning tasks, Flash for simpler ones
-            # Model IDs: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/models
-            self.models = {
-                "overview": "gemini-3.1-pro-preview",      # High reasoning - latest Pro
-                "executive": "gemini-3.1-pro-preview",     # High reasoning - latest Pro
-                "journalist": "gemini-3.1-pro-preview",    # Creative writing - latest Pro
-                "deep_dive": "gemini-3.1-pro-preview",     # High reasoning - latest Pro
-                "simple": "gemini-3.8-flash",      # Simpler task - stable Flash
-                "policy": "gemini-3.1-pro-preview",        # High reasoning - latest Pro
-            }
+        # Gemini models via Vertex AI (GCP project billing)
+        # Model IDs: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/models
+        self.models = {
+            "overview": "gemini-3.1-pro-preview",
+            "executive": "gemini-3.1-pro-preview",
+            "journalist": "gemini-3.1-pro-preview",
+            "deep_dive": "gemini-3.1-pro-preview",
+            "simple": "gemini-3.8-flash",
+            "policy": "gemini-3.1-pro-preview",
+        }
 
         # Max output tokens
         self.max_tokens = {
@@ -205,17 +168,7 @@ class BatchService:
             "policy": 16000,
         }
 
-        # Extended Thinking budget tokens (Claude only)
-        self.thinking_budgets = {
-            "overview": 5000,
-            "executive": 8000,
-            "journalist": 12000,
-            "deep_dive": 16000,
-            "simple": 6000,
-            "policy": 10000,
-        }
-
-        # Concurrent processing settings (Gemini mode)
+        # Concurrent processing settings
         self.max_workers = 5  # Parallel API calls for Gemini
 
         # Current job timestamp (set when creating job tracker)
@@ -394,28 +347,12 @@ class BatchService:
             custom_id = _short_id(report_id, "ov")
             id_mapping[custom_id] = report_id
 
-            if self.use_claude:
-                requests.append(
-                    {
-                        "custom_id": custom_id,
-                        "params": {
-                            "model": self.models["overview"],
-                            "max_tokens": self.max_tokens["overview"],
-                            "thinking": {
-                                "type": "adaptive",
-                            },
-                            "messages": [{"role": "user", "content": prompt}],
-                        },
-                    }
-                )
-            else:
-                # Gemini request format
-                requests.append({
-                    "custom_id": custom_id,
-                    "prompt": prompt,
-                    "model": self.models["overview"],
-                    "max_tokens": self.max_tokens["overview"],
-                })
+            requests.append({
+                "custom_id": custom_id,
+                "prompt": prompt,
+                "model": self.models["overview"],
+                "max_tokens": self.max_tokens["overview"],
+            })
 
         # Save ID mapping
         self._save_id_mapping(id_mapping, job_timestamp)
@@ -428,35 +365,18 @@ class BatchService:
             {"overview_requests": len(requests), "model": self.models["overview"]},
         )
 
-        if self.use_claude:
-            # Submit batch using messages.batches API (SDK v0.77.0+)
-            batch = self.client.messages.batches.create(requests=requests)
-            print(f"✅ Overview batch submitted: {batch.id}")
-            print(f"   Reports: {len(requests)}")
+        results = self._process_batch_gemini(requests, "overview")
+        self._save_overview_results(results, id_mapping)
 
-            emitter.emit_decision(
-                "10a",
-                "overview_batch_submission",
-                "submitted",
-                ["submitted", "failed"],
-                f"Claude batch {batch.id}",
-            )
-            return batch.id
-        else:
-            # Process synchronously with Gemini
-            results = self._process_batch_gemini(requests, "overview")
-            # Save results immediately
-            self._save_overview_results(results, id_mapping)
-
-            success = sum(1 for r in results if r["error"] is None)
-            emitter.emit_decision(
-                "10a",
-                "overview_batch_submission",
-                "completed" if success == len(results) else "partial",
-                ["completed", "partial", "failed"],
-                f"Gemini sync: {success}/{len(results)} succeeded",
-            )
-            return f"gemini_sync_{self._current_job_timestamp}"
+        success = sum(1 for r in results if r["error"] is None)
+        emitter.emit_decision(
+            "10a",
+            "overview_batch_submission",
+            "completed" if success == len(results) else "partial",
+            ["completed", "partial", "failed"],
+            f"Gemini sync: {success}/{len(results)} succeeded",
+        )
+        return f"gemini_sync_{self._current_job_timestamp}"
 
     def _save_overview_results(self, results: list[dict], id_mapping: dict):
         """Save Gemini overview results to files."""
@@ -531,29 +451,13 @@ class BatchService:
                 custom_id = _short_id(report_id, prefix)
                 id_mapping[custom_id] = {"report_id": report_id, "variant": variant}
 
-                if self.use_claude:
-                    requests.append(
-                        {
-                            "custom_id": custom_id,
-                            "params": {
-                                "model": self.models[variant],
-                                "max_tokens": self.max_tokens[variant],
-                                "thinking": {
-                                    "type": "adaptive",
-                                },
-                                "messages": [{"role": "user", "content": prompt}],
-                            },
-                        }
-                    )
-                else:
-                    # Gemini request format
-                    requests.append({
-                        "custom_id": custom_id,
-                        "prompt": prompt,
-                        "model": self.models[variant],
-                        "max_tokens": self.max_tokens[variant],
-                        "variant": variant,
-                    })
+                requests.append({
+                    "custom_id": custom_id,
+                    "prompt": prompt,
+                    "model": self.models[variant],
+                    "max_tokens": self.max_tokens[variant],
+                    "variant": variant,
+                })
 
         # Save ID mapping
         self._save_id_mapping(id_mapping, job_timestamp)
@@ -566,43 +470,24 @@ class BatchService:
             {"summary_requests": len(requests)},
         )
 
-        if self.use_claude:
-            # Submit batch using messages.batches API (SDK v0.77.0+)
-            batch = self.client.messages.batches.create(requests=requests)
-            print(f"✅ Summary batch submitted: {batch.id}")
-            print(f"   Reports: {len(json_files)}")
-            print(f"   Total requests: {len(requests)} ({len(json_files)} × 5 variants)")
+        results = self._process_batch_gemini(requests, "summary")
+        self._save_summary_results(results, id_mapping)
 
-            emitter.emit_decision(
-                "10a",
-                "summary_batch_submission",
-                "submitted",
-                ["submitted", "failed"],
-                f"Claude batch {batch.id} ({len(requests)} requests)",
-            )
-            return batch.id
-        else:
-            # Process synchronously with Gemini
-            results = self._process_batch_gemini(requests, "summary")
-            # Save results
-            self._save_summary_results(results, id_mapping)
-
-            success = sum(1 for r in results if r["error"] is None)
-            emitter.emit_decision(
-                "10a",
-                "summary_batch_submission",
-                "completed" if success == len(results) else "partial",
-                ["completed", "partial", "failed"],
-                f"Gemini sync: {success}/{len(results)} succeeded",
-            )
-            return f"gemini_sync_{self._current_job_timestamp}"
+        success = sum(1 for r in results if r["error"] is None)
+        emitter.emit_decision(
+            "10a",
+            "summary_batch_submission",
+            "completed" if success == len(results) else "partial",
+            ["completed", "partial", "failed"],
+            f"Gemini sync: {success}/{len(results)} succeeded",
+        )
+        return f"gemini_sync_{self._current_job_timestamp}"
 
     def _save_summary_results(self, results: list[dict], id_mapping: dict):
         """
         Save Gemini summary results to files, grouped by report.
 
-        Uses the same schema as process_results.py (Claude path) so the API's
-        summaries routes read both identically.
+        Uses the schema the API's summaries routes read.
         """
         from collections import defaultdict
 
@@ -673,74 +558,7 @@ class BatchService:
                 "is_complete": True,
             }
 
-        if not self.client:
-            raise ValueError("Claude client not available - using Gemini mode")
-
-        batch = self.client.messages.batches.retrieve(batch_id)
-
-        # Handle different SDK versions for request_counts
-        request_counts = batch.request_counts
-
-        if hasattr(request_counts, "total"):
-            total = request_counts.total
-            completed = request_counts.completed
-            failed = request_counts.failed
-        elif hasattr(request_counts, "processing"):
-            # New SDK structure: processing, succeeded, errored, canceled, expired
-            succeeded = getattr(request_counts, "succeeded", 0)
-            errored = getattr(request_counts, "errored", 0)
-            canceled = getattr(request_counts, "canceled", 0)
-            expired = getattr(request_counts, "expired", 0)
-            processing = getattr(request_counts, "processing", 0)
-
-            completed = succeeded
-            failed = errored + canceled + expired
-            total = processing + succeeded + errored + canceled + expired
-        else:
-            try:
-                rc_dict = (
-                    request_counts.model_dump()
-                    if hasattr(request_counts, "model_dump")
-                    else vars(request_counts)
-                )
-                total = rc_dict.get(
-                    "total",
-                    rc_dict.get("processing", 0)
-                    + rc_dict.get("succeeded", 0)
-                    + rc_dict.get("errored", 0),
-                )
-                completed = rc_dict.get("completed", rc_dict.get("succeeded", 0))
-                failed = rc_dict.get("failed", rc_dict.get("errored", 0))
-            except:
-                total = 0
-                completed = 0
-                failed = 0
-
-        # Convert datetime objects to strings
-        created_at = batch.created_at
-        ended_at = batch.ended_at
-        expires_at = batch.expires_at
-
-        if isinstance(created_at, datetime):
-            created_at = created_at.isoformat()
-        if isinstance(ended_at, datetime):
-            ended_at = ended_at.isoformat()
-        if isinstance(expires_at, datetime):
-            expires_at = expires_at.isoformat()
-
-        return {
-            "batch_id": batch.id,
-            "status": batch.processing_status,
-            "created_at": created_at,
-            "ended_at": ended_at,
-            "expires_at": expires_at,
-            "request_counts": {
-                "total": total,
-                "completed": completed,
-                "failed": failed,
-            },
-            "is_complete": batch.processing_status == "ended",
-        }
+        raise ValueError(f"Unknown batch id {batch_id}: only Gemini sync jobs are supported")
 
     def get_batch_results(self, batch_id: str, job_timestamp: str = None) -> list[dict]:
         """
@@ -753,51 +571,7 @@ class BatchService:
         if self.is_sync_batch(batch_id):
             return []
 
-        results = []
-        id_mapping = self._load_id_mapping(job_timestamp)
-
-        for result in self.client.messages.batches.results(batch_id):
-            custom_id = result.custom_id
-
-            # Resolve report_id from mapping
-            mapped = id_mapping.get(custom_id, custom_id)
-            if isinstance(mapped, dict):
-                report_id = mapped.get("report_id", custom_id)
-                variant = mapped.get("variant")
-            else:
-                report_id = mapped
-                variant = None
-
-            item = {
-                "custom_id": custom_id,
-                "report_id": report_id,
-                "variant": variant,
-                "content": None,
-                "thinking": None,
-                "error": None,
-            }
-
-            if result.result.type == "errored":
-                error_obj = result.result.error
-                if hasattr(error_obj, "message"):
-                    item["error"] = error_obj.message
-                else:
-                    item["error"] = str(error_obj)
-            elif result.result.type == "succeeded":
-                message = result.result.message
-                for block in message.content:
-                    if block.type == "thinking":
-                        item["thinking"] = block.thinking
-                    elif block.type == "text":
-                        item["content"] = block.text
-            elif result.result.type == "canceled":
-                item["error"] = "Request was canceled"
-            elif result.result.type == "expired":
-                item["error"] = "Request expired"
-
-            results.append(item)
-
-        return results
+        raise ValueError(f"Unknown batch id {batch_id}: only Gemini sync jobs are supported")
 
     # ═══════════════════════════════════════════════════════════════════════
     # JOB TRACKING (File-based)
@@ -1145,7 +919,7 @@ class BatchService:
         - Chapter summaries (L2): ~23 per report average
         - Section summaries (L1): ~50 per report average
 
-        Uses Gemini Flash-Lite (direct calls) or Claude Haiku (Batch API).
+        Uses Gemini Flash-Lite (direct calls).
 
         Args:
             json_files: List of *_chunks.json file paths
@@ -1165,17 +939,10 @@ class BatchService:
             print(f"⚠️  No job timestamp set — auto-generated: {self._current_job_timestamp}")
 
         # Hierarchical model config
-        if self.use_claude:
-            hierarchical_models = {
-                "chapter_summary": "claude-haiku-4-5-20251001",
-                "section_summary": "claude-haiku-4-5-20251001",
-            }
-        else:
-            # Gemini models for GCP credit billing
-            hierarchical_models = {
-                "chapter_summary": "gemini-3.5-flash-lite",
-                "section_summary": "gemini-3.5-flash-lite",
-            }
+        hierarchical_models = {
+            "chapter_summary": "gemini-3.5-flash-lite",
+            "section_summary": "gemini-3.5-flash-lite",
+        }
         hierarchical_max_tokens = {
             "chapter_summary": 500,   # 3-5 sentences
             "section_summary": 200,   # 1-2 sentences
@@ -1304,51 +1071,18 @@ class BatchService:
             },
         )
 
-        if not self.use_claude:
-            # Process synchronously with Gemini and save outputs directly
-            results = self._process_batch_gemini(requests, "hierarchical")
-            self._save_hierarchical_results(results, id_mapping)
+        results = self._process_batch_gemini(requests, "hierarchical")
+        self._save_hierarchical_results(results, id_mapping)
 
-            success = sum(1 for r in results if r["error"] is None)
-            emitter.emit_decision(
-                "10a",
-                "hierarchical_batch_submission",
-                "completed" if success == len(results) else "partial",
-                ["completed", "partial", "failed"],
-                f"Gemini sync: {success}/{len(results)} succeeded",
-            )
-            return f"gemini_sync_{self._current_job_timestamp}"
-
-        # Submit batch using messages.batches API
-        batch = self.client.messages.batches.create(
-            requests=[
-                {
-                    "custom_id": req["custom_id"],
-                    "params": {
-                        "model": req["model"],
-                        "max_tokens": req["max_tokens"],
-                        "messages": [{"role": "user", "content": req["prompt"]}],
-                    },
-                }
-                for req in requests
-            ]
-        )
-
-        print(f"✅ Hierarchical batch submitted: {batch.id}")
-        print(f"   Reports: {len(json_files)}")
-        print(f"   Chapter summaries (L2): {chapter_count}")
-        print(f"   Section summaries (L1): {section_count}")
-        print(f"   Total requests: {len(requests)}")
-
+        success = sum(1 for r in results if r["error"] is None)
         emitter.emit_decision(
             "10a",
             "hierarchical_batch_submission",
-            "submitted",
-            ["submitted", "skipped", "failed"],
-            f"Claude batch {batch.id}",
+            "completed" if success == len(results) else "partial",
+            ["completed", "partial", "failed"],
+            f"Gemini sync: {success}/{len(results)} succeeded",
         )
-
-        return batch.id
+        return f"gemini_sync_{self._current_job_timestamp}"
 
     def process_hierarchical_results(
         self,

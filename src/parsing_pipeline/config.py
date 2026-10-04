@@ -15,11 +15,14 @@ Design Philosophy:
 - Allow granular tuning without code changes
 """
 
+import logging
 import os
 import yaml
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -79,28 +82,6 @@ class OCRConfig:
 @dataclass
 class ScaffoldingConfig:
     """Phase 4: Document Scaffolding - TOC extraction and structure building."""
-
-    embedded_toc_min_entries: int = 3
-    """
-    Minimum TOC entries required to accept an embedded TOC.
-
-    Raising this: Stricter TOC validation, may reject valid but short TOCs.
-    Lowering this: Accept shorter TOCs, risk of false positives.
-    """
-
-    toc_rejection_alert_threshold: float = 0.25
-    """
-    Alert if rejection rate exceeds this fraction (0.25 = 25%).
-
-    Used for monitoring TOC extraction quality during processing.
-    """
-
-    min_toc_quality_score: int = 20
-    """
-    Minimum quality score (0-100) to accept a TOC.
-
-    TOCs below this threshold are rejected and trigger fallback strategies.
-    """
 
     bookmark_quality_threshold: float = 0.6
     """
@@ -238,45 +219,6 @@ class TOCReconciliationConfig:
 
 
 @dataclass
-class LLMValidationConfig:
-    """Phase 5.7: LLM TOC Validation - Last resort validation via Google Gemini."""
-
-    enabled: bool = True
-    """
-    Enable LLM validation for low-quality TOCs.
-
-    Set to False to skip LLM validation (saves API costs, ~$0.005-0.01 per report).
-    """
-
-    model: str = "gemini-3.8-flash"
-    """
-    Gemini model for TOC validation. Flash is cost-efficient (~$0.015/report).
-
-    Options: 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'
-    """
-
-    max_input_chars: int = 8000
-    """
-    Maximum characters of document text to send to LLM.
-
-    Balances context vs API cost. 8000 chars covers first ~15 pages.
-    """
-
-    quality_threshold: int = 50
-    """
-    Only validate TOCs with quality score below this threshold.
-
-    Higher threshold: More reports validated (higher API costs).
-    Lower threshold: Fewer reports validated (only tail cases).
-    """
-
-    max_pages_to_extract: int = 15
-    """
-    Maximum number of PDF pages to extract text from for LLM validation.
-    """
-
-
-@dataclass
 class ContentExtractionConfig:
     """Phase 6: Content Extraction - Extract text, tables, and images from layout blocks."""
 
@@ -352,18 +294,11 @@ class ChunkingConfig:
     Lowering this: More lenient matching, risk of merging unrelated tables.
     """
 
-    max_parent_chunk_pages: int = 100
-
     max_child_chunk_chars: int = 4000
     """
     Longest child chunk; longer tables are split into row groups (header repeated) and
     longer text at sentence boundaries. text-embedding-005 reads ~2,048 tokens, which is
     ~4-8K chars (number-heavy tables tokenize densely); the rest is silently dropped.
-    """
-    """
-    Maximum page range for a single parent chunk.
-
-    Prevents pathological cases where single section spans entire document.
     """
 
 
@@ -395,26 +330,10 @@ class SemanticEnrichmentConfig:
     P3: Raised from 0.4 to 0.5 - lower confidence findings go to LLM validation.
     """
 
-    min_monetary_value_for_high_severity: int = 1_00_000_00  # ₹1 lakh in paise
-    """
-    Minimum monetary value to consider for high severity classification.
-
-    Prevents tiny amounts from being flagged as critical.
-    """
-
 
 @dataclass
 class InstrumentationConfig:
     """Trace instrumentation configuration for pipeline observability."""
-
-    enabled: bool = False
-    """
-    Master switch for trace instrumentation.
-
-    When False (default), all TraceEmitter methods are no-ops with zero overhead.
-    When True, emits per-report markdown trace files documenting every decision,
-    fallback, and input/output for debugging and analysis.
-    """
 
     output_dir: str = "logs/traces"
     """
@@ -448,7 +367,6 @@ class ParsingPipelineConfig:
     scaffolding: ScaffoldingConfig = field(default_factory=ScaffoldingConfig)
     layout: LayoutAnalysisConfig = field(default_factory=LayoutAnalysisConfig)
     toc_reconciliation: TOCReconciliationConfig = field(default_factory=TOCReconciliationConfig)
-    llm_validation: LLMValidationConfig = field(default_factory=LLMValidationConfig)
     content_extraction: ContentExtractionConfig = field(default_factory=ContentExtractionConfig)
     chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
     semantic_enrichment: SemanticEnrichmentConfig = field(default_factory=SemanticEnrichmentConfig)
@@ -495,6 +413,11 @@ class ParsingPipelineConfig:
                 for key, value in phase_config.items():
                     if hasattr(phase_obj, key):
                         setattr(phase_obj, key, value)
+                    else:
+                        # A typo or a removed key would otherwise be tuned with no effect
+                        logger.warning(f"parsing_config.yaml: unknown key {phase_name}.{key} ignored")
+            else:
+                logger.warning(f"parsing_config.yaml: unknown section {phase_name} ignored")
         return config
 
     @classmethod
