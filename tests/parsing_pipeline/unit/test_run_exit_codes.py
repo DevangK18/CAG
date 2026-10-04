@@ -98,3 +98,14 @@ def test_mark_failed_quarantines_old_output(tmp_path):
     entry = next(r for r in json.loads((out / "manifest.json").read_text())["reports"] if r["report_id"] == "X")
     assert entry["status"] == "failed" and entry["stale_output"] is True
     assert sorted(entry["quarantined_files"]) == ["state/X_chunks.json.stale", "state/X_overview.json.stale"]
+
+
+def test_red_flags_kept_when_tracing_off():
+    from src.parsing_pipeline.instrumentation.trace_emitter import TraceEmitter
+    emitter = TraceEmitter(enabled=False)
+    emitter.set_current_report("R1")
+    emitter.emit_red_flag("9", "monetary_total_implausible", {"total_crore": 1e9})
+    emitter.emit_red_flag("3", "ocr_failed", {"report_id": "R2", "error": ValueError("x")})
+    assert emitter.get_red_flags("R1")[0]["flag"] == "monetary_total_implausible"
+    assert emitter.get_red_flags("R2")[0]["details"]["error"] == "x"
+    assert set(emitter.get_red_flags()) == {"R1", "R2"}

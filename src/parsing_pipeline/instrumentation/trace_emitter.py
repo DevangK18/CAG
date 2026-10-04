@@ -30,6 +30,7 @@ Usage:
     paths = emitter.finalize_all_reports("enrichment_complete")
 """
 
+import json
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -75,6 +76,9 @@ class TraceEmitter:
         # Legacy attributes for backward compatibility with noop emitter checks
         self.report_id: Optional[str] = None
 
+        # Red flags are kept even when tracing is off, so production output can carry them
+        self._red_flags_by_report: Dict[str, List[Dict[str, Any]]] = {}
+
     def start_report(self, report_id: str, metadata: ReportMetadata) -> None:
         """
         Initialize trace collection for a new report.
@@ -117,6 +121,8 @@ class TraceEmitter:
             report_id: The report to switch to (must have called start_report first).
         """
         if not self.enabled:
+            # Still track the current report so red flags are attributed correctly
+            self._current_report_id = report_id
             return
 
         if report_id in self._report_contexts:
@@ -290,6 +296,11 @@ class TraceEmitter:
             flag: Short description of the anomaly.
             details: Additional context (must include actual data, not just messages).
         """
+        report_id = (details or {}).get("report_id") or self._current_report_id or "_run"
+        self._red_flags_by_report.setdefault(report_id, []).append(
+            {"phase": phase, "flag": flag, "details": _jsonable(details or {})}
+        )
+
         if not self.enabled:
             return
 
@@ -306,6 +317,12 @@ class TraceEmitter:
                 ts=time.time(),
             )
         )
+
+    def get_red_flags(self, report_id: Optional[str] = None) -> Any:
+        """Red flags for one report, or a dict of all of them (key "_run" = unattributed)."""
+        if report_id is None:
+            return {k: list(v) for k, v in self._red_flags_by_report.items()}
+        return list(self._red_flags_by_report.get(report_id, []))
 
     def emit_error(self, phase: str, error: str, details: Dict[str, Any] = None) -> None:
         """
@@ -546,6 +563,15 @@ class TraceEmitter:
             return (float(phase), 0)
         except ValueError:
             return (999, 0)  # Unknown phases at end
+
+
+def _jsonable(value: Any) -> Any:
+    """Make red-flag details safe to write into the output JSON."""
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return json.loads(json.dumps(value, default=str))
 
 
 # Global no-op emitter for when tracing is disabled

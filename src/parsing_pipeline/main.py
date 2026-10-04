@@ -1304,6 +1304,11 @@ class PipelineOrchestrator:
                     assembled_data["semantic_enrichment"],
                 )
 
+                # Red flags from phases 1-9 travel with the output (tracing or not)
+                assembled_data.setdefault("processing_stats", {})["red_flags"] = (
+                    emitter.get_red_flags(task.report_id)
+                )
+
                 # Save enriched output (overwrite the original)
                 with open(task.assembled_output_path, "w", encoding="utf-8") as f:
                     json.dump(assembled_data, f, indent=2, ensure_ascii=False)
@@ -1971,6 +1976,7 @@ class PipelineOrchestrator:
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
             "report_status": statuses,
+            "red_flags": self.state.trace_emitter.get_red_flags(),
             "gemini_usage": log_usage_summary(),
         }
         path = Path("logs") / f"run_summary_{self.run_id}.json"
