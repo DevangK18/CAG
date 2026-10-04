@@ -168,32 +168,39 @@ def reset_client():
 # USAGE AND COST ACCOUNTING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Vertex AI list prices, USD per 1M tokens, as recorded on 2026-10-04.
+# Vertex AI list prices for the global endpoint (the client uses location="global"),
+# USD per 1M tokens, checked against cloud.google.com/vertex-ai/generative-ai/pricing
+# on 2026-10-04. Regional endpoints cost 10% more.
 # Each model has rate periods in date order: "until" is the last day (inclusive) a
-# rate applies; the final period has no end. "long_context" rates apply to a
-# request whose prompt exceeds "above_prompt_tokens". Thinking tokens bill as
-# output. Cached tokens are priced at the full input rate, so the estimate is an
-# upper bound when context caching is used. Unlisted models get cost=None: add
-# their published price here rather than guessing.
+# rate applies; the final period has no end. "cached" is the rate for cached input
+# tokens. "long_context" rates apply to a request whose prompt exceeds
+# "above_prompt_tokens". Thinking tokens bill as output. Unlisted models get
+# cost=None: add their published price here rather than guessing.
 MODEL_PRICES_USD_PER_1M: Dict[str, List[Dict[str, Any]]] = {
     # Introductory rate through 2026-12-31, then the standard rate
     "gemini-3.8-flash": [
-        {"until": "2026-12-31", "input": 0.75, "output": 3.75},
-        {"input": 1.50, "output": 7.50},
+        {"until": "2026-12-31", "input": 0.75, "cached": 0.075, "output": 3.75},
+        {"input": 1.50, "cached": 0.15, "output": 7.50},
     ],
+    "gemini-3.6-flash": [
+        {"until": "2026-12-31", "input": 0.75, "cached": 0.075, "output": 3.75},
+        {"input": 1.50, "cached": 0.15, "output": 7.50},
+    ],
+    "gemini-3.5-flash": [{"input": 1.50, "cached": 0.15, "output": 9.00}],
+    "gemini-3.5-flash-lite": [{"input": 0.30, "cached": 0.03, "output": 2.50}],
     "gemini-3.1-pro-preview": [
         {
             "input": 2.00,
+            "cached": 0.20,
             "output": 12.00,
-            "long_context": {"above_prompt_tokens": 200_000, "input": 4.00, "output": 18.00},
+            "long_context": {
+                "above_prompt_tokens": 200_000, "input": 4.00, "cached": 0.40, "output": 18.00,
+            },
         },
     ],
-    # From the CLAUDE.md Gemini Models table
-    "gemini-3.5-flash": [{"input": 0.50, "output": 3.00}],
-    "gemini-3.6-flash": [{"input": 1.50, "output": 7.50}],
 }
 
-PRICE_SOURCE = "Vertex AI list prices recorded 2026-10-04 (USD per 1M tokens)"
+PRICE_SOURCE = "Vertex AI global list prices checked 2026-10-04 (USD per 1M tokens)"
 
 # usage_metadata attribute -> token kind
 _USAGE_FIELDS = {
@@ -258,10 +265,12 @@ def _price_for(
         day = (on or date.today()).isoformat()
         period = next((p for p in periods if "until" not in p or day <= p["until"]), periods[-1])
         long_context = period.get("long_context")
-        if long_context and prompt_tokens > long_context["above_prompt_tokens"]:
-            price = {"input": long_context["input"], "output": long_context["output"]}
-        else:
-            price = {"input": period["input"], "output": period["output"]}
+        rates = long_context if long_context and prompt_tokens > long_context["above_prompt_tokens"] else period
+        price = {
+            "input": rates["input"],
+            "cached": rates.get("cached", rates["input"]),
+            "output": rates["output"],
+        }
     if price is None:
         with _usage_lock:
             first = model not in _warned_unpriced
@@ -279,9 +288,13 @@ def _cost_usd(model: str, tokens: Dict[str, int], on: Optional[date] = None) -> 
     price = _price_for(model, tokens.get("prompt", 0), on)
     if price is None:
         return None
-    input_tokens = tokens.get("prompt", 0) + tokens.get("tool_use_prompt", 0)
+    # prompt_token_count includes cached tokens, which bill at the cached rate
+    cached = min(tokens.get("cached", 0), tokens.get("prompt", 0))
+    input_tokens = tokens.get("prompt", 0) - cached + tokens.get("tool_use_prompt", 0)
     output_tokens = tokens.get("candidates", 0) + tokens.get("thoughts", 0)
-    return (input_tokens * price["input"] + output_tokens * price["output"]) / 1_000_000
+    return (
+        input_tokens * price["input"] + cached * price["cached"] + output_tokens * price["output"]
+    ) / 1_000_000
 
 
 def _new_bucket() -> Dict[str, Any]:
