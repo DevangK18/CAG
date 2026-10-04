@@ -839,7 +839,8 @@ class EmbeddingService:
                 "report_id": chunk.get("report_id"),
                 "report_year": chunk.get("report_year"),
                 "page_physical": chunk.get("source_page_physical", 0),
-                "page_logical": str(chunk.get("source_page_logical", "")),
+                # `or ""`: a None logical page must not become the string "None"
+                "page_logical": str(chunk.get("source_page_logical") or ""),
                 "hierarchy": hierarchy,
                 "report_title": chunk.get("report_title", ""),
                 # Multi-tier metadata fields

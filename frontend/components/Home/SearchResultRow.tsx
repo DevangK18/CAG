@@ -14,7 +14,7 @@
  */
 
 import React from 'react';
-import { isValidMinistry } from '../../utils';
+import { isValidMinistry, toViewerPage } from '../../utils';
 import type {
     SearchResultRow as SearchResultRowType,
     SearchResultReport,
@@ -346,7 +346,7 @@ const FindingRow: React.FC<{
             }}
                 title={result.report_id}
             >
-                {truncatedReportId}, p.{result.page}
+                {truncatedReportId}, p.{toViewerPage(result.page)}
             </div>
         </div>
     );

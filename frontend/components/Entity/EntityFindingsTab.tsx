@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getEntityFindings } from '../../lib/api';
-import { formatAmountCrore, formatReportSlug } from '../../utils';
+import { formatAmountCrore, formatReportSlug, toViewerPage } from '../../utils';
 import { useAppStore } from '../../stores/appStore';
 
 interface EntityFindingsTabProps {
@@ -93,7 +93,7 @@ export function EntityFindingsTab({ entityId }: EntityFindingsTabProps) {
               key={idx}
               onClick={() => {
                 if (finding.report_id) {
-                  openHomePdf(finding.report_id, finding.page);
+                  openHomePdf(finding.report_id, finding.page != null ? toViewerPage(finding.page) : undefined);
                 }
               }}
               style={{
@@ -218,7 +218,7 @@ export function EntityFindingsTab({ entityId }: EntityFindingsTabProps) {
                   }}
                 >
                   {finding.section && <span>Section: {finding.section}</span>}
-                  {finding.page !== undefined && <span>Page: {finding.page}</span>}
+                  {finding.page != null && <span>Page: {toViewerPage(finding.page)}</span>}
                   {finding.amount_crore !== undefined &&
                     finding.amount_crore !== null &&
                     formatAmountCrore(finding.amount_crore) && (

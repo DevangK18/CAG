@@ -9,7 +9,7 @@ import { create } from 'zustand';
 import { CitationMap } from '../lib/api';
 import { buildNormalizedCitationMap } from '../lib/citationUtils';
 import { setManagedTimeout, clearManagedTimeout } from '../lib/timerManager';
-import { generateId } from '../utils';
+import { generateId, toViewerPage } from '../utils';
 import { debug } from '../lib/debug';
 import { GroundednessReport, ViewState } from '../types';
 
@@ -318,7 +318,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Navigate to citation
   navigateToCitation: (citation) => {
-    const targetPage = citation.page_physical + 1;
+    const targetPage = toViewerPage(citation.page_physical);
 
     // Set page and highlight in one update
     set({

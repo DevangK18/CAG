@@ -8,6 +8,7 @@
 
 import { CitationMap } from './api';
 import { debug } from './debug';
+import { toViewerPage } from '../utils';
 
 // ============================================================================
 // Citation Parsing
@@ -181,10 +182,10 @@ export function lookupCitation(
   // Strategy 3: Try matching just by page number if we have one
   if (page) {
     // Look for any entry that matches this page
-    // page_physical is 0-based, page is 1-based from citation text
+    // page is the 1-based label from the citation text
     // page_logical is a string (e.g., "54"), convert to number for robust comparison
     for (const [_key, value] of normalizedMap.entries()) {
-      const physicalPageMatch = value.page_physical === page - 1;
+      const physicalPageMatch = toViewerPage(value.page_physical) === page;
       const logicalPageNum = parseInt(value.page_logical, 10);
       const logicalPageMatch = !isNaN(logicalPageNum) && logicalPageNum === page;
 

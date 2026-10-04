@@ -372,3 +372,12 @@ class TestFindingAmountCrore:
     def test_no_amount(self):
         from src.entity_graph.mention_indexer import finding_amount_crore
         assert finding_amount_crore({}) is None
+
+    def test_total_amount_paise_name(self):
+        from src.entity_graph.mention_indexer import finding_amount_crore
+        assert finding_amount_crore({"total_amount_paise": 2_500_000_000}) == 2.5
+
+    def test_paise_name_wins_over_legacy_alias(self):
+        from src.entity_graph.mention_indexer import finding_amount_crore
+        finding = {"total_amount_paise": 1_000_000_000, "total_amount_inr": 9_000_000_000}
+        assert finding_amount_crore(finding) == 1.0

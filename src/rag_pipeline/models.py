@@ -29,7 +29,7 @@ class RetrievedChunk:
     hierarchy: Dict[str, str] = field(default_factory=dict)
     report_id: str = ""
     report_year: Optional[int] = None
-    page_physical: int = 0
+    page_physical: int = 0  # 0-based
     page_logical: str = ""
     content_type: str = "paragraph"
 
@@ -232,7 +232,7 @@ class Citation:
     id: int
     report_id: str
     section: str
-    page: int
+    page: int  # 1-based physical page: the "p.N" label the LLM cites
     score: float
     finding_type: Optional[str] = None
     severity: Optional[str] = None

@@ -33,6 +33,7 @@ import { PDFViewer } from './components/PDFViewer';
 import { TablePreview } from './components/TablePreview';
 import { ChatMessage } from './components/ChatMessage';
 import { lookupCitation } from './lib/citationUtils';
+import { toViewerPage } from './utils';
 import { renderMarkdown } from './lib/markdown';
 import { ChartItem, TableItem, TimeSeriesInfo, getPdfUrl, TopicCovered, GlossaryTerm } from './lib/api';
 
@@ -388,7 +389,9 @@ function App() {
         setBannerMinimized(!bannerMinimized);
     };
 
-    const handleNavigateToPage = (page: number, section: string, type: 'chart' | 'table' = 'chart', bbox?: number[] | null) => {
+    // `physicalPage` is the 0-based page from the API.
+    const handleNavigateToPage = (physicalPage: number, section: string, type: 'chart' | 'table' = 'chart', bbox?: number[] | null) => {
+        const page = toViewerPage(physicalPage);
         showPdfPanel();
         setPdfPage(page);
         setCitationFeedback({ show: true, section, page });
@@ -425,7 +428,7 @@ function App() {
         showPdfPanel();
         const citation = lookupCitation(citationText, normalizedCitationMap);
         if (!citation) return;
-        const targetPage = citation.page_physical + 1;
+        const targetPage = toViewerPage(citation.page_physical);
 
         if (view === 'series-chat' && selectedSeries) {
             const citationReportId = citation.report_id;
@@ -581,8 +584,9 @@ function App() {
         let monetaryDisplay: string;
         if (totalMonetaryCrore === 0) {
             monetaryDisplay = 'N/A';
-        } else if (totalMonetaryCrore >= 10000) {
-            monetaryDisplay = `₹${(totalMonetaryCrore / 10000).toFixed(1)}L Cr`;
+        } else if (totalMonetaryCrore >= 100000) {
+            // 1 lakh crore = 100,000 crore
+            monetaryDisplay = `₹${(totalMonetaryCrore / 100000).toFixed(1)}L Cr`;
         } else if (totalMonetaryCrore >= 1000) {
             monetaryDisplay = `₹${(totalMonetaryCrore / 1000).toFixed(1)}K Cr`;
         } else {
@@ -650,7 +654,7 @@ function App() {
                                     <div className="visual-item-content">
                                         <h4>{chart.title}</h4>
                                         <p className="visual-item-analysis">{chart.analysis}</p>
-                                        <div className="visual-item-meta"><span className="meta-section">{getShortSection(chart.section)}</span><span className="meta-page">Page {chart.page}</span></div>
+                                        <div className="visual-item-meta"><span className="meta-section">{getShortSection(chart.section)}</span><span className="meta-page">Page {toViewerPage(chart.page)}</span></div>
                                         <button className="goto-btn" onClick={() => handleNavigateToPage(chart.page, chart.section, 'chart', chart.bbox)}><LocationIcon /> View in PDF</button>
                                     </div>
                                 </div>
@@ -681,7 +685,7 @@ function App() {
                                     <div className="visual-item-content">
                                         <h4>{table.title}</h4>
                                         <p className="visual-item-analysis">{table.analysis}</p>
-                                        <div className="visual-item-meta"><span className="meta-section">{getShortSection(table.section)}</span><span className="meta-page">Page {table.page}</span></div>
+                                        <div className="visual-item-meta"><span className="meta-section">{getShortSection(table.section)}</span><span className="meta-page">Page {toViewerPage(table.page)}</span></div>
                                         <button className="goto-btn" onClick={() => handleNavigateToPage(table.page, table.section, 'table', table.bbox)}><LocationIcon /> View in PDF</button>
                                     </div>
                                 </div>
@@ -843,7 +847,7 @@ function App() {
                                             <p className="topic-desc">{topic.description}</p>
                                             <div className="topic-meta">
                                                 <span>Sections: {topic.sections.join(', ')}</span>
-                                                <span>Pages {topic.page_start}-{topic.page_end}</span>
+                                                <span>Pages {toViewerPage(topic.page_start)}-{toViewerPage(topic.page_end)}</span>
                                             </div>
                                         </div>
                                     ))}

@@ -48,17 +48,23 @@ def get_hierarchy_string(finding: dict) -> str:
     return "Unknown"
 
 
+PAISE_PER_RUPEE = 100
+PAISE_PER_LAKH = 10_000_000
+PAISE_PER_CRORE = 1_000_000_000
+
+
 def extract_monetary_value(finding: dict) -> str:
     """Extract monetary value from finding."""
-    amount = finding.get("total_amount_inr", 0)
+    # Both names hold paise; total_amount_inr is the legacy alias.
+    amount = finding.get("total_amount_paise") or finding.get("total_amount_inr") or 0
     if amount and amount > 0:
         # Format in lakhs/crores for readability
-        if amount >= 10000000:  # 1 crore
-            return f"₹{amount / 10000000:.2f} Cr"
-        elif amount >= 100000:  # 1 lakh
-            return f"₹{amount / 100000:.2f} L"
+        if amount >= PAISE_PER_CRORE:
+            return f"₹{amount / PAISE_PER_CRORE:.2f} Cr"
+        elif amount >= PAISE_PER_LAKH:
+            return f"₹{amount / PAISE_PER_LAKH:.2f} L"
         else:
-            return f"₹{amount:,.0f}"
+            return f"₹{amount / PAISE_PER_RUPEE:,.0f}"
     return "none"
 
 
