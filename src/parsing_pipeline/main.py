@@ -77,6 +77,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
 
+from src.core.gemini_client import log_usage_summary, reset_usage
+
 # Import services from modules
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
     ManifestIngestionService,
@@ -190,6 +192,7 @@ class PipelineOrchestrator:
 
     async def run(self) -> int:
         """Run the complete pipeline with phase skipping support. Returns the process exit code."""
+        reset_usage()
         self._print_header()
 
         # Phases 1-3 with smart caching
@@ -1968,6 +1971,7 @@ class PipelineOrchestrator:
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
             "report_status": statuses,
+            "gemini_usage": log_usage_summary(),
         }
         path = Path("logs") / f"run_summary_{self.run_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)

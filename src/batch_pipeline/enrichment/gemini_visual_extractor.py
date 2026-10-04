@@ -291,11 +291,11 @@ class GeminiVisualExtractor:
 
         self._request_times.append(time.time())
 
-    async def _generate(self, **kwargs):
+    async def _generate(self, tag: str = "phase10b.visual", **kwargs):
         """generate_content with backoff on transient errors (see gemini_client.generate_with_retry)."""
         from src.core.gemini_client import generate_with_retry
 
-        return await asyncio.to_thread(generate_with_retry, **kwargs)
+        return await asyncio.to_thread(generate_with_retry, tag=tag, **kwargs)
 
     async def _generate_json(self, item_type: str, max_attempts: int = 3, **kwargs) -> Dict:
         """
@@ -306,7 +306,7 @@ class GeminiVisualExtractor:
         config = config.model_copy(update={"response_mime_type": "application/json"})
         result: Dict = {}
         for attempt in range(1, max_attempts + 1):
-            response = await self._generate(config=config, **kwargs)
+            response = await self._generate(tag=f"phase10b.visual.{item_type}", config=config, **kwargs)
             result = self._parse_json_response(response.text, item_type)
             if result.get("success"):
                 return result

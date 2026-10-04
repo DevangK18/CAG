@@ -272,6 +272,7 @@ class BatchService:
         model: str,
         max_tokens: int,
         custom_id: str,
+        tag: str = "phase10a",
     ) -> dict:
         """Process a single request with Gemini, retrying transient errors."""
         from google.genai import types
@@ -279,6 +280,7 @@ class BatchService:
 
         try:
             response = generate_with_retry(
+                tag=tag,
                 model=model,
                 contents=[types.Part.from_text(text=prompt)],
                 config=types.GenerateContentConfig(
@@ -318,6 +320,7 @@ class BatchService:
                     req["model"],
                     req["max_tokens"],
                     req["custom_id"],
+                    f"phase10a.{description}",
                 ): req["custom_id"]
                 for req in requests
             }

@@ -254,6 +254,7 @@ class LLMValidator:
 
             response = generate_with_retry(
                 client=self.client,
+                tag="phase9.validator",
                 model=self.model,
                 contents=[types.Part.from_text(text=full_prompt)],
                 config=types.GenerateContentConfig(

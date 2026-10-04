@@ -229,6 +229,7 @@ Return ONLY the JSON array, no explanations."""
 
             response = generate_with_retry(
                 client=self._get_client(),
+                tag="phase5.7.toc",
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
