@@ -17,7 +17,6 @@ Folder Structure:
 """
 
 import json
-import time
 import base64
 import asyncio
 import logging
@@ -224,11 +223,10 @@ class GeminiVisualExtractor:
 
     def __init__(
         self,
-        model: str = "gemini-3.8-flash",  # Vertex AI stable Flash model for visual extraction
+        model: Optional[str] = None,  # default: Phase10ModelConfig.visual
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
         images_dir: str = "data/extraction_images",
-        requests_per_minute: int = 120,  # Agent Platform has no fixed RPM (shared quota); 429s are retried
         trace_emitter=None,
     ):
         """
@@ -239,9 +237,12 @@ class GeminiVisualExtractor:
             batch_jobs_dir: Directory for job tracking files
             processed_dir: Directory with processed report JSONs
             images_dir: Directory for saved extraction images
-            requests_per_minute: Client-side throttle (15 was the AI Studio free-tier limit)
             trace_emitter: Optional TraceEmitter for Phase 10b instrumentation
         """
+        if model is None:
+            from src.core.phase10_models import Phase10ModelConfig
+
+            model = Phase10ModelConfig().visual
         self.model = model
         self.batch_jobs_dir = Path(batch_jobs_dir)
         self.processed_dir = Path(processed_dir)
@@ -253,9 +254,8 @@ class GeminiVisualExtractor:
         self.visual_extraction_dir.mkdir(parents=True, exist_ok=True)
         self.images_dir.mkdir(parents=True, exist_ok=True)
 
-        # Rate limiting
-        self.rpm_limit = requests_per_minute
-        self._request_times: List[float] = []
+        # Items still failing after their own retries get one more pass after this pause
+        self.retry_pause_s = 60
 
         # Initialize Gemini client (lazy — created on first use)
         self._client = None
@@ -270,25 +270,9 @@ class GeminiVisualExtractor:
             logger.info(f"Gemini client initialized with GCP Agent Platform (model={self.model})")
         return self._client
 
-    # ========== RATE LIMITING ==========
-
-    async def _wait_for_rate_limit(self):
-        """
-        Enforce rate limiting (RPM).
-        Waits if we've hit the per-minute limit.
-        """
-        now = time.time()
-        # Remove timestamps older than 60 seconds
-        self._request_times = [t for t in self._request_times if now - t < 60]
-
-        if len(self._request_times) >= self.rpm_limit:
-            # Wait until the oldest request is >60s old
-            sleep_time = 60 - (now - self._request_times[0]) + 0.5
-            if sleep_time > 0:
-                logger.info(f"Rate limit reached, waiting {sleep_time:.1f}s...")
-                await asyncio.sleep(sleep_time)
-
-        self._request_times.append(time.time())
+    # ========== GEMINI CALLS ==========
+    # Concurrency, 429 back-off and the phase deadline come from the shared limiter
+    # (src/core/gemini_limiter.py) inside generate_with_retry.
 
     async def _generate(self, tag: str = "phase10b.visual", **kwargs):
         """generate_content with backoff on transient errors (see gemini_client.generate_with_retry)."""
@@ -330,8 +314,6 @@ class GeminiVisualExtractor:
         Returns:
             Dict with extracted data or error
         """
-        await self._wait_for_rate_limit()
-
         try:
             from google.genai import types
 
@@ -374,8 +356,6 @@ class GeminiVisualExtractor:
         Returns:
             Dict with extracted data or error
         """
-        await self._wait_for_rate_limit()
-
         try:
             from google.genai import types
 
@@ -417,8 +397,6 @@ class GeminiVisualExtractor:
         Returns:
             Dict with unified table data or error
         """
-        await self._wait_for_rate_limit()
-
         try:
             from google.genai import types
 
@@ -479,57 +457,94 @@ class GeminiVisualExtractor:
         Returns:
             List of result dicts with extracted data
         """
-        results = []
-        total = len(items)
         emitter = trace_emitter or self._trace_emitter
+        results = await self._run_items(items, emitter)
 
-        for i, item in enumerate(items, 1):
-            item_type = item.get("type", "table")
-            context = item.get("context", "")
+        # Items that failed transiently (busy model, invalid JSON) get one more pass
+        retry = [i for i, r in enumerate(results) if self._worth_retrying(r)]
+        if retry and self.retry_pause_s is not None:
+            from src.core.gemini_limiter import GeminiDeadlineExceeded, get_limiter
 
-            logger.info(
-                f"Processing {i}/{total}: {item_type} for "
-                f"{item.get('report_id', '?')}/{item.get('chunk_id', '?')}"
-            )
+            logger.info(f"Retrying {len(retry)} failed visual items in {self.retry_pause_s}s")
+            try:
+                await asyncio.to_thread(get_limiter().backoff, self.retry_pause_s, "phase10b")
+            except GeminiDeadlineExceeded:
+                logger.warning(f"Phase 10b time budget used up; {len(retry)} items not retried")
+            else:
+                retried = await self._run_items([items[i] for i in retry], emitter)
+                for i, result in zip(retry, retried):
+                    results[i] = result
+        return results
 
+    @staticmethod
+    def _worth_retrying(result: Dict) -> bool:
+        if result.get("success"):
+            return False
+        from src.core.gemini_client import is_transient
+
+        error = str(result.get("error", ""))
+        return is_transient(error) or "JSON" in error or not error
+
+    async def _run_items(self, items: List[Dict], emitter=None) -> List[Dict]:
+        """Extract items concurrently; results keep the order of items."""
+        from src.core.gemini_limiter import get_limiter
+
+        # Bounds the worker threads; the shared limiter bounds requests in flight
+        gate = asyncio.Semaphore(get_limiter().group_caps.get("phase10b", 8))
+        total = len(items)
+
+        async def run(i: int, item: Dict) -> Dict:
+            async with gate:
+                return await self._extract_item(i, total, item, emitter)
+
+        return list(await asyncio.gather(*(run(i, item) for i, item in enumerate(items, 1))))
+
+    async def _extract_item(self, i: int, total: int, item: Dict, emitter=None) -> Dict:
+        item_type = item.get("type", "table")
+        context = item.get("context", "")
+
+        logger.info(
+            f"Processing {i}/{total}: {item_type} for "
+            f"{item.get('report_id', '?')}/{item.get('chunk_id', '?')}"
+        )
+
+        try:
             if item_type == "multi_page_table":
-                result = await self.extract_multi_page_table(
-                    item["image_paths"], context
-                )
+                result = await self.extract_multi_page_table(item["image_paths"], context)
             elif item_type == "chart":
                 result = await self.extract_chart(item["image_path"], context)
             else:
                 result = await self.extract_table(item["image_path"], context)
+        except Exception as e:  # one item must never sink the batch
+            logger.error(f"Visual extraction failed for {item.get('chunk_id', '?')}: {e}")
+            result = {"success": False, "error": str(e)}
 
-            # Attach metadata
-            result["report_id"] = item.get("report_id", "")
-            result["chunk_id"] = item.get("chunk_id", "")
-            result["item_type"] = item_type
-            result["image_path"] = item.get("image_path", item.get("image_paths", ""))
-            result["json_file"] = item.get("json_file", "")
+        # Attach metadata
+        result["report_id"] = item.get("report_id", "")
+        result["chunk_id"] = item.get("chunk_id", "")
+        result["item_type"] = item_type
+        result["image_path"] = item.get("image_path", item.get("image_paths", ""))
+        result["json_file"] = item.get("json_file", "")
 
-            # Trace: Per-item extraction decision
-            if emitter:
-                if result.get("success"):
-                    emitter.emit_decision(
-                        "10b",
-                        f"gemini_extraction_{item_type}",
-                        "success",
-                        ["success", "failed"],
-                        f"{item_type} extraction successful (chunk {item.get('chunk_id', '?')})",
-                    )
-                else:
-                    emitter.emit_decision(
-                        "10b",
-                        f"gemini_extraction_{item_type}",
-                        "failed",
-                        ["success", "failed"],
-                        f"Error: {result.get('error', 'unknown')[:100]}",
-                    )
-
-            results.append(result)
-
-        return results
+        # Trace: Per-item extraction decision
+        if emitter:
+            if result.get("success"):
+                emitter.emit_decision(
+                    "10b",
+                    f"gemini_extraction_{item_type}",
+                    "success",
+                    ["success", "failed"],
+                    f"{item_type} extraction successful (chunk {item.get('chunk_id', '?')})",
+                )
+            else:
+                emitter.emit_decision(
+                    "10b",
+                    f"gemini_extraction_{item_type}",
+                    "failed",
+                    ["success", "failed"],
+                    f"Error: {str(result.get('error', 'unknown'))[:100]}",
+                )
+        return result
 
     # ========== JOB ORCHESTRATION ==========
 
@@ -553,7 +568,8 @@ class GeminiVisualExtractor:
         Returns:
             Job ID string
         """
-        job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Microseconds: one run submits a job per PDF directory, often in the same second
+        job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         job_id = f"visual_extraction_{job_timestamp}"
         emitter = trace_emitter or self._trace_emitter
 
@@ -943,6 +959,9 @@ class GeminiVisualExtractor:
                 cleaned = "\n".join(lines)
 
             parsed = json.loads(cleaned)
+            # JSON mode sometimes wraps the object in a one-element list
+            if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], dict):
+                parsed = parsed[0]
             if not isinstance(parsed, dict):
                 raise json.JSONDecodeError("Top-level value is not an object", cleaned, 0)
             # Copy pure Gemini response before adding metadata

@@ -152,6 +152,20 @@ def extract_overview_from_json(json_path: Path) -> dict:
     }
 
 
+def _has_llm_fields(path: Path) -> bool:
+    """An existing final overview that was built with LLM-extracted fields."""
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return False
+    # Older overviews predate the _metadata flag; their LLM fields show it instead
+    return bool(data.get("_metadata", {}).get("llm_extraction_available")) or any(
+        data.get(field) for field in ("audit_scope", "audit_objectives", "topics_covered")
+    )
+
+
 def build_final_overviews(service, report_ids) -> tuple[int, int]:
     """
     Merge JSON-extracted and LLM-extracted data into final overview files.
@@ -213,8 +227,13 @@ def build_final_overviews(service, report_ids) -> tuple[int, int]:
             llm_merged_count += 1
             llm_fields_total += merge_stats["fields_merged"]
 
-        # Save final overview to processed directory (tier-aware)
+        # Save final overview to processed directory (tier-aware). Without this run's
+        # LLM fields, an existing overview that has them is kept, not overwritten
         output_path = service.get_final_overview_path(report_id, tier)
+        if not merge_stats["llm_file_found"] and _has_llm_fields(output_path):
+            print(f"  ⚠️  {report_id[:40]}...: LLM overview missing; kept the existing overview")
+            merge_failed += 1
+            continue
         with open(output_path, "w") as f:
             json.dump(overview, f, indent=2, ensure_ascii=False)
 

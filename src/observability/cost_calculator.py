@@ -27,9 +27,11 @@ PRICING: dict[Tuple[str, str], dict[str, float]] = {
     ("anthropic", "claude-3-5-sonnet-20241022"): {"prompt": 3.00, "completion": 15.00},
     ("anthropic", "claude-haiku-4-5-20251001"): {"prompt": 1.00, "completion": 5.00},
     ("anthropic", "claude-3-5-haiku-20241022"): {"prompt": 1.00, "completion": 5.00},
-    # Google Gemini - Latest models (GCP credit billing)
+    # Google Gemini - Latest models (GCP credit billing). Standard rates; the pipeline's
+    # own accounting (src.core.gemini_client) also applies dated and cached rates
+    ("google", "gemini-3.8-flash"): {"prompt": 1.50, "completion": 7.50},
     ("google", "gemini-3.6-flash"): {"prompt": 1.50, "completion": 7.50},
-    ("google", "gemini-3.5-flash"): {"prompt": 0.50, "completion": 3.00},
+    ("google", "gemini-3.5-flash"): {"prompt": 1.50, "completion": 9.00},
     ("google", "gemini-3.5-flash-lite"): {"prompt": 0.30, "completion": 2.50},
     ("google", "gemini-3.1-pro-preview"): {"prompt": 2.00, "completion": 12.00},
     # Google Gemini - Legacy models

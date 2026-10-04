@@ -196,6 +196,22 @@ semantic_enrichment:
   finding_confidence_threshold: 0.5
 
 # ==============================================================================
+# GEMINI LIMITER (all LLM calls: Phase 9 validation, 10a, 10b)
+# ==============================================================================
+gemini:
+  # Requests in flight across the run; a 429 halves it and cools down every caller
+  max_concurrency: 16
+
+  # Requests in flight per phase
+  phase9_concurrency: 4
+  phase10a_concurrency: 8
+  phase10b_concurrency: 8
+
+  # Time budget per phase (minutes); later requests fail and count as losses. 0 = none
+  phase10a_deadline_minutes: 180
+  phase10b_deadline_minutes: 180
+
+# ==============================================================================
 # TRACE INSTRUMENTATION (DEBUGGING & OBSERVABILITY)
 # ==============================================================================
 instrumentation:

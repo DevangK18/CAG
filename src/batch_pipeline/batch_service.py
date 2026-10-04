@@ -150,15 +150,13 @@ class BatchService:
         self.overviews_dir.mkdir(parents=True, exist_ok=True)
         self.summaries_dir.mkdir(parents=True, exist_ok=True)
 
-        # Gemini models via Vertex AI (GCP project billing)
-        # Model IDs: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/models
+        # Gemini models via Vertex AI (GCP project billing), set in one place
+        from src.core.phase10_models import Phase10ModelConfig
+
+        self.model_config = Phase10ModelConfig()
         self.models = {
-            "overview": "gemini-3.1-pro-preview",
-            "executive": "gemini-3.1-pro-preview",
-            "journalist": "gemini-3.1-pro-preview",
-            "deep_dive": "gemini-3.1-pro-preview",
-            "simple": "gemini-3.8-flash",
-            "policy": "gemini-3.1-pro-preview",
+            role: getattr(self.model_config, role)
+            for role in ("overview", "executive", "journalist", "deep_dive", "simple", "policy")
         }
 
         # Max output tokens
@@ -171,8 +169,12 @@ class BatchService:
             "policy": 16000,
         }
 
-        # Concurrent processing settings
-        self.max_workers = 5  # Parallel API calls for Gemini
+        # Threads for concurrent calls; the shared limiter decides how many are in flight
+        from src.core.gemini_limiter import get_limiter
+
+        self.max_workers = get_limiter().group_caps.get("phase10a", 8)
+        # Requests still failing after their own retries get one more pass after this pause
+        self.retry_pause_s = 60
 
         # Current job timestamp (set when creating job tracker)
         self._current_job_timestamp = None
@@ -262,7 +264,33 @@ class BatchService:
         requests: list[dict],
         description: str = "batch",
     ) -> list[dict]:
-        """Process multiple requests concurrently with Gemini."""
+        """
+        Process requests concurrently, then retry the ones that failed transiently.
+
+        A busy spell can outlast one request's ~5 min of retries; a second pass after
+        a pause recovers most of those (lost variants were 429s, not bad prompts).
+        """
+        from src.core.gemini_client import is_transient
+        from src.core.gemini_limiter import GeminiDeadlineExceeded, get_limiter
+
+        results = self._run_requests(requests, description)
+        failed = {r["custom_id"] for r in results if r["error"] and is_transient(r["error"])}
+        if not failed or self.retry_pause_s is None:
+            return results
+        print(f"↻ Retrying {len(failed)} failed {description} requests in {self.retry_pause_s}s")
+        try:
+            get_limiter().backoff(self.retry_pause_s, "phase10a")
+        except GeminiDeadlineExceeded:
+            logger.warning(f"Phase 10a time budget used up; {len(failed)} {description} requests not retried")
+            return results
+        retried = {
+            r["custom_id"]: r
+            for r in self._run_requests([q for q in requests if q["custom_id"] in failed], f"{description} retry")
+        }
+        return [retried.get(r["custom_id"], r) for r in results]
+
+    def _run_requests(self, requests: list[dict], description: str) -> list[dict]:
+        """One concurrent pass over the requests."""
         results = []
         emitter = self._trace_emitter
 
@@ -556,6 +584,18 @@ class BatchService:
         # Save per-report summary files
         for report_id, data in by_report.items():
             output_path = self.get_summary_output_path(report_id)
+            # Never replace a complete file with a partial one: a variant lost this
+            # run keeps its previous text, marked stale (and still counted as lost)
+            previous = {}
+            if output_path.exists():
+                try:
+                    previous = json.loads(output_path.read_text()).get("variants") or {}
+                except (OSError, ValueError):
+                    previous = {}
+            for err in data["errors"]:
+                variant = err["variant"]
+                if variant not in data["variants"] and variant in previous:
+                    data["variants"][variant] = {**previous[variant], "stale": True}
             with open(output_path, "w") as f:
                 json.dump({
                     "report_id": report_id,
@@ -563,6 +603,7 @@ class BatchService:
                     "variants": data["variants"],
                     "variant_count": len(data["variants"]),
                     "errors": data["errors"] or None,
+                    "stale_variants": [v for v, d in data["variants"].items() if d.get("stale")],
                     "ungrounded_variants": [
                         v for v, d in data["variants"].items()
                         if not d.get("grounding", {}).get("grounded", True)
@@ -979,8 +1020,8 @@ class BatchService:
 
         # Hierarchical model config
         hierarchical_models = {
-            "chapter_summary": "gemini-3.5-flash-lite",
-            "section_summary": "gemini-3.5-flash-lite",
+            "chapter_summary": self.model_config.chapter_summary,
+            "section_summary": self.model_config.section_summary,
         }
         hierarchical_max_tokens = {
             "chapter_summary": 500,   # 3-5 sentences

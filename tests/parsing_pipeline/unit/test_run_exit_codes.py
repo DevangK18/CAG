@@ -238,4 +238,5 @@ def test_phase10a_orchestration_runs_to_completion(tmp_path, monkeypatch):
     orch._phase_overview_summary()
     assert orch.state.phase10a_completed
     assert json.loads((tmp_path / "tracker.json").read_text())["status"] == "completed"
-    assert not orch.state.phase10_losses.get("10a")
+    assert orch.state.phase10_losses == {}
+    assert orch._compute_exit_code() == EXIT_OK

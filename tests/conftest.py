@@ -43,3 +43,13 @@ def _anonymous_google_credentials(monkeypatch):
     except ImportError:
         return
     monkeypatch.setattr(google.auth, "default", lambda *a, **k: (AnonymousCredentials(), "test-project"))
+
+
+@pytest.fixture(autouse=True)
+def _fresh_gemini_limiter():
+    """The Gemini limiter is process-wide: start each test with a new one and no cool-down."""
+    from src.core.gemini_limiter import configure_limiter, reset_limiter
+
+    configure_limiter(cooldown_s=0)
+    yield
+    reset_limiter()
