@@ -75,7 +75,7 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 # Import services from modules
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
@@ -1955,19 +1955,31 @@ def parse_skip_phases(values) -> list:
     return phases
 
 
-def setup_logging(debug: bool = False):
+def resolve_run_id(cli_value: Optional[str] = None) -> str:
+    """Run ID for log and summary file names: --run-id, then RUN_ID / GITHUB_RUN_ID, then a timestamp."""
+    return (
+        cli_value
+        or os.environ.get("RUN_ID")
+        or os.environ.get("GITHUB_RUN_ID")
+        or datetime.now().strftime("local-%Y%m%d-%H%M%S")
+    )
+
+
+def setup_logging(debug: bool = False, run_id: Optional[str] = None):
     """
-    Configure root logger with console and rotating file handlers.
+    Configure root logger with a console handler and one log file per run.
 
     Args:
         debug: If True, set all loggers to DEBUG level. Otherwise, WARNING for noisy libs.
+        run_id: Included in the log file name so concurrent or same-day runs never share a file.
     """
     # Create logs directory
     logs_dir = Path("logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate log filename with date
-    log_filename = logs_dir / f"parsing_pipeline_{datetime.now().strftime('%Y%m%d')}.log"
+    # One file per run: a shared daily file mixed concurrent runs and tiers
+    run_id = run_id or resolve_run_id()
+    log_filename = logs_dir / f"parsing_pipeline_{datetime.now().strftime('%Y%m%d')}_{run_id}.log"
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -1986,13 +1998,8 @@ def setup_logging(debug: bool = False):
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
-    # Rotating file handler (10MB per file, keep 5 backups)
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_filename,
-        maxBytes=10 * 1024 * 1024,  # 10 MB
-        backupCount=5,
-        encoding='utf-8'
-    )
+    # Plain file handler: size-based rotation split long runs across files
+    file_handler = logging.FileHandler(log_filename, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
         '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -2069,6 +2076,12 @@ Examples:
              "Recommended: min(cpu_count/2, 4) due to ~2-4GB memory per worker.",
     )
     parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Run identifier for log and summary file names "
+             "(default: $RUN_ID, $GITHUB_RUN_ID or a timestamp)",
+    )
+    parser.add_argument(
         "--trace",
         action="store_true",
         help="Enable trace instrumentation. Emits detailed per-report markdown traces "
@@ -2087,7 +2100,8 @@ Examples:
         args.workers = 1
 
     # Setup logging (must be done early, before any loggers are used)
-    setup_logging(debug=args.debug)
+    args.run_id = resolve_run_id(args.run_id)
+    setup_logging(debug=args.debug, run_id=args.run_id)
 
     # Validate manifest path
     manifest_file = Path(args.manifest_path)
