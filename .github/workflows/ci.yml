@@ -1,7 +1,7 @@
 # =============================================================================
 # CI Pipeline - Lint and Test
 # =============================================================================
-# Runs on every PR and push to main branch.
+# Runs on pushes to main and on PRs into main or feature/gcp-migration.
 # Validates code quality and runs test suite.
 
 name: CI
@@ -10,7 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feature/gcp-migration]
 
 env:
   PYTHON_VERSION: "3.11"
