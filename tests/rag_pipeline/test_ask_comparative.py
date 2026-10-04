@@ -23,6 +23,20 @@ from src.rag_pipeline.models import (
 from src.core.config import RAGConfig, LLMProvider
 
 
+@pytest.fixture(autouse=True)
+def _no_entity_graph_dsn(monkeypatch):
+    """Without a DSN get_entity_service() returns None, as in a deployment with no entity graph.
+
+    The root conftest points ENTITY_GRAPH_DSN at an empty in-memory SQLite database
+    for the entity_graph tests; here it would reach a real EntityService with no tables.
+    Tests of entity filtering patch get_entity_service directly.
+    """
+    # Import first: entity_graph.db runs load_dotenv() on import and would restore a local .env DSN
+    import src.entity_graph.entity_service  # noqa: F401
+
+    monkeypatch.delenv("ENTITY_GRAPH_DSN", raising=False)
+
+
 @dataclass
 class MockReportInfo:
     """Mock report info for registry."""
@@ -509,13 +523,14 @@ class TestAskComparativeEntityFiltering:
 
 
 class TestAskComparativeBackwardCompatibility:
-    """Test that ask_comparative works when entity_graph is not configured."""
+    """Test that ask_comparative works when no entity graph database is configured."""
 
     @patch("src.rag_pipeline.rag_service.get_registry")
     @patch("src.rag_pipeline.rag_service.OpenAI")
     def test_works_without_entity_graph_config(self, mock_openai, mock_registry):
-        """ask_comparative works correctly when entity_graph is not in config (backward compat)."""
-        # Setup config WITHOUT entity_graph
+        """ask_comparative works when no entity graph database is configured."""
+        from src.entity_graph.entity_service import get_entity_service
+
         config = RAGConfig()
         config.llm.provider = LLMProvider.OPENAI
 
@@ -539,8 +554,9 @@ class TestAskComparativeBackwardCompatibility:
         # Setup RAG service
         rag = RAGService(config)
 
-        # Verify entity_graph is not configured
-        assert not hasattr(config, "entity_graph") or not config.entity_graph.enabled
+        # Filtering is on by default but there is no entity graph to query
+        assert config.entity_graph.enabled
+        assert get_entity_service() is None
 
         # Mock retrieval
         result = RetrievalResult(

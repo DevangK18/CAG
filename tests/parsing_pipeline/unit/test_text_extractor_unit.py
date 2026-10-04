@@ -4,10 +4,10 @@ Tests precision text extraction and content type classification.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import ANY, Mock, patch
 
-from ..src.extractors.text_extractor import TextExtractor
-from ..src.modules.data_contracts import ExtractedContent
+from src.parsing_pipeline.extractors.text_extractor import TextExtractor
+from src.core.data_contracts import ExtractedContent
 
 
 class TestTextExtractor:
@@ -42,6 +42,11 @@ class TestTextExtractor:
         # Test only whitespace
         assert text_extractor._normalize_text("   \n\t  ") == ""
 
+    def test_ligatures_and_space_before_punctuation(self, text_extractor):
+        """Ligatures are expanded and stray spaces before punctuation dropped."""
+        assert text_extractor._normalize_text("eﬀective ﬁnancial") == "effective financial"
+        assert text_extractor._normalize_text("audit , period .") == "audit, period."
+
     def test_content_type_classification(self, text_extractor):
         """Test layout label to content type mapping."""
         # Header variants
@@ -64,23 +69,21 @@ class TestTextExtractor:
     @patch("fitz.open")
     def test_extract_text_from_bbox_valid(self, mock_fitz, text_extractor):
         """Test text extraction with valid bounding box."""
-        # Mock PDF document and page
         mock_doc = Mock()
         mock_page = Mock()
+        mock_page.rotation = 0
         mock_doc.load_page.return_value = mock_page
         mock_fitz.return_value = mock_doc
-
-        # Mock get_text with clip parameter
         mock_page.get_text.return_value = "Extracted text content"
 
-        # Test extraction
-        result = text_extractor._extract_text_from_bbox(
+        text, rotation = text_extractor._extract_text_from_bbox(
             "test.pdf", 0, [10, 20, 100, 50]
         )
 
-        # Verify result and calls
-        assert result == "Extracted text content"
-        mock_page.get_text.assert_called_once_with("text", clip=Mock(), sort=True)
+        assert text == "Extracted text content"
+        assert rotation == 0
+        mock_page.get_text.assert_called_once_with("text", clip=ANY, sort=True)
+        mock_doc.close.assert_called()
 
     @patch("fitz.open")
     def test_extract_text_from_bbox_invalid(self, mock_fitz, text_extractor):
@@ -89,14 +92,13 @@ class TestTextExtractor:
             text_extractor._extract_text_from_bbox(
                 "test.pdf", 0, [10, 20]
             )  # Too few coords
+        mock_fitz.assert_not_called()
 
     @patch.object(TextExtractor, "_extract_text_from_bbox")
     def test_full_extract_pipeline(self, mock_extract, text_extractor):
         """Test complete extraction pipeline."""
-        # Mock text extraction
-        mock_extract.return_value = "This is a sample paragraph of text content."
+        mock_extract.return_value = ("This is a sample paragraph of text content.", 0)
 
-        # Test extraction
         result = text_extractor.extract(
             pdf_path="test.pdf",
             page_num=1,
@@ -105,15 +107,27 @@ class TestTextExtractor:
             confidence=0.87,
         )
 
-        # Verify result structure
         assert isinstance(result, ExtractedContent)
         assert result.content_type == "paragraph"
         assert result.content == "This is a sample paragraph of text content."
         assert result.source_page_physical == 1
         assert result.source_bbox == [50, 100, 300, 150]
         assert result.model_used == "PyMuPDF-clip"
+        assert result.extraction_method == "pymupdf-text"
         assert result.layout_label == "Text"
         assert result.layout_confidence == 0.87
+        assert result.structured_data is None
+
+    @patch.object(TextExtractor, "_extract_text_from_bbox")
+    def test_rotated_page_recorded_in_structured_data(self, mock_extract, text_extractor):
+        """A non-zero page rotation is kept for the Phase 6 red flag."""
+        mock_extract.return_value = ("Text read from a landscape annexure page.", 90)
+
+        result = text_extractor.extract(
+            pdf_path="test.pdf", page_num=3, bbox=[0, 0, 100, 50], label="Text"
+        )
+
+        assert result.structured_data == {"page_rotation": 90}
 
     @patch.object(TextExtractor, "_extract_text_from_bbox")
     def test_extract_with_different_content_types(self, mock_extract, text_extractor):
@@ -127,7 +141,7 @@ class TestTextExtractor:
         ]
 
         for label, text_content, expected_type in test_cases:
-            mock_extract.return_value = text_content
+            mock_extract.return_value = (text_content, 0)
 
             result = text_extractor.extract(
                 pdf_path="test.pdf",
@@ -144,36 +158,24 @@ class TestTextExtractor:
     @patch.object(TextExtractor, "_extract_text_from_bbox")
     def test_extract_empty_text_filtering(self, mock_extract, text_extractor):
         """Test that empty or whitespace-only text is filtered out."""
-        # Test empty string
-        mock_extract.return_value = ""
+        for raw in ("", "   \n\t  "):
+            mock_extract.return_value = (raw, 0)
 
-        result = text_extractor.extract(
-            pdf_path="test.pdf",
-            page_num=0,
-            bbox=[0, 0, 100, 50],
-            label="Text",
-            confidence=0.8,
-        )
-        assert result is None
-
-        # Test whitespace only
-        mock_extract.return_value = "   \n\t  "
-
-        result = text_extractor.extract(
-            pdf_path="test.pdf",
-            page_num=0,
-            bbox=[0, 0, 100, 50],
-            label="Text",
-            confidence=0.8,
-        )
-        assert result is None
+            result = text_extractor.extract(
+                pdf_path="test.pdf",
+                page_num=0,
+                bbox=[0, 0, 100, 50],
+                label="Text",
+                confidence=0.8,
+            )
+            assert result is None
 
     @patch.object(TextExtractor, "_extract_text_from_bbox")
     def test_extract_text_normalization(self, mock_extract, text_extractor):
         """Test that text normalization is applied correctly."""
-        # Text with hyphenation and extra whitespace
         mock_extract.return_value = (
-            "This is a hy-\nphenated word  with\textra\t\twhitespace."
+            "This is a hy-\nphenated word  with\textra\t\twhitespace.",
+            0,
         )
 
         result = text_extractor.extract(
@@ -190,18 +192,26 @@ class TestTextExtractor:
         assert result.content.startswith("This")  # Leading space removed
 
     @patch("fitz.open")
-    def test_pdf_access_error_handling(self, mock_fitz, text_extractor):
-        """Test error handling when PDF access fails."""
-        # Mock PDF opening failure
-        mock_fitz.side_effect = Exception("PDF access error")
+    def test_page_access_error_wrapped(self, mock_fitz, text_extractor):
+        """Errors reading the page are raised as ValueError."""
+        mock_doc = Mock()
+        mock_doc.load_page.side_effect = Exception("page out of range")
+        mock_fitz.return_value = mock_doc
 
         with pytest.raises(ValueError, match="Failed to extract text from PDF"):
             text_extractor._extract_text_from_bbox("test.pdf", 0, [0, 0, 100, 50])
+        mock_doc.close.assert_called()
+
+    @patch("fitz.open")
+    def test_unopenable_pdf_returns_none(self, mock_fitz, text_extractor):
+        """A PDF that cannot be opened yields no content rather than an exception."""
+        mock_fitz.side_effect = Exception("PDF access error")
+
+        assert text_extractor.extract("test.pdf", 0, [0, 0, 100, 50], label="Text") is None
 
     def test_extract_error_recovery(self, text_extractor):
         """Test that extraction failures are handled gracefully."""
         with patch.object(text_extractor, "_extract_text_from_bbox") as mock_extract:
-            # Mock extraction failure
             mock_extract.side_effect = Exception("PyMuPDF error")
 
             result = text_extractor.extract(
@@ -212,5 +222,4 @@ class TestTextExtractor:
                 confidence=0.8,
             )
 
-            # Should return None on failure
             assert result is None

@@ -490,7 +490,8 @@ class TestSOTAConfig:
         assert config.enabled is True
         assert config.drill_down_threshold == 0.85
         assert config.default_level == 2
-        assert "haiku" in config.chapter_model
+        assert config.chapter_model.startswith("gemini-")
+        assert config.section_model.startswith("gemini-")
 
     def test_query_routing_config_defaults(self):
         """Test QueryRoutingConfig defaults."""
