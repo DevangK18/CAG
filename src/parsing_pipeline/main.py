@@ -1940,6 +1940,21 @@ class PipelineOrchestrator:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+SKIPPABLE_PHASES = ("5.5", "5.7", "10a", "10b", "10c")
+
+
+def parse_skip_phases(values) -> list:
+    """Accept "--skip 10a 10b" and "--skip 10a,10b" (the workflow passes commas)."""
+    phases = [p.strip() for v in values or [] for p in v.split(",") if p.strip()]
+    unknown = sorted(set(phases) - set(SKIPPABLE_PHASES))
+    if unknown:
+        raise ValueError(
+            f"unknown phase(s) in --skip: {', '.join(unknown)} "
+            f"(choose from {', '.join(SKIPPABLE_PHASES)})"
+        )
+    return phases
+
+
 def setup_logging(debug: bool = False):
     """
     Configure root logger with console and rotating file handlers.
@@ -2025,9 +2040,9 @@ Examples:
     parser.add_argument(
         "--skip",
         nargs="*",
-        choices=["5.5", "5.7", "10a", "10b", "10c"],
         default=[],
-        help="Skip optional phases (space-separated)",
+        help="Skip optional phases: " + ", ".join(SKIPPABLE_PHASES)
+             + " (space- or comma-separated)",
     )
     parser.add_argument(
         "--quiet",
@@ -2061,6 +2076,10 @@ Examples:
     )
 
     args = parser.parse_args()
+    try:
+        args.skip = parse_skip_phases(args.skip)
+    except ValueError as e:
+        parser.error(str(e))
 
     # Handle --trace flag constraints
     if args.trace and args.workers > 1:
