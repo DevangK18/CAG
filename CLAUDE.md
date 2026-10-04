@@ -86,9 +86,9 @@ DATA_DIR=/app/data              # Local data directory
 **Gemini Models:**
 | Component | Model | Cost (input/output per 1M) |
 |-----------|-------|---------------------------|
-| Chat/RAG | gemini-3.5-flash | $0.50 / $3.00 |
-| Batch Summaries | gemini-3.5-flash | $0.50 / $3.00 |
-| TOC Validation | gemini-3.6-flash | $1.50 / $7.50 |
+| Chat/RAG | gemini-3.5-flash | $1.50 / $9.00 |
+| Batch Summaries | gemini-3.5-flash | $1.50 / $9.00 |
+| TOC Validation | gemini-3.6-flash | $0.75 / $3.75 to 2026-12-31, then $1.50 / $7.50 |
 | Embeddings | text-embedding-005 | $0.00625 |
 
 ### Claude Batch Mode (Optional)

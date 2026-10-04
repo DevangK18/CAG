@@ -68,9 +68,9 @@ class TestAccumulation:
         client = _client(_response(prompt=1_000_000, candidates=0, thoughts=1_000_000))
         gc.generate_with_retry(client=client, tag="t", model="gemini-3.5-flash", contents="x")
         summary = gc.get_usage_summary()
-        # 1M input * $0.50 + 1M thinking (output) * $3.00
-        assert summary["totals"]["estimated_cost_usd"] == pytest.approx(3.50)
-        assert summary["by_model"]["gemini-3.5-flash"]["estimated_cost_usd"] == pytest.approx(3.50)
+        # 1M input * $1.50 + 1M thinking (output) * $9.00
+        assert summary["totals"]["estimated_cost_usd"] == pytest.approx(10.50)
+        assert summary["by_model"]["gemini-3.5-flash"]["estimated_cost_usd"] == pytest.approx(10.50)
 
     def test_per_model_and_per_tag_split(self):
         client = _client(_response(prompt=10), _response(prompt=20), _response(prompt=40))
@@ -175,7 +175,7 @@ class TestFailures:
         totals = gc.get_usage_summary()["totals"]
         assert totals["failed_calls"] == 1
         assert totals["tokens"]["thoughts"] == 1000
-        assert totals["estimated_cost_usd"] == pytest.approx((500 * 0.5 + 1000 * 3.0) / 1e6)
+        assert totals["estimated_cost_usd"] == pytest.approx((500 * 1.5 + 1000 * 9.0) / 1e6)
 
     def test_record_usage_failed(self):
         gc.record_usage(None, "gemini-3.5-flash", "direct", success=False)
@@ -204,7 +204,7 @@ class TestUnknownModel:
         gc.generate_with_retry(client=client, tag="mix", model="gemini-unpriced-test", contents="x")
         tag = gc.get_usage_summary()["by_tag"]["mix"]
         assert tag["estimated_cost_usd"] is None
-        assert tag["estimated_cost_usd_priced_models"] == pytest.approx(0.50)
+        assert tag["estimated_cost_usd_priced_models"] == pytest.approx(1.50)
 
 
 class TestSummaryOutput:
@@ -229,7 +229,7 @@ class TestSummaryOutput:
                                                  "tool_use_prompt", "input", "output"}
         assert {(e["model"], e["tag"]) for e in data["by_model_tag"]} == {
             ("gemini-3.5-flash", "phase10a.summary"), ("gemini-3.8-flash", "phase10b.visual.chart")}
-        assert data["prices_usd_per_1m"]["gemini-3.5-flash"] == [{"input": 0.5, "output": 3.0}]
+        assert data["prices_usd_per_1m"]["gemini-3.5-flash"] == [{"input": 1.5, "cached": 0.15, "output": 9.0}]
 
     def test_merge_usage_from_worker_summary(self):
         gc.generate_with_retry(client=_client(_response(prompt=7)), tag="phase5.7.toc",
@@ -294,8 +294,21 @@ class TestDatedPrices:
     def test_flash_intro_then_standard_rate(self):
         from datetime import date
         from src.core.gemini_client import _price_for
-        assert _price_for("gemini-3.8-flash", 0, date(2026, 12, 31)) == {"input": 0.75, "output": 3.75}
-        assert _price_for("gemini-3.8-flash", 0, date(2027, 1, 1)) == {"input": 1.50, "output": 7.50}
+        for model in ("gemini-3.8-flash", "gemini-3.6-flash"):
+            assert _price_for(model, 0, date(2026, 12, 31)) == {"input": 0.75, "cached": 0.075, "output": 3.75}
+            assert _price_for(model, 0, date(2027, 1, 1)) == {"input": 1.50, "cached": 0.15, "output": 7.50}
+
+    def test_flash_lite_price(self):
+        from datetime import date
+        from src.core.gemini_client import _price_for
+        assert _price_for("gemini-3.5-flash-lite", 0, date(2026, 10, 4)) == {"input": 0.30, "cached": 0.03, "output": 2.50}
+
+    def test_cached_tokens_bill_at_cached_rate(self):
+        from datetime import date
+        from src.core.gemini_client import _cost_usd
+        # 1M prompt tokens of which 600K cached, on gemini-3.5-flash ($1.50 in, $0.15 cached)
+        cost = _cost_usd("gemini-3.5-flash", {"prompt": 1_000_000, "cached": 600_000}, date(2026, 10, 4))
+        assert cost == pytest.approx(0.4 * 1.50 + 0.6 * 0.15)
 
     def test_pro_long_context_rate(self):
         from datetime import date

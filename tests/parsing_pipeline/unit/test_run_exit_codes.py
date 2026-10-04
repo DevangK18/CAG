@@ -149,6 +149,7 @@ def test_phase10a_losses_counted_from_summary_files(tmp_path, monkeypatch):
     service = SimpleNamespace(
         get_summary_output_path=lambda rid: sums / f"{rid}.json",
         get_overview_output_path=lambda rid: tmp_path / f"{rid}_ov.json",
+        get_hierarchical_output_path=lambda rid: tmp_path / f"{rid}_hier.json",
     )
     orch._record_phase10a_losses(service, ["A", "B"], merge_failed=0)
     losses = orch.state.phase10_losses["10a"]
@@ -174,3 +175,19 @@ def test_run_summary_lists_quarantined_files(tmp_path, monkeypatch):
     orch.exit_code = orch._compute_exit_code()
     data = json.loads(orch._write_run_summary().read_text())
     assert data["quarantined_files"] == ["state/B_chunks.json"]
+
+def test_lost_chapter_and_section_summaries_counted(tmp_path, monkeypatch):
+    from src.batch_pipeline.prompts.summary_variants import VARIANTS
+    orch = _orch(tmp_path, monkeypatch)
+    _complete(orch, "A")
+    (tmp_path / "A_sum.json").write_text(json.dumps({"variants": {v: {} for v in VARIANTS}}))
+    (tmp_path / "A_ov.json").write_text("{}")
+    (tmp_path / "A_hier.json").write_text(json.dumps({"stats": {"chapters_failed": 2, "sections_failed": 5}}))
+    service = SimpleNamespace(
+        get_summary_output_path=lambda rid: tmp_path / f"{rid}_sum.json",
+        get_overview_output_path=lambda rid: tmp_path / f"{rid}_ov.json",
+        get_hierarchical_output_path=lambda rid: tmp_path / f"{rid}_hier.json",
+    )
+    orch._record_phase10a_losses(service, ["A"], merge_failed=0)
+    assert orch.state.phase10_losses["10a"]["A"] == {"chapter_summaries": 2, "section_summaries": 5}
+    assert orch._compute_exit_code() == EXIT_PARTIAL

@@ -1381,7 +1381,7 @@ class BatchService:
         from collections import defaultdict
 
         # Group by report_id
-        by_report = defaultdict(lambda: {"chapters": [], "sections": []})
+        by_report = defaultdict(lambda: {"chapters": [], "sections": [], "errors": []})
 
         success_count = 0
         error_count = 0
@@ -1390,13 +1390,20 @@ class BatchService:
             custom_id = result.get("custom_id")
             mapping = id_mapping.get(custom_id, {})
 
+            report_id = mapping.get("report_id", result.get("report_id"))
+            level = mapping.get("level", 0)
+
             if result.get("error"):
                 print(f"⚠️  Hierarchical summary failed: {custom_id} - {result['error']}")
                 error_count += 1
+                # Recorded per report so the run can count lost chapter/section summaries
+                by_report[report_id]["errors"].append({
+                    "parent_chunk_id": mapping.get("parent_chunk_id"),
+                    "title": mapping.get("title"),
+                    "hierarchy_level": level,
+                    "error": str(result["error"])[:300],
+                })
                 continue
-
-            report_id = mapping.get("report_id", result.get("report_id"))
-            level = mapping.get("level", 0)
 
             summary_entry = {
                 "parent_chunk_id": mapping.get("parent_chunk_id"),
@@ -1426,9 +1433,12 @@ class BatchService:
                     "generated_at": datetime.now().isoformat(),
                     "chapter_summaries": summaries["chapters"],
                     "section_summaries": summaries["sections"],
+                    "errors": summaries["errors"] or None,
                     "stats": {
                         "chapter_count": len(summaries["chapters"]),
                         "section_count": len(summaries["sections"]),
+                        "chapters_failed": sum(1 for e in summaries["errors"] if e["hierarchy_level"] == 2),
+                        "sections_failed": sum(1 for e in summaries["errors"] if e["hierarchy_level"] == 1),
                     }
                 }, f, indent=2)
 

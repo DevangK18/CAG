@@ -1982,6 +1982,13 @@ class PipelineOrchestrator:
                 lost["summary_variants"] = missing
             if not service.get_overview_output_path(report_id).exists():
                 lost["llm_overview"] = True
+            hier = service.get_hierarchical_output_path(report_id)
+            if hier.exists():
+                stats = json.loads(hier.read_text()).get("stats") or {}
+                if stats.get("chapters_failed"):
+                    lost["chapter_summaries"] = stats["chapters_failed"]
+                if stats.get("sections_failed"):
+                    lost["section_summaries"] = stats["sections_failed"]
             if lost:
                 losses[report_id] = lost
         if merge_failed:
