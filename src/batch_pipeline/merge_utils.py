@@ -13,52 +13,27 @@ from datetime import datetime
 from typing import Optional
 
 
+# Key the overview batch stamps into <id>_overview_llm.json to mark its run.
+RUN_MARKER_KEY = "_job_timestamp"
+
+
 def find_llm_overview_file(report_id: str, overviews_dir: Path) -> Optional[Path]:
     """
-    Find the LLM overview file using fuzzy matching for truncated names.
+    Find this report's LLM overview file by exact report ID.
+
+    No prefix or substring fallback: state and local IDs share their first parts
+    ("OD_2025_..."), so a fuzzy match picked another report's overview whenever
+    this one's was missing (D-10a-05).
 
     Args:
         report_id: Full report ID
         overviews_dir: Directory containing LLM overview files
 
     Returns:
-        Path to matching LLM overview file, or None if not found
+        Path to {report_id}_overview_llm.json, or None if it does not exist
     """
-    if not overviews_dir.exists():
-        return None
-
-    # List all files in the directory
-    all_files = list(overviews_dir.glob("*_overview_llm.json"))
-
-    if len(all_files) == 0:
-        return None
-
-    # Strategy 1: Exact match
-    for f in all_files:
-        if report_id in f.name:
-            return f
-
-    # Strategy 2: Match on key parts of the report ID
-    # Extract key identifiers: year, report number, ministry
-    report_parts = report_id.split("_")
-
-    # Try to find common substrings
-    # e.g., "2025_04_CAG_Report_on_Union_Government_Accounts"
-    for length in range(len(report_parts), 3, -1):
-        partial_id = "_".join(report_parts[:length])
-        for f in all_files:
-            if partial_id in f.name:
-                return f
-
-    # Strategy 3: Match on year and report number pattern
-    # Look for "2025_04" pattern
-    year_report_pattern = "_".join(report_parts[:2]) if len(report_parts) >= 2 else None
-    if year_report_pattern:
-        for f in all_files:
-            if year_report_pattern in f.name:
-                return f
-
-    return None
+    path = Path(overviews_dir) / f"{report_id}_overview_llm.json"
+    return path if path.is_file() else None
 
 
 def merge_llm_overview_data(
@@ -66,7 +41,8 @@ def merge_llm_overview_data(
     main_overview: dict,
     overviews_dir: Path,
     summaries_dir: Path,
-    verbose: bool = False
+    verbose: bool = False,
+    run_marker: Optional[str] = None,
 ) -> tuple[dict, dict]:
     """
     Merge LLM-extracted data into the main overview.
@@ -77,40 +53,54 @@ def merge_llm_overview_data(
         overviews_dir: Directory containing LLM overview files
         summaries_dir: Directory containing summary files
         verbose: Whether to print detailed merge info
+        run_marker: This run's job timestamp. When both it and the file's
+            RUN_MARKER_KEY are set and differ, the file is from an earlier run
+            and is not merged.
 
     Returns:
         Tuple of (updated_overview, merge_stats)
         merge_stats contains: {
             "llm_file_found": bool,
             "fields_merged": int,
-            "summaries_available": bool
+            "summaries_available": bool,
+            "stale": bool
         }
     """
     merge_stats = {
         "llm_file_found": False,
         "fields_merged": 0,
         "summaries_available": False,
-        "llm_file_path": None
+        "llm_file_path": None,
+        "stale": False,
     }
 
-    # Find LLM overview file (handles truncated names)
     llm_overview_path = find_llm_overview_file(report_id, overviews_dir)
+    llm_overview = None
 
     if llm_overview_path is None:
         if verbose:
             print(f"   ⚠️  No LLM overview file found for {report_id}")
-        return main_overview, merge_stats
+    else:
+        merge_stats["llm_file_found"] = True
+        merge_stats["llm_file_path"] = str(llm_overview_path)
+        try:
+            with open(llm_overview_path, "r", encoding="utf-8") as f:
+                llm_overview = json.load(f)
+        except Exception as e:
+            if verbose:
+                print(f"   ❌ Failed to load LLM overview: {e}")
 
-    merge_stats["llm_file_found"] = True
-    merge_stats["llm_file_path"] = str(llm_overview_path)
-
-    # Load LLM overview
-    try:
-        with open(llm_overview_path, "r", encoding="utf-8") as f:
-            llm_overview = json.load(f)
-    except Exception as e:
+    file_marker = llm_overview.get(RUN_MARKER_KEY) if isinstance(llm_overview, dict) else None
+    if run_marker and file_marker and file_marker != run_marker:
+        # Left over from an earlier run: this run's overview failed
         if verbose:
-            print(f"   ❌ Failed to load LLM overview: {e}")
+            print(f"   ⚠️  Stale LLM overview for {report_id} (run {file_marker})")
+        merge_stats["stale"] = True
+        llm_overview = None
+
+    if not isinstance(llm_overview, dict):
+        _record_llm_metadata(main_overview, merge_stats, None)
+        _record_summaries(report_id, main_overview, merge_stats, summaries_dir)
         return main_overview, merge_stats
 
     # Fields to merge from LLM extraction
@@ -137,21 +127,25 @@ def merge_llm_overview_data(
                 else:
                     print(f"      ✓ {field}")
 
-    # Update metadata
-    if "_metadata" not in main_overview:
-        main_overview["_metadata"] = {}
-
-    main_overview["_metadata"]["llm_extraction_available"] = merge_stats["fields_merged"] > 0
-    main_overview["_metadata"]["llm_extraction_path"] = merge_stats["llm_file_path"]
-    main_overview["_metadata"]["llm_merged_at"] = datetime.now().isoformat()
-    main_overview["_metadata"]["llm_fields_merged"] = merge_stats["fields_merged"]
-
-    # Check for summaries
-    summaries_path = summaries_dir / f"{report_id}_summaries.json"
-    merge_stats["summaries_available"] = summaries_path.exists()
-    main_overview["_metadata"]["summaries_available"] = merge_stats["summaries_available"]
-    main_overview["_metadata"]["summaries_path"] = (
-        str(summaries_path) if merge_stats["summaries_available"] else None
-    )
-
+    _record_llm_metadata(main_overview, merge_stats, file_marker)
+    _record_summaries(report_id, main_overview, merge_stats, summaries_dir)
     return main_overview, merge_stats
+
+
+def _record_llm_metadata(main_overview: dict, merge_stats: dict, file_marker: Optional[str]):
+    meta = main_overview.setdefault("_metadata", {})
+    merged = merge_stats["fields_merged"] > 0
+    meta["llm_extraction_available"] = merged
+    meta["llm_extraction_path"] = merge_stats["llm_file_path"] if merged else None
+    meta["llm_extraction_run"] = file_marker if merged else None
+    meta["llm_extraction_stale"] = merge_stats["stale"]
+    meta["llm_merged_at"] = datetime.now().isoformat()
+    meta["llm_fields_merged"] = merge_stats["fields_merged"]
+
+
+def _record_summaries(report_id: str, main_overview: dict, merge_stats: dict, summaries_dir: Path):
+    summaries_path = Path(summaries_dir) / f"{report_id}_summaries.json"
+    merge_stats["summaries_available"] = summaries_path.exists()
+    meta = main_overview.setdefault("_metadata", {})
+    meta["summaries_available"] = merge_stats["summaries_available"]
+    meta["summaries_path"] = str(summaries_path) if merge_stats["summaries_available"] else None

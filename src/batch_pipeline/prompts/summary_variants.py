@@ -19,6 +19,9 @@ VARIANTS = ["executive", "journalist", "deep_dive", "simple", "policy"]
 # TIER CONTEXT DICTIONARY
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# No example amounts or headlines here or in the prompts below: models reused them
+# as if they were the report's own figures (D-10a-07).
+
 TIER_CONTEXT = {
     "union": {
         "name": "Union",
@@ -35,18 +38,10 @@ TIER_CONTEXT = {
         "financial_scale": {
             "critical": "₹100 Crore",
             "high": "₹10 Crore",
-            "example_large": "₹12,000 Crore",
-            "example_medium": "₹500 Crore",
-            "relatable": "₹12,000 Crore—enough to build 2,400 government schools",
         },
         "action_channels": "Ministry circulars, Office Memoranda, Cabinet notes",
-        "media_context": "major national newspaper (The Hindu, Indian Express, Times of India)",
-        "entity_examples": "Central Ministries, PSUs like NHAI/FCI, national schemes like PMAY",
-        "headline_examples": [
-            "₹3.5 Lakh Crore Gap: CAG Audit Exposes Tax Collection Failures",
-            "Railway Safety Funds Unspent as Accidents Continue, Reveals CAG",
-            "Government Lost ₹12,000 Crore to Contract Irregularities: Audit",
-        ],
+        "media_context": "major national newspaper",
+        "entity_examples": "Central Ministries, Central PSUs, national schemes",
     },
     "state": {
         "name": "State",
@@ -64,18 +59,10 @@ TIER_CONTEXT = {
         "financial_scale": {
             "critical": "₹50 Crore",
             "high": "₹5 Crore",
-            "example_large": "₹500 Crore",
-            "example_medium": "₹50 Crore",
-            "relatable": "₹500 Crore—the annual budget of 50 district hospitals",
         },
         "action_channels": "Government Orders (GOs), Department circulars, Secretariat instructions",
-        "media_context": "major regional newspaper (Dainik Bhaskar, Amar Ujala, Eenadu, Mathrubhumi)",
+        "media_context": "major regional newspaper",
         "entity_examples": "State departments, State PSEs (SPSEs), state-level schemes",
-        "headline_examples": [
-            "₹500 Crore Meant for State Roads Diverted: CAG Audit",
-            "State Health Department Failed to Spend ₹200 Crore: Audit Reveals",
-            "Power Distribution Losses Cost State ₹1,200 Crore Annually: CAG",
-        ],
     },
     "local_body": {
         "name": "Local Body",
@@ -94,19 +81,10 @@ TIER_CONTEXT = {
             "critical": "₹10 Crore",
             "high": "₹1 Crore",
             "medium": "₹10 Lakh",
-            "example_large": "₹25 Crore",
-            "example_medium": "₹2 Crore",
-            "example_small": "₹50 Lakh",
-            "relatable": "₹50 Lakh—the annual budget of 5 Gram Panchayats",
         },
         "action_channels": "District Collector orders, Panchayat resolutions, Municipal council decisions",
         "media_context": "regional and local newspapers with grassroots impact framing",
         "entity_examples": "Gram Panchayats, Zilla Parishads, Municipal Corporations, Block offices, DRDA",
-        "headline_examples": [
-            "₹25 Crore for Village Roads Unused: CAG Finds 200 GPs Never Spent Their Grants",
-            "60% of Gram Panchayats Haven't Been Audited in 3 Years: CAG Report",
-            "Municipal Corporations Failed to Collect ₹15 Crore in Property Tax: Audit",
-        ],
     },
 }
 
@@ -342,6 +320,8 @@ ACCURACY_RULES = """
 ## Accuracy Rules (apply to everything above)
 - Quote monetary amounts exactly as the report states them. Never add amounts together into a new total, and never present outlays, budgets or sanctioned costs as losses.
 - Never output fill-in placeholders such as [Date], [Amount], [Name], [XXX], DD/MM/YYYY or blank lines (____). If a detail such as a date, officer or notice number is not in the report data, leave it out or write "not stated in the report".
+- Every number you state (amounts, percentages, counts, dates, years, paragraph and page numbers) must appear in the Report Data. You may round a stated figure, but never derive a new one: no totals, differences, averages, per-unit figures, shares or lakh/crore conversions.
+- These instructions contain no facts about this report. Take every figure, name, scheme and system from the Report Data only.
 """
 
 
@@ -413,7 +393,7 @@ def _get_executive_prompt_union() -> str:
 - Order by monetary impact (highest first)
 - For each finding include:
   - Clear statement of the issue
-  - Specific amount in ₹ Crores
+  - Specific amount, as the report states it
   - Reference to section/paragraph
   - Brief implication for national programs/taxpayers
 - Use sub-headers to group related findings
@@ -421,7 +401,7 @@ def _get_executive_prompt_union() -> str:
 ### 3. Financial Impact Summary (300-400 words)
 - Headline amounts the report itself states as loss, excess or irregular expenditure (quoted, not added together)
 - Breakdown by category (non-compliance, revenue loss, irregular expenditure, etc.)
-- Breakdown by severity (critical ≥₹100 Cr, high ≥₹10 Cr, medium ≥₹1 Cr)
+- Breakdown by severity, using the severity counts in the Findings Overview
 - Any recurring vs. one-time issues
 
 ### 4. Key Recommendations (400-500 words)
@@ -439,8 +419,8 @@ def _get_executive_prompt_union() -> str:
 ## Style Guidelines
 - Formal, professional tone suitable for Central Government communication
 - Use bullet points strategically for scanability
-- Always include specific numbers (₹X.XX Crore)
-- Reference source sections (Section 3.4, Para 2.5.1)
+- Always include the specific amounts the report states
+- Reference the section or paragraph numbers given in the Report Data
 - Reference GFR/CVC guidelines where applicable
 - NO meta-commentary like "This report discusses..." - start directly with content
 - Use tables where they aid comprehension
@@ -479,7 +459,7 @@ def _get_executive_prompt_state(state_name: str = None) -> str:
 - Order by monetary impact (highest first)
 - For each finding include:
   - Clear statement of the issue
-  - Specific amount in ₹ Crores
+  - Specific amount, as the report states it
   - Reference to section/paragraph
   - Implication for state finances/services
 - Use sub-headers to group related findings
@@ -487,7 +467,7 @@ def _get_executive_prompt_state(state_name: str = None) -> str:
 ### 3. Financial Impact Summary (250-350 words)
 - Headline amounts the report itself states as loss, excess or irregular expenditure (quoted, not added together)
 - Breakdown by category (non-compliance, revenue loss, irregular expenditure)
-- Breakdown by severity (critical ≥₹50 Cr, high ≥₹5 Cr, medium ≥₹0.5 Cr)
+- Breakdown by severity, using the severity counts in the Findings Overview
 - Comparison to state budget allocations where relevant
 - Recurring vs. one-time issues
 
@@ -506,8 +486,8 @@ def _get_executive_prompt_state(state_name: str = None) -> str:
 ## Style Guidelines
 - Formal, professional tone suitable for state government communication
 - Reference State Financial Rules and Treasury Code where applicable
-- Include specific amounts (₹X.XX Crore)
-- Reference source sections (Section 3.4, Para 2.5.1)
+- Include the specific amounts the report states
+- Reference the section or paragraph numbers given in the Report Data
 - NO meta-commentary - start directly with content
 - Use tables where they aid comprehension
 
@@ -547,7 +527,7 @@ def _get_executive_prompt_local(state_name: str = None) -> str:
 - Order by impact (financial + institutional)
 - For each finding include:
   - Clear statement of the issue
-  - Amount involved (use ₹ Lakhs for smaller amounts, ₹ Crores for larger)
+  - Amount involved, in the unit the report uses (lakh or crore)
   - Number of local bodies affected
   - Reference to section/paragraph
   - Direct impact on citizens/service delivery
@@ -558,14 +538,14 @@ def _get_executive_prompt_local(state_name: str = None) -> str:
 - Breakdown by:
   - Own revenue vs grant funds
   - SFC/CFC grant utilization issues
-  - Scheme-wise irregularities (MGNREGA, housing, sanitation, etc.)
+  - Scheme-wise irregularities, for each scheme the report names
 - Impact on local body financial health
 
 ### 4. Institutional Compliance Issues (200-250 words)
 - Gram Sabha/Ward Sabha meeting compliance
 - Account maintenance and audit arrears
 - Staff vacancy and capacity issues
-- IT system compliance (PRIASoft, PFMS)
+- Accounting and IT system compliance, for the systems the report names
 - Election of statutory committees
 
 ### 5. Key Recommendations (300-400 words)
@@ -583,7 +563,7 @@ def _get_executive_prompt_local(state_name: str = None) -> str:
 ## Style Guidelines
 - Clear language accessible to elected representatives
 - Explain technical terms (SFC = State Finance Commission grants, CFC = Central Finance Commission)
-- Use ₹ Lakhs for amounts under ₹1 Crore
+- Keep each amount in the unit the report uses (lakh or crore); do not convert between units
 - Reference Panchayat Act / Municipal Act provisions
 - Focus on improving local self-governance capacity
 - NO meta-commentary - start directly with content
@@ -609,7 +589,7 @@ def _get_journalist_prompt(tier: str = "union", state_name: str = None, audit_ca
 
 def _get_journalist_prompt_union() -> str:
     """Journalist writeup for Union (Central Government) reports."""
-    return """You are a senior investigative journalist at a major national newspaper (like The Hindu, Indian Express, or Times of India) writing about this CAG audit report on a Central Government ministry or department.
+    return """You are a senior investigative journalist at a major national newspaper writing about this CAG audit report on a Central Government ministry or department.
 
 ## Your Mission
 Transform this government audit into a compelling news story that:
@@ -622,12 +602,10 @@ Transform this government audit into a compelling news story that:
 
 ### 1. The Headlines (5-7 options)
 Write potential news headlines that could run in major national papers:
-- One main headline (dramatic but 100% accurate)
+- One main headline (dramatic but fully accurate)
 - 4-6 alternative angles for different editorial choices
-- Style examples:
-  - "₹3.5 Lakh Crore Gap: CAG Audit Exposes Tax Collection Failures"
-  - "Railway Safety Funds Unspent as Accidents Continue, Reveals CAG"
-  - "Government Lost ₹12,000 Crore to Contract Irregularities: Audit"
+- Style: short and active, built on the report's most striking stated amount or fact, naming the
+  audited ministry or entity as the Report Data names it, and attributed to CAG or the audit
 
 ### 2. The Lead Paragraph (150 words)
 Classic inverted pyramid - most important facts first:
@@ -639,7 +617,7 @@ Classic inverted pyramid - most important facts first:
 ### 3. The Full Story (800-1000 words)
 Write as a complete news article:
 - Lead with the biggest revelation
-- Include specific ₹ amounts throughout (typically ₹100s to ₹1000s of Crores)
+- Include the specific ₹ amounts the report states throughout
 - Use direct quotes/references from the report
 - Explain what this means for ordinary citizens/taxpayers across India
 - Include reactions/implications
@@ -649,7 +627,9 @@ Write as a complete news article:
 Create a "fast facts" sidebar with 8-12 key statistics:
 - Format: "₹X Crore - brief description"
 - Most shocking/impactful numbers first
-- Make numbers relatable: "₹12,000 Crore—enough to build 2,400 government schools"
+- Make numbers relatable only against another figure the Report Data states (such as the scheme's
+  budget or the number of units audited); never invent comparisons such as schools, hospitals
+  or salaries that the money could pay for
 
 ### 5. The Context (200-250 words)
 Background information:
@@ -698,18 +678,16 @@ Transform this state government audit into a compelling news story that:
 - Leads with the finding most relevant to {state_display} residents
 - Makes state government issues accessible to local readers
 - Highlights accountability gaps in state administration
-- Could run in the state edition of major regional dailies (Dainik Bhaskar, Amar Ujala, Eenadu, etc.)
+- Could run in the state edition of major regional dailies
 
 ## Required Sections
 
 ### 1. The Headlines (5-7 options)
 Write potential news headlines for regional papers:
-- One main headline (dramatic but 100% accurate)
+- One main headline (dramatic but fully accurate)
 - 4-6 alternative angles for different editorial choices
-- Style examples:
-  - "₹500 Crore Meant for {state_display} Roads Diverted: CAG Audit"
-  - "State Health Department Failed to Spend ₹200 Crore on Hospitals: Audit"
-  - "Power Distribution Losses Cost {state_display} ₹800 Crore Annually: CAG"
+- Style: short and active, built on the report's most striking stated amount or fact, naming the
+  state department or entity as the Report Data names it, and attributed to CAG or the audit
 
 ### 2. The Lead Paragraph (150 words)
 Classic inverted pyramid:
@@ -721,7 +699,7 @@ Classic inverted pyramid:
 ### 3. The Full Story (800-1000 words)
 Write as a complete news article:
 - Lead with the biggest revelation
-- Include specific ₹ amounts (typically ₹10s to ₹100s of Crores for state reports)
+- Include the specific ₹ amounts the report states
 - Reference the specific state department/entity
 - Explain what this means for state residents and taxpayers
 - Connect to local services (state hospitals, roads, schools)
@@ -730,8 +708,10 @@ Write as a complete news article:
 ### 4. By The Numbers
 Create a "fast facts" sidebar with 8-12 key statistics:
 - Format: "₹X Crore - brief description"
-- Make numbers relatable to state scale: "₹500 Crore—the annual budget of 50 district hospitals"
-- Compare to state budget allocations where possible
+- Make numbers relatable only against another figure the Report Data states (such as the scheme's
+  budget or the number of units audited); never invent comparisons such as schools, hospitals
+  or salaries that the money could pay for
+- Compare to state budget allocations where the Report Data states them
 
 ### 5. The Context (200-250 words)
 Background information:
@@ -796,13 +776,10 @@ Transform this local body audit into a story that resonates with grassroots read
 
 ### 1. The Headlines (5-7 options)
 Write headlines that resonate with local readers:
-- One main headline (dramatic but 100% accurate)
+- One main headline (dramatic but fully accurate)
 - 4-6 alternative angles
-- Style examples:
-  - "₹25 Crore for Village Roads Unused: CAG Finds 200 Gram Panchayats Never Spent Their Grants"
-  - "Your Panchayat's Missing Audit: 60% of {state_display} GPs Haven't Been Audited in 3 Years"
-  - "Why Your Ward's Drain Project Never Started: Municipal Audit Reveals the Answer"
-  - "MGNREGA Wages Delayed for 6 Months in 150 Panchayats: CAG Report"
+- Style: plain and local ("your village", "your ward"), built on a stated amount, count of local
+  bodies or service failure from the Report Data, and attributed to CAG or the audit
 
 ### 2. The Lead Paragraph (150 words)
 - What's wrong with local governance in {state_display}?
@@ -815,16 +792,14 @@ Write as a story about local governance:
 - Lead with the most relatable finding
 - Explain what Gram Panchayats and Municipalities are supposed to do
 - Show how failures affect daily life: roads, water, sanitation, streetlights, ration distribution
-- Use amounts in Lakhs where appropriate (more relatable than Crores for local budgets)
+- Keep each amount in the unit the report uses (lakh or crore); do not convert between units
 - Include specific examples from the report
 - Quote the audit findings directly
 
 ### 4. By The Numbers
 8-12 statistics that local citizens can understand:
-- "₹50 Lakh - average unspent funds per Gram Panchayat"
-- "3 years - how long since some GPs were audited"
-- "60% - Gram Panchayats that didn't hold required Gram Sabhas"
-- "₹2 Crore - property tax that Municipal Corporation failed to collect"
+- Format: "figure - brief description", one per line
+- Use only amounts, counts of local bodies, durations and shares that the Report Data states
 
 ### 5. What This Means For You (200-250 words)
 - Connect findings to citizen services
@@ -853,8 +828,8 @@ Extract 5-7 findings about local governance:
   - MC = Municipal Corporation (city government)
   - BDO = Block Development Officer
   - SFC = State Finance Commission grants
-- Use ₹ Lakhs for amounts under ₹1 Crore (more relatable)
-- Connect to services people use: village roads, handpumps, streetlights, MGNREGA, ration cards
+- Keep each amount in the unit the report uses (lakh or crore); do not convert between units
+- Connect to services people use (village roads, handpumps, streetlights, welfare schemes, ration cards) where the report covers them
 - Avoid blame; focus on systemic issues and what can be fixed
 - NO meta-commentary - write as if filing an actual local story
 
@@ -883,7 +858,7 @@ def _get_deep_dive_prompt_union() -> str:
 
 ## Target Audience
 - Academic researchers studying Indian Central Government functioning
-- Policy analysts at think tanks (CPR, ORF, PRS, NIPFP, etc.)
+- Policy analysts at think tanks
 - PhD students in public administration, economics, or political science
 - International organizations studying Supreme Audit Institutions
 - Parliamentary research staff preparing briefings
@@ -912,7 +887,7 @@ For EACH major thematic area:
 - Methodology used for that specific examination
 - Quantitative data and statistical patterns
 - Cross-case patterns and variations across states/units
-- Severity distribution (critical ≥₹100 Cr, high ≥₹10 Cr, medium ≥₹1 Cr)
+- Severity distribution, using the severity counts in the Findings Overview
 - Causal analysis where provided
 
 ### 4. Quantitative Summary (400-500 words)
@@ -926,7 +901,7 @@ For EACH major thematic area:
 - Root causes identified by the audit
 - Structural/institutional problems in Central Government
 - Regulatory and policy gaps
-- Information system weaknesses (e.g., MIS, PFMS integration)
+- Information system weaknesses the report identifies
 - Capacity and resource constraints
 - Centre-State coordination failures if relevant
 
@@ -958,7 +933,7 @@ For EACH major thematic area:
 
 ## Style Guidelines
 - Academic tone throughout
-- Use formal citation style: (Section 3.4.2, p. 45)
+- Use formal citation style, with the section and page numbers given in the Report Data
 - Include verbatim quotes with exact references
 - Present data in tabular format where appropriate
 - Maintain analytical objectivity
@@ -1011,7 +986,7 @@ For EACH major thematic area:
 - Methodology used for that specific examination
 - Quantitative data and statistical patterns
 - Cross-district patterns and variations within {state_display}
-- Severity distribution (critical ≥₹50 Cr, high ≥₹5 Cr, medium ≥₹0.5 Cr)
+- Severity distribution, using the severity counts in the Findings Overview
 - Causal analysis where provided
 
 ### 4. Quantitative Summary (400-500 words)
@@ -1057,7 +1032,7 @@ For EACH major thematic area:
 
 ## Style Guidelines
 - Academic tone throughout
-- Use formal citation style: (Section 3.4.2, p. 45)
+- Use formal citation style, with the section and page numbers given in the Report Data
 - Include verbatim quotes with exact references
 - Present data in tabular format where appropriate
 - Maintain analytical objectivity
@@ -1114,7 +1089,7 @@ Analyze findings across key local governance themes:
 - Accounting and audit arrears
 
 **B. Scheme Implementation**
-- CSS/State scheme implementation (MGNREGA, housing, sanitation)
+- Centrally sponsored and State scheme implementation, for each scheme the report names
 - Asset creation and maintenance
 - Beneficiary selection and targeting
 
@@ -1122,7 +1097,7 @@ Analyze findings across key local governance themes:
 - Gram Sabha/Ward Sabha meetings
 - Standing committee functioning
 - Staff positions and vacancies
-- IT system compliance (PRIASoft, PFMS)
+- Accounting and IT system compliance, for the systems the report names
 
 For each theme: findings with references, patterns across local bodies, severity distribution
 
@@ -1150,7 +1125,7 @@ For each theme: findings with references, patterns across local bodies, severity
   - IT and accounting system improvements
   - Amendments to State Panchayat/Municipal Act
 - Feasibility in local governance context
-- Comparison with 2nd ARC recommendations on local governance
+- Comparison with earlier recommendations on local governance, where the report cites them
 
 ### 7. Research Implications (300-400 words)
 - Questions for local governance research
@@ -1162,14 +1137,14 @@ For each theme: findings with references, patterns across local bodies, severity
 
 ### 8. Technical Appendix
 - Structure of PRIs/ULBs in {state_display}
-- Glossary: GP, ZP, PS, MC, NP, NAC, BDO, DRDA, SFC, CFC, PRIASoft
+- Glossary: GP, ZP, PS, MC, NP, NAC, BDO, DRDA, SFC, CFC and any other abbreviations the report uses
 - List of State Panchayat Act / Municipal Act provisions cited
 - Finance Commission grant framework
 - CSS schemes mentioned and their nodal ministries
 
 ## Style Guidelines
 - Academic tone with local governance expertise
-- Use formal citation style: (Section 3.4.2, p. 45)
+- Use formal citation style, with the section and page numbers given in the Report Data
 - Explain PRI/ULB terminology for non-specialist readers
 - Present data in tabular format where appropriate
 - Connect to decentralization literature and 73rd/74th Amendment objectives
@@ -1218,10 +1193,8 @@ Make this completely understandable to:
 ### What Did They Find Wrong?
 - Top 5-7 problems in plain, everyday language
 - Use relatable analogies: "It's like if you gave money to a contractor to build your house, but they used cheaper materials and kept the difference..."
-- Make amounts relatable at national scale:
-  - "₹12,000 Crore—that's enough money to give ₹1,000 to 12 crore families"
-  - "₹500 Crore—that could build 100 new hospitals"
-  - "This is like losing ₹90 from every ₹100 collected"
+- Make amounts relatable with plain-word analogies that add no new numbers; never convert an
+  amount into schools, hospitals, families or salaries
 
 ### Why Should I Care?
 - How does this directly affect regular Indians?
@@ -1293,10 +1266,8 @@ Make this completely understandable to:
 ### What Did They Find Wrong?
 - Top 5-7 problems in plain, everyday language
 - Use relatable analogies from daily life
-- Make amounts relatable at state scale:
-  - "₹500 Crore—that's the annual budget for 50 government hospitals in {state_display}"
-  - "₹50 Crore—that could pay salaries of 5,000 teachers for a year"
-  - "This is like losing ₹50 from every ₹100 meant for state services"
+- Make amounts relatable with plain-word analogies that add no new numbers; never convert an
+  amount into schools, hospitals, families or salaries
 
 ### Why Should I Care?
 - How does this directly affect people in {state_display}?
@@ -1377,10 +1348,8 @@ Make this completely understandable to:
 - Use relatable analogies:
   - "It's like the Panchayat got money to build your village road, but the road was never built"
   - "The Municipality collected taxes but didn't fix the drains"
-- Make amounts relatable at local scale:
-  - "₹50 Lakh—that's the annual budget of 5 Gram Panchayats"
-  - "₹5 Lakh—enough to build a village community hall"
-  - "₹25 Crore—that could fix roads in 100 villages"
+- Make amounts relatable with plain-word analogies that add no new numbers; never convert an
+  amount into schools, hospitals, families or salaries
 
 ### Why Should I Care?
 - How does this affect YOUR village or YOUR city ward?
@@ -1389,7 +1358,7 @@ Make this completely understandable to:
   - Handpumps not repaired
   - Streetlights not working
   - Drains overflowing
-  - MGNREGA wages delayed
+  - Scheme wages or benefits delayed
 - This is YOUR money from government grants!
 
 ### Who Is Responsible?
@@ -1425,7 +1394,7 @@ Make this completely understandable to:
   - BDO = Block Development Officer = the block-level government officer
   - SFC = State Finance Commission = grants from state government
   - Gram Sabha = village meeting where all adults can participate
-- Use amounts in Lakhs (not Crores) when under ₹1 Crore—more relatable
+- Keep each amount in the unit the report uses (lakh or crore); do not convert between units
 - Connect to services people use daily: roads, water, toilets, streetlights, ration
 - Be empowering, not angry—help people ask the right questions
 
@@ -1463,7 +1432,7 @@ def _get_policy_prompt_union() -> str:
 
 ### 1. Policy & Regulatory Context (300-350 words)
 - Relevant Central laws, rules, and regulations governing the audited area
-- GFR 2017 provisions applicable
+- GFR provisions applicable
 - CVC guidelines and DoPT rules relevant to findings
 - Policy framework under which the ministry/PSU operates
 - Recent policy changes or pending reforms
@@ -1483,7 +1452,7 @@ def _get_policy_prompt_union() -> str:
 - Internal control weaknesses per CVC guidelines
 
 **C. System & Monitoring Weaknesses**
-- IT system deficiencies (PFMS, ministry MIS)
+- IT system deficiencies the report identifies
 - Data integrity and reliability problems
 - Monitoring mechanism failures
 - Inter-ministry coordination issues
@@ -1506,7 +1475,7 @@ def _get_policy_prompt_union() -> str:
 **SHORT-TERM ACTIONS (3-12 months)**
 - Process re-engineering requirements
 - Training and capacity building needs
-- System modifications (PFMS, MIS)
+- System modifications
 - Monitoring mechanism improvements
 
 **MEDIUM-TERM ACTIONS (1-2 years)**
@@ -1683,7 +1652,7 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 - 73rd/74th Constitutional Amendment compliance requirements
 - State Finance Commission (SFC) grant conditions
 - Central Finance Commission (CFC) fund utilization rules
-- PRIASoft/PFMS compliance requirements
+- Accounting and IT system requirements the report cites
 - State-specific rules for local bodies
 
 ### 2. Compliance Gaps Identified (500-600 words)
@@ -1701,7 +1670,7 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 - Fund diversion or misutilization
 
 **C. Scheme Implementation Issues**
-- CSS scheme implementation gaps (MGNREGA, housing, sanitation)
+- Scheme implementation gaps, for each scheme the report names
 - Asset creation without proper records
 - Beneficiary selection irregularities
 - Maintenance of created assets
@@ -1709,7 +1678,7 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 **D. Institutional Weaknesses**
 - Staff vacancies at GP/ULB level
 - Training gaps for elected representatives
-- IT system compliance (PRIASoft, PFMS)
+- Accounting and IT system compliance, for the systems the report names
 - Record-keeping deficiencies
 
 ### 3. Financial Implications (250-300 words)
@@ -1729,14 +1698,14 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 
 **SHORT-TERM ACTIONS (3-12 months)**
 - Capacity building for elected representatives
-- PRIASoft/accounting system rollout
+- Accounting system rollout
 - Own revenue mobilization campaigns
 - Block-level monitoring mechanism
 
 **MEDIUM-TERM ACTIONS (1-2 years)**
 - State Panchayat Act / Municipal Act amendments
 - Staffing norms revision for local bodies
-- IT system integration (PRIASoft-PFMS)
+- Accounting and payment system integration
 - Audit coverage improvement plan
 
 ### 5. Implementation Framework (250-300 words)
@@ -1751,7 +1720,7 @@ def _get_policy_prompt_local(state_name: str = None) -> str:
 - Impact on citizen services at grassroots
 - State PAC scrutiny of local body audits
 - Central scheme fund release implications
-- 15th Finance Commission grant conditions at risk
+- Finance Commission grant conditions at risk
 
 ### 7. Model Action Outlines
 Fill each outline with this report's findings, amounts and local bodies (not a blank form).

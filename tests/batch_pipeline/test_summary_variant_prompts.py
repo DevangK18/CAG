@@ -142,3 +142,50 @@ def test_no_wrong_crore_conversion_in_source():
 def test_no_wrong_crore_conversion_in_rendered_prompt(variant, case):
     prompt = get_summary_prompt(variant, SENTINEL, _json_data(*case))
     assert not WRONG_CRORE.search(prompt)
+
+
+# D-10a-07: models reused the prompts' example figures and headlines ("60%",
+# "12 crore families", "₹1,200 Crore") as if they were the report's own.
+EXAMPLE_FIGURE = re.compile(
+    r"₹\s*\d|\d\s*%|\d[\d,.]*\s*(?:crore|lakh)|\d+\s*(?:families|villages|schools|hospitals|teachers)",
+    re.IGNORECASE,
+)
+# The one number-and-unit phrase a prompt may keep: the unit explanation.
+CRORE_EXPLANATION = "1 crore = 100 lakhs = 10 million"
+NAMED_EXAMPLES = [
+    "The Hindu", "Indian Express", "Times of India", "Dainik Bhaskar", "Amar Ujala",
+    "Eenadu", "MGNREGA", "PRIASoft", "PFMS", "NHAI", "PMAY", "Railway",
+    "15th Finance Commission", "2nd ARC", "NIPFP",
+]
+
+
+def _prompt_text(variant, case):
+    """The rendered prompt with the report data taken out."""
+    return get_summary_prompt(variant, SENTINEL, _json_data(*case)).replace(SENTINEL, "")
+
+
+@pytest.mark.parametrize("case", TIER_CASES, ids=_case_id)
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_prompt_has_no_example_figures(variant, case):
+    text = _prompt_text(variant, case).replace(CRORE_EXPLANATION, "")
+    assert EXAMPLE_FIGURE.findall(text) == []
+
+
+@pytest.mark.parametrize("case", TIER_CASES, ids=_case_id)
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_prompt_names_no_example_entities(variant, case):
+    text = _prompt_text(variant, case)
+    assert [name for name in NAMED_EXAMPLES if name in text] == []
+
+
+@pytest.mark.parametrize("case", TIER_CASES, ids=_case_id)
+@pytest.mark.parametrize("variant", VARIANTS)
+def test_prompt_requires_numbers_from_report_data(variant, case):
+    text = _prompt_text(variant, case)
+    assert "Every number you state" in text
+    assert "must appear in the Report Data" in text
+
+
+def test_example_figure_pattern_catches_old_examples():
+    for old in ["₹12,000 Crore—enough", "60% of GPs", "12 crore families", "₹50 Lakh", "100 villages"]:
+        assert EXAMPLE_FIGURE.search(old), old

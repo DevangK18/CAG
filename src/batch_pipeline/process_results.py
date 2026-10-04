@@ -204,7 +204,8 @@ def build_final_overviews(service, report_ids) -> tuple[int, int]:
             overview,
             service.overviews_dir,
             service.summaries_dir,
-            verbose=False  # Set to True for detailed output
+            verbose=False,  # Set to True for detailed output
+            run_marker=getattr(service, "_current_job_timestamp", None),
         )
 
         # Track merge statistics

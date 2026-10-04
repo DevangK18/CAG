@@ -116,6 +116,7 @@ class BatchService:
         batch_jobs_dir: str = "data/batch_jobs",
         processed_dir: str = "data/processed",
         trace_emitter=None,
+        raw_dir: str = "data/raw",
     ):
         """
         Initialize BatchService with optional trace instrumentation.
@@ -123,6 +124,7 @@ class BatchService:
         Args:
             batch_jobs_dir: Directory for batch job tracking files
             processed_dir: Directory with processed report JSONs
+            raw_dir: Source PDFs (raw/<tier>/), the reference for the grounding check
             trace_emitter: Optional TraceEmitter for Phase 10a instrumentation.
                           If None, uses noop emitter (no overhead).
         """
@@ -136,6 +138,7 @@ class BatchService:
         # Base directories
         self.batch_jobs_dir = Path(batch_jobs_dir)
         self.processed_dir = Path(processed_dir)
+        self.raw_dir = Path(raw_dir)
 
         # Organized subdirectories within batch_jobs
         self.jobs_dir = self.batch_jobs_dir / "jobs"
@@ -384,20 +387,25 @@ class BatchService:
             custom_id = result["custom_id"]
             report_id = id_mapping.get(custom_id, custom_id)
 
+            output_path = self.get_overview_output_path(report_id)
             if result["error"]:
                 logger.error(f"Overview failed for {report_id}: {result['error']}")
+                # An earlier run's file must not be merged as this run's overview
+                output_path.unlink(missing_ok=True)
                 continue
 
-            output_path = self.get_overview_output_path(report_id)
             try:
+                from .merge_utils import RUN_MARKER_KEY
                 from .process_results import clean_json_response
 
                 parsed = json.loads(clean_json_response(result["content"]))
+                parsed[RUN_MARKER_KEY] = self._current_job_timestamp
                 with open(output_path, "w") as f:
                     json.dump(parsed, f, indent=2)
                 logger.info(f"Saved overview: {output_path}")
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse overview JSON for {report_id}: {e}")
+                output_path.unlink(missing_ok=True)
                 # Save raw content for debugging
                 with open(output_path.with_suffix(".txt"), "w") as f:
                     f.write(result["content"])
@@ -426,8 +434,12 @@ class BatchService:
             VARIANTS,
         )
 
+        from .grounding import build_source_text, source_numbers
+
         requests = []
         id_mapping = {}
+        # report_id -> numbers in the report (chunks + PDF), to check each summary against
+        grounding_sources = {}
 
         for json_path in json_files:
             with open(json_path) as f:
@@ -435,6 +447,9 @@ class BatchService:
 
             report_id = data["report_metadata"]["report_id"]
             summary_input = build_summary_input(data)
+            grounding_sources[report_id] = source_numbers(
+                build_source_text(data, self._source_pdf_path(data))
+            )
 
             for variant in VARIANTS:
                 prompt = get_summary_prompt(variant, summary_input, data)
@@ -471,7 +486,7 @@ class BatchService:
         )
 
         results = self._process_batch_gemini(requests, "summary")
-        self._save_summary_results(results, id_mapping)
+        self._save_summary_results(results, id_mapping, grounding_sources)
 
         success = sum(1 for r in results if r["error"] is None)
         emitter.emit_decision(
@@ -483,13 +498,24 @@ class BatchService:
         )
         return f"gemini_sync_{self._current_job_timestamp}"
 
-    def _save_summary_results(self, results: list[dict], id_mapping: dict):
+    def _source_pdf_path(self, data: dict) -> Path:
+        """The report's PDF under raw/<tier>/ (chunks alone miss text the PDF has)."""
+        meta = data.get("report_metadata", {})
+        filename = meta.get("source_filename") or f"{meta.get('report_id')}.pdf"
+        return self.raw_dir / meta.get("government_body_type", "union") / filename
+
+    def _save_summary_results(
+        self, results: list[dict], id_mapping: dict, grounding_sources: dict | None = None
+    ):
         """
         Save Gemini summary results to files, grouped by report.
 
-        Uses the schema the API's summaries routes read.
+        Uses the schema the API's summaries routes read. Each variant carries a
+        number-grounding check against the report (grounding_sources).
         """
         from collections import defaultdict
+
+        from .grounding import check_grounding
 
         # Group by report_id
         by_report = defaultdict(lambda: {"variants": {}, "errors": []})
@@ -511,12 +537,21 @@ class BatchService:
                 continue
 
             content = result["content"]
-            by_report[report_id]["variants"][variant] = {
+            entry = {
                 "content": content,
                 "word_count": len(content.split()),
                 "thinking_used": False,
                 "model": self.models.get(variant),
             }
+            known = (grounding_sources or {}).get(report_id)
+            if known is not None:
+                entry["grounding"] = check_grounding(content, known)
+                if not entry["grounding"]["grounded"]:
+                    logger.warning(
+                        f"Summary {variant} for {report_id}: {entry['grounding']['ungrounded_pct']}% "
+                        f"ungrounded numbers, e.g. {entry['grounding']['examples'][:5]}"
+                    )
+            by_report[report_id]["variants"][variant] = entry
 
         # Save per-report summary files
         for report_id, data in by_report.items():
@@ -528,6 +563,10 @@ class BatchService:
                     "variants": data["variants"],
                     "variant_count": len(data["variants"]),
                     "errors": data["errors"] or None,
+                    "ungrounded_variants": [
+                        v for v, d in data["variants"].items()
+                        if not d.get("grounding", {}).get("grounded", True)
+                    ],
                 }, f, indent=2, ensure_ascii=False)
             logger.info(f"Saved summaries: {output_path}")
 
