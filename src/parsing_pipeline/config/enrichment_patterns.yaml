@@ -335,7 +335,9 @@ confidence_thresholds:
 
 # LLM Validation Configuration
 llm_validation:
-  enabled: true
+  # Disabled: against the gold labels 26 of the 33 findings it rejected were real,
+  # and its calls cost ~2.5 h per union run (docs/pipeline-review/step2/deep-dives/llm_validation.md)
+  enabled: false
   model: "gemini-3.8-flash"  # Runs on GCP Agent Platform
   collect_refinement_data: true  # Log invalid findings for pattern refinement
   refinement_data_path: "logs/pattern_refinement/"
