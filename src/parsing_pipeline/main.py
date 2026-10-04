@@ -101,6 +101,7 @@ from src.parsing_pipeline.modules.semantic_enrichment_service import (
 )
 from src.parsing_pipeline.modules.hierarchy_enricher import (
     HierarchyEnricher,
+    aggressive_for_reason,
     should_enrich_hierarchy,
 )
 from src.parsing_pipeline.modules.toc_reconciliation_service import (
@@ -1117,11 +1118,22 @@ class PipelineOrchestrator:
                                 report_id=task.report_id,
                                 # Flat or lopsided trees need sub-sections detected even
                                 # when the report already has many parents
-                                aggressive=reason in ("flat_hierarchy", "high_concentration", "oversized_parent"),
+                                aggressive=aggressive_for_reason(reason),
                                 trace_emitter=emitter,
                             )
                             task.parent_chunks = enriched_parents
                             task.child_chunks = enriched_children
+                            outcome = enricher.last_outcome or {}
+                            if outcome.get("status") == "rejected":
+                                # Safety valve kept the Phase 7 hierarchy unchanged
+                                self._log(
+                                    f"             ⚠ Enrichment rejected, kept Phase 7 hierarchy: "
+                                    f"{outcome.get('problems')}",
+                                    force=True,
+                                )
+                                skipped_count += 1
+                                emitter.set_phase_status("7.5", "skipped")
+                                continue
                             enriched_count += 1
                             self._log(
                                 f"             ✓ {len(enriched_parents)} parents, {len(enriched_children)} children"
