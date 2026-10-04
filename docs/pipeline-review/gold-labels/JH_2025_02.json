@@ -1,0 +1,2603 @@
+{
+  "report_id": "JH_2025_02_State_Finances_Audit_Report_of_the_Government_of_Jharkhand_for_the_year_202324",
+  "labeller": "agent",
+  "pages_total": 168,
+  "pages_read": "0-167",
+  "unreadable_pages": [],
+  "findings": [
+    {
+      "id": "F001",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "Taken together, the committed and inflexible expenditure in 2023-24 was ₹ 41,558 crore; 54 per",
+      "text": "Taken together, the committed and inflexible expenditure in 2023-24 was ₹ 41,558 crore; 54 per cent of the revenue expenditure. Upward trend on committed and inflexible expenditure leaves the Government with lesser flexibility for other priority sectors and capital creation.",
+      "summary": "Committed and inflexible expenditure at 54 per cent of revenue expenditure and rising, which leaves little flexibility for priority sectors and capital creation",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 41,558 crore (committed + inflexible expenditure: context)"
+      ],
+      "borderline": true,
+      "note": "Analytical concern rather than a clear deficiency"
+    },
+    {
+      "id": "F002",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "The State Government had also notified reversion to the Old Pension Scheme (OPS) vide Notification",
+      "text": "The State Government had also notified reversion to the Old Pension Scheme (OPS) vide Notification dated 1 September 2022. The imminent financial burden on account of implementation of OPS also needs to be reckoned while assessing debt sustainability of the State.",
+      "summary": "Reversion to the Old Pension Scheme creates an imminent financial burden that is not reckoned in debt sustainability",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Risk flag with no quantified deficiency"
+    },
+    {
+      "id": "F003",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "It was noticed that supplementary provisions of ₹ 13,499.10 crore during the year 2023-24 in",
+      "text": "It was noticed that supplementary provisions of ₹ 13,499.10 crore during the year 2023-24 in 57 cases (more than ₹ 0.50 crore in each case) proved unnecessary, as the expenditure did not come up even to the level of the original provisions. It was noticed that in several cases, there were supplementary grants where expenditure was not even up to the original grant. A reliable budget practice should need to deal with such deviations.",
+      "summary": "Supplementary provisions of ₹13,499.10 crore in 57 cases proved unnecessary because expenditure did not reach even the original provision",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 13,499.10 crore",
+        "crore": 13499.1
+      },
+      "other_amounts": [
+        "₹ 0.50 crore (threshold per case: context)"
+      ],
+      "borderline": false,
+      "note": "Two consecutive ES paragraphs on the same issue are merged into one item"
+    },
+    {
+      "id": "F004",
+      "page": 16,
+      "printed_page": "xi",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "It was observed that in 2023-24, there was excess expenditure of ₹ 268.02 crore under",
+      "text": "It was observed that in 2023-24, there was excess expenditure of ₹ 268.02 crore under one appropriation which required regularisation. Further, excess disbursements of ₹ 3,778.41 crore relating to 10 grants pertaining to FYs 2001-02 to 2022-23 is yet to be regularised.",
+      "summary": "Excess expenditure of ₹268.02 crore in 2023-24 needs regularisation, and ₹3,778.41 crore of excess from 2001-02 to 2022-23 is still not regularised",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 268.02 crore",
+        "crore": 268.02
+      },
+      "other_amounts": [
+        "₹ 3,778.41 crore (older excess not regularised: second impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F005",
+      "page": 16,
+      "printed_page": "xi",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "As against the requirements of the Indian Government Accounting Standards (IGAS), the State Government partially",
+      "text": "As against the requirements of the Indian Government Accounting Standards (IGAS), the State Government partially complied with IGAS-2: Accounting & classification of Grants-in-aid and IGAS-3: Loans and Advances made by the Government.",
+      "summary": "Only partial compliance with IGAS-2 and IGAS-3",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F006",
+      "page": 16,
+      "printed_page": "xi",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "In Jharkhand, 24 PD accounts were opened, to deposit the land acquisition compensation funds. All",
+      "text": "In Jharkhand, 24 PD accounts were opened, to deposit the land acquisition compensation funds. All these accounts are operational and an amount of ₹ 1,187.22 crore was added to the opening balance of ₹ 2,368.79 crore during the year 2023-24. Out of the total deposits in these PD accounts, ₹ 346.31 crore was disbursed during the year, leaving a balance of ₹ 3,209.70 crore, at the end of the financial year.",
+      "summary": "Land-acquisition compensation of ₹3,209.70 crore lying in 24 PD accounts, with only ₹346.31 crore disbursed during the year",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 3,209.70 crore",
+        "crore": 3209.7
+      },
+      "other_amounts": [
+        "₹ 1,187.22 crore (added during year: context)",
+        "₹ 2,368.79 crore (opening balance: context)",
+        "₹ 346.31 crore (disbursed: context)"
+      ],
+      "borderline": true,
+      "note": "Worded neutrally in the ES; the adverse point (money parked outside the Consolidated Fund) is implicit"
+    },
+    {
+      "id": "F007",
+      "page": 16,
+      "printed_page": "xi",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "The Government of India and the State Government have introduced system of Single Nodal Agency",
+      "text": "The Government of India and the State Government have introduced system of Single Nodal Agency (SNA) for implementation and fund flow for each Centrally Sponsored Scheme (CSS). The share of the Government of India and the State Government is transferred to the Bank Account of the SNA lying outside the Government Account. As intimated by the State Government, it received ₹ 6,439.24 crore being Central share for Centrally Sponsored Schemes, during 2023-24, in its Treasury Accounts. The State Government transferred ₹ 6,545.59 crore, received in Treasury Accounts being Central share, and State share of ₹ 8,477.76 crore to the SNAs. No further details/documents were provided in this regard. As per PFMS portal of CGA/SNAs, ₹ 6,276.70 crore was lying unspent in the bank accounts of SNAs as on 31 March 2024.",
+      "summary": "₹6,276.70 crore unspent in SNA bank accounts outside the Government account; no details or documents provided",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 6,276.70 crore",
+        "crore": 6276.7
+      },
+      "other_amounts": [
+        "₹ 6,439.24 crore (central share received: context)",
+        "₹ 6,545.59 crore (central share transferred to SNAs: context)",
+        "₹ 8,477.76 crore (state share transferred: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F008",
+      "page": 16,
+      "printed_page": "xi",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "Despite the requirement of submitting Utilisation Certificates (UCs) against grants-in-aid within a stipulated time period,",
+      "text": "Despite the requirement of submitting Utilisation Certificates (UCs) against grants-in-aid within a stipulated time period, 47,367 outstanding UCs of ₹ 1,33,161.50 crore were pending as on 31st March 2024. High pendency of UCs is fraught with the risk of fraud and misappropriation of funds.",
+      "summary": "47,367 UCs worth ₹1,33,161.50 crore pending as on 31 March 2024",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 1,33,161.50 crore",
+        "crore": 133161.5
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F009",
+      "page": 17,
+      "printed_page": "xii",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "Similarly, despite the requirement of submitting Detailed Contingency (DC) Bills against the advance money withdrawn",
+      "text": "Similarly, despite the requirement of submitting Detailed Contingency (DC) Bills against the advance money withdrawn through Abstract Contingency (AC) Bills, 18,011 AC bills of ₹ 4,891.72 crore were pending for submission of DC bills as on 31st March 2024. Advances drawn and not accounted for increase the possibility of wastage/ misappropriation/ malfeasance etc.",
+      "summary": "18,011 AC bills worth ₹4,891.72 crore pending submission of DC bills",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 4,891.72 crore",
+        "crore": 4891.72
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F010",
+      "page": 17,
+      "printed_page": "xii",
+      "para_no": null,
+      "location": "executive_summary",
+      "anchor": "Compliance with prevailing rules and codal provisions are meant to ensure control and accountability in",
+      "text": "Compliance with prevailing rules and codal provisions are meant to ensure control and accountability in accounting and financial reporting. Non- compliance and deviations impact the quality of accounting and financial reporting adversely. Non-timely submission of UCs against conditional grants; non-submission of DC bills against AC bills; non-compliance with IGAS-2 and IGAS-3; funds remaining outside Government accounts; and non-supply of details of expenditure from SNAs have impacted the quality of accounts adversely.",
+      "summary": "Quality of accounts adversely affected by pending UCs and DC bills, IGAS non-compliance, funds outside Government accounts and missing SNA details",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Summary conclusion paragraph at the end of the ES"
+    },
+    {
+      "id": "F011",
+      "page": 29,
+      "printed_page": "10",
+      "para_no": "1.4.1",
+      "location": "chapter",
+      "anchor": "The State had Revenue Surplus during the period from FY 2019-20 to FY 2023-24, except",
+      "text": "The State had Revenue Surplus during the period from FY 2019-20 to FY 2023-24, except in FY 2020-21. The Fiscal Deficit was also below the prescribed target during FY 2019-20 to FY 2023-24, except in FY 2020-21. The ratio of outstanding liability to GSDP had crossed the norms prescribed in the MTFP, under the Jharkhand FRBM Act during FYs 2019-20 and 2020-21. However, it was within the target during FY 2021-22 to FY 2023-24.",
+      "summary": "Outstanding liability to GSDP exceeded the FRBM/MTFP norm in 2019-20 and 2020-21 (revenue deficit and fiscal deficit target also missed in 2020-21)",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Breaches were in earlier years; within target in 2023-24"
+    },
+    {
+      "id": "F012",
+      "page": 30,
+      "printed_page": "11",
+      "para_no": "1.4.1",
+      "location": "chapter",
+      "anchor": "As shown in the above table, the State’s revenue receipts were less than the MTFP",
+      "text": "As shown in the above table, the State’s revenue receipts were less than the MTFP targets mainly due to less collection of non-tax revenue as projected by the State, and less receipt of GIA from GoI.",
+      "summary": "Revenue receipts fell short of the MTFP projection (23.39 per cent), mainly non-tax revenue and GIA",
+      "finding_type": "performance_shortfall",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Shortfall against projection; could also be read as a neutral variance"
+    },
+    {
+      "id": "F013",
+      "page": 32,
+      "printed_page": "13",
+      "para_no": "1.5",
+      "location": "chapter",
+      "anchor": "As can be seen from Table 1.8, the revenue surplus was overstated by ₹ 188.37",
+      "text": "As can be seen from Table 1.8, the revenue surplus was overstated by ₹ 188.37 crore and the fiscal deficit was understated by ₹ 188.37 crore in the current year. Thus, if the above items are factored in, the State’s actual revenue surplus and fiscal deficit would be ₹ 11,063.71 crore and ₹ 6,520.13 crore, respectively, instead of ₹ 11,252.08 crore and ₹ 6,331.76 crore.",
+      "summary": "Revenue surplus overstated and fiscal deficit understated by ₹188.37 crore (short transfer of cess, non-discharge of SDRF interest)",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 188.37 crore",
+        "crore": 188.37
+      },
+      "other_amounts": [
+        "₹ 11,063.71 crore / ₹ 6,520.13 crore (restated surplus / deficit: context)",
+        "₹ 11,252.08 crore / ₹ 6,331.76 crore (reported figures: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F014",
+      "page": 41,
+      "printed_page": "20",
+      "para_no": "2.3.2.1",
+      "location": "chapter",
+      "anchor": "Jharkhand is a Model-II State and with effect from January 2021, user-id based access to",
+      "text": "Jharkhand is a Model-II State and with effect from January 2021, user-id based access to the back-end system has been provided to audit teams, at the premises of Commercial Taxes Circle as and when required. The Secretary, Commercial Taxes Department was requested (September 2024) to provide dedicated user-id based access to Audit.",
+      "summary": "Audit has only occasional back-end access to GST data; the request for dedicated user-id access (Sept 2024) was still pending",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Limitation on audit access, stated implicitly"
+    },
+    {
+      "id": "F015",
+      "page": 42,
+      "printed_page": "21",
+      "para_no": "2.3.2.1",
+      "location": "chapter",
+      "anchor": "As on 31 March 2024, arrears in collection of revenue were ₹ 84.72 crore (Excise",
+      "text": "As on 31 March 2024, arrears in collection of revenue were ₹ 84.72 crore (Excise and Prohibition Department), of which ₹ 38.91 crore was outstanding for more than five years. Out of the total arrears in the Department, ₹ 7.72 crore was held up in the Courts and other appellate authorities. While it was intimated that there were no arrears in Land Revenue Department, information in regard to other departments was not made available as of December 2024.",
+      "summary": "Revenue arrears of ₹84.72 crore in Excise (₹38.91 crore over five years old); other departments did not provide arrears information",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 84.72 crore",
+        "crore": 84.72
+      },
+      "other_amounts": [
+        "₹ 38.91 crore (arrears over five years old: part of impact)",
+        "₹ 7.72 crore (held up in courts: part of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F016",
+      "page": 45,
+      "printed_page": "24",
+      "para_no": "2.3.2.1",
+      "location": "chapter",
+      "anchor": "The State Government received ₹ 6,439.24 crore being Central share for Centrally Sponsored Schemes, during",
+      "text": "The State Government received ₹ 6,439.24 crore being Central share for Centrally Sponsored Schemes, during 2023-24, in its Treasury Accounts. The State Government transferred ₹ 6,545.59 crore3, received in Treasury Accounts being Central share, and State share of ₹ 8,477.76 crore to the SNAs. No further details/documents (scheme-wise) were provided in this regard. As per PFMS portal of CGA/SNAs, ₹ 6,276.70 crore was lying unspent in the bank accounts of SNAs as on 31 March 2024.",
+      "summary": "₹6,276.70 crore unspent in SNA bank accounts; no scheme-wise details or documents provided to Audit",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 6,276.70 crore",
+        "crore": 6276.7
+      },
+      "other_amounts": [
+        "₹ 6,439.24 crore (central share received: context)",
+        "₹ 6,545.59 crore (central share transferred: context)",
+        "₹ 8,477.76 crore (state share transferred: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F017",
+      "page": 45,
+      "printed_page": "24",
+      "para_no": "2.3.2.1",
+      "location": "chapter",
+      "anchor": "The Central Government released ₹ 5,358.37 crore between 2021-22 and 2023-24 for ULBs and PRIs",
+      "text": "The Central Government released ₹ 5,358.37 crore between 2021-22 and 2023-24 for ULBs and PRIs against ₹ 12,322.00 crore recommended by the 15th FC for the period 2021-26. Further, out of total release of ₹ 3,644.56 crore to the ULBs and PRIs by the State during the year 2023-24, ₹ 1,901.48 crore was received from the Central Government.",
+      "summary": "Only ₹5,358.37 crore of the ₹12,322 crore recommended by the 15th FC for ULBs and PRIs (2021-26) was released by 2023-24",
+      "finding_type": "performance_shortfall",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 5,358.37 crore (released: context)",
+        "₹ 12,322.00 crore (recommended: context)",
+        "₹ 3,644.56 crore / ₹ 1,901.48 crore (2023-24 release: context)"
+      ],
+      "borderline": true,
+      "note": "Low release by the Union Government; no adverse wording; may be a neutral statement"
+    },
+    {
+      "id": "F018",
+      "page": 46,
+      "printed_page": "25",
+      "para_no": "2.3.3",
+      "location": "chapter",
+      "anchor": "As recommended by the Thirteenth Finance Commission, Ministry of Finance, GoI, had written off (February",
+      "text": "As recommended by the Thirteenth Finance Commission, Ministry of Finance, GoI, had written off (February 2012) loans advanced to the State Government by various Ministries (except those advanced by the Ministry of Finance itself) as on 31 March 2010, towards Central Plan and Centrally Sponsored Schemes. The Ministry of Finance had permitted the State Governments to adjust the excess repayments of principal and interest made from the effective date of the order (31 March 2010) and its implementation, against future repayments to the Ministry of Finance. The Government of Jharkhand had made excess repayment of ₹ 5.73 crore (Principal: ₹ 2.50 crore and Interest: ₹ 3.23 crore) of which, Ministry of Finance has so far adjusted ₹ 3.51 crore. No adjustments have been made during FYs 2022-23 and 2023-24.",
+      "summary": "Excess repayment of ₹5.73 crore on written-off central loans; only ₹3.51 crore adjusted, and nothing adjusted in 2022-23 or 2023-24",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 5.73 crore",
+        "crore": 5.73
+      },
+      "other_amounts": [
+        "₹ 2.50 crore / ₹ 3.23 crore (principal/interest split of impact)",
+        "₹ 3.51 crore (already adjusted)"
+      ],
+      "borderline": false,
+      "note": "The unadjusted balance (₹2.22 crore) is not stated; the excess repayment is used as the impact"
+    },
+    {
+      "id": "F019",
+      "page": 52,
+      "printed_page": "31",
+      "para_no": "2.4.2",
+      "location": "chapter",
+      "anchor": "During 2023-24, the State Government transferred ₹ 4.28 crore against receipt of ₹ 4.61 crore",
+      "text": "During 2023-24, the State Government transferred ₹ 4.28 crore against receipt of ₹ 4.61 crore as employees contribution in the public account to the designated fund manager through NSDL. Short transfer of ₹ 0.33 crore during the year combined with the opening balance of ₹ 78.94 crore resulted in a closing balance of ₹ 79.27 crore in the Public Account (Major Head 8342-117-Defined Contribution Pension Scheme) at the end of 2023-24.",
+      "summary": "Short transfer of NPS employee contributions (₹0.33 crore) leaves ₹79.27 crore untransferred in the Public Account (undischarged NPS liability)",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 79.27 crore",
+        "crore": 79.27
+      },
+      "other_amounts": [
+        "₹ 4.28 crore / ₹ 4.61 crore (transferred / received: context)",
+        "₹ 0.33 crore (short transfer in year: part of impact)",
+        "₹ 78.94 crore (opening balance: part of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F020",
+      "page": 54,
+      "printed_page": "33",
+      "para_no": "2.4.2",
+      "location": "chapter",
+      "anchor": "The State Government constituted four State Finance Commissions (SFCs) during the period January 2004 to",
+      "text": "The State Government constituted four State Finance Commissions (SFCs) during the period January 2004 to January 2024. The recommendations of the first SFC were only for the ULBs. The second and third SFCs, constituted in December 2009 and April 2015 respectively, did not submit any Report/s to the State Government. No recommendations were made by any of the SFCs for Rural Local Bodies.",
+      "summary": "Second and third SFCs submitted no reports, and no SFC has made recommendations for Rural Local Bodies",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F021",
+      "page": 54,
+      "printed_page": "33",
+      "para_no": "2.4.2",
+      "location": "chapter",
+      "anchor": "Though the notification for constitution of the fourth SFC was issued by the State Government",
+      "text": "Though the notification for constitution of the fourth SFC was issued by the State Government in July 2019, the Chairperson of the SFC was not appointed and the term of the fourth SFC expired in January 2024. The Fifth SFC has been constituted vide Finance Department notification no. 526 dated 23 February 2024 for the next five years i.e. upto 27 January 2029.",
+      "summary": "The fourth SFC chairperson was never appointed and its term lapsed (Jan 2024) with no work done",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F022",
+      "page": 54,
+      "printed_page": "33",
+      "para_no": "2.4.2",
+      "location": "chapter",
+      "anchor": "The first SFC had recommended a “Core Municipal Services Provision Grants” at the rate of",
+      "text": "The first SFC had recommended a “Core Municipal Services Provision Grants” at the rate of ₹ 375 per capita in 2009-10 with an annual increase of 10 per cent for the next four years in lieu of taxes not assigned/ shared with ULBs by the State Government. However, neither was the financial condition of ULBs reviewed nor was the principle for allocation of adequate financial resources determined by the SFC.",
+      "summary": "The first SFC neither reviewed ULB finances nor set allocation principles",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "The deficiency lies with the SFC rather than the Government"
+    },
+    {
+      "id": "F023",
+      "page": 54,
+      "printed_page": "33",
+      "para_no": "2.4.2",
+      "location": "chapter",
+      "anchor": "The recommendations of the first SFC were not implemented by the State Government and it",
+      "text": "The recommendations of the first SFC were not implemented by the State Government and it was decided (October 2013) to provide 40 per cent loan and 30 per cent grants to the ULBs to meet salary of employees. Various sairats4 were also transferred to the ULBs to generate their own revenue.",
+      "summary": "The State did not implement the first SFC recommendations",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F024",
+      "page": 54,
+      "printed_page": "33",
+      "para_no": "2.4.2",
+      "location": "chapter",
+      "anchor": "Further, as per recommendations of the first SFC, Jharkhand Urban Development Fund for Urban Infrastructure",
+      "text": "Further, as per recommendations of the first SFC, Jharkhand Urban Development Fund for Urban Infrastructure Development Projects (UIDP) was created and the State made budgetary provision for this during the financial years 2016-17 to 2018-19. However, the funds were not transferred to the ULBs. No provisions were made in the budget, in this regard, by the State Government after 2018-19.",
+      "summary": "The Urban Development Fund for UIDP was budgeted in 2016-19 but funds were never transferred to ULBs; no provision after 2018-19",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F025",
+      "page": 56,
+      "printed_page": "35",
+      "para_no": "2.4.4",
+      "location": "chapter",
+      "anchor": "As per the latest finalised accounts received from 17 out of the total 32 companies",
+      "text": "As per the latest finalised accounts received from 17 out of the total 32 companies in Jharkhand, net worth of six companies5 was completely eroded as their cumulative net worth was (-) ₹ 13,287.27 crore, as on 31 March 2024. Accumulated loss of these SPSEs was ₹ 17,868.68 crore as on 31 March 2024.",
+      "summary": "Net worth of six SPSEs completely eroded (−₹13,287.27 crore); accumulated losses ₹17,868.68 crore; accounts received from only 17 of 32 companies",
+      "finding_type": "performance_shortfall",
+      "impact_amount": {
+        "raw": "₹ 13,287.27 crore",
+        "crore": 13287.27
+      },
+      "other_amounts": [
+        "₹ 17,868.68 crore (accumulated losses: related)"
+      ],
+      "borderline": true,
+      "note": "Adverse state of investee companies rather than a direct Government lapse"
+    },
+    {
+      "id": "F026",
+      "page": 56,
+      "printed_page": "35",
+      "para_no": "2.4.4",
+      "location": "chapter",
+      "anchor": "Further, as per their accounts, three companies were loss making and their loss during 2023-24",
+      "text": "Further, as per their accounts, three companies were loss making and their loss during 2023-24 was ₹ 3,944.48 crore. Out of these loss making companies, two companies (Jharkhand Bijli Vitran Nigam Limited and Jharkhand Urja Sancharan Nigam Limited) received Government loans amounting to ₹ 4,227.75 crore during 2023-24.",
+      "summary": "Three loss-making SPSEs lost ₹3,944.48 crore; two of them (JBVNL, JUSNL) still received Government loans of ₹4,227.75 crore",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹ 4,227.75 crore",
+        "crore": 4227.75
+      },
+      "other_amounts": [
+        "₹ 3,944.48 crore (loss of companies in 2023-24: context)"
+      ],
+      "borderline": true,
+      "note": "Implicit adverse point: loans given to loss-making companies"
+    },
+    {
+      "id": "F027",
+      "page": 56,
+      "printed_page": "35",
+      "para_no": "2.4.4",
+      "location": "chapter",
+      "anchor": "As per Finance Accounts of the State ending 31 March 2024, the State Government had",
+      "text": "As per Finance Accounts of the State ending 31 March 2024, the State Government had invested ₹ 4,142.64 crore in three Regional Rural Banks6 (RRB) (₹ 46.41 crore), 22 Government Companies/corporations (₹ 3,807.14 crore) and 22 Co-operatives Banks and Societies (₹ 289.09 crore) since the formation of the State in November 2000. However, verification of PSUs accounts and sanction orders of the State during 2016-17 revealed that the Government accounts had understated investment by ₹ 124.54 crore in nine companies/ corporations during 2000-2016, due to erroneous budgetary categorisation, viz., not providing for the investment under appropriate minor head and depicting investment in share capital as GIA instead of investment in equity. After being pointed out by Audit, the Finance Department of the State reconciled and corrected investment figures in respect of four companies amounting to ₹ 65 crore7 at the end of 2020-21. However, investments of ₹ 59.54 crore8 against five entities at the end of the current financial year still remains unsettled.",
+      "summary": "Investment understated by ₹124.54 crore through misclassification (equity shown as GIA); ₹59.54 crore across five entities still unreconciled",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 59.54 crore",
+        "crore": 59.54
+      },
+      "other_amounts": [
+        "₹ 4,142.64 crore (total investment: context)",
+        "₹ 124.54 crore (original understatement)",
+        "₹ 65 crore (already corrected)",
+        "₹ 46.41 crore / ₹ 3,807.14 crore / ₹ 289.09 crore (investment breakdown: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F028",
+      "page": 57,
+      "printed_page": "36",
+      "para_no": "2.4.4",
+      "location": "chapter",
+      "anchor": "Despite no return on its investments, the State Government made further investment of ₹ 1,659.289",
+      "text": "Despite no return on its investments, the State Government made further investment of ₹ 1,659.289 crore in the form of equity during 2023-24.",
+      "summary": "Further equity investment of ₹1,659.28 crore in 2023-24 despite zero return on investments",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹ 1,659.289 crore",
+        "crore": 1659.28
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "The trailing \"9\" in the raw amount is footnote marker 9; the value is ₹1,659.28 crore"
+    },
+    {
+      "id": "F029",
+      "page": 57,
+      "printed_page": "36",
+      "para_no": "2.4.4",
+      "location": "chapter",
+      "anchor": "Investments made by the erstwhile State of Bihar in the form of equity in Damodar",
+      "text": "Investments made by the erstwhile State of Bihar in the form of equity in Damodar Valley Corporation (₹ 1,781.55 crore) and Tenughat Vidyut Nigam Limited (₹ 100 crore) up to 14 November 2000 have not yet been apportioned between the successor States of Bihar and Jharkhand.",
+      "summary": "Equity investments in DVC (₹1,781.55 crore) and TVNL (₹100 crore) of the undivided State not apportioned between Bihar and Jharkhand",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 1,781.55 crore (DVC equity not apportioned)",
+        "₹ 100 crore (TVNL equity not apportioned)"
+      ],
+      "borderline": false,
+      "note": "No single impact amount is given; the two unapportioned amounts are listed under other_amounts"
+    },
+    {
+      "id": "F030",
+      "page": 58,
+      "printed_page": "37",
+      "para_no": "2.4.5",
+      "location": "chapter",
+      "anchor": "Outstanding arrears of loanee entities at the end of March 2024 amounted to ₹ 4,095.22",
+      "text": "Outstanding arrears of loanee entities at the end of March 2024 amounted to ₹ 4,095.22 crore (Principal: ₹ 2,059.87 crore and Interest: ₹ 2,035.35 crore).",
+      "summary": "Loan arrears of ₹4,095.22 crore (principal + interest) outstanding from loanee entities",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 4,095.22 crore",
+        "crore": 4095.22
+      },
+      "other_amounts": [
+        "₹ 2,059.87 crore / ₹ 2,035.35 crore (principal/interest parts of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F031",
+      "page": 58,
+      "printed_page": "37",
+      "para_no": "2.4.5",
+      "location": "chapter",
+      "anchor": "Loan to Jharkhand State Food and Civil Supplies Corporation Ltd. (₹ 44 crore) in 2011-12",
+      "text": "Loan to Jharkhand State Food and Civil Supplies Corporation Ltd. (₹ 44 crore) in 2011-12 was understated in Government accounts due to incorrect budgetary categorisation under revenue expenditure instead of capital expenditure. Loans to Jharkhand State Electricity Board (JSEB) amounting to ₹ 7,222.18 crore continued to be depicted in Government accounts as receivable from the Board, even though the Board was unbundled in January 2014 into separate companies.",
+      "summary": "₹44 crore loan misclassified as revenue expenditure; JSEB loans of ₹7,222.18 crore still shown as receivable from the unbundled Board",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 7,222.18 crore",
+        "crore": 7222.18
+      },
+      "other_amounts": [
+        "₹ 44 crore (misclassified loan: second impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F032",
+      "page": 58,
+      "printed_page": "37",
+      "para_no": "2.4.5",
+      "location": "chapter",
+      "anchor": "Further, loans made by the erstwhile State of Bihar to Tenughat Vidyut Nigam Limited (₹",
+      "text": "Further, loans made by the erstwhile State of Bihar to Tenughat Vidyut Nigam Limited (₹ 608 crore) before 14 November 2000 have not been apportioned between the successor States of Bihar and Jharkhand.",
+      "summary": "Loans of ₹608 crore to TVNL by the undivided State not apportioned",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 608 crore",
+        "crore": 608.0
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F033",
+      "page": 59,
+      "printed_page": "38",
+      "para_no": "2.4.6",
+      "location": "chapter",
+      "anchor": "As can be seen from the above table, 168 projects with an estimated cost of",
+      "text": "As can be seen from the above table, 168 projects with an estimated cost of ₹ 5,653.05 crore were incomplete in spite of expenditure of ₹ 3,137.31 crore at the end of FY 2023-24. These projects were delayed between one to 12 years from the target year of completion. Since the departments did not furnish the details of the revised costs, they have not been shown in the Finance Accounts and hence the cost overrun on these projects could not be ascertained.",
+      "summary": "168 projects (est. ₹5,653.05 crore) incomplete after ₹3,137.31 crore spent, delayed 1-12 years; revised costs not furnished",
+      "finding_type": "incomplete_infrastructure",
+      "impact_amount": {
+        "raw": "₹ 3,137.31 crore",
+        "crore": 3137.31
+      },
+      "other_amounts": [
+        "₹ 5,653.05 crore (estimated cost: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F034",
+      "page": 61,
+      "printed_page": "40",
+      "para_no": "2.5.2",
+      "location": "chapter",
+      "anchor": "As per Para 19 and 20 of SDRF guidelines 2015, the balances under the funds",
+      "text": "As per Para 19 and 20 of SDRF guidelines 2015, the balances under the funds should be invested by the State in (a) Central Government dated securities (b) auctioned treasury bills and (c) interest earning deposits and certificates of deposits with Scheduled Commercial Banks. The Finance Department of the Govt. of Jharkhand (GoJ)stated (July 2019) that ₹ 400 crore was invested in Scheduled Commercial Banks during the year 2012-13 but no investment was made after 2012-13.",
+      "summary": "SDRF balances not invested since 2012-13, contrary to guidelines",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 400 crore (invested in 2012-13: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F035",
+      "page": 61,
+      "printed_page": "40",
+      "para_no": "2.5.2",
+      "location": "chapter",
+      "anchor": "Further, as per the guidelines, the Government was required to pay interest on the non-invested",
+      "text": "Further, as per the guidelines, the Government was required to pay interest on the non-invested balances at the rate of interest (8.5 per cent) payable on overdrafts, which is to be added to the corpus of the fund itself. Since its creation, interest on SDRF works out to ₹ 1,098.66 crore at the applicable rates of interest for the period 2011-24, of which ₹ 703.70 crore pertaining to previous years was transferred by the State into the fund during 2023-24. Of the unpaid interest of ₹ 394.96 crore, interest for 2023-24 alone amounted to ₹ 94.46 crore. Non-transfer of interest of ₹ 94.46 crore pertaining to 2023-24 resulted in overstatement of revenue surplus and understatement of fiscal deficit for the year. Consequently, the non-invested balances of ₹ 2,786.36 crore in the Fund as on 31 March 2024 are only book entries and do not represent actual cash balance. Such unpaid interest represents the unaccounted liabilities of the State.",
+      "summary": "Unpaid SDRF interest of ₹394.96 crore (₹94.46 crore for 2023-24) overstates the revenue surplus; the ₹2,786.36 crore balance is a book entry only",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 394.96 crore",
+        "crore": 394.96
+      },
+      "other_amounts": [
+        "₹ 94.46 crore (2023-24 portion: part of impact)",
+        "₹ 1,098.66 crore (total interest due: context)",
+        "₹ 703.70 crore (paid in 2023-24: context)",
+        "₹ 2,786.36 crore (non-invested balance: context)"
+      ],
+      "borderline": false,
+      "note": "Impact taken as the total unpaid interest; the 2023-24 portion (₹94.46 crore) is what Table 1.8 uses"
+    },
+    {
+      "id": "F036",
+      "page": 62,
+      "printed_page": "41",
+      "para_no": "2.5.2",
+      "location": "chapter",
+      "anchor": "The State Disaster Mitigation Fund (SDMF) is to be constituted under Section 48 (1) (c)",
+      "text": "The State Disaster Mitigation Fund (SDMF) is to be constituted under Section 48 (1) (c) of the Disaster Management Act, 2005. This Fund is exclusively for the purpose of mitigation projects in respect of disasters covered under the State Disaster Response Fund (SDRF) / National Disaster Response Fund (NDRF) and State specific local disasters notified by the State Government from time to time. The State Government created the SDMF through a notification in December 2022. The Central and the State Governments are required to contribute to the Fund in the proportion of 75:25. However, the State Government has not made any budgetary provision for this purpose under the Major Head ‘8121-130- State Disaster Mitigation Fund’ as on 31 March 2024. Consequently, the State Government has not transferred any amount to the Fund, including the amount of ₹ 113.60 crore received from the Central Government during 2022-23 pertaining to the financial year 2021-22 and its corresponding State share of ₹ 37.80 crore. During 2023-24, the State Government did not receive the share from Central Government on this account.",
+      "summary": "No budget provision for SDMF; ₹113.60 crore of central share (plus ₹37.80 crore of state share) not transferred to the Fund",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 113.60 crore",
+        "crore": 113.6
+      },
+      "other_amounts": [
+        "₹ 37.80 crore (state share not transferred: part of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F037",
+      "page": 64,
+      "printed_page": "43",
+      "para_no": "2.5.3",
+      "location": "chapter",
+      "anchor": "As per the recommendation of the Twelfth Finance Commission, ‘the State Government was to constitute",
+      "text": "As per the recommendation of the Twelfth Finance Commission, ‘the State Government was to constitute a Guarantee Redemption Fund (GRF) for meeting the payment obligations arising out of the guarantees issued by the Government in respect of bonds issued and other borrowings by the State Public Sector Undertakings or other Bodies and invoked by the beneficiaries. However, the Fund has not been created.",
+      "summary": "Guarantee Redemption Fund not created, contrary to the 12th FC recommendation",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F038",
+      "page": 64,
+      "printed_page": "43",
+      "para_no": "2.5.3",
+      "location": "chapter",
+      "anchor": "The Jharkhand BOCW Board had prepared its accounts upto 2023-24. As of March 2024, the",
+      "text": "The Jharkhand BOCW Board had prepared its accounts upto 2023-24. As of March 2024, the State Government had transferred only ₹ 312.83 crore out of the total collection of ₹ 826.34 crore to the Board. As a result, the liability of the State Government increased to that extent.",
+      "summary": "Only ₹312.83 crore of ₹826.34 crore of Labour Cess collected was transferred to the BOCW Board",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 312.83 crore (transferred: context)",
+        "₹ 826.34 crore (total collection: context)"
+      ],
+      "borderline": false,
+      "note": "The untransferred ₹513.51 crore appears only in Table 2.25, so impact_amount is left null"
+    },
+    {
+      "id": "F039",
+      "page": 65,
+      "printed_page": "44",
+      "para_no": "2.5.3",
+      "location": "chapter",
+      "anchor": "During the period 2009-10 to 2023-24, ₹ 679.86 crore was spent by the Board on",
+      "text": "During the period 2009-10 to 2023-24, ₹ 679.86 crore was spent by the Board on welfare schemes while ₹ 17.30 crore was spent on establishment expenses. The Board had utilised only 35.08 per cent of the available funds.",
+      "summary": "BOCW Board utilised only 35.08 per cent of available funds",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 679.86 crore (spent on schemes: context)",
+        "₹ 17.30 crore (establishment: context)"
+      ],
+      "borderline": false,
+      "note": "The unutilised ₹1,290.24 crore appears only in Table 2.26"
+    },
+    {
+      "id": "F040",
+      "page": 65,
+      "printed_page": "44",
+      "para_no": "2.5.3",
+      "location": "chapter",
+      "anchor": "As per the Finance Accounts, the Government collected ₹ 0.57 crore as Land Cess during",
+      "text": "As per the Finance Accounts, the Government collected ₹ 0.57 crore as Land Cess during the year 2023-24 leading to a total collection of ₹ 185.30 crore during the period 2008-24. However, no amount was transferred to the designated fund (Major Head ‘8448-101 District Fund) by the State as of March 2024.",
+      "summary": "Land Cess of ₹185.30 crore collected (2008-24) never transferred to the District Fund",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 185.30 crore",
+        "crore": 185.3
+      },
+      "other_amounts": [
+        "₹ 0.57 crore (collected in 2023-24: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F041",
+      "page": 65,
+      "printed_page": "44",
+      "para_no": "2.5.3",
+      "location": "chapter",
+      "anchor": "Thus, the total Cess liable to be transferred by the Government to the Labour Welfare",
+      "text": "Thus, the total Cess liable to be transferred by the Government to the Labour Welfare Board (Labour Cess: ₹ 93.34 crore) and Zila Parishads (Land Cess: ₹ 0.57 crore) was ₹ 93.91 crore during FY 2023-24. Non-transfer of the same resulted in an overstatement of the revenue surplus and understatement of the fiscal deficit of the State.",
+      "summary": "Non-transfer of ₹93.91 crore of cess in 2023-24 overstates the revenue surplus and understates the fiscal deficit",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 93.91 crore",
+        "crore": 93.91
+      },
+      "other_amounts": [
+        "₹ 93.34 crore (Labour Cess: part)",
+        "₹ 0.57 crore (Land Cess: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F042",
+      "page": 66,
+      "printed_page": "45",
+      "para_no": "2.5.4.1",
+      "location": "chapter",
+      "anchor": "Apportionment of fiscal liabilities of the composite Bihar State between the successor States of Bihar",
+      "text": "Apportionment of fiscal liabilities of the composite Bihar State between the successor States of Bihar and Jharkhand has not been done so far.",
+      "summary": "Fiscal liabilities of undivided Bihar still not apportioned between Bihar and Jharkhand",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F043",
+      "page": 74,
+      "printed_page": "53",
+      "para_no": "2.6.3",
+      "location": "chapter",
+      "anchor": "The Government of Jharkhand has neither created the guarantee redemption fund nor made any policy",
+      "text": "The Government of Jharkhand has neither created the guarantee redemption fund nor made any policy in this regard. As per information provided by the Finance Department, guarantees amounting to ₹ 2,378.23 crore were given to the power companies and ₹ 2,463 crore was given to Jharkhand State Food & Civil Supplies Corporation, as of 2023-24.",
+      "summary": "Neither a Guarantee Redemption Fund nor a guarantee policy exists despite guarantees to power companies and JSFCSC",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 2,378.23 crore (guarantees to power companies: context)",
+        "₹ 2,463 crore (guarantee to JSFCSC: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F044",
+      "page": 74,
+      "printed_page": "53",
+      "para_no": "2.6.3",
+      "location": "chapter",
+      "anchor": "Letter of Comfort (LOC) amounting to ₹ 157.15 crore, given on behalf of Jharkhand State",
+      "text": "Letter of Comfort (LOC) amounting to ₹ 157.15 crore, given on behalf of Jharkhand State Electricity Board (JSEB) in February 2013, was still pending clearance in the accounts of the Government even after unbundling of JSEB in January 2014.",
+      "summary": "Letter of Comfort of ₹157.15 crore for JSEB still pending clearance in the accounts after the 2014 unbundling",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 157.15 crore",
+        "crore": 157.15
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F045",
+      "page": 75,
+      "printed_page": "54",
+      "para_no": "2.7",
+      "location": "chapter",
+      "anchor": "The State Government had invested ₹ 400 crore from earmarked fund of SDRF in 2012-13.",
+      "text": "The State Government had invested ₹ 400 crore from earmarked fund of SDRF in 2012-13. No amount was invested after the FY 2012-13 from the SDRF leading to a balance of ₹ 2,786.36 crore in the fund, on which the State Government was liable to pay interest as per SDRF guidelines.",
+      "summary": "SDRF balance of ₹2,786.36 crore not invested since 2012-13, which creates an interest liability",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 2,786.36 crore",
+        "crore": 2786.36
+      },
+      "other_amounts": [
+        "₹ 400 crore (invested in 2012-13: context)"
+      ],
+      "borderline": true,
+      "note": "Repeats the para 2.5.2 finding in the cash-balance section; the paragraph continues with neutral Sinking Fund investment sentences (not included)"
+    },
+    {
+      "id": "F046",
+      "page": 76,
+      "printed_page": "55",
+      "para_no": "2.7",
+      "location": "chapter",
+      "anchor": "There was a difference of ₹ 40.50 crore (net credit) between the figures reflected in",
+      "text": "There was a difference of ₹ 40.50 crore (net credit) between the figures reflected in the accounts {₹ 86.66 crore (credit)} and that intimated by the RBI {(₹ 46.16 crore (debit)} as on 31 March 2024. This difference has been taken up by the Principal Accountant General (A&E), Jharkhand with RBI, Ranchi for reconciliation and necessary correction.",
+      "summary": "Unreconciled difference of ₹40.50 crore between the cash balance in the accounts and the RBI figure",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 40.50 crore",
+        "crore": 40.5
+      },
+      "other_amounts": [
+        "₹ 86.66 crore (accounts figure: context)",
+        "₹ 46.16 crore (RBI figure: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F047",
+      "page": 77,
+      "printed_page": "56",
+      "para_no": "2.8",
+      "location": "conclusion",
+      "anchor": "As per Finance Accounts of the State ending 31 March 2024, the Government had invested",
+      "text": "As per Finance Accounts of the State ending 31 March 2024, the Government had invested ₹ 4,142.64 crore (in Government companies, rural banks and co-operative banks and societies) since inception of the State in November 2000. Further, despite no return on its investments, the State Government made investment of ₹ 1,659.28 crore in Rural Bank, State PSUs and Co-operatives in the form of equity during 2023-24.",
+      "summary": "Conclusion: further equity investment of ₹1,659.28 crore despite no return",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹ 1,659.28 crore",
+        "crore": 1659.28
+      },
+      "other_amounts": [
+        "₹ 4,142.64 crore (cumulative investment: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F048",
+      "page": 77,
+      "printed_page": "56",
+      "para_no": "2.8",
+      "location": "conclusion",
+      "anchor": "Total liabilities of the State increased from ₹ 1,18,448 crore in 2022-23 to ₹ 1,27,609",
+      "text": "Total liabilities of the State increased from ₹ 1,18,448 crore in 2022-23 to ₹ 1,27,609 crore in 2023-24. The fiscal liabilities to GSDP ratio was 27.68 per cent against the MTFP target of 30.60 per cent. Apportionment of fiscal liabilities of the composite Bihar State between the successor States of Bihar and Jharkhand has not been done so far.",
+      "summary": "Conclusion: liabilities of undivided Bihar not apportioned (liabilities grew to ₹1,27,609 crore)",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 1,18,448 crore / ₹ 1,27,609 crore (total liabilities: context)"
+      ],
+      "borderline": true,
+      "note": "Mixed paragraph; only the last sentence is adverse"
+    },
+    {
+      "id": "F049",
+      "page": 77,
+      "printed_page": "56",
+      "para_no": "2.8",
+      "location": "conclusion",
+      "anchor": "The Government had transferred ₹ 703.70 crore as interest to SDRF leaving a balance of",
+      "text": "The Government had transferred ₹ 703.70 crore as interest to SDRF leaving a balance of ₹ 394.96 crore which includes ₹ 94.46 crore for 2023-24. Non-payment of interest had an impact on Revenue deficit and Fiscal Deficit of the State.",
+      "summary": "Conclusion: unpaid SDRF interest of ₹394.96 crore (₹94.46 crore for 2023-24) distorts the deficits",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 394.96 crore",
+        "crore": 394.96
+      },
+      "other_amounts": [
+        "₹ 703.70 crore (paid: context)",
+        "₹ 94.46 crore (2023-24 part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F050",
+      "page": 77,
+      "printed_page": "56",
+      "para_no": "2.8",
+      "location": "conclusion",
+      "anchor": "The Government had transferred ₹ 567 crore to the Sinking Fund during the year. Government",
+      "text": "The Government had transferred ₹ 567 crore to the Sinking Fund during the year. Government departments did not transfer cesses collected to the concerned Boards.",
+      "summary": "Conclusion: collected cesses not transferred to the concerned Boards",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 567 crore (Sinking Fund transfer: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F051",
+      "page": 82,
+      "printed_page": "59",
+      "para_no": "3.1.1",
+      "location": "chapter",
+      "anchor": "During FY 2023-24, the total savings of ₹ 32,744.35 crore (23.14 per cent of the",
+      "text": "During FY 2023-24, the total savings of ₹ 32,744.35 crore (23.14 per cent of the total budget) were the result of savings of ₹ 25,822.15 crore in 52 voted grants and six appropriations under the Revenue Section and ₹ 6,922.20 crore in 40 grants and one appropriation under the Capital Section. There was an excess expenditure of ₹ 268.02 crore in one grant (15-Pension) under the Revenue Section.",
+      "summary": "Total savings of ₹32,744.35 crore (23.14 per cent of the budget) across grants, plus excess of ₹268.02 crore in Grant 15-Pension",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 32,744.35 crore",
+        "crore": 32744.35
+      },
+      "other_amounts": [
+        "₹ 25,822.15 crore (revenue savings: part)",
+        "₹ 6,922.20 crore (capital savings: part)",
+        "₹ 268.02 crore (excess in Pension: separate)"
+      ],
+      "borderline": true,
+      "note": "Summary statement of the savings position; adverse but worded descriptively"
+    },
+    {
+      "id": "F052",
+      "page": 82,
+      "printed_page": "59",
+      "para_no": "3.1.1",
+      "location": "chapter",
+      "anchor": "Further, it was observed that, out of the total savings of ₹ 32,744.35 crore during",
+      "text": "Further, it was observed that, out of the total savings of ₹ 32,744.35 crore during FY 2023-24, savings of ₹ 22,386.79 crore had occurred under 101 grants, the reasons for which have not been appropriately explained in the Appropriation Accounts. Further, these grants had persistent total savings, ranging from ₹ 11,975.09 crore to ₹ 15,625.57 crore, during FYs 2019-20 to 2022-23.",
+      "summary": "Savings of ₹22,386.79 crore under 10 grants not explained in the Appropriation Accounts; persistent savings of ₹11,975-15,626 crore in these grants in earlier years",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 22,386.79 crore",
+        "crore": 22386.79
+      },
+      "other_amounts": [
+        "₹ 32,744.35 crore (total savings: context)",
+        "₹ 11,975.09 crore to ₹ 15,625.57 crore (prior-year persistent savings: context)"
+      ],
+      "borderline": false,
+      "note": "get_text reads \"under 101 grants\": the trailing 1 is footnote marker 1 (the footnote lists 10 grants, and the Conclusion says 10 grants)"
+    },
+    {
+      "id": "F053",
+      "page": 82,
+      "printed_page": "59",
+      "para_no": "3.1.1",
+      "location": "chapter",
+      "anchor": "It was also noticed that, nearly all the savings were surrendered in the month of",
+      "text": "It was also noticed that, nearly all the savings were surrendered in the month of March 2024, leaving the Finance Department virtually no time to reallocate the funds to other departments that may have required funds. This also defeated the objective of achieving efficiency in budget management.",
+      "summary": "Nearly all savings surrendered in March 2024, leaving no time to reallocate",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F054",
+      "page": 82,
+      "printed_page": "59",
+      "para_no": "3.1.1",
+      "location": "chapter",
+      "anchor": "A detailed review of the Appropriation Accounts of the Government of Jharkhand for the FY",
+      "text": "A detailed review of the Appropriation Accounts of the Government of Jharkhand for the FY 2023-24 revealed that, except in a few cases, reasons for savings/excess against the budget provisions of the schemes/sub-heads had not been furnished by the departments.",
+      "summary": "Departments did not furnish reasons for savings or excess against scheme provisions",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F055",
+      "page": 83,
+      "printed_page": "60",
+      "para_no": "3.1.2",
+      "location": "chapter",
+      "anchor": "Table 3.2 shows that the budget provisions under the voted section, had not been fully",
+      "text": "Table 3.2 shows that the budget provisions under the voted section, had not been fully utilised by the departments and significant savings had occurred every year, during the period 2019-20 to 2023-24.",
+      "summary": "Voted provisions not fully utilised; significant savings every year from 2019-20 to 2023-24",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F056",
+      "page": 85,
+      "printed_page": "62",
+      "para_no": "3.2.1",
+      "location": "chapter",
+      "anchor": "Audit scrutiny revealed that in one appropriation, expenditure was incurred without budget provision, in four",
+      "text": "Audit scrutiny revealed that in one appropriation, expenditure was incurred without budget provision, in four cases. The total expenditure, incurred without provision, was ₹ 2,450 crore, during the year. Details are given in Table 3.5.",
+      "summary": "₹2,450 crore spent without budget provision under 14-Repayment of Loans (four sub-heads)",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹ 2,450 crore",
+        "crore": 2450.0
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "The paragraph after Table 3.5 (\"substantial expenditure, without budget provision ... sufficient budgetary provisions were not made\") elaborates this same item"
+    },
+    {
+      "id": "F057",
+      "page": 85,
+      "printed_page": "62",
+      "para_no": "3.2.2",
+      "location": "chapter",
+      "anchor": "During verification of Statement No. 21 of the Finance Accounts, it was observed that, every",
+      "text": "During verification of Statement No. 21 of the Finance Accounts, it was observed that, every year, a significant amount had remained as balance under the Minor Head-800 of Major Head-8443. At the end of FY 2022-23, there was a balance of ₹ 257.58 crore under this head. In 2023-24, the deposits under this head were ₹ 0.95 crore (related to miscellaneous receipts) and the disbursement was ₹ 19.67 crore, leading to a balance of ₹ 238.86 crore at the end of the year. The Government of Jharkhand, in consultation with AG (A&E), had directed (December 2019) that PD accounts be opened in the 24 district treasuries under the Minor Head ‘106- Personal Deposit Accounts’ of Major Head ‘8443-Civil Deposits’ in the name of District Land Acquisition Officers (DLAOs) for payment of compensation for acquisition of land. Further, the amount previously booked under the Minor Head 800 by the DLAOs was required to be transferred to these PD accounts. However, the amount was not fully transferred to the PD accounts leading to a balance of ₹ 238.86 crore under Minor Head 800, as of March 2024.",
+      "summary": "₹238.86 crore of land-acquisition money still under MH 8443-800 instead of being transferred to the DLAO PD accounts as directed",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 238.86 crore",
+        "crore": 238.86
+      },
+      "other_amounts": [
+        "₹ 257.58 crore (opening balance: context)",
+        "₹ 0.95 crore / ₹ 19.67 crore (deposits/disbursements: context)"
+      ],
+      "borderline": false,
+      "note": "Two paragraphs on one observation, merged"
+    },
+    {
+      "id": "F058",
+      "page": 86,
+      "printed_page": "63",
+      "para_no": "3.2.3",
+      "location": "chapter",
+      "anchor": "As detailed in Appendix 3.1, out of the total supplementary budget provision of ₹ 25,081",
+      "text": "As detailed in Appendix 3.1, out of the total supplementary budget provision of ₹ 25,081 crore, supplementary provisions aggregating ₹ 13,499.10 crore (53.82 per cent) in 57 cases (₹ 0.50 crore or more in each case) during the year, proved unnecessary, as the expenditure did not even come up to the level of the original provision which indicates poor budgetary management.",
+      "summary": "Supplementary provisions of ₹13,499.10 crore (53.82 per cent) in 57 cases proved unnecessary",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 13,499.10 crore",
+        "crore": 13499.1
+      },
+      "other_amounts": [
+        "₹ 25,081 crore (total supplementary: context)",
+        "₹ 0.50 crore (threshold: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F059",
+      "page": 86,
+      "printed_page": "63",
+      "para_no": "3.2.4",
+      "location": "chapter",
+      "anchor": "During verification of grant registers, surrender orders, re-appropriation orders etc., it was observed that, in",
+      "text": "During verification of grant registers, surrender orders, re-appropriation orders etc., it was observed that, in several schemes, additional funds were provided injudiciously under seven sub-heads, during FY 2023-24 (Appendix 3.2), which proved excessive. Despite low expenditure under these schemes/ sub-heads, additional funds of ₹ 5.36 crore was provided through re-appropriation, leading to savings of ₹ 45.73 crore.",
+      "summary": "Injudicious re-appropriation of ₹5.36 crore to seven sub-heads with low expenditure; savings of ₹45.73 crore",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 5.36 crore",
+        "crore": 5.36
+      },
+      "other_amounts": [
+        "₹ 45.73 crore (resulting savings)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F060",
+      "page": 86,
+      "printed_page": "63",
+      "para_no": "3.2.5.1",
+      "location": "chapter",
+      "anchor": "Out of total savings of ₹ 32,744.35 crore, savings of ₹ 31,578.05 crore (96.44 per",
+      "text": "Out of total savings of ₹ 32,744.35 crore, savings of ₹ 31,578.05 crore (96.44 per cent) occurred in 29 grants2, each amounting to ₹ 100 crore or more (Appendix 3.3). No appropriate reasons for such large savings were given by the departmental authorities.",
+      "summary": "Savings of ₹31,578.05 crore (96.44 per cent) in 29 grants of ₹100 crore or more each, with no reasons given",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 31,578.05 crore",
+        "crore": 31578.05
+      },
+      "other_amounts": [
+        "₹ 32,744.35 crore (total savings: context)"
+      ],
+      "borderline": false,
+      "note": "\"29 grants2\": the trailing 2 is footnote marker 2"
+    },
+    {
+      "id": "F061",
+      "page": 86,
+      "printed_page": "63",
+      "para_no": "3.2.5.1",
+      "location": "chapter",
+      "anchor": "Further, during FY 2023-24, savings in 15 grants under revenue section and five grants under",
+      "text": "Further, during FY 2023-24, savings in 15 grants under revenue section and five grants under capital section were ₹ 500 crore or more. The reasons for such savings were not furnished by the departments concerned. Huge savings without justification was indicative of unrealistic budget proposals, poor expenditure monitoring mechanism, weak scheme implementation capacity and weak internal control in the departments. Details are given in Appendix 3.4.",
+      "summary": "Savings of ₹500 crore or more in 20 grants with no reasons furnished, indicating unrealistic budgeting and weak controls",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F062",
+      "page": 87,
+      "printed_page": "64",
+      "para_no": "3.2.5.1",
+      "location": "chapter",
+      "anchor": "The above mentioned grants were related to social and economic services and the expenditure therein",
+      "text": "The above mentioned grants were related to social and economic services and the expenditure therein was therefore to be made for development purposes. However, the Government was unable to utilise the provisions year after year, depriving the targeted beneficiaries of the envisaged benefits. As can be seen from the table above, savings under Grant No. 60 were between 64 per cent and 98 per cent during the period 2019-24, except 2023-24, as in this year, funds provided for schemes like implementation of the rights of persons with disabilities, construction works for rehabilitation centers, working women hostels, anganwadi kendras etc., were surrendered instead, without giving any appropriate reasons. Similarly, savings under capital section in Grant No. 26 were between 30 per cent to 90 per cent during the period 2019-24, as the funds provided for schemes for skill development of youth in left wing extremism affected districts, construction of ITIs and allied buildings, construction of labour offices etc., were surrendered, without giving any appropriate reason.",
+      "summary": "Persistent savings of 30 per cent or more in development grants (e.g. Grants 60 and 26) over five years; funds surrendered without reasons",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F063",
+      "page": 87,
+      "printed_page": "64",
+      "para_no": "3.2.6",
+      "location": "chapter",
+      "anchor": "Verification of Appropriation Accounts of the State revealed that, out of total savings of ₹",
+      "text": "Verification of Appropriation Accounts of the State revealed that, out of total savings of ₹ 32,744.35 crore, savings of ₹ 10 crore or more amounting to ₹ 21,067.59 crore (64.34 per cent) were surrendered, at the end of March 2024, leaving no scope for the Government to utilise the funds on other development schemes, as detailed in Appendix 3.5.",
+      "summary": "Savings of ₹21,067.59 crore (64.34 per cent) surrendered at the end of March 2024",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 21,067.59 crore",
+        "crore": 21067.59
+      },
+      "other_amounts": [
+        "₹ 32,744.35 crore (total savings: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F064",
+      "page": 88,
+      "printed_page": "65",
+      "para_no": "3.2.6",
+      "location": "chapter",
+      "anchor": "As can be seen from Chart 3.2, 28 grants had savings between 11 and 30",
+      "text": "As can be seen from Chart 3.2, 28 grants had savings between 11 and 30 per cent, whereas 21 grants had savings of more than 30 per cent in the current year under which eight grants had savings of more than 50 per cent. Grant No. 42-Rural Development Department and 48- Urban Development and Housing Department (Urban Development Division) concerned with public welfare also had savings of 52 per cent and 62 per cent respectively.",
+      "summary": "21 grants had savings over 30 per cent (eight over 50 per cent), including Rural Development (52 per cent) and Urban Development (62 per cent)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Largely descriptive distribution of savings"
+    },
+    {
+      "id": "F065",
+      "page": 88,
+      "printed_page": "65",
+      "para_no": "3.2.6",
+      "location": "chapter",
+      "anchor": "As can be seen from Chart 3.3, the total budget allocation increased from ₹ 94,765",
+      "text": "As can be seen from Chart 3.3, the total budget allocation increased from ₹ 94,765 crore in 2019-20 to ₹ 1,41,499 crore in 2023-24. However, utilisation during the last five years remained between 75 per cent to 79 per cent of the funds allocated indicating that the budgetary process was deficient/unrealistic.",
+      "summary": "Budget utilisation only 75-79 per cent over five years, showing a deficient or unrealistic budget process",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 94,765 crore / ₹ 1,41,499 crore (budget allocation: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F066",
+      "page": 89,
+      "printed_page": "66",
+      "para_no": "3.2.7.1",
+      "location": "chapter",
+      "anchor": "As observed in the Appropriation Accounts, excess expenditure of ₹ 268.02 crore was incurred in",
+      "text": "As observed in the Appropriation Accounts, excess expenditure of ₹ 268.02 crore was incurred in one appropriation (15- Pension) during FY 2023-24.",
+      "summary": "Excess expenditure of ₹268.02 crore over the appropriation in 15-Pension, needing regularisation",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹ 268.02 crore",
+        "crore": 268.02
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F067",
+      "page": 89,
+      "printed_page": "66",
+      "para_no": "3.2.7.2",
+      "location": "chapter",
+      "anchor": "Excess expenditure remaining unregularised for extended periods dilutes legislative control over the executive. Excess disbursement",
+      "text": "Excess expenditure remaining unregularised for extended periods dilutes legislative control over the executive. Excess disbursement over grant/appropriation amounting to ₹ 3,778.41 crore relating to 10 grants pertaining to FYs 2001-02 to 2022-23 is yet to be regularised by the State Legislature as detailed in Appendix 3.6. Three Grants/Appropriations, 13-Interest payments, 14-Repayment of Loans and 15-Pension accounted for ₹ 889.27 crore (23.54 per cent), ₹ 983.49 crore (26.03 per cent) and ₹ 1,731.55 crore (45.83 per cent) respectively, of the total excess expenditure during FYs 2001-02 to 2022-23, which is yet to be regularised. The excess expenditure of previous years has not been regularised, even after being reported repeatedly in the State Finances Audit Report.",
+      "summary": "Excess of ₹3,778.41 crore over grants (2001-02 to 2022-23) still not regularised despite repeated reporting",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 3,778.41 crore",
+        "crore": 3778.41
+      },
+      "other_amounts": [
+        "₹ 889.27 crore / ₹ 983.49 crore / ₹ 1,731.55 crore (grant-wise parts of impact)"
+      ],
+      "borderline": false,
+      "note": "Two paragraphs on one observation, merged"
+    },
+    {
+      "id": "F068",
+      "page": 89,
+      "printed_page": "66",
+      "para_no": "3.2.8",
+      "location": "chapter",
+      "anchor": "During FY 2023-24, ₹ 8,549.30 crore was given as grants to the bodies and authorities",
+      "text": "During FY 2023-24, ₹ 8,549.30 crore was given as grants to the bodies and authorities of the State for creation of capital assets. However, ₹ 4,433.60 crore of such grant was booked as capital expenditure in the accounts of the State which was against the provisions of Indian Government Accounting Standard (IGAS)-2 related to accounting and classification of Grants-in-aid.",
+      "summary": "₹4,433.60 crore of grants-in-aid for capital assets booked as capital expenditure, contrary to IGAS-2",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 4,433.60 crore",
+        "crore": 4433.6
+      },
+      "other_amounts": [
+        "₹ 8,549.30 crore (total GIA for capital assets: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F069",
+      "page": 90,
+      "printed_page": "67",
+      "para_no": "3.3.1",
+      "location": "chapter",
+      "anchor": "Table 3.7 shows that out of the total provision of ₹ 1,41,498.79 crore, an amount",
+      "text": "Table 3.7 shows that out of the total provision of ₹ 1,41,498.79 crore, an amount of ₹ 1,08,754.44 crore was spent by the State departments and ₹ 32,744.35 crore (23.14 per cent) remained unutilised during FY 2023-24. The unutilised amount was surrendered in the month of March.",
+      "summary": "₹32,744.35 crore (23.14 per cent) of provision unutilised and surrendered in March",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 32,744.35 crore",
+        "crore": 32744.35
+      },
+      "other_amounts": [
+        "₹ 1,41,498.79 crore (total provision: context)",
+        "₹ 1,08,754.44 crore (expenditure: context)"
+      ],
+      "borderline": true,
+      "note": "Restates the para 3.1.1 savings"
+    },
+    {
+      "id": "F070",
+      "page": 90,
+      "printed_page": "67",
+      "para_no": "3.3.1",
+      "location": "chapter",
+      "anchor": "Further, as evident from Table 3.7 & 3.8, a large part of the budget provisions",
+      "text": "Further, as evident from Table 3.7 & 3.8, a large part of the budget provisions was not utilised during FYs 2019-20 to 2023-24 and was surrendered by the departmental officers. No appropriate reasons were recorded for these surrenders. These savings were much more than the supplementary provisions of the State, which was indicative of budgetary allocations having been made based on unrealistic proposals, poor expenditure monitoring mechanism, weak scheme implementation capacity/weak internal controls etc.",
+      "summary": "Large parts of the budget unused and surrendered in 2019-24 with no reasons; savings exceeded supplementary provisions, showing unrealistic budgeting",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F071",
+      "page": 91,
+      "printed_page": "68",
+      "para_no": "3.3.2",
+      "location": "chapter",
+      "anchor": "At times while obtaining supplementary provision, departments report to the legislature large additional requirements for",
+      "text": "At times while obtaining supplementary provision, departments report to the legislature large additional requirements for different purposes under various schemes/activities; but are unable to spend even the original budget provision which leads to large savings. At the same time, some of the schemes remained incomplete due to lack of funds. Cases of unnecessary/excessive supplementary provisions despite low expenditure, leading to large savings, are given in Table 3.9.",
+      "summary": "Unnecessary or excessive supplementary provisions despite low expenditure, leading to large savings (cases in Table 3.9)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Mostly an introduction to Table 3.9, whose total (₹8,309.09 crore supplementary; ₹17,693.64 crore unutilised) appears only in the table"
+    },
+    {
+      "id": "F072",
+      "page": 91,
+      "printed_page": "68",
+      "para_no": "3.3.2",
+      "location": "chapter",
+      "anchor": "Review of the Appropriation Accounts of the State revealed that there were persistent large savings",
+      "text": "Review of the Appropriation Accounts of the State revealed that there were persistent large savings out of funds allocated for several schemes. Persistent large savings in the last three years had resulted in non-completion of schemes and the envisaged benefits could not be achieved. Some of these schemes are shown in Table 3.10.",
+      "summary": "Persistent large savings in major schemes over three years led to non-completion of schemes",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F073",
+      "page": 92,
+      "printed_page": "69",
+      "para_no": "3.3.2",
+      "location": "chapter",
+      "anchor": "From the above table, it can be seen that there were huge savings in the",
+      "text": "From the above table, it can be seen that there were huge savings in the schemes under social and economic services like Pradhan Mantri Krishi Sinchayee Yojana, Distribution of Dhoti Saree Scheme to BPL families, Swarna Jayanti Gram Swarojgar Yojana, Indira Awas Yojana Scheme for General etc., during the last three years. Besides highlighting the issue of effectiveness of the budgetary procedure followed by the State, this also raises the risk of potential beneficiaries of these scheme being deprived of their benefits.",
+      "summary": "Huge savings in PMKSY, Dhoti Saree, SGSY and IAY schemes over three years, putting beneficiaries at risk of losing benefits",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Continues the previous item after Table 3.10; could be merged with it"
+    },
+    {
+      "id": "F074",
+      "page": 92,
+      "printed_page": "69",
+      "para_no": "3.3.3",
+      "location": "chapter",
+      "anchor": "Policy initiatives taken up by Government and schemes incorporated in the budget were not executed,",
+      "text": "Policy initiatives taken up by Government and schemes incorporated in the budget were not executed, which deprived the beneficiaries of the intended benefits. Reasons for non-utilisation of the provisions were not given by the departments. Savings in such schemes deprived other departments of funds which they could have utilised. In 408 cases, 100 per cent of the provisions (₹ one crore and above in each case), amounting to ₹ 7,557.23 crore, were surrendered, resulting in non-implementation of schemes/programmes, as detailed in Appendix 3.7.",
+      "summary": "In 408 cases the entire provision (₹7,557.23 crore) was surrendered and schemes were not implemented",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 7,557.23 crore",
+        "crore": 7557.23
+      },
+      "other_amounts": [
+        "₹ one crore (threshold per case: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F075",
+      "page": 93,
+      "printed_page": "70",
+      "para_no": "3.4",
+      "location": "chapter",
+      "anchor": "During FY 2023-24, ₹ 20,794 crore, comprising 19.12 per cent of the total expenditure (₹",
+      "text": "During FY 2023-24, ₹ 20,794 crore, comprising 19.12 per cent of the total expenditure (₹ 1,08,755 crore), was spent in March 2024. The high percentage of expenditure in March indicates that uniform flow of expenditure, a primary requirement of budgetary control, had not been maintained. Rush of expenditure in the closing month of the financial year is against the provisions of the Budget Manual and entails the risk of misuse of public money.",
+      "summary": "Rush of expenditure: ₹20,794 crore (19.12 per cent) spent in March 2024",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 20,794 crore",
+        "crore": 20794.0
+      },
+      "other_amounts": [
+        "₹ 1,08,755 crore (total expenditure: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F076",
+      "page": 93,
+      "printed_page": "70",
+      "para_no": "3.4",
+      "location": "chapter",
+      "anchor": "Further, it was observed, that out of the total expenditure of ₹ 25,208.86 crore under",
+      "text": "Further, it was observed, that out of the total expenditure of ₹ 25,208.86 crore under 39 major heads, expenditure of 50 per cent and above, amounting to ₹ 15,668.71 crore (62.16 per cent), had been incurred in the last quarter of the year, as detailed in Appendix 3.8. Of this, an expenditure of ₹ 8,603.74 crore (34.13 per cent of the total expenditure under these heads) was incurred in the month of March 2024.",
+      "summary": "In 39 major heads, ₹15,668.71 crore (62.16 per cent) spent in the last quarter, ₹8,603.74 crore of it in March",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 15,668.71 crore",
+        "crore": 15668.71
+      },
+      "other_amounts": [
+        "₹ 25,208.86 crore (total under 39 heads: context)",
+        "₹ 8,603.74 crore (March portion: part of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F077",
+      "page": 93,
+      "printed_page": "70",
+      "para_no": "3.4",
+      "location": "chapter",
+      "anchor": "It was observed that ₹ 13.32 crore was drawn through AC bills in March 2024,",
+      "text": "It was observed that ₹ 13.32 crore was drawn through AC bills in March 2024, of which ₹ 6.79 crore was drawn on the last two days of the financial year mainly by the Home, Jail and Disaster Management Department and Health & Family Welfare Department. Drawal of AC bills decreased significantly during the year due to regular reporting and follow up with the State Government.",
+      "summary": "₹13.32 crore drawn on AC bills in March 2024, ₹6.79 crore of it in the last two days",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 13.32 crore",
+        "crore": 13.32
+      },
+      "other_amounts": [
+        "₹ 6.79 crore (last two days: part of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F078",
+      "page": 94,
+      "printed_page": "71",
+      "para_no": "3.5.3",
+      "location": "chapter",
+      "anchor": "As shown in the above table, the Department had persistent savings ranging between 19.01 and",
+      "text": "As shown in the above table, the Department had persistent savings ranging between 19.01 and 36.24 per cent during FYs 2020-21 to 2023-24 which was not only indicative of the inability of the Department to utilise the funds but also revealed non-completion of State schemes approved by the Legislature.",
+      "summary": "Forest Department: persistent savings of 19.01-36.24 per cent in 2020-24",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F079",
+      "page": 95,
+      "printed_page": "72",
+      "para_no": "3.5.4",
+      "location": "chapter",
+      "anchor": "The Department had utilised only ₹ 278.92 crore out of original provision of ₹ 389.10",
+      "text": "The Department had utilised only ₹ 278.92 crore out of original provision of ₹ 389.10 crore under 10 heads leading to savings of ₹ 110.18 crore during FY 2023-24. Despite non-utilisation of the original provision, additional funds amounting to ₹ 83.85 crore had been provided to those schemes through supplementary budget in violation of the provisions of the BM.",
+      "summary": "Forest Department: supplementary provision of ₹83.85 crore given to 10 heads that had not used their original provision (₹110.18 crore saved)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 83.85 crore",
+        "crore": 83.85
+      },
+      "other_amounts": [
+        "₹ 278.92 crore / ₹ 389.10 crore (utilised / original: context)",
+        "₹ 110.18 crore (savings: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F080",
+      "page": 95,
+      "printed_page": "72",
+      "para_no": "3.5.5",
+      "location": "chapter",
+      "anchor": "Scrutiny of records revealed that budget provision of ₹ 16.10 crore under eight sub-heads, made",
+      "text": "Scrutiny of records revealed that budget provision of ₹ 16.10 crore under eight sub-heads, made by the Department for FY 2023-24, had not been utilised and the entire provision had been surrendered, as shown in Table 3.14.",
+      "summary": "Forest Department: entire provision of ₹16.10 crore under eight sub-heads unused and surrendered",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 16.10 crore",
+        "crore": 16.1
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F081",
+      "page": 96,
+      "printed_page": "73",
+      "para_no": "3.5.6",
+      "location": "chapter",
+      "anchor": "Audit of records of the Department revealed that against the budget provision of ₹ 1,820.20",
+      "text": "Audit of records of the Department revealed that against the budget provision of ₹ 1,820.20 crore (₹ 35.00 crore under the capital head and ₹ 1,785.20 crore under the revenue head), ₹ 657.36 crore (under the revenue head), was surrendered by the Department at the fag end of the financial year.",
+      "summary": "Forest Department surrendered ₹657.36 crore at the fag end of the year",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 657.36 crore",
+        "crore": 657.36
+      },
+      "other_amounts": [
+        "₹ 1,820.20 crore (budget: context)",
+        "₹ 35.00 crore / ₹ 1,785.20 crore (capital/revenue budget: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F082",
+      "page": 96,
+      "printed_page": "73",
+      "para_no": "3.5.6",
+      "location": "chapter",
+      "anchor": "Further, scrutiny of records of the test-checked districts revealed that ₹ 9.28 crore had been",
+      "text": "Further, scrutiny of records of the test-checked districts revealed that ₹ 9.28 crore had been surrendered at the fag end of the financial year, as detailed in Appendix 3.9. The delay in surrender of funds was attributed to reasons such as anticipation of expenditure and late allocation of funds etc.",
+      "summary": "Test-checked forest districts surrendered ₹9.28 crore at the fag end of the year",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 9.28 crore",
+        "crore": 9.28
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F083",
+      "page": 96,
+      "printed_page": "73",
+      "para_no": "3.5.7",
+      "location": "chapter",
+      "anchor": "Out of the total expenditure of ₹ 1,160.55 crore in FY 2023-24, ₹ 638.79 crore",
+      "text": "Out of the total expenditure of ₹ 1,160.55 crore in FY 2023-24, ₹ 638.79 crore (55 per cent) had been spent in the month of March 2024. Further, in the test-checked divisions/DDOs, the expenditure had ranged between 15.48 and 58.25 per cent in the month of March, in contravention of financial rules, as detailed in Appendix 3.10.",
+      "summary": "Forest Department: ₹638.79 crore (55 per cent) spent in March 2024; test-checked DDOs spent 15-58 per cent in March",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 638.79 crore",
+        "crore": 638.79
+      },
+      "other_amounts": [
+        "₹ 1,160.55 crore (total expenditure: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F084",
+      "page": 96,
+      "printed_page": "73",
+      "para_no": "3.5.8",
+      "location": "chapter",
+      "anchor": "Scrutiny revealed that, out of the savings of ₹ 657.36 crore under the revenue section,",
+      "text": "Scrutiny revealed that, out of the savings of ₹ 657.36 crore under the revenue section, ₹ 584.09 crore had been surrendered, while the remaining amount of ₹ 73.27 crore had lapsed at the end of the financial year. Non-surrender of anticipated savings (₹ 73.27 crore) on time was against Rule 112 of the Budget Manual.",
+      "summary": "Forest Department: ₹73.27 crore of savings lapsed without being surrendered",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 73.27 crore",
+        "crore": 73.27
+      },
+      "other_amounts": [
+        "₹ 657.36 crore (savings: context)",
+        "₹ 584.09 crore (surrendered: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F085",
+      "page": 97,
+      "printed_page": "74",
+      "para_no": "3.5.9",
+      "location": "chapter",
+      "anchor": "During test-check of records of the office of the Divisional Forest Officer, Social Forestry Division,",
+      "text": "During test-check of records of the office of the Divisional Forest Officer, Social Forestry Division, Dumka, it was observed that the division received (20.12.2023) ₹ 75,45,928 for various works and development of basic structures of the permanent nurseries. It was further seen that out of ₹ 75,45,928, provision of ₹ 44,01,570 had been made for maintenance of four permanent nurseries. It was, however, seen that the Division had only three permanent nurseries, against which estimate of ₹ 33,01,176 (₹ 11,00,393 each) had been prepared by the Division and sent to the Department. During 2023-24, ₹ 33,01,176 was spent on three permanent nurseries and ₹ 11,00,393 lapsed at the end of the financial year. Similarly, during 2022-23, an amount of ₹ 10,48,516 had lapsed as allotment was received against four permanent nurseries.",
+      "summary": "DFO Social Forestry Dumka: provision made for four nurseries although only three exist; ₹11.00 lakh lapsed in 2023-24 (₹10.49 lakh in 2022-23)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 11,00,393",
+        "crore": 0.11
+      },
+      "other_amounts": [
+        "₹ 75,45,928 (funds received: context)",
+        "₹ 44,01,570 (provision for four nurseries: context)",
+        "₹ 33,01,176 (spent on three nurseries: context)",
+        "₹ 10,48,516 (lapsed in 2022-23: related)"
+      ],
+      "borderline": false,
+      "note": "Two paragraphs merged. Amounts are in rupees; ₹11,00,393 = ₹0.11 crore"
+    },
+    {
+      "id": "F086",
+      "page": 97,
+      "printed_page": "74",
+      "para_no": "3.5.10",
+      "location": "chapter",
+      "anchor": "During scrutiny of appropriation account for the year 2023-24, it was noticed that an expenditure",
+      "text": "During scrutiny of appropriation account for the year 2023-24, it was noticed that an expenditure of ₹ 27.85 crore was incurred out of a budget provision of ₹ 26.91 crore under the head 2406-01-070-01- Roads and bridges of Grant No. 19. Hence, excess expenditure of ₹ 0.94 crore was incurred against the budget provision for reasons not available on records.",
+      "summary": "Excess expenditure of ₹0.94 crore over provision under Roads and Bridges head of Grant 19",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹ 0.94 crore",
+        "crore": 0.94
+      },
+      "other_amounts": [
+        "₹ 27.85 crore / ₹ 26.91 crore (expenditure / provision: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F087",
+      "page": 97,
+      "printed_page": "74",
+      "para_no": "3.6.1",
+      "location": "chapter",
+      "anchor": "To meet the above-mentioned responsibilities, the State Government provided a budget of ₹ 4,910.33 crore",
+      "text": "To meet the above-mentioned responsibilities, the State Government provided a budget of ₹ 4,910.33 crore during 2023-24 to the Department. Against the budget provision, only an amount of ₹ 1,867.84 crore (38 per cent) was spent resulting in total savings of ₹ 3,042.49 crore (62 per cent). Further, out of the total savings of ₹ 3,042.49 crore, an amount of ₹ 2,977.63 crore was surrendered and the balance of ₹ 64.86 crore was allowed to lapse, during the year 2023-24.",
+      "summary": "Urban Development Division spent only 38 per cent of ₹4,910.33 crore; savings ₹3,042.49 crore, of which ₹64.86 crore lapsed",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 3,042.49 crore",
+        "crore": 3042.49
+      },
+      "other_amounts": [
+        "₹ 4,910.33 crore (budget: context)",
+        "₹ 1,867.84 crore (spent: context)",
+        "₹ 2,977.63 crore (surrendered: part)",
+        "₹ 64.86 crore (lapsed: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F088",
+      "page": 98,
+      "printed_page": "75",
+      "para_no": "3.6.1",
+      "location": "chapter",
+      "anchor": "In view of the final savings of ₹ 3,042.49 crore (revenue: ₹ 2,794.47 crore and",
+      "text": "In view of the final savings of ₹ 3,042.49 crore (revenue: ₹ 2,794.47 crore and capital: ₹ 248.02 crore), supplementary grant of ₹ 1,604.74 crore (revenue: ₹ 1,598.09 and capital: ₹ 6.65 crore) proved wholly unnecessary and could have been restricted to token amounts, where necessary.",
+      "summary": "UDHD supplementary grant of ₹1,604.74 crore proved wholly unnecessary",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 1,604.74 crore",
+        "crore": 1604.74
+      },
+      "other_amounts": [
+        "₹ 3,042.49 crore (savings: context)",
+        "revenue ₹ 1,598.09 / capital ₹ 6.65 crore (parts of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F089",
+      "page": 99,
+      "printed_page": "76",
+      "para_no": "3.6.3",
+      "location": "chapter",
+      "anchor": "As shown in the table, the Department had persistent savings ranging between eight and 62",
+      "text": "As shown in the table, the Department had persistent savings ranging between eight and 62 per cent during 2020-21 to 2023-24 which was not only indicative of the inability of the Department to utilise the funds but also showed non-completion of schemes included in the budget during the year.",
+      "summary": "UDHD: persistent savings of 8-62 per cent in 2020-24",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F090",
+      "page": 99,
+      "printed_page": "76",
+      "para_no": "3.6.4",
+      "location": "chapter",
+      "anchor": "It was noticed that Budget Estimates (BEs) for establishment expenditure were submitted timely i.e. on",
+      "text": "It was noticed that Budget Estimates (BEs) for establishment expenditure were submitted timely i.e. on 14 December 2022 whereas the BEs for the general budget were submitted to the Finance Department only on 11 February 2023 i.e., with a delay of 36 days against the target date prescribed by the Finance Department. Details are given in Table 3.17.",
+      "summary": "UDHD general-budget BEs submitted 36 days late",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F091",
+      "page": 99,
+      "printed_page": "76",
+      "para_no": "3.6.5",
+      "location": "chapter",
+      "anchor": "During audit, it was noticed that provisions of BM had not been followed and the",
+      "text": "During audit, it was noticed that provisions of BM had not been followed and the estimates for establishment expenditure and general budget (State, Central and Centrally Sponsored Schemes) had been prepared at the Department level, without obtaining/ assessing the actual requirements from the field DDOs, who are finally responsible for executing various works and utilising the funds. The huge savings of ₹ 3,042.49 crore (62 per cent), out of the total provision of ₹ 4,910.33 crore, during FY 2023-24, can be attributed to preparation of budget estimates without obtaining requirements from field DDOs.",
+      "summary": "UDHD budget estimates prepared at Department level without field DDO requirements, contributing to ₹3,042.49 crore (62 per cent) savings",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 3,042.49 crore",
+        "crore": 3042.49
+      },
+      "other_amounts": [
+        "₹ 4,910.33 crore (total provision: context)"
+      ],
+      "borderline": false,
+      "note": "Impact is the savings attributed to the lapse"
+    },
+    {
+      "id": "F092",
+      "page": 100,
+      "printed_page": "77",
+      "para_no": "3.6.6",
+      "location": "chapter",
+      "anchor": "Finance Department, GoJ, revised the prescribed date for submission of estimates of revenue from 1",
+      "text": "Finance Department, GoJ, revised the prescribed date for submission of estimates of revenue from 1 October 2022 to 06 January 2023. However, estimates of revenue were not prepared and submitted by the Department.",
+      "summary": "UDHD did not prepare or submit revenue estimates",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F093",
+      "page": 100,
+      "printed_page": "77",
+      "para_no": "3.6.7",
+      "location": "chapter",
+      "anchor": "During FY 2023-24, it was noticed that, in 28 out of 115 schemes, out of",
+      "text": "During FY 2023-24, it was noticed that, in 28 out of 115 schemes, out of the original provision of ₹ 107.63 crore, the Department had utilised only ₹ 100.55 crore, leading to savings of ₹ 7.08 crore. Despite the non-utilisation of original provisions, additional funds, amounting to ₹ 1,250.80 crore, had been provided to those schemes through the supplementary budget, in violation of the provisions of the BM. Details are given in Appendix 3.11.",
+      "summary": "UDHD: supplementary provision of ₹1,250.80 crore given to 28 schemes that had not used their original provision",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 1,250.80 crore",
+        "crore": 1250.8
+      },
+      "other_amounts": [
+        "₹ 107.63 crore / ₹ 100.55 crore (original / utilised: context)",
+        "₹ 7.08 crore (savings: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F094",
+      "page": 100,
+      "printed_page": "77",
+      "para_no": "3.6.8",
+      "location": "chapter",
+      "anchor": "Audit observed that against the budget provision of ₹ 311.04 crore under 11 sub-heads, only",
+      "text": "Audit observed that against the budget provision of ₹ 311.04 crore under 11 sub-heads, only an amount of ₹ 230.15 crore (74 per cent) was spent leaving a total saving of ₹ 80.89 crore (26 per cent), out of which an amount of ₹ 16.03 crore was surrendered and balance of ₹ 64.86 crore was allowed to lapse at the end of the financial year, as detailed in Table 3.18.",
+      "summary": "UDHD: ₹64.86 crore of savings lapsed without being surrendered (against Rule 112)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 64.86 crore",
+        "crore": 64.86
+      },
+      "other_amounts": [
+        "₹ 311.04 crore (provision: context)",
+        "₹ 230.15 crore (spent: context)",
+        "₹ 80.89 crore (savings: context)",
+        "₹ 16.03 crore (surrendered: context)"
+      ],
+      "borderline": false,
+      "note": "The closing sentence \"Non-surrender of anticipated savings (₹ 64.86 crore) was against the Rule 112\" comes after the table caption and is not included"
+    },
+    {
+      "id": "F095",
+      "page": 101,
+      "printed_page": "78",
+      "para_no": "3.6.9",
+      "location": "chapter",
+      "anchor": "Scrutiny of records revealed that a budget of ₹ 656.70 crore had been provided, under",
+      "text": "Scrutiny of records revealed that a budget of ₹ 656.70 crore had been provided, under 22 sub-heads, during FY 2023-24, based on estimates sent by the Department. However, the entire amount had not been utilised and had been surrendered/re-appropriated. It was further noticed that out of ₹ 656.70 crore, budget provision of ₹ 335 crore (₹ 200 crore under AMRUT and ₹ 135 crore under 15th Finance Commission grants) remained unutilised due to non-receipt of Central share whereas, ₹ 135 crore provided for construction of building for Government employees was surrendered without providing any specific reason. The surrenders were made at the fag end of the financial year, as detailed in Appendix 3.12.",
+      "summary": "UDHD: entire provision of ₹656.70 crore under 22 sub-heads unused and surrendered at the fag end; ₹135 crore for staff housing surrendered with no reason",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 656.70 crore",
+        "crore": 656.7
+      },
+      "other_amounts": [
+        "₹ 335 crore (unused for lack of central share: part)",
+        "₹ 135 crore (surrendered without reason: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F096",
+      "page": 101,
+      "printed_page": "78",
+      "para_no": "3.6.10",
+      "location": "chapter",
+      "anchor": "It was observed that, out of the total expenditure of ₹ 1,867.84 crore, expenditure of",
+      "text": "It was observed that, out of the total expenditure of ₹ 1,867.84 crore, expenditure of ₹ 824.88 crore (44 per cent) had been incurred in the month of March 2024. Scrutiny further revealed that, in 31 out of the 115 sub- heads, expenditure (₹ 767.92 crore) in the month of March ranged between 30 and 100 per cent of the total expenditure during the year. Further, in the test-checked DDOs, it was observed that expenditure under various heads ranged between 36 to 100 per cent in the month of March, as detailed in Appendix 3.13.",
+      "summary": "UDHD: ₹824.88 crore (44 per cent) spent in March 2024; March spending of 30-100 per cent in 31 sub-heads",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 824.88 crore",
+        "crore": 824.88
+      },
+      "other_amounts": [
+        "₹ 1,867.84 crore (total: context)",
+        "₹ 767.92 crore (31 sub-heads: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F097",
+      "page": 101,
+      "printed_page": "78",
+      "para_no": "3.6.11",
+      "location": "chapter",
+      "anchor": "Scrutiny of Finance Accounts revealed that the ULBs had not repaid ₹ 453.08 crore provided",
+      "text": "Scrutiny of Finance Accounts revealed that the ULBs had not repaid ₹ 453.08 crore provided by State Government as loans for payment of salaries to their permanent employees under the Major Head 6217. Further, it was noticed that ₹ 104.36 crore (Principal- ₹ 19.67 crore & Interest- ₹ 84.69 crore) was due for payment as on 31 March 2024.",
+      "summary": "ULBs have not repaid salary loans of ₹453.08 crore; ₹104.36 crore (principal + interest) overdue",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 104.36 crore",
+        "crore": 104.36
+      },
+      "other_amounts": [
+        "₹ 453.08 crore (total loans outstanding: context)",
+        "₹ 19.67 crore / ₹ 84.69 crore (principal/interest parts of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F098",
+      "page": 102,
+      "printed_page": "79",
+      "para_no": "3.6.12.1",
+      "location": "chapter",
+      "anchor": "During scrutiny of records in the test-checked units, it was noticed that an amount of",
+      "text": "During scrutiny of records in the test-checked units, it was noticed that an amount of ₹ 1,902.05 crore was parked in Personal Ledger (PL) Accounts (8448-Deposit of Local fund), as of 31 March 2024, as shown in Table 3.19.",
+      "summary": "₹1,902.05 crore parked in PL accounts of test-checked units",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 1,902.05 crore",
+        "crore": 1902.05
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F099",
+      "page": 102,
+      "printed_page": "79",
+      "para_no": "3.6.12.1",
+      "location": "chapter",
+      "anchor": "Further, examination of 67 schemes in the test-checked units revealed that the opening balance of",
+      "text": "Further, examination of 67 schemes in the test-checked units revealed that the opening balance of ₹ 365.07 crore as on 01 April 2021 in these schemes had remained unutilised as of 31 March 2024, which is against the codal provisions. Details of the test-checked schemes are given in Appendix 3.14.",
+      "summary": "Opening balance of ₹365.07 crore in 67 schemes unused for three years, against codal provisions",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 365.07 crore",
+        "crore": 365.07
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F100",
+      "page": 103,
+      "printed_page": "80",
+      "para_no": "3.6.12.2",
+      "location": "chapter",
+      "anchor": "Scrutiny of records in selected units revealed that the closing balance, as on 31 March",
+      "text": "Scrutiny of records in selected units revealed that the closing balance, as on 31 March 2024, as per data available with units was ₹ 1,902.05 crore whereas the closing balance as per data (plus & minus memorandum) available with the office of the PAG (A&E) was ₹ 1,344.92 crore. Hence, there was a difference of ₹ 557.13 crore between the closing balances provided by the units and the closing balances provided by the treasuries to PAG (A&E) office. Details are given in Table 3.20.",
+      "summary": "Difference of ₹557.13 crore between PL account balances per units and per treasury data",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 557.13 crore",
+        "crore": 557.13
+      },
+      "other_amounts": [
+        "₹ 1,902.05 crore / ₹ 1,344.92 crore (the two balances: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F101",
+      "page": 103,
+      "printed_page": "80",
+      "para_no": "3.6.13",
+      "location": "chapter",
+      "anchor": "During test check of records of State Urban Development Agency (SUDA), it was noticed that",
+      "text": "During test check of records of State Urban Development Agency (SUDA), it was noticed that a total of ₹ 554.37 crore (₹ 231.18 crore under Swachh Bharat Mission (SBM) and ₹ 323.19 crore under Atal Mission for Rejuvenation and Urban Transformation or AMRUT), remained as balance in the SNA, as of March 2024. Details are given in Table 3.21.",
+      "summary": "₹554.37 crore (SBM and AMRUT) lying idle in SUDA SNA accounts",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 554.37 crore",
+        "crore": 554.37
+      },
+      "other_amounts": [
+        "₹ 231.18 crore / ₹ 323.19 crore (SBM / AMRUT parts of impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F102",
+      "page": 104,
+      "printed_page": "81",
+      "para_no": "3.6.13",
+      "location": "chapter",
+      "anchor": "Further, it was also noticed that there was a balance of ₹ 42.15 crore under",
+      "text": "Further, it was also noticed that there was a balance of ₹ 42.15 crore under Namami Gange (State Share) in savings bank account (380302010161313) of the Union Bank of India, as of March 2024, of which ₹ 25.35 crore pertains to the period 2016-17 to 2020-21. Thus, huge balances in SNA and in savings bank account including amount received more than three years before resulted in blockage of fund.",
+      "summary": "₹42.15 crore of Namami Gange state share in a savings account (₹25.35 crore from 2016-21); funds blocked",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 42.15 crore",
+        "crore": 42.15
+      },
+      "other_amounts": [
+        "₹ 25.35 crore (older than three years: part)"
+      ],
+      "borderline": false,
+      "note": "Includes the concluding \"Thus, huge balances ...\" paragraph"
+    },
+    {
+      "id": "F103",
+      "page": 104,
+      "printed_page": "81",
+      "para_no": "3.6.14",
+      "location": "chapter",
+      "anchor": "Test check of records of the State Urban Development Agency revealed that the closing balance",
+      "text": "Test check of records of the State Urban Development Agency revealed that the closing balance as on 31 March 2024, as per bank statement, was ₹ 554.37 crore whereas the closing balance, as per cash book, was ₹ 535.03 crore. The difference of ₹ 19.34 crore, as shown in Table 3.22, has not been reconciled (November 2024).",
+      "summary": "SUDA: unreconciled ₹19.34 crore difference between bank and cash-book balances",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 19.34 crore",
+        "crore": 19.34
+      },
+      "other_amounts": [
+        "₹ 554.37 crore / ₹ 535.03 crore (bank / cash book: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F104",
+      "page": 104,
+      "printed_page": "81",
+      "para_no": "3.7",
+      "location": "conclusion",
+      "anchor": "During FY 2023-24, out of the total savings of ₹ 32,744.35 crore, savings of ₹",
+      "text": "During FY 2023-24, out of the total savings of ₹ 32,744.35 crore, savings of ₹ 22,386.79 crore had occurred under 10 grants, the reasons for which have not been appropriately explained in the Appropriation Accounts. Further, these grants had persistent total savings, ranging from ₹ 11,975.09 crore to ₹ 15,625.57 crore, during the previous four years.",
+      "summary": "Conclusion: unexplained savings of ₹22,386.79 crore under 10 grants, with persistent savings",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 22,386.79 crore",
+        "crore": 22386.79
+      },
+      "other_amounts": [
+        "₹ 32,744.35 crore (total savings: context)",
+        "₹ 11,975.09 crore to ₹ 15,625.57 crore (prior years: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F105",
+      "page": 104,
+      "printed_page": "81",
+      "para_no": "3.7",
+      "location": "conclusion",
+      "anchor": "Supplementary provisions aggregating ₹ 13,499.10 crore (53.82 per cent) in 57 cases (₹ 0.50 crore",
+      "text": "Supplementary provisions aggregating ₹ 13,499.10 crore (53.82 per cent) in 57 cases (₹ 0.50 crore or more in each case), during the year, proved unnecessary as the expenditure did not come up even to the level of the original provisions.",
+      "summary": "Conclusion: unnecessary supplementary provisions of ₹13,499.10 crore",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 13,499.10 crore",
+        "crore": 13499.1
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F106",
+      "page": 105,
+      "printed_page": "82",
+      "para_no": "3.7",
+      "location": "conclusion",
+      "anchor": "Excess disbursement over grant/appropriation amounting to ₹ 3,778.41 crore relating to 10 grants pertaining to",
+      "text": "Excess disbursement over grant/appropriation amounting to ₹ 3,778.41 crore relating to 10 grants pertaining to FYs 2001-02 to 2022-23 is yet to be regularised by the State Legislature. Further, excess expenditure of ₹ 268.02 crore was incurred in one appropriation (15- Pension), during FY 2023-24.",
+      "summary": "Conclusion: excess of ₹3,778.41 crore not regularised, plus ₹268.02 crore excess in 2023-24",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 3,778.41 crore",
+        "crore": 3778.41
+      },
+      "other_amounts": [
+        "₹ 268.02 crore (2023-24 excess: second impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F107",
+      "page": 105,
+      "printed_page": "82",
+      "para_no": "3.7",
+      "location": "conclusion",
+      "anchor": "Forest, Environment and Climate Change Department and Urban Development and Housing Department (Urban Development Division),",
+      "text": "Forest, Environment and Climate Change Department and Urban Development and Housing Department (Urban Development Division), did not follow the provisions of the budget manual, leading to lack of budgetary control in the Departments, large savings, rush of expenditure at the end of the financial year etc.",
+      "summary": "Conclusion: Forest and UDHD departments ignored Budget Manual provisions (large savings, rush of expenditure)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F108",
+      "page": 108,
+      "printed_page": "83",
+      "para_no": "4.2",
+      "location": "chapter",
+      "anchor": "During the financial year 2023-24, Central share of ₹ 6,829.58 crore, under various Centrally Sponsored",
+      "text": "During the financial year 2023-24, Central share of ₹ 6,829.58 crore, under various Centrally Sponsored Schemes, was transferred directly to the Implementing Agencies. This constituted 7.77 and 8.91 per cent of the total Revenue Receipts (₹ 87,929 crore) and Revenue Expenditure (₹ 76,676 crore), respectively. Direct transfer to implementing agencies, without routing the funds through the Consolidated Fund of the State, not only contracted the budget and expenditure of the State to that extent (₹ 6,829.58 crore), but also implied that the assets created and the cost of benefits extended to the public, were not reflected in the State Accounts and the Budget.",
+      "summary": "₹6,829.58 crore of central share sent directly to implementing agencies, outside the State budget and accounts",
+      "finding_type": "system_deficiency",
+      "impact_amount": {
+        "raw": "₹ 6,829.58 crore",
+        "crore": 6829.58
+      },
+      "other_amounts": [
+        "₹ 87,929 crore / ₹ 76,676 crore (RR / RE: context)"
+      ],
+      "borderline": true,
+      "note": "The transfer is a Union Government practice; adverse for the completeness of State accounts"
+    },
+    {
+      "id": "F109",
+      "page": 110,
+      "printed_page": "85",
+      "para_no": "4.3",
+      "location": "chapter",
+      "anchor": "As can be seen from Table 4.2, despite huge unutilised balance every year, the State",
+      "text": "As can be seen from Table 4.2, despite huge unutilised balance every year, the State Government continued to provide grants-in-aid to the Local Bodies. During 2022-23 and 2023-24, expenditure by the PRIs was significantly lower than the funds received from the Government.",
+      "summary": "Grants to Local Bodies kept flowing despite large unused balances in LB deposit accounts; PRI spending well below receipts",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F110",
+      "page": 110,
+      "printed_page": "85",
+      "para_no": "4.4",
+      "location": "chapter",
+      "anchor": "Audit observed that 47,367 UCs1, due in respect of grants aggregating ₹ 1,33,161.50 crore, paid",
+      "text": "Audit observed that 47,367 UCs1, due in respect of grants aggregating ₹ 1,33,161.50 crore, paid up to FY 2022-23, were outstanding at the end of March 2024.",
+      "summary": "47,367 UCs for grants of ₹1,33,161.50 crore (paid up to 2022-23) outstanding",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 1,33,161.50 crore",
+        "crore": 133161.5
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "\"UCs1\": the trailing 1 is footnote marker 1"
+    },
+    {
+      "id": "F111",
+      "page": 110,
+      "printed_page": "85",
+      "para_no": "4.4",
+      "location": "chapter",
+      "anchor": "Further, during 2023-24, out of the total grants-in-aid of ₹ 30,038.20 crore provided by the",
+      "text": "Further, during 2023-24, out of the total grants-in-aid of ₹ 30,038.20 crore provided by the Government to authorities and bodies of the State, a significant amount (₹ 8,549.30 crore) was granted for creation of capital assets. However, UCs in this regard were not submitted by the authorities to the Principal Accountant General (A&E). In the absence of UCs, the creation of capital assets could not be ascertained.",
+      "summary": "No UCs submitted for ₹8,549.30 crore of grants for creation of capital assets; asset creation not verifiable",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 8,549.30 crore",
+        "crore": 8549.3
+      },
+      "other_amounts": [
+        "₹ 30,038.20 crore (total GIA: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F112",
+      "page": 112,
+      "printed_page": "87",
+      "para_no": "4.4",
+      "location": "chapter",
+      "anchor": "Non-receipt of UCs against the GIA bills indicates the failure of the departmental officers to",
+      "text": "Non-receipt of UCs against the GIA bills indicates the failure of the departmental officers to comply with the rules and procedures to ensure timely submission of utilisation of the grants for the intended purpose. High pendency of UCs is fraught with the risk of misappropriation of funds and fraud. Reasons for non- submission of UCs were not provided by the departments.",
+      "summary": "Non-receipt of UCs shows departmental non-compliance and risk of fraud; no reasons given",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Concluding paragraph of the 4.4 UC finding, after the chart and tables; could be merged with the 47,367-UC item"
+    },
+    {
+      "id": "F113",
+      "page": 112,
+      "printed_page": "87",
+      "para_no": "4.5",
+      "location": "chapter",
+      "anchor": "As can be seen from Table 4.5, UCs in respect of a huge amount of",
+      "text": "As can be seen from Table 4.5, UCs in respect of a huge amount of ₹ 900.49 crore had not been submitted by the Department in violation of the provision of the treasury code which lays down that UCs should be submitted within 12 months after drawal of the bill.",
+      "summary": "UDHD (Grant 48): UCs for ₹900.49 crore not submitted",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 900.49 crore",
+        "crore": 900.49
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F114",
+      "page": 112,
+      "printed_page": "87",
+      "para_no": "4.5.1",
+      "location": "chapter",
+      "anchor": "During test check of records of State Urban Development Agency (SUDA), it was noticed that",
+      "text": "During test check of records of State Urban Development Agency (SUDA), it was noticed that grant of ₹ 372.41 crore was provided as State share for AMRUT projects during FYs 2019-20 to 2021-22. Utilisation Certificates of the said amount were sent to the Ministry of Housing and Urban Affairs, GoI, and were not submitted to the office of the PAG (A&E) Jharkhand. As such, these UCs remained outstanding in the records of PAG (A&E) Jharkhand.",
+      "summary": "SUDA sent UCs for ₹372.41 crore of AMRUT state share to GoI instead of PAG (A&E); they remain outstanding",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 372.41 crore",
+        "crore": 372.41
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F115",
+      "page": 112,
+      "printed_page": "87",
+      "para_no": "4.5.2",
+      "location": "chapter",
+      "anchor": "During test-check of records in the selected units, it was noticed that loans amounting to",
+      "text": "During test-check of records in the selected units, it was noticed that loans amounting to ₹ 94.24 crore were given to seven ULBs by the State Government, as detailed in Table 4.6. Neither the UCs against the loans nor the details of expenditure were provided to PAG (A&E) by the ULBs since 2002. Pendency of UCs for such long periods is not only indicative of an ineffective internal control mechanism and poor monitoring by the Department but also entails risk of misutilisation of public money.",
+      "summary": "No UCs or expenditure details since 2002 for loans of ₹94.24 crore to seven ULBs",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 94.24 crore",
+        "crore": 94.24
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Paragraph before Table 4.6 plus the two paragraphs after it"
+    },
+    {
+      "id": "F116",
+      "page": 113,
+      "printed_page": "88",
+      "para_no": "4.5.3",
+      "location": "chapter",
+      "anchor": "During audit in the test-checked units of UDD, it was noticed that in five units",
+      "text": "During audit in the test-checked units of UDD, it was noticed that in five units out of GIA of ₹ 49.68 crore released during the years 2021-23 under different components, ₹ 10.87 crore was spent and the balance of ₹ 38.81 crore was parked in PL accounts. However, Utilisation Certificates for an amount of ₹ 49.56 crore, pertaining to the year 2021-23, were submitted to the Department despite the total expenditure of only ₹ 10.87 crore, as detailed in Table 4.7. Submission of UCs without actual utilisation is not only indicative of an ineffective internal control mechanism and poor monitoring by the Department but also entails risk of misutilisation of public money.",
+      "summary": "Five UDD units submitted UCs for ₹49.56 crore though only ₹10.87 crore was spent; ₹38.81 crore parked in PL accounts",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 38.81 crore",
+        "crore": 38.81
+      },
+      "other_amounts": [
+        "₹ 49.68 crore (GIA released: context)",
+        "₹ 10.87 crore (spent: context)",
+        "₹ 49.56 crore (UCs submitted: context)"
+      ],
+      "borderline": false,
+      "note": "Unspent amount covered by false UCs is ₹38.69 crore (table only); the parked ₹38.81 crore from the text is used as the impact"
+    },
+    {
+      "id": "F117",
+      "page": 115,
+      "printed_page": "90",
+      "para_no": "4.6",
+      "location": "chapter",
+      "anchor": "Eight departments of the State had drawn ₹ 26.22 crore on 30 Abstract Contingent (AC)",
+      "text": "Eight departments of the State had drawn ₹ 26.22 crore on 30 Abstract Contingent (AC) bills, during the financial year 2023-24. Out of 30 AC bills, seven AC bills, amounting to ₹ 3.68 crore were drawn upto September 2023, for which the due date of submission was March 2024. Against these seven AC bills, only three DC bills, amounting to ₹ 2.12 crore, were submitted on time and four AC bills, amounting to ₹ 1.56 crore remained outstanding. There is no assurance that the amount of ₹ 1.56 crore has actually been spent, during the financial year, for the purpose for which it was sanctioned/authorised by the Legislature. The expenditure, during the year, may also have been overstated to this extent.",
+      "summary": "Four AC bills (₹1.56 crore) drawn in 2023-24 still lack DC bills; expenditure possibly overstated",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 1.56 crore",
+        "crore": 1.56
+      },
+      "other_amounts": [
+        "₹ 26.22 crore (AC bills drawn in 2023-24: context)",
+        "₹ 3.68 crore / ₹ 2.12 crore (due / submitted: context)"
+      ],
+      "borderline": false,
+      "note": "Two paragraphs merged"
+    },
+    {
+      "id": "F118",
+      "page": 115,
+      "printed_page": "90",
+      "para_no": "4.6",
+      "location": "chapter",
+      "anchor": "Thus, 18,011 AC bills, amounting to ₹ 4,891.72 crore, drawn upto September 2023, were outstanding,",
+      "text": "Thus, 18,011 AC bills, amounting to ₹ 4,891.72 crore, drawn upto September 2023, were outstanding, as on 31 March 2024. Advances drawn and not accounted for increase the possibility of wastage/ misappropriation/ malfeasance etc.",
+      "summary": "18,011 AC bills worth ₹4,891.72 crore outstanding without DC bills",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 4,891.72 crore",
+        "crore": 4891.72
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F119",
+      "page": 115,
+      "printed_page": "90",
+      "para_no": "4.6",
+      "location": "chapter",
+      "anchor": "Out of the total amount drawn in 2023-24, nine AC bills, amounting to ₹ 13.32",
+      "text": "Out of the total amount drawn in 2023-24, nine AC bills, amounting to ₹ 13.32 crore, were drawn in the month of March 2024. Drawal of funds, through AC bills, in March, indicates that these drawals were primarily to exhaust the budget and reveal inadequate budgetary control.",
+      "summary": "Nine AC bills (₹13.32 crore) drawn in March 2024 to exhaust the budget",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 13.32 crore",
+        "crore": 13.32
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F120",
+      "page": 116,
+      "printed_page": "91",
+      "para_no": "4.6",
+      "location": "chapter",
+      "anchor": "As can be seen from Table 4.9, AC bills drawn since 2000-01 are pending clearance.",
+      "text": "As can be seen from Table 4.9, AC bills drawn since 2000-01 are pending clearance. This is a serious irregularity and misutilisation and misuse of Government money cannot be ruled out.",
+      "summary": "AC bills in major departments pending since 2000-01, a serious irregularity",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F121",
+      "page": 116,
+      "printed_page": "91",
+      "para_no": "4.7",
+      "location": "chapter",
+      "anchor": "As per data provided by office of the PAG (A&E), 109 AC bills amounting to",
+      "text": "As per data provided by office of the PAG (A&E), 109 AC bills amounting to ₹ 45.09 crore were drawn upto 2021-22 under the Major Heads 4217, 2251, 2217 and 2215 in Grant No.48-Urban Development Department (Urban Development Division). Out of this, 47 DC bills pertaining to an amount of ₹ 6.03 crore were submitted and 62 AC bills pertaining to an amount of ₹ 39.06 crore were outstanding as of 31 March 2024. Details are given in Table 4.10.",
+      "summary": "UDHD (Grant 48): 62 AC bills worth ₹39.06 crore without DC bills",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 39.06 crore",
+        "crore": 39.06
+      },
+      "other_amounts": [
+        "₹ 45.09 crore (AC bills drawn: context)",
+        "₹ 6.03 crore (DC bills submitted: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F122",
+      "page": 117,
+      "printed_page": "92",
+      "para_no": "4.8",
+      "location": "chapter",
+      "anchor": "During 2023-24, disbursements were less than receipts by ₹ 2,581.94 crore leading to significant increase",
+      "text": "During 2023-24, disbursements were less than receipts by ₹ 2,581.94 crore leading to significant increase in the balance at the end of the year. As of 31 March 2024, a huge amount of ₹ 20,969.34 crore remained outside the budgetary control of the Government.",
+      "summary": "₹20,969.34 crore in Deposits of Local Funds (209 accounts) outside the Government budgetary control",
+      "finding_type": "system_deficiency",
+      "impact_amount": {
+        "raw": "₹ 20,969.34 crore",
+        "crore": 20969.34
+      },
+      "other_amounts": [
+        "₹ 2,581.94 crore (net accretion in 2023-24: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F123",
+      "page": 117,
+      "printed_page": "92",
+      "para_no": "4.9",
+      "location": "chapter",
+      "anchor": "The Finance Department directed the treasury officers of all the districts to open PD accounts",
+      "text": "The Finance Department directed the treasury officers of all the districts to open PD accounts in the name of District Land Acquisition Officers in December 2019. Accordingly, 24 PD accounts were opened, to deposit the land acquisition compensation funds. All these accounts were operational in 2023-24 and an amount of ₹ 1,187.22 crore was added to the opening balance of ₹ 2,368.79 crore during the year. Out of the total deposits in these PD accounts, ₹ 346.31 crore was disbursed during the year, leaving a balance of ₹ 3,209.70 crore, at the end of the financial year.",
+      "summary": "₹3,209.70 crore of land-acquisition compensation lying in 24 DLAO PD accounts; only ₹346.31 crore disbursed in the year",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 3,209.70 crore",
+        "crore": 3209.7
+      },
+      "other_amounts": [
+        "₹ 1,187.22 crore (added: context)",
+        "₹ 2,368.79 crore (opening: context)",
+        "₹ 346.31 crore (disbursed: context)"
+      ],
+      "borderline": true,
+      "note": "Worded neutrally; adverse only by implication (funds parked outside the Consolidated Fund)"
+    },
+    {
+      "id": "F124",
+      "page": 118,
+      "printed_page": "93",
+      "para_no": "4.10",
+      "location": "chapter",
+      "anchor": "Out of the total receipts of ₹ 87,928.50 crore under 47 Major Heads, ₹ 2,324.60",
+      "text": "Out of the total receipts of ₹ 87,928.50 crore under 47 Major Heads, ₹ 2,324.60 crore (2.90 per cent) was booked under the Minor Head “800-Other Receipts”. Further, as shown in Table 4.12, during 2023-24, in 14 major heads, 52 per cent and above receipts, amounting to ₹ 1,092.01 crore, was booked under ‘800’ against the total receipts of ₹ 1,112.37 crore under these heads.",
+      "summary": "₹2,324.60 crore of receipts booked under the catch-all Minor Head 800; in 14 major heads 52 per cent or more went to 800",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 2,324.60 crore",
+        "crore": 2324.6
+      },
+      "other_amounts": [
+        "₹ 87,928.50 crore (total receipts: context)",
+        "₹ 1,092.01 crore / ₹ 1,112.37 crore (14 heads: part / context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F125",
+      "page": 119,
+      "printed_page": "94",
+      "para_no": "4.11",
+      "location": "chapter",
+      "anchor": "Outstanding debit balances under this head represent payments cleared by the PAG (A&E), Jharkhand, on",
+      "text": "Outstanding debit balances under this head represent payments cleared by the PAG (A&E), Jharkhand, on behalf of PAOs of Central Government departments, which are yet to be recovered. Outstanding credit balances represent payments made by PAOs on behalf of the State Government, which the PAG (A&E) is yet to adjust. It was noticed that the net balance increased from credit balance of ₹ 2.02 crore in 2022-23 to credit balance of ₹ 34.55 crore in 2023-24. On settlement of the net credit balance under this head (₹ 34.55 crore), the cash balance of the State Government will decrease to that extent.",
+      "summary": "PAO Suspense net credit balance grew to ₹34.55 crore; the cash balance will fall on settlement",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 34.55 crore",
+        "crore": 34.55
+      },
+      "other_amounts": [
+        "₹ 2.02 crore (previous year: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F126",
+      "page": 119,
+      "printed_page": "94",
+      "para_no": "4.11",
+      "location": "chapter",
+      "anchor": "The Suspense Account minor head is used for booking of receipts (credit) and expenditure incurred",
+      "text": "The Suspense Account minor head is used for booking of receipts (credit) and expenditure incurred (debit), which are to be cleared on receipt of supporting documents by the PAG (A&E). Clearance of these items have no impact on cash balance. The net balance under this suspense head increased from credit of ₹ 6.86 crore during 2022-23 to credit of ₹ 16.52 crore in 2023-24.",
+      "summary": "Suspense Account (Civil) uncleared credit balance increased to ₹16.52 crore",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 16.52 crore",
+        "crore": 16.52
+      },
+      "other_amounts": [
+        "₹ 6.86 crore (previous year: context)"
+      ],
+      "borderline": true,
+      "note": "Uncleared suspense; stated with little adverse wording"
+    },
+    {
+      "id": "F127",
+      "page": 119,
+      "printed_page": "94",
+      "para_no": "4.11",
+      "location": "chapter",
+      "anchor": "Scrutiny of Cash Remittances and adjustments between officers rendering accounts to the same accounts’ officers",
+      "text": "Scrutiny of Cash Remittances and adjustments between officers rendering accounts to the same accounts’ officers revealed that a credit balance of ₹ 53.36 crore was in transit at the end of March 2024.",
+      "summary": "Credit balance of ₹53.36 crore in cash remittances in transit at year end",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 53.36 crore",
+        "crore": 53.36
+      },
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Uncleared remittance balance; adverse only by implication"
+    },
+    {
+      "id": "F128",
+      "page": 120,
+      "printed_page": "95",
+      "para_no": "4.13",
+      "location": "chapter",
+      "anchor": "There was a difference of ₹ 40.50 crore (net credit) between the figures reflected in",
+      "text": "There was a difference of ₹ 40.50 crore (net credit) between the figures reflected in the accounts {₹ 86.66 crore (credit)} and that intimated by the RBI {(₹ 46.16 crore (debit)} during the year 2023-24 The difference has been taken up by the PAG (A&E), Jharkhand, with RBI, Ranchi, for reconciliation and necessary correction.",
+      "summary": "Cash balance per accounts differs from RBI by ₹40.50 crore (unreconciled)",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 40.50 crore",
+        "crore": 40.5
+      },
+      "other_amounts": [
+        "₹ 86.66 crore / ₹ 46.16 crore (the two figures: context)"
+      ],
+      "borderline": false,
+      "note": "Repeats para 2.7"
+    },
+    {
+      "id": "F129",
+      "page": 122,
+      "printed_page": "97",
+      "para_no": "4.16",
+      "location": "chapter",
+      "anchor": "Scrutiny revealed that out of 84 bodies/authorities, no body/authority had submitted their latest accounts, as",
+      "text": "Scrutiny revealed that out of 84 bodies/authorities, no body/authority had submitted their latest accounts, as of November 2024, whereas eight2 bodies/authorities have not been audited since inception and 25 are newly created. Audit of 51 bodies and authorities has been completed, as detailed in Appendix 4.1.",
+      "summary": "None of 84 grantee bodies submitted latest accounts; eight never audited since inception",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "\"eight2\": the trailing 2 is footnote marker 2"
+    },
+    {
+      "id": "F130",
+      "page": 122,
+      "printed_page": "97",
+      "para_no": "4.16",
+      "location": "chapter",
+      "anchor": "Further, under Sections 14 and 15 of the CAG’s (Duties, Powers and Conditions of Service)",
+      "text": "Further, under Sections 14 and 15 of the CAG’s (Duties, Powers and Conditions of Service) Act, 1971 the Government / HODs are required to furnish to Audit: • detailed information about the financial assistance given to various institutions, • the purpose for which the assistance is granted, and • total expenditure of the institutions. However, no department of the State had furnished any such data to the PAG (Audit) as of November 2024.",
+      "summary": "No department furnished details of financial assistance to institutions, as Sections 14/15 of the DPC Act require",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "The part-1 bullets are the criteria; the adverse sentence is on the next page"
+    },
+    {
+      "id": "F131",
+      "page": 123,
+      "printed_page": "98",
+      "para_no": "4.17",
+      "location": "chapter",
+      "anchor": "Rule 31 of the Jharkhand Financial Rules, provides that loss of public money, Government revenue,",
+      "text": "Rule 31 of the Jharkhand Financial Rules, provides that loss of public money, Government revenue, stores or other property, by defalcation or otherwise, should be immediately reported by the office to the higher authority, Finance Department as well as to the PAG (A&E), Jharkhand, even when such loss has been made good by the party responsible for it. Such reports must be submitted as soon as a suspicion arises that there has been a loss and must not be delayed while enquiries are made. PAG (A&E) has informed that no information in this regard has been reported to the A&E office by the State Government.",
+      "summary": "No reports of misappropriation, loss or theft sent to PAG (A&E) as Rule 31 requires",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Could mean there were no cases, or that cases went unreported; the report implies non-reporting"
+    },
+    {
+      "id": "F132",
+      "page": 123,
+      "printed_page": "98",
+      "para_no": "4.18",
+      "location": "chapter",
+      "anchor": "Excess expenditure over provisions amounting to ₹ 8,120.12 crore (relating to previous years) reported in",
+      "text": "Excess expenditure over provisions amounting to ₹ 8,120.12 crore (relating to previous years) reported in paragraph 2.4.4 of Audit Report on State Finances for the year 2011-12 was regularised by the State Legislature (13.01.2014) on the recommendations of the Public Accounts Committee (PAC). Thereafter, excess expenditure over provisions has not been regularised, as no recommendation has been made by the PAC. Paragraph 2.3.5 of SFAR 2018-19 and paragraph 3.3.8.1 of SFAR 2019-20, relating to regularisation of excess expenditure, was discussed in PAC on 02.08.2022.",
+      "summary": "No excess expenditure regularised since 2014 for want of PAC recommendations",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [
+        "₹ 8,120.12 crore (excess regularised in 2014: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F133",
+      "page": 123,
+      "printed_page": "98",
+      "para_no": "4.19",
+      "location": "conclusion",
+      "anchor": "As on 31 March 2024, 47,367 Utilisation Certificates for an amount of ₹ 1,33,161.50 crore,",
+      "text": "As on 31 March 2024, 47,367 Utilisation Certificates for an amount of ₹ 1,33,161.50 crore, were outstanding for submission to the Principal Accountant General (A&E).",
+      "summary": "Conclusion: 47,367 UCs of ₹1,33,161.50 crore outstanding",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 1,33,161.50 crore",
+        "crore": 133161.5
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F134",
+      "page": 123,
+      "printed_page": "98",
+      "para_no": "4.19",
+      "location": "conclusion",
+      "anchor": "As of 31 March 2024, DC bills, against 18,011 AC bills amounting to ₹ 4,891.72",
+      "text": "As of 31 March 2024, DC bills, against 18,011 AC bills amounting to ₹ 4,891.72 crore, were outstanding for submission to the Principal Accountant General (A&E).",
+      "summary": "Conclusion: DC bills outstanding for 18,011 AC bills of ₹4,891.72 crore",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 4,891.72 crore",
+        "crore": 4891.72
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "R001",
+      "page": 77,
+      "printed_page": "56",
+      "rec_number": "2.9 (1)",
+      "location": "rec_section",
+      "anchor": "State Government should rationalise its investments in various entities, so that the return on investment",
+      "text": "State Government should rationalise its investments in various entities, so that the return on investment and loans matches the Government borrowing costs.",
+      "addressee": "Government of Jharkhand",
+      "form": "should",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R002",
+      "page": 77,
+      "printed_page": "56",
+      "rec_number": "2.9 (2)",
+      "location": "rec_section",
+      "anchor": "The State Government may ensure complete transfer of Labour Cess to the Labour Welfare Board,",
+      "text": "The State Government may ensure complete transfer of Labour Cess to the Labour Welfare Board, as early as possible, so that the Board can fulfil its objectives of improving the working conditions of building and other construction workers and providing adequate financial assistance to them.",
+      "addressee": "Government of Jharkhand",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "\"may ensure\" advisory form"
+    },
+    {
+      "id": "R003",
+      "page": 105,
+      "printed_page": "82",
+      "rec_number": "3.8 (1)",
+      "location": "rec_section",
+      "anchor": "State Government may put in place mechanisms to ensure accuracy of budgetary assumptions, as well",
+      "text": "State Government may put in place mechanisms to ensure accuracy of budgetary assumptions, as well as an efficient control mechanism to curtail non-utilisation of allocated funds.",
+      "addressee": "Government of Jharkhand",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R004",
+      "page": 105,
+      "printed_page": "82",
+      "rec_number": "3.8 (2)",
+      "location": "rec_section",
+      "anchor": "State Government may ensure that expenditure does not exceed the amount authorised by the Legislature.",
+      "text": "State Government may ensure that expenditure does not exceed the amount authorised by the Legislature. Steps may be taken to regularise the excess expenditure of previous years.",
+      "addressee": "Government of Jharkhand",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R005",
+      "page": 105,
+      "printed_page": "82",
+      "rec_number": "3.8 (3)",
+      "location": "rec_section",
+      "anchor": "The Forest, Environment and Climate Change Department and the Urban Development and Housing Department (Urban",
+      "text": "The Forest, Environment and Climate Change Department and the Urban Development and Housing Department (Urban Development Division) may institute appropriate mechanisms, to enforce proper budgetary management in order to curtail instances of non-utilisation of allocated funds and ensure that anticipated savings are identified and surrendered within specified timeframe.",
+      "addressee": "Forest, Environment and Climate Change Department; Urban Development and Housing Department (Urban Development Division)",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R006",
+      "page": 123,
+      "printed_page": "98",
+      "rec_number": "4.20 (1)",
+      "location": "rec_section",
+      "anchor": "The Finance Department may take steps for ensuring that outstanding UCs are submitted within a",
+      "text": "The Finance Department may take steps for ensuring that outstanding UCs are submitted within a prescribed time frame. The administrative departments releasing the grants may be held responsible for collection of UCs pending beyond the time stipulated in the grant orders. The Finance Department may also ensure that no further grants are released to the defaulting grantees. Government may initiate appropriate action against officers who have defaulted in submission of UCs in time.",
+      "addressee": "Finance Department, Government of Jharkhand",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "One bullet with four \"may\" sentences (ensure timely UCs; hold releasing departments responsible; stop grants to defaulters; act against defaulting officers)"
+    },
+    {
+      "id": "R007",
+      "page": 124,
+      "printed_page": "99",
+      "rec_number": "4.20 (2)",
+      "location": "rec_section",
+      "anchor": "The Finance Department may take steps to ensure that all controlling officers adjust, in a",
+      "text": "The Finance Department may take steps to ensure that all controlling officers adjust, in a time-bound manner, all AC bills pending beyond the prescribed period, and also ensure that AC bills are not drawn merely to avoid lapse of budget.",
+      "addressee": "Finance Department, Government of Jharkhand",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    }
+  ],
+  "labelling_notes": "All 168 pages read in order. Physical pages 1, 3, 7, 9, 11, 19, 35, 79, 107, 125 and 166 are blank (0-8 chars of text; intentional blanks, not unreadable), and 0, 2, 10, 18, 34, 78, 106, 126 and 167 are covers or dividers. Appendices (pp. 128-165) are tables, glossary and acronyms only; no items were labelled from them. Printed page numbers are taken from the running header; divider and chapter-opening pages are inferred from the next page; the Executive Summary is vii-xii. CONVENTIONS: (1) Neutral fiscal trend statistics are excluded: growth rates, buoyancy, deficit and GSDP ratios, composition shares, budget-outturn deviation percentages (paras 3.1.3/ES Budget performance), and actual-vs-BE shortfalls for SGST, non-tax revenue and capex in Ch.2. FRBM compliance statements (positive) are excluded. Exception: the MTFP revenue shortfall (p30) is kept as borderline. (2) Content only in tables is excluded. This drops the IGAS compliance table 4.15 (IGAS-2/3 partial compliance survives only as ES item F005), the autonomous-body account arrears (Table 4.16), the PSU account arrears (Table 4.17), Table 3.9 unnecessary supplementaries and Table 2.25/2.26 untransferred cess amounts. (3) Where a paragraph continues after an intervening table or chart on the same observation, the parts are merged into one item (noted per item). Where the continuation is a separate adverse paragraph, it is labelled separately as borderline (F073, F112). (4) Restatements are labelled wherever they appear: ES items (location executive_summary), Chapter 2/3 conclusions (location conclusion), and repeats inside the chapters (e.g. SDRF non-investment in 2.5.2 and 2.7; the RBI cash difference in 2.7 and 4.13; savings in 3.1.1 and 3.3.1; UCs, DC bills and PD accounts in the ES and Ch.4). (5) Footnote markers glued to numbers in get_text are kept verbatim in the text: '101 grants' = 10 grants + fn 1; 'UCs1'; '29 grants2'; 'eight2'; '₹ 1,659.289 crore' = ₹1,659.28 crore + fn 9. (6) Impact amount: the headline adverse amount in the paragraph; left null when the adverse amount appears only in a table (Labour Cess ₹513.51 crore, BOCW unused ₹1,290.24 crore). (7) No recommendation boxes; recommendations appear only as bulleted lists in 2.9, 3.8 and 4.20 (7 bullets, one item each). Most use 'may ...' (form passive_may_be); 2.9(1) uses 'should'. The Executive Summary has no recommendation list, so duplicate_of is unused. (8) The report has no management replies (replies were awaited as of January 2025)."
+}

@@ -1,0 +1,2490 @@
+{
+ "2025_38": {
+  "report": "2025_38",
+  "pipeline_file": "2025_38_Performance_Audit_of_Blast_Furnace_in_Steel_Authority_of_India_Limited_chunks.json",
+  "tier": "union",
+  "findings": {
+   "pipeline": 15,
+   "gold": 94,
+   "gold_core": 74,
+   "precision_any": 0.933,
+   "precision_strict": 0.8,
+   "pipeline_matching_a_recommendation": 0,
+   "recall_core": 0.189,
+   "recall_by_location": {
+    "executive_summary": "2/19",
+    "chapter": "8/51",
+    "conclusion": "4/4"
+   },
+   "precision_by_confidence": {
+    "0.5-0.7": "5/6",
+    ">=0.7": "2/2",
+    "<0.5": "7/7"
+   },
+   "precision_by_acceptance_rule": {
+    "R1_confidence": "7/8",
+    "R3_type+indicator": "6/6",
+    "R2_money+type/indicator": "1/1"
+   },
+   "precision_by_pattern": {
+    "loss_damage": "7/8",
+    "audit_revealed": "6/6",
+    "delay_issue": "1/1",
+    "(none)": "1/1",
+    "non_compliance": "1/1"
+   },
+   "recall_loss_reasons": {
+    "not_accepted": 48,
+    "text_not_in_any_chunk": 12
+   },
+   "recall_loss_examples": [
+    [
+     "F002",
+     11,
+     "not_accepted",
+     "The consumption of iron ore lump more than the norm"
+    ],
+    [
+     "F003",
+     11,
+     "not_accepted",
+     "However, during 2017-2024, SAIL plants often relied on excess sinter"
+    ],
+    [
+     "F004",
+     11,
+     "text_not_in_any_chunk",
+     "Except at Bhilai Steel Plant (during 2022-23)"
+    ],
+    [
+     "F006",
+     11,
+     "not_accepted",
+     "At Bokaro Steel Plant the actual use of refractories"
+    ],
+    [
+     "F007",
+     12,
+     "text_not_in_any_chunk",
+     "Against the planned production of 140.88 million tonne"
+    ],
+    [
+     "F008",
+     12,
+     "not_accepted",
+     "SAIL lacked a structured policy for capital repairs"
+    ],
+    [
+     "F009",
+     12,
+     "not_accepted",
+     "High unplanned shutdown hours were mainly attributable"
+    ],
+    [
+     "F010",
+     13,
+     "not_accepted",
+     "Neither the new blast furnaces at Bhilai (BF#8)"
+    ],
+    [
+     "F011",
+     13,
+     "not_accepted",
+     "All SAIL plants, except Bhilai, had fixed oxygen enrichment norms"
+    ],
+    [
+     "F012",
+     13,
+     "not_accepted",
+     "Low blast pressure between 0.81 and 2.80"
+    ],
+    [
+     "F013",
+     13,
+     "not_accepted",
+     "However, in the downstream, capacity of the Steel melting shops"
+    ],
+    [
+     "F014",
+     14,
+     "not_accepted",
+     "To achieve 5.77 MTPA hot metal, Bokaro needed a new 360"
+    ],
+    [
+     "F017",
+     14,
+     "text_not_in_any_chunk",
+     "Between 2017-2024, Bhilai and IISCO Steel Plants dumped"
+    ],
+    [
+     "F019",
+     15,
+     "not_accepted",
+     "Corporate Safety Policy of SAIL stipulates safety audit"
+    ],
+    [
+     "F020",
+     15,
+     "not_accepted",
+     "At IISCO Steel Plant, effluent levels from the Blast Furnace"
+    ],
+    [
+     "F021",
+     15,
+     "not_accepted",
+     "Coal consumption exceeded norms in all SAIL plants"
+    ],
+    [
+     "F022",
+     15,
+     "not_accepted",
+     "Bhilai, Bokaro, Rourkela and IISCO Steel used or sold the entire solid waste"
+    ],
+    [
+     "F026",
+     31,
+     "not_accepted",
+     "Consumption of iron ore lump was more than the Annual Business Perspective in Bo"
+    ],
+    [
+     "F027",
+     31,
+     "not_accepted",
+     "Audit observed that the consumption of iron ore lump more than the norm"
+    ],
+    [
+     "F028",
+     33,
+     "not_accepted",
+     "Audit noted that despite the above envisaged benefits, Pellets were not used"
+    ],
+    [
+     "F030",
+     33,
+     "not_accepted",
+     "At Gua mines, contract for installation of Crushing, Beneficiation"
+    ],
+    [
+     "F031",
+     33,
+     "not_accepted",
+     "At Rourkela Steel Plant, the project for setting up of Pellet Plant"
+    ],
+    [
+     "F032",
+     34,
+     "not_accepted",
+     "At Dalli mines, SAIL Board accorded (October 2014)"
+    ],
+    [
+     "F034",
+     35,
+     "not_accepted",
+     "Audit noted that consumption of sinter was intermittently more than the norms"
+    ],
+    [
+     "F035",
+     36,
+     "text_not_in_any_chunk",
+     "Norms for sinter return were, however, not fixed by the Rourkela and Bhilai"
+    ],
+    [
+     "F036",
+     36,
+     "text_not_in_any_chunk",
+     "Audit noted that return of undersized sinter from the blast furnaces was more th"
+    ],
+    [
+     "F037",
+     37,
+     "text_not_in_any_chunk",
+     "Audit noted that all the steel plants consumed coke in excess of the target"
+    ],
+    [
+     "F039",
+     38,
+     "not_accepted",
+     "Audit noted that norms fixed by the management for specific power consumption"
+    ],
+    [
+     "F041",
+     39,
+     "not_accepted",
+     "Audit noted that in Bokaro Steel Plant, the norms for consumption of refractorie"
+    ],
+    [
+     "F043",
+     39,
+     "text_not_in_any_chunk",
+     "Due to consumption of 11,799 tonne refractories beyond norms"
+    ],
+    [
+     "F045",
+     46,
+     "not_accepted",
+     "Audit observed that production capacity in Bokaro, Burnpur and Bhadravati"
+    ],
+    [
+     "F046",
+     46,
+     "text_not_in_any_chunk",
+     "Annual production of hot metal in SAIL was between 15.98 million tonne"
+    ],
+    [
+     "F047",
+     47,
+     "not_accepted",
+     "It was seen that Bokaro and Rourkela Steel Plant in 2017-18 and 2020-21"
+    ],
+    [
+     "F056",
+     55,
+     "not_accepted",
+     "Out of total 8,90,694 available hours for plant operation"
+    ],
+    [
+     "F057",
+     55,
+     "not_accepted",
+     "High unplanned shutdown hours left less hours for plant utilization"
+    ],
+    [
+     "F060",
+     56,
+     "not_accepted",
+     "Audit noted that more than 20 per cent of total delay hours was attributable"
+    ],
+    [
+     "F061",
+     58,
+     "not_accepted",
+     "Audit noted that none of the three new blast furnaces at Bhilai (BF#8)"
+    ],
+    [
+     "F063",
+     59,
+     "not_accepted",
+     "Further, despite measures been taken by the respective plant management, Audit n"
+    ],
+    [
+     "F064",
+     59,
+     "not_accepted",
+     "The blast furnaces at SAIL could not achieve the respective desired level of oxy"
+    ],
+    [
+     "F065",
+     60,
+     "not_accepted",
+     "It was seen that all the steel plants except Bhilai Steel Plant44 have fixed"
+    ]
+   ],
+   "llm_rejected_candidates": 1,
+   "llm_rejected_that_were_real": 1,
+   "llm_rejected_real_examples": [
+    [
+     13,
+     "The planned upgradation of Casters #1 and #2 at Rourkela (2008) to raise crude steel capacity to 4.2"
+    ]
+   ],
+   "false_positive_categories": {
+    "mgmt_reply": 1
+   },
+   "false_positive_examples": [
+    [
+     "012",
+     53,
+     0.58,
+     "mgmt_reply",
+     "Management/Ministry replied (November 2023/July 2024/February 2025 & April 2025) that the project of BF#1 of R"
+    ]
+   ]
+  },
+  "amounts": {
+   "pairs": 7,
+   "max_equals_gold": 4,
+   "sum_equals_gold": 3,
+   "sum_gt_1.5x_gold": 4,
+   "identify_primary_equals_gold": 6
+  },
+  "recommendations": {
+   "pipeline": 11,
+   "gold": 22,
+   "gold_core": 10,
+   "precision": 0.909,
+   "recall_core": 0.9,
+   "precision_by_strategy": {
+    "numbered": "8/8",
+    "verb": "2/3"
+   },
+   "recall_by_form": {
+    "box_numbered": "8/8",
+    "may_consider": "1/2"
+   },
+   "false_positive_examples": [
+    [
+     80,
+     "verb",
+     "6.1 Integrated Iron and Steel Industry has many inherent potential safety and environment issues which need to"
+    ]
+   ],
+   "missed_examples": [
+    [
+     "R015",
+     63,
+     "may_consider",
+     "To enhance the performance of blast furnaces, SAIL may strengthen maintenance practices"
+    ]
+   ]
+  }
+ },
+ "2025_08": {
+  "report": "2025_08",
+  "pipeline_file": "2025_08_Compliance_Audit_on_on__the_Activities_of_Indian_National_Centre_for_Ocean_Infor_chunks.json",
+  "tier": "union",
+  "findings": {
+   "pipeline": 30,
+   "gold": 140,
+   "gold_core": 129,
+   "precision_any": 0.967,
+   "precision_strict": 0.967,
+   "pipeline_matching_a_recommendation": 0,
+   "recall_core": 0.279,
+   "recall_by_location": {
+    "executive_summary": "7/14",
+    "chapter": "28/104",
+    "conclusion": "1/11"
+   },
+   "precision_by_confidence": {
+    "0.5-0.7": "16/16",
+    ">=0.7": "7/8",
+    "<0.5": "6/6"
+   },
+   "precision_by_acceptance_rule": {
+    "R1_confidence": "23/24",
+    "R3_type+indicator": "4/4",
+    "R2_money+type/indicator": "2/2"
+   },
+   "precision_by_pattern": {
+    "audit_revealed": "26/27",
+    "(none)": "3/3",
+    "pending_issue": "1/1"
+   },
+   "recall_loss_reasons": {
+    "not_accepted": 85,
+    "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(": 7,
+    "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d": 1
+   },
+   "recall_loss_examples": [
+    [
+     "F003",
+     11,
+     "not_accepted",
+     "Audit also noted that due to delayed procurement and deployment of platforms, IN"
+    ],
+    [
+     "F004",
+     11,
+     "not_accepted",
+     "INCOIS has been successfully providing Potential Fishing Zone advisories for the"
+    ],
+    [
+     "F005",
+     11,
+     "not_accepted",
+     "INCOIS did not carry out any activity relating to SDG 14 – Life Below Water, tho"
+    ],
+    [
+     "F008",
+     12,
+     "not_accepted",
+     "INCOIS, recognised as National Oceanographic Data Centre, did not put in place a"
+    ],
+    [
+     "F013",
+     14,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "Tsunami buoys are deployed in deep ocean, to detect tsunamis and provide early w"
+    ],
+    [
+     "F014",
+     14,
+     "not_accepted",
+     "MoES is the nodal Ministry for Sustainable Development Goal 14 – Life Below Wate"
+    ],
+    [
+     "F015",
+     15,
+     "not_accepted",
+     "INCOIS took up Multi-hazard Vulnerability Mapping in 2010-2013 for India’s entir"
+    ],
+    [
+     "F016",
+     29,
+     "not_accepted",
+     "The table reveals that the administrative orders for all the above projects were"
+    ],
+    [
+     "F017",
+     30,
+     "not_accepted",
+     "We observed that, during these reorganisations in Ocean Services, Modelling, App"
+    ],
+    [
+     "F018",
+     31,
+     "not_accepted",
+     "Audit analysis revealed that there were instances of short release, delayed rele"
+    ],
+    [
+     "F020",
+     33,
+     "not_accepted",
+     "Audit found that these posts were not sanctioned by MoF. INCOIS approached MoES "
+    ],
+    [
+     "F021",
+     33,
+     "not_accepted",
+     "Despite the Independent Review Committee's specific recommendations, neither INC"
+    ],
+    [
+     "F022",
+     33,
+     "not_accepted",
+     "Audit examination also indicated that the Governing Council recommended INCOIS i"
+    ],
+    [
+     "F023",
+     34,
+     "not_accepted",
+     "Audit also observed that: (i) In the absence of regular manpower, MoES approved "
+    ],
+    [
+     "F024",
+     34,
+     "not_accepted",
+     "(ii) Due to the shortage of both regular and project manpower, INCOIS had to out"
+    ],
+    [
+     "F025",
+     34,
+     "not_accepted",
+     "Project approvals and release of funds were not in consonance with the timelines"
+    ],
+    [
+     "F028",
+     41,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "Audit observed that as against the above targets, INCOIS deployed only 76 Argo f"
+    ],
+    [
+     "F029",
+     42,
+     "not_accepted",
+     "During the International Argo Steering Team (IAST)16 Meeting held in March 2022,"
+    ],
+    [
+     "F031",
+     44,
+     "not_accepted",
+     "Audit review of the Drifter Programme revealed the following: i. INCOIS informed"
+    ],
+    [
+     "F032",
+     44,
+     "not_accepted",
+     "INCOIS commenced the process of procurement with an indent in September 2017 and"
+    ],
+    [
+     "F033",
+     44,
+     "not_accepted",
+     "Though INCOIS imported drifters, citing poor performance of indigenously develop"
+    ],
+    [
+     "F034",
+     45,
+     "not_accepted",
+     "Audit observed that when INCOIS assigned the work to National Institute of Ocean"
+    ],
+    [
+     "F035",
+     45,
+     "not_accepted",
+     "The above data indicates less than 15 per cent overall achievement. Despite bein"
+    ],
+    [
+     "F036",
+     46,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "During the period 2017-2020, INCOIS aimed to expand its network of 34 existing A"
+    ],
+    [
+     "F037",
+     46,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "INCOIS attempted to maintain the 34 Automatic Weather Stations by outsourcing Co"
+    ],
+    [
+     "F038",
+     46,
+     "not_accepted",
+     "Further INCOIS failed to award the Comprehensive Annual Maintenance Contracts fo"
+    ],
+    [
+     "F039",
+     48,
+     "not_accepted",
+     "INCOIS managed to procure only five new Wave Rider Buoys between 2017 and 2022, "
+    ],
+    [
+     "F040",
+     48,
+     "not_accepted",
+     "INCOIS did not expand the Wave Rider Buoy Network as proposed. It deployed the n"
+    ],
+    [
+     "F041",
+     48,
+     "not_accepted",
+     "Despite collaborating with various organisations and funding sub-projects for Wa"
+    ],
+    [
+     "F043",
+     50,
+     "not_accepted",
+     "Under the Monsoon Mission project, INCOIS proposed to procure 14 platforms/equip"
+    ],
+    [
+     "F044",
+     50,
+     "not_accepted",
+     "As could be seen from the above, INCOIS was not successful in procurement and de"
+    ],
+    [
+     "F048",
+     52,
+     "not_accepted",
+     "Subsequently, National Institute of Ocean Technology signed a technology licensi"
+    ],
+    [
+     "F049",
+     52,
+     "not_accepted",
+     "One of the companies which acquired the technology, supplied three drifters to I"
+    ],
+    [
+     "F050",
+     53,
+     "not_accepted",
+     "During the Project Management Council Meeting in August 2014, National Institute"
+    ],
+    [
+     "F051",
+     53,
+     "not_accepted",
+     "It is apparent from the above, that while, National Institute of Ocean Technolog"
+    ],
+    [
+     "F052",
+     53,
+     "not_accepted",
+     "INCOIS did not have a strategy for procurement, deployment, replacement and main"
+    ],
+    [
+     "F053",
+     59,
+     "not_accepted",
+     "As per National Oceanographic Data Centre guidelines 2016, there was a requireme"
+    ],
+    [
+     "F054",
+     60,
+     "not_accepted",
+     "Audit examination, however, revealed that: i. INCOIS is yet to put in place a Qu"
+    ],
+    [
+     "F055",
+     61,
+     "not_accepted",
+     "The operational efficacy of INCOIS heavily relies on IT resources. INCOIS, howev"
+    ],
+    [
+     "F056",
+     62,
+     "not_accepted",
+     "INCOIS did not have a written down Business Continuity/Disaster Recovery Plan. O"
+    ]
+   ],
+   "llm_rejected_candidates": 2,
+   "llm_rejected_that_were_real": 2,
+   "llm_rejected_real_examples": [
+    [
+     29,
+     "Audit examination revealed that when the administrative orders were originally issued for the projec"
+    ],
+    [
+     87,
+     "ii. INCOIS received Project Completion Report from the remaining four grantee organisations viz., Na"
+    ]
+   ],
+   "false_positive_categories": {
+    "mgmt_reply": 1
+   },
+   "false_positive_examples": [
+    [
+     "008",
+     48,
+     0.78,
+     "mgmt_reply",
+     "MoES stated (December 2023) that from the experience of operating various ocean observations for the past 20 y"
+    ]
+   ]
+  },
+  "amounts": {
+   "pairs": 3,
+   "max_equals_gold": 2,
+   "sum_equals_gold": 3,
+   "sum_gt_1.5x_gold": 0,
+   "identify_primary_equals_gold": 2
+  },
+  "recommendations": {
+   "pipeline": 21,
+   "gold": 36,
+   "gold_core": 16,
+   "precision": 0.524,
+   "recall_core": 0.312,
+   "precision_by_strategy": {
+    "structural": "4/5",
+    "verb": "7/16"
+   },
+   "recall_by_form": {
+    "numbered": "5/16"
+   },
+   "false_positive_examples": [
+    [
+     11,
+     "structural",
+     "Audit also noted that due to delayed procurement and deployment of platforms, INCOIS could not achieve the obj"
+    ],
+    [
+     40,
+     "verb",
+     "The reply is not acceptable since the targets in the Administrative Order originated from the proposals submit"
+    ],
+    [
+     43,
+     "verb",
+     "This reply of MoES needs to be viewed in the light of the fact that INCOIS/MoES on behalf of India, committed "
+    ],
+    [
+     44,
+     "verb",
+     "While appreciating the efforts being made, the response needs to be viewed in light of the fact that technical"
+    ],
+    [
+     45,
+     "verb",
+     "The above data indicates less than 15 per cent overall achievement. Despite being advised by Project Managemen"
+    ],
+    [
+     46,
+     "verb",
+     "The reply needs to be viewed in light of the fact that project requirements and deliverables commensurate with"
+    ],
+    [
+     47,
+     "verb",
+     "The reply needs to be viewed in light of the fact that only 30 per cent of the Automatic Weather Stations were"
+    ],
+    [
+     48,
+     "verb",
+     "MoES statement that necessary redundancies are built into the network design is not acceptable, since there wa"
+    ],
+    [
+     64,
+     "verb",
+     "Additionally, organisations should institute 24/7 surveillance mechanisms, employing technology like security "
+    ],
+    [
+     64,
+     "verb",
+     "As an output from sub-project sanctioned to National Institute of Oceanography, INCOIS receives XBT/XCTD data "
+    ]
+   ],
+   "missed_examples": [
+    [
+     "R002",
+     11,
+     "numbered",
+     "2) MoES may clearly define the revised targets commensurate with the resources during refo"
+    ],
+    [
+     "R004",
+     12,
+     "numbered",
+     "4) INCOIS may devise and follow a systematic procurement and deployment plan for ocean obs"
+    ],
+    [
+     "R006",
+     13,
+     "numbered",
+     "6) INCOIS may implement adequate data safety and security measures; develop and implement "
+    ],
+    [
+     "R007",
+     13,
+     "numbered",
+     "7) INCOIS may document and follow the Data Quality Management System and Data Management P"
+    ],
+    [
+     "R008",
+     13,
+     "numbered",
+     "8) INCOIS may put in place the IT Security Policy in a time-bound manner and take"
+    ],
+    [
+     "R009",
+     13,
+     "numbered",
+     "9) In order to achieve improvements in advisories and forecasts, INCOIS may strive towards"
+    ],
+    [
+     "R010",
+     13,
+     "numbered",
+     "10) The data collection under the Mission Mode projects may be executed in a time-bound ma"
+    ],
+    [
+     "R012",
+     14,
+     "numbered",
+     "12) INCOIS may build effective linkages with other organisations to get essential inputs t"
+    ],
+    [
+     "R013",
+     14,
+     "numbered",
+     "13) INCOIS may strive to maintain ideal tsunami buoy network to alleviate the risk of miss"
+    ],
+    [
+     "R014",
+     15,
+     "numbered",
+     "14) INCOIS/MoES may formulate the research programmes/activities targeting the achievement"
+    ],
+    [
+     "R016",
+     15,
+     "numbered",
+     "16) INCOIS may prepare Multi-hazard Vulnerability maps for Lakshadweep Islands. INCOIS may"
+    ]
+   ]
+  }
+ },
+ "JH_2025_02": {
+  "report": "JH_2025_02",
+  "pipeline_file": "JH_2025_02_State_Finances_Audit_Report_of_the_Government_of_Jharkhand_for_the_year_202324_chunks.json",
+  "tier": "state",
+  "findings": {
+   "pipeline": 33,
+   "gold": 134,
+   "gold_core": 110,
+   "precision_any": 0.97,
+   "precision_strict": 0.939,
+   "pipeline_matching_a_recommendation": 0,
+   "recall_core": 0.309,
+   "recall_by_location": {
+    "executive_summary": "3/6",
+    "chapter": "30/95",
+    "conclusion": "1/9"
+   },
+   "precision_by_confidence": {
+    "0.5-0.7": "8/8",
+    "<0.5": "15/16",
+    ">=0.7": "9/9"
+   },
+   "precision_by_acceptance_rule": {
+    "R1_confidence": "17/17",
+    "R2_money+type/indicator": "15/16"
+   },
+   "precision_by_pattern": {
+    "(none)": "15/16",
+    "audit_revealed": "14/14",
+    "variance_issue": "2/2",
+    "non_compliance": "2/2",
+    "delay_issue": "1/1"
+   },
+   "recall_loss_reasons": {
+    "not_accepted": 53,
+    "accepted_by_R1_confidence_then_removed(LLM?)": 9,
+    "NON_FINDING:as\\s+(?:depicted|shown|given|detailed)\\s+in\\s": 5,
+    "NON_FINDING:during\\s+(?:the\\s+)?(?:FYs?\\s+)?\\d{4}[-–]\\d{2": 3,
+    "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(": 2,
+    "NON_FINDING:(?:as\\s+per|based\\s+on)\\s+(?:the\\s+)?(?:data|": 2,
+    "NON_FINDING:^\\s*Table\\s+[\\d.]+[\\s:]+": 1,
+    "NON_FINDING:(?:details?\\s+(?:is|are)\\s+)?(?:given|shown|d": 1
+   },
+   "recall_loss_examples": [
+    [
+     "F004",
+     16,
+     "accepted_by_R1_confidence_then_removed(LLM?)",
+     "It was observed that in 2023-24, there was excess expenditure of ₹ 268.02 crore "
+    ],
+    [
+     "F005",
+     16,
+     "not_accepted",
+     "As against the requirements of the Indian Government Accounting Standards (IGAS)"
+    ],
+    [
+     "F007",
+     16,
+     "not_accepted",
+     "The Government of India and the State Government have introduced system of Singl"
+    ],
+    [
+     "F013",
+     32,
+     "not_accepted",
+     "As can be seen from Table 1.8, the revenue surplus was overstated by ₹ 188.37"
+    ],
+    [
+     "F015",
+     42,
+     "not_accepted",
+     "As on 31 March 2024, arrears in collection of revenue were ₹ 84.72 crore (Excise"
+    ],
+    [
+     "F016",
+     45,
+     "not_accepted",
+     "The State Government received ₹ 6,439.24 crore being Central share for Centrally"
+    ],
+    [
+     "F018",
+     46,
+     "not_accepted",
+     "As recommended by the Thirteenth Finance Commission, Ministry of Finance, GoI, h"
+    ],
+    [
+     "F019",
+     52,
+     "not_accepted",
+     "During 2023-24, the State Government transferred ₹ 4.28 crore against receipt of"
+    ],
+    [
+     "F020",
+     54,
+     "not_accepted",
+     "The State Government constituted four State Finance Commissions (SFCs) during th"
+    ],
+    [
+     "F021",
+     54,
+     "not_accepted",
+     "Though the notification for constitution of the fourth SFC was issued by the Sta"
+    ],
+    [
+     "F023",
+     54,
+     "not_accepted",
+     "The recommendations of the first SFC were not implemented by the State Governmen"
+    ],
+    [
+     "F024",
+     54,
+     "not_accepted",
+     "Further, as per recommendations of the first SFC, Jharkhand Urban Development Fu"
+    ],
+    [
+     "F027",
+     56,
+     "not_accepted",
+     "As per Finance Accounts of the State ending 31 March 2024, the State Government "
+    ],
+    [
+     "F028",
+     57,
+     "not_accepted",
+     "Despite no return on its investments, the State Government made further investme"
+    ],
+    [
+     "F029",
+     57,
+     "not_accepted",
+     "Investments made by the erstwhile State of Bihar in the form of equity in Damoda"
+    ],
+    [
+     "F030",
+     58,
+     "not_accepted",
+     "Outstanding arrears of loanee entities at the end of March 2024 amounted to ₹ 4,"
+    ],
+    [
+     "F031",
+     58,
+     "not_accepted",
+     "Loan to Jharkhand State Food and Civil Supplies Corporation Ltd. (₹ 44 crore) in"
+    ],
+    [
+     "F032",
+     58,
+     "not_accepted",
+     "Further, loans made by the erstwhile State of Bihar to Tenughat Vidyut Nigam Lim"
+    ],
+    [
+     "F034",
+     61,
+     "not_accepted",
+     "As per Para 19 and 20 of SDRF guidelines 2015, the balances under the funds"
+    ],
+    [
+     "F036",
+     62,
+     "not_accepted",
+     "The State Disaster Mitigation Fund (SDMF) is to be constituted under Section 48 "
+    ],
+    [
+     "F037",
+     64,
+     "not_accepted",
+     "As per the recommendation of the Twelfth Finance Commission, ‘the State Governme"
+    ],
+    [
+     "F038",
+     64,
+     "not_accepted",
+     "The Jharkhand BOCW Board had prepared its accounts upto 2023-24. As of March 202"
+    ],
+    [
+     "F039",
+     65,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "During the period 2009-10 to 2023-24, ₹ 679.86 crore was spent by the Board on"
+    ],
+    [
+     "F040",
+     65,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "As per the Finance Accounts, the Government collected ₹ 0.57 crore as Land Cess "
+    ],
+    [
+     "F042",
+     66,
+     "not_accepted",
+     "Apportionment of fiscal liabilities of the composite Bihar State between the suc"
+    ],
+    [
+     "F043",
+     74,
+     "NON_FINDING:(?:as\\s+per|based\\s+on)\\s+(?:the\\s+)?(?:data|",
+     "The Government of Jharkhand has neither created the guarantee redemption fund no"
+    ],
+    [
+     "F044",
+     74,
+     "not_accepted",
+     "Letter of Comfort (LOC) amounting to ₹ 157.15 crore, given on behalf of Jharkhan"
+    ],
+    [
+     "F046",
+     76,
+     "accepted_by_R1_confidence_then_removed(LLM?)",
+     "There was a difference of ₹ 40.50 crore (net credit) between the figures reflect"
+    ],
+    [
+     "F047",
+     77,
+     "not_accepted",
+     "As per Finance Accounts of the State ending 31 March 2024, the Government had in"
+    ],
+    [
+     "F049",
+     77,
+     "not_accepted",
+     "The Government had transferred ₹ 703.70 crore as interest to SDRF leaving a bala"
+    ],
+    [
+     "F050",
+     77,
+     "not_accepted",
+     "The Government had transferred ₹ 567 crore to the Sinking Fund during the year. "
+    ],
+    [
+     "F053",
+     82,
+     "not_accepted",
+     "It was also noticed that, nearly all the savings were surrendered in the month o"
+    ],
+    [
+     "F054",
+     82,
+     "not_accepted",
+     "A detailed review of the Appropriation Accounts of the Government of Jharkhand f"
+    ],
+    [
+     "F055",
+     83,
+     "NON_FINDING:^\\s*Table\\s+[\\d.]+[\\s:]+",
+     "Table 3.2 shows that the budget provisions under the voted section, had not been"
+    ],
+    [
+     "F056",
+     85,
+     "NON_FINDING:(?:details?\\s+(?:is|are)\\s+)?(?:given|shown|d",
+     "Audit scrutiny revealed that in one appropriation, expenditure was incurred with"
+    ],
+    [
+     "F058",
+     86,
+     "not_accepted",
+     "As detailed in Appendix 3.1, out of the total supplementary budget provision of "
+    ],
+    [
+     "F060",
+     86,
+     "not_accepted",
+     "Out of total savings of ₹ 32,744.35 crore, savings of ₹ 31,578.05 crore (96.44 p"
+    ],
+    [
+     "F061",
+     86,
+     "not_accepted",
+     "Further, during FY 2023-24, savings in 15 grants under revenue section and five "
+    ],
+    [
+     "F062",
+     87,
+     "not_accepted",
+     "The above mentioned grants were related to social and economic services and the "
+    ],
+    [
+     "F063",
+     87,
+     "not_accepted",
+     "Verification of Appropriation Accounts of the State revealed that, out of total "
+    ]
+   ],
+   "llm_rejected_candidates": 13,
+   "llm_rejected_that_were_real": 10,
+   "llm_rejected_real_examples": [
+    [
+     16,
+     "The State Government has to get excesses over grants/appropriations regularised by the State Legisla"
+    ],
+    [
+     76,
+     "There was a difference of ₹ 40.50 crore (net credit) between the figures reflected in the accounts {"
+    ],
+    [
+     95,
+     "The Department had utilised only ₹ 278.92 crore out of original provision of ₹ 389.10 crore under 10"
+    ],
+    [
+     96,
+     "Out of the total expenditure of ₹ 1,160.55 crore in FY 2023-24, ₹ 638.79 crore (55 per cent) had bee"
+    ],
+    [
+     97,
+     "During test-check of records of the office of the Divisional Forest Officer, Social Forestry Divisio"
+    ],
+    [
+     97,
+     "During scrutiny of appropriation account for the year 2023-24, it was noticed that an expenditure of"
+    ],
+    [
+     101,
+     "It was observed that, out of the total expenditure of ₹ 1,867.84 crore, expenditure of ₹ 824.88 cror"
+    ],
+    [
+     103,
+     "Scrutiny of records in selected units revealed that the closing balance, as on 31 March 2024, as per"
+    ]
+   ],
+   "false_positive_categories": {
+    "background/other": 1
+   },
+   "false_positive_examples": [
+    [
+     "005",
+     44,
+     0.0,
+     "background/other",
+     "Growth rate of GIA from GoI was highest during the year 2019-20 (33.21 per cent) but stood at negative 16.04 p"
+    ]
+   ]
+  },
+  "amounts": {
+   "pairs": 27,
+   "max_equals_gold": 16,
+   "sum_equals_gold": 8,
+   "sum_gt_1.5x_gold": 15,
+   "identify_primary_equals_gold": 16
+  },
+  "recommendations": {
+   "pipeline": 15,
+   "gold": 7,
+   "gold_core": 7,
+   "precision": 0.467,
+   "recall_core": 1.0,
+   "precision_by_strategy": {
+    "structural": "5/6",
+    "verb": "2/9"
+   },
+   "recall_by_form": {
+    "should": "1/1",
+    "passive_may_be": "6/6"
+   },
+   "false_positive_examples": [
+    [
+     123,
+     "structural",
+     "Rule 31 of the Jharkhand Financial Rules, provides that loss of public money, Government revenue, stores or ot"
+    ],
+    [
+     15,
+     "verb",
+     "It was noticed that in several cases, there were supplementary grants where expenditure was not even up to the"
+    ],
+    [
+     44,
+     "verb",
+     "The Government of India, Ministry of Finance, Department of Expenditure, New Delhi vide Office Memorandum No. "
+    ],
+    [
+     73,
+     "verb",
+     "Applying the DOMAR analysis to Jharkhand showed that fiscal liabilities should converge to a stable level, as "
+    ],
+    [
+     74,
+     "verb",
+     "Borrowed funds should ideally be used for capital creation and developmental activities. Using borrowed funds "
+    ],
+    [
+     85,
+     "verb",
+     "Expenditure on New scheme/service should not be incurred without provision of funds except after obtaining add"
+    ],
+    [
+     110,
+     "verb",
+     "The Jharkhand Treasury Code (JTC) stipulates that departmental officers should obtain Utilisation Certificates"
+    ],
+    [
+     112,
+     "verb",
+     "The JTC stipulates that departmental officers should obtain UCs from the grantees and, after verification, for"
+    ]
+   ],
+   "missed_examples": []
+  }
+ },
+ "HP_2022": {
+  "report": "HP_2022",
+  "pipeline_file": "HP_2022_ATI_report_on_Panchayati_Raj_Institution_and_Urban_Local_Bodies_in_Himachal_Prad_chunks.json",
+  "tier": "local_body",
+  "findings": {
+   "pipeline": 87,
+   "gold": 139,
+   "gold_core": 129,
+   "precision_any": 0.943,
+   "precision_strict": 0.931,
+   "pipeline_matching_a_recommendation": 0,
+   "recall_core": 0.682,
+   "recall_by_location": {
+    "executive_summary": "6/20",
+    "chapter": "2/8",
+    "atir_unit": "80/101"
+   },
+   "precision_by_confidence": {
+    "<0.5": "38/41",
+    "0.5-0.7": "7/7",
+    ">=0.7": "37/39"
+   },
+   "precision_by_acceptance_rule": {
+    "R2_money+type/indicator": "30/33",
+    "R1_confidence": "44/46",
+    "R3_type+indicator": "8/8"
+   },
+   "precision_by_pattern": {
+    "audit_revealed": "42/44",
+    "(none)": "33/36",
+    "loss_damage": "7/7",
+    "non_compliance": "5/5",
+    "irregular_expenditure": "3/3",
+    "variance_issue": "2/2",
+    "system_weakness": "1/1",
+    "procurement_issue": "1/1"
+   },
+   "recall_loss_reasons": {
+    "not_accepted": 27,
+    "content_type=table_markdown": 6,
+    "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(": 4,
+    "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d": 3,
+    "NON_FINDING:during\\s+(?:the\\s+)?(?:FYs?\\s+)?\\d{4}[-–]\\d{2": 1
+   },
+   "recall_loss_examples": [
+    [
+     "F002",
+     13,
+     "not_accepted",
+     "Differences between figures of receipts and expenditure furnished to audit and t"
+    ],
+    [
+     "F003",
+     13,
+     "not_accepted",
+     "Non-reconciliation of balances of cashbook with bank statements."
+    ],
+    [
+     "F004",
+     13,
+     "not_accepted",
+     "Non-depositing of liquor cess amounting to ₹ 12.26 lakh in Account-A."
+    ],
+    [
+     "F005",
+     13,
+     "not_accepted",
+     "Funds of ₹ 1.37 crore remained unspent due to non-commencement of works."
+    ],
+    [
+     "F006",
+     13,
+     "not_accepted",
+     "Funds of ₹ 1.95 crore remained unspent due to non-completion of works."
+    ],
+    [
+     "F014",
+     14,
+     "not_accepted",
+     "Due to ineffective monitoring, revenue of ₹ 11.80 crore on account of house tax "
+    ],
+    [
+     "F015",
+     14,
+     "not_accepted",
+     "Rent due from shops, booths and stalls amounting to ₹ 14.75 crore remained unrea"
+    ],
+    [
+     "F016",
+     14,
+     "not_accepted",
+     "MC Shimla failed to realise lease money of ₹ 1.74 crore from shops and stalls."
+    ],
+    [
+     "F018",
+     15,
+     "content_type=table_markdown",
+     "In three ULBs, funds amounting to ₹ 4.74 crore under 13th & 14th Finance Commiss"
+    ],
+    [
+     "F019",
+     15,
+     "content_type=table_markdown",
+     "Funds amounting to ₹ 14.52 crore remained unspent in twelve test checked ULBs du"
+    ],
+    [
+     "F020",
+     15,
+     "content_type=table_markdown",
+     "Funds amounting to ₹ 4.41 crore received for execution of sewerage schemes were "
+    ],
+    [
+     "F021",
+     15,
+     "content_type=table_markdown",
+     "Non-allotment of 73 houses in MC Nalagarh resulted in unfruitful expenditure of "
+    ],
+    [
+     "F022",
+     15,
+     "content_type=table_markdown",
+     "Utilisation Certificates of ₹ 3.97 crore were not obtained in two ULBs."
+    ],
+    [
+     "F023",
+     15,
+     "content_type=table_markdown",
+     "Six ULBs sanctioned advances of ₹ 32.21 crore during 2015-18 without adjustment "
+    ],
+    [
+     "F029",
+     25,
+     "not_accepted",
+     "It may be noted that some similar recommendations for improvement had been made "
+    ],
+    [
+     "F030",
+     26,
+     "not_accepted",
+     "Correspondence is being undertaken regularly with PRIs and Panchayati Raj Depart"
+    ],
+    [
+     "F031",
+     30,
+     "not_accepted",
+     "In 18 out of 45 test-checked GPs (Appendix-4), Audit observed that maintenance o"
+    ],
+    [
+     "F032",
+     30,
+     "not_accepted",
+     "It was also noticed that in 22 out of 45 test-checked GPs (Appendix-4), only thr"
+    ],
+    [
+     "F033",
+     31,
+     "not_accepted",
+     "Audit noticed that in 40 out of 45 test checked GPs (except 5 GPs1), information"
+    ],
+    [
+     "F036",
+     32,
+     "not_accepted",
+     "(i) During 2017-18, it was observed that out of 57 test checked PRIs, in 35 GPs"
+    ],
+    [
+     "F049",
+     36,
+     "not_accepted",
+     "Scrutiny of records showed that in 59 (Appendix-10) out of the test checked 170 "
+    ],
+    [
+     "F051",
+     37,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "Scrutiny of records revealed that in seven PRIs (audited during 2017-18) (Append"
+    ],
+    [
+     "F054",
+     38,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "During scrutiny of records in 18 PRIs audited during 2017-18 and 2018-19, it was"
+    ],
+    [
+     "F065",
+     41,
+     "not_accepted",
+     "Scrutiny of records in 2017-18 revealed that in three14 out of nine test-checked"
+    ],
+    [
+     "F077",
+     45,
+     "not_accepted",
+     "(ii) Out of 45 test checked GPs audited during 2017-18, in two21 GPs payment amo"
+    ],
+    [
+     "F079",
+     45,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "Audit noticed that temporary advances of ₹9.46 lakh23 were sanctioned between th"
+    ],
+    [
+     "F080",
+     46,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "Audit noticed that 30 Gram Panchayats24 did not prepare budget estimates for the"
+    ],
+    [
+     "F083",
+     47,
+     "not_accepted",
+     "Scrutiny of records during 2017-18 revealed that bills amounting to ₹5.55 lakh p"
+    ],
+    [
+     "F086",
+     53,
+     "not_accepted",
+     "It may be noted that all the funds released by the Urban Development Department "
+    ],
+    [
+     "F087",
+     54,
+     "not_accepted",
+     "There is no provision for a separate and independent internal audit agency under"
+    ],
+    [
+     "F088",
+     55,
+     "not_accepted",
+     "It may be noticed that similar recommendations for improvement had been made dur"
+    ],
+    [
+     "F089",
+     56,
+     "not_accepted",
+     "Correspondence is being undertaken to settle IRs/ Paras, despite this the number"
+    ],
+    [
+     "F090",
+     60,
+     "not_accepted",
+     "During test check of records in 2018-19, it was noticed in four1 ULBs (Municipal"
+    ],
+    [
+     "F091",
+     61,
+     "not_accepted",
+     "It is evident from Table-15(i) that there were persistent savings ranging betwee"
+    ],
+    [
+     "F092",
+     61,
+     "not_accepted",
+     "It is evident from Table-15(ii) that there were persistent savings ranging betwe"
+    ],
+    [
+     "F093",
+     62,
+     "NON_FINDING:during\\s+(?:the\\s+)?(?:FYs?\\s+)?\\d{4}[-–]\\d{2",
+     "During 2018-19, audit noticed that four ULBs (MCorp. Dharamshala, NPs Banjar, Bh"
+    ],
+    [
+     "F094",
+     62,
+     "not_accepted",
+     "(a) During 2017-18, it was noticed in MC Nalagarh that the following registers h"
+    ],
+    [
+     "F095",
+     62,
+     "not_accepted",
+     "(b) During 2018-19, it was noticed in NP Karsog that the following registers had"
+    ],
+    [
+     "F099",
+     64,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "In three ULBs (MCs Ghumarwin, Hamirpur and Manali) audited during 2018-19, audit"
+    ],
+    [
+     "F112",
+     69,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "During 2017-18, test-check of records of Municipal Council, Solan revealed that "
+    ]
+   ],
+   "llm_rejected_candidates": 4,
+   "llm_rejected_that_were_real": 1,
+   "llm_rejected_real_examples": [
+    [
+     73,
+     "(b) During 2018-19, it was noticed in seven out of 14 ULBs that funds amounting to ₹5.13 crore 15 un"
+    ]
+   ],
+   "false_positive_categories": {
+    "background/other": 3,
+    "mgmt_reply": 2
+   },
+   "false_positive_examples": [
+    [
+     "051",
+     61,
+     0.0,
+     "background/other",
+     "Rule 97(1) of Himachal Pradesh Financial Rules, 2009 (revised) provides that goods can be purchased up to mone"
+    ],
+    [
+     "065",
+     69,
+     0.0,
+     "mgmt_reply",
+     "Admitting the facts, the Executive Officer stated (November 2017) that necessary corrections would be made in "
+    ],
+    [
+     "066",
+     69,
+     0.72,
+     "background/other",
+     "During 2018-19, audit noticed that Municipal Council Kullu received funds amounting to ₹12.97 crore for Water "
+    ],
+    [
+     "075",
+     74,
+     0.0,
+     "mgmt_reply",
+     "The Executive Officer, MCorp. Dharamshala stated (August 2021) that the fund could not be utilised due to unav"
+    ],
+    [
+     "081",
+     76,
+     0.82,
+     "background/other",
+     "During 2017-18, audit noticed that Municipal Corporation, Shimla prepared a pilot Detailed Project Report (DPR"
+    ]
+   ]
+  },
+  "amounts": {
+   "pairs": 73,
+   "max_equals_gold": 32,
+   "sum_equals_gold": 32,
+   "sum_gt_1.5x_gold": 24,
+   "identify_primary_equals_gold": 33
+  },
+  "recommendations": {
+   "pipeline": 0,
+   "gold": 12,
+   "gold_core": 11,
+   "precision": null,
+   "recall_core": 0.0,
+   "precision_by_strategy": {},
+   "recall_by_form": {
+    "numbered": "0/7",
+    "should": "0/1",
+    "may_consider": "0/3"
+   },
+   "false_positive_examples": [],
+   "missed_examples": [
+    [
+     "R001",
+     25,
+     "numbered",
+     "Reference to rules may be mentioned clearly in separate paragraphs while raising objection"
+    ],
+    [
+     "R002",
+     25,
+     "numbered",
+     "Audit memos may be issued to the auditee unit."
+    ],
+    [
+     "R003",
+     25,
+     "numbered",
+     "The reply of the Secretary, Gram Panchayat may be incorporated in audit paras."
+    ],
+    [
+     "R004",
+     26,
+     "should",
+     "The Department should pay adequate attention towards compliance/ settlement and follow up "
+    ],
+    [
+     "R005",
+     30,
+     "may_consider",
+     "The Department may initiate action to examine similar cases and take necessary corrective "
+    ],
+    [
+     "R006",
+     55,
+     "numbered",
+     "Reference to rules may be mentioned clearly in separate paragraphs while raising audit obj"
+    ],
+    [
+     "R007",
+     55,
+     "numbered",
+     "Audit memos may be issued to the auditee unit."
+    ],
+    [
+     "R008",
+     55,
+     "numbered",
+     "The reply of the Secretary and Executive Officer of the ULBs concerned may be incorporated"
+    ],
+    [
+     "R009",
+     55,
+     "numbered",
+     "The calculation may be shown clearly in table format."
+    ],
+    [
+     "R010",
+     55,
+     "may_consider",
+     "The Department may initiate action to examine similar cases and take necessary corrective "
+    ],
+    [
+     "R011",
+     60,
+     "may_consider",
+     "The Department may initiate action to examine similar cases and take necessary corrective "
+    ]
+   ]
+  }
+ },
+ "OD_2025_05": {
+  "report": "OD_2025_05",
+  "pipeline_file": "OD_2025_05_School_Education_in_Odisha_School_and_Mass_Education_Department_chunks.json",
+  "tier": "state",
+  "findings": {
+   "pipeline": 68,
+   "gold": 245,
+   "gold_core": 229,
+   "precision_any": 0.971,
+   "precision_strict": 0.912,
+   "pipeline_matching_a_recommendation": 0,
+   "recall_core": 0.328,
+   "recall_by_location": {
+    "executive_summary": "6/18",
+    "conclusion": "3/38",
+    "chapter": "66/173"
+   },
+   "precision_by_confidence": {
+    "0.5-0.7": "24/24",
+    ">=0.7": "12/12",
+    "<0.5": "30/32"
+   },
+   "precision_by_acceptance_rule": {
+    "R1_confidence": "36/36",
+    "R3_type+indicator": "23/24",
+    "R2_money+type/indicator": "7/8"
+   },
+   "precision_by_pattern": {
+    "audit_revealed": "58/58",
+    "benefit_deprivation": "12/12",
+    "(none)": "5/7",
+    "variance_issue": "4/4",
+    "non_compliance": "3/3",
+    "loss_damage": "1/1",
+    "delay_issue": "1/1",
+    "system_weakness": "1/1"
+   },
+   "recall_loss_reasons": {
+    "not_accepted": 133,
+    "accepted_by_R1_confidence_then_removed(LLM?)": 5,
+    "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(": 5,
+    "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d": 4,
+    "NON_FINDING:as\\s+(?:depicted|shown|given|detailed)\\s+in\\s": 3,
+    "NON_FINDING:(?:as\\s+per|based\\s+on)\\s+(?:the\\s+)?(?:data|": 1,
+    "NON_FINDING:^\\s*Table\\s+[\\d.]+[\\s:]+": 1,
+    "NON_FINDING:during\\s+(?:the\\s+)?(?:FYs?\\s+)?\\d{4}[-–]\\d{2": 1,
+    "NON_FINDING:(?:details?\\s+(?:is|are)\\s+)?(?:given|shown|d": 1
+   },
+   "recall_loss_examples": [
+    [
+     "F002",
+     12,
+     "not_accepted",
+     "Planning was not participatory and bottoms-up. The district level planning team "
+    ],
+    [
+     "F003",
+     12,
+     "not_accepted",
+     "The budget provisions and expenditure made by the School and Mass Education (SME"
+    ],
+    [
+     "F004",
+     13,
+     "not_accepted",
+     "Gross Enrolment Ratio in Secondary and Higher Secondary levels declined in the S"
+    ],
+    [
+     "F006",
+     13,
+     "not_accepted",
+     "10 sampled Block Education Officers (BEOs) had identified 1,458 CwSN through med"
+    ],
+    [
+     "F007",
+     13,
+     "not_accepted",
+     "In 13 to 26 per cent schools, ramp facilities did not exist while 31 to 44"
+    ],
+    [
+     "F008",
+     13,
+     "not_accepted",
+     "The State had made provision for imparting self-defence trainings to girls of 22"
+    ],
+    [
+     "F012",
+     13,
+     "not_accepted",
+     "Vocational Education (VE) was introduced in a limited manner. Against the target"
+    ],
+    [
+     "F013",
+     13,
+     "accepted_by_R1_confidence_then_removed(LLM?)",
+     "3.51 lakh eligible students were deprived of the benefit of free uniforms in the"
+    ],
+    [
+     "F014",
+     14,
+     "not_accepted",
+     "In 23 to 37 test-checked schools, books were distributed to students with delays"
+    ],
+    [
+     "F016",
+     14,
+     "not_accepted",
+     "There was shortfall in review of the progress of the implementation of Samagra S"
+    ],
+    [
+     "F017",
+     14,
+     "not_accepted",
+     "In 14 out of 77 sampled schools, the School Management Committees were functioni"
+    ],
+    [
+     "F018",
+     14,
+     "not_accepted",
+     "The State had not constituted the Research Approval Committee for approving rese"
+    ],
+    [
+     "F019",
+     26,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "The School and Mass Education Department had not prepared the Perspective Plan f"
+    ],
+    [
+     "F020",
+     26,
+     "not_accepted",
+     "School Management Committees (SMCs)/ School Management and Development Committee"
+    ],
+    [
+     "F022",
+     26,
+     "not_accepted",
+     "The Department surrendered ₹ 1,159.31 crore in FY 2019-22, from the budgetary al"
+    ],
+    [
+     "F023",
+     27,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "Audit noticed that while the State had not prepared the Perspective Plan for the"
+    ],
+    [
+     "F024",
+     28,
+     "not_accepted",
+     "In this context, Audit noticed that: • In seven out of 85 sampled Government and"
+    ],
+    [
+     "F028",
+     31,
+     "not_accepted",
+     "Analysis of the budget provisions and corresponding expenditure made by the SME "
+    ],
+    [
+     "F030",
+     33,
+     "NON_FINDING:(?:for|during)\\s+the\\s+period\\s+(?:from\\s+)?(",
+     "In the sampled districts, utilisation of funds ranged between 68 (Nabarangpur) a"
+    ],
+    [
+     "F033",
+     38,
+     "not_accepted",
+     "Gross Enrolment Ratio in Secondary and Higher Secondary levels declined in the S"
+    ],
+    [
+     "F034",
+     38,
+     "not_accepted",
+     "Enrolment data, available in UDISE+ database, used for calculating Gross Enrolme"
+    ],
+    [
+     "F035",
+     38,
+     "not_accepted",
+     "The Transition rate from Secondary to Higher secondary level was less than the N"
+    ],
+    [
+     "F036",
+     38,
+     "not_accepted",
+     "The Retention rate witnessed growth at Secondary level in the State but was less"
+    ],
+    [
+     "F037",
+     38,
+     "not_accepted",
+     "During 2018-23, 1.50 lakh to 5.47 lakh children enrolled in Classes I to XI, dis"
+    ],
+    [
+     "F038",
+     39,
+     "not_accepted",
+     "Audit noticed that all schools having active UDISE+ code uploaded enrolment figu"
+    ],
+    [
+     "F039",
+     40,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "The above figures indicated that improvement was noticed in the GER at Primary a"
+    ],
+    [
+     "F040",
+     40,
+     "not_accepted",
+     "As per the above-mentioned data, in the six sampled districts, growth in GER was"
+    ],
+    [
+     "F041",
+     41,
+     "not_accepted",
+     "On the credibility of GER data, Audit observed that the enrolment data fed by th"
+    ],
+    [
+     "F043",
+     42,
+     "not_accepted",
+     "From the above, NER of Odisha was lower than the National figure at Secondary an"
+    ],
+    [
+     "F044",
+     43,
+     "not_accepted",
+     "Out of the six sampled districts, the NER declined in four districts (Koraput, N"
+    ],
+    [
+     "F045",
+     43,
+     "not_accepted",
+     "The reasons for such decline in NER had not been analysed by OSEPA. However, ine"
+    ],
+    [
+     "F046",
+     43,
+     "not_accepted",
+     "Audit, however, observed that the credibility of NER derived by OSEPA was as dou"
+    ],
+    [
+     "F047",
+     44,
+     "not_accepted",
+     "The above data indicated that the Retention rates in Primary, Elementary and Sec"
+    ],
+    [
+     "F048",
+     45,
+     "not_accepted",
+     "The above table indicates that there was decline in Retention rate at Elementary"
+    ],
+    [
+     "F050",
+     46,
+     "not_accepted",
+     "It would be observed from the above that the Transition rates from Primary to Up"
+    ],
+    [
+     "F051",
+     47,
+     "not_accepted",
+     "It would be seen from the above table that the Transition rate in Upper Primary "
+    ],
+    [
+     "F052",
+     47,
+     "not_accepted",
+     "In the six sampled districts, the Transition rate from Primary to Upper Primary "
+    ],
+    [
+     "F054",
+     48,
+     "not_accepted",
+     "The above data indicated that in 2022-23, at secondary level, the State witnesse"
+    ],
+    [
+     "F055",
+     48,
+     "not_accepted",
+     "Audit noted that 1.50 lakh to 5.47 lakh children enrolled in Classes I to XI dur"
+    ],
+    [
+     "F056",
+     48,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "Audit analysed transition from Secondary to Higher Secondary i.e. results of Cla"
+    ]
+   ],
+   "llm_rejected_candidates": 8,
+   "llm_rejected_that_were_real": 8,
+   "llm_rejected_real_examples": [
+    [
+     13,
+     "• 3.51 lakh eligible students were deprived of the benefit of free uniforms in the State during 2018"
+    ],
+    [
+     68,
+     "It was observed that in 13 to 26 per cent schools, where CwSN children ranging from 0.97 lakh to 1.4"
+    ],
+    [
+     104,
+     "On analysis of the Class-X examination conducted by Board of Secondary Education (BSE), Odisha for 2"
+    ],
+    [
+     118,
+     "• Performance of Class XII students under CHSE: Analysis of Class XII students who appeared in the X"
+    ],
+    [
+     126,
+     "• The State supplied free uniform to 214.98 lakh (98 per cent) students out of 218.49 lakh eligible "
+    ],
+    [
+     127,
+     "Audit noticed that the State supplied free uniform to 214.98 lakh (98 per cent) students out of 218."
+    ],
+    [
+     129,
+     "Audit noticed that OSEPA placed indent with TBP&M for printing and supply of 1,318 lakh books at Blo"
+    ],
+    [
+     131,
+     "Audit noticed that as per the indent placed by the SME and SSD Departments, BSE supplied 303.58 lakh"
+    ]
+   ],
+   "false_positive_categories": {
+    "mgmt_reply": 1,
+    "background/other": 1
+   },
+   "false_positive_examples": [
+    [
+     "012",
+     49,
+     0.0,
+     "mgmt_reply",
+     "The Department’s reply (October 2024) was silent on the increase in dropout rate in Secondary level. It, howev"
+    ],
+    [
+     "016",
+     55,
+     0.0,
+     "background/other",
+     "The Department did not offer any specific views on the discrepancies in enrolment data."
+    ]
+   ]
+  },
+  "amounts": {
+   "pairs": 6,
+   "max_equals_gold": 2,
+   "sum_equals_gold": 2,
+   "sum_gt_1.5x_gold": 3,
+   "identify_primary_equals_gold": 2
+  },
+  "recommendations": {
+   "pipeline": 36,
+   "gold": 50,
+   "gold_core": 25,
+   "precision": 0.833,
+   "recall_core": 0.6,
+   "precision_by_strategy": {
+    "verb": "30/36"
+   },
+   "recall_by_form": {
+    "box_numbered": "15/25"
+   },
+   "false_positive_examples": [
+    [
+     26,
+     "verb",
+     "This Chapter focuses on the process of Planning and efficiency in Financial Management. The process of plannin"
+    ],
+    [
+     56,
+     "verb",
+     "The State had neither notified the neighbourhood norms nor had it done habitation-wise school mapping to asses"
+    ],
+    [
+     68,
+     "verb",
+     "Paragraphs 5.5.5 and 5.5.6 of SSIF stipulate that all schools should have minimum basic facilities including t"
+    ],
+    [
+     73,
+     "verb",
+     "Paragraphs 8.5.2.4 and 8.5.2.5 of SSIF stipulate that the State needs to ensure availability of boundary wall/"
+    ],
+    [
+     89,
+     "verb",
+     "Accuracy of data should be ensured by the Department, because inaccurate data leads to improper infrastructure"
+    ],
+    [
+     128,
+     "verb",
+     "The guidelines issued by OSEPA stipulate that uniforms should be distributed amongst students by a specified d"
+    ]
+   ],
+   "missed_examples": [
+    [
+     "R027",
+     35,
+     "box_numbered",
+     "In view of large scale shortages in teaching staff and deficiencies in physical infrastruc"
+    ],
+    [
+     "R028",
+     35,
+     "box_numbered",
+     "Efficient utilisation of allocated funds may be ensured to deliver the educational needs o"
+    ],
+    [
+     "R029",
+     43,
+     "box_numbered",
+     "GER and NER, being the critical indicators of percentage of population enrolled in a parti"
+    ],
+    [
+     "R035",
+     59,
+     "box_numbered",
+     "The Department should ensure accurate data collection through surveys mandated under the R"
+    ],
+    [
+     "R039",
+     89,
+     "box_numbered",
+     "Infrastructure facilities in schools, being an essential requirement for effective teachin"
+    ],
+    [
+     "R042",
+     107,
+     "box_numbered",
+     "The Department may take steps to maintain the normative Pupil- Teacher Ratio by engaging a"
+    ],
+    [
+     "R043",
+     107,
+     "box_numbered",
+     "The Department may rationalise deployment of teachers based on the enrolment of students, "
+    ],
+    [
+     "R044",
+     111,
+     "box_numbered",
+     "The Department may strengthen capacity of the teacher training institutes along with creat"
+    ],
+    [
+     "R046",
+     123,
+     "box_numbered",
+     "Vocational education in the State may be revamped by providing adequate resources, in term"
+    ],
+    [
+     "R050",
+     145,
+     "box_numbered",
+     "The Department may ensure that inspections by district and block level authorities are inc"
+    ]
+   ]
+  }
+ },
+ "BR_2024_03": {
+  "report": "BR_2024_03",
+  "pipeline_file": "BR_2024_03_Report_on_Local_Government_in_Bihar_for_the_year_ended_31st_March_2022_chunks.json",
+  "tier": "local_body",
+  "findings": {
+   "pipeline": 81,
+   "gold": 257,
+   "gold_core": 228,
+   "precision_any": 0.951,
+   "precision_strict": 0.926,
+   "pipeline_matching_a_recommendation": 0,
+   "recall_core": 0.346,
+   "recall_by_location": {
+    "executive_summary": "6/18",
+    "chapter": "71/200",
+    "conclusion": "2/10"
+   },
+   "precision_by_confidence": {
+    "0.5-0.7": "19/20",
+    "<0.5": "28/30",
+    ">=0.7": "30/31"
+   },
+   "precision_by_acceptance_rule": {
+    "R1_confidence": "49/51",
+    "R2_money+type/indicator": "14/16",
+    "R3_type+indicator": "14/14"
+   },
+   "precision_by_pattern": {
+    "audit_revealed": "55/55",
+    "(none)": "13/15",
+    "loss_damage": "11/13",
+    "non_compliance": "5/6",
+    "system_weakness": "2/2",
+    "procedural_lapse": "1/1",
+    "record_keeping_failure": "1/1",
+    "monitoring_failure": "1/1"
+   },
+   "recall_loss_reasons": {
+    "not_accepted": 129,
+    "NON_FINDING:as\\s+(?:depicted|shown|given|detailed)\\s+in\\s": 12,
+    "NON_FINDING:during\\s+(?:the\\s+)?(?:FYs?\\s+)?\\d{4}[-–]\\d{2": 2,
+    "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d": 1,
+    "content_type=header": 1,
+    "NON_FINDING:(?:UCs?|Utilisation\\s+Certificates?)\\s+(?:for": 1,
+    "NON_FINDING:^\\s*Table\\s+[\\d.]+[\\s:]+": 1,
+    "accepted_by_R1_confidence_then_removed(LLM?)": 1,
+    "content_type=image_caption": 1
+   },
+   "recall_loss_examples": [
+    [
+     "F001",
+     11,
+     "not_accepted",
+     "Gram Panchayat, Budhua, failed to monitor the execution of works to be financed "
+    ],
+    [
+     "F004",
+     12,
+     "not_accepted",
+     "According to the Ministry of Urban Development, Government of India, there are e"
+    ],
+    [
+     "F005",
+     12,
+     "not_accepted",
+     "The low achievement of benchmarks for SWM, was mainly on account of deficient pl"
+    ],
+    [
+     "F006",
+     12,
+     "not_accepted",
+     "Thirteen out of the 28 test-checked ULBs, did not have any plans for SWM. The re"
+    ],
+    [
+     "F008",
+     13,
+     "not_accepted",
+     "None of the test-checked ULBs had carried out baseline studies/surveys and ward "
+    ],
+    [
+     "F009",
+     13,
+     "not_accepted",
+     "Only 24 per cent households, in the test-checked ULBs, had carried out source se"
+    ],
+    [
+     "F011",
+     13,
+     "not_accepted",
+     "Waste was not being processed in 18 ULBs. In seven ULBs, the extent of waste pro"
+    ],
+    [
+     "F013",
+     13,
+     "not_accepted",
+     "Authorised sanitary landfill sites were not available in any of the sampled ULBs"
+    ],
+    [
+     "F014",
+     14,
+     "not_accepted",
+     "Twenty-seven, out of the 28 test-checked ULBs, had not made any arrangements for"
+    ],
+    [
+     "F015",
+     14,
+     "not_accepted",
+     "Recycling/channelization of plastic waste was not being carried out in any of th"
+    ],
+    [
+     "F016",
+     14,
+     "not_accepted",
+     "Deficient monitoring was evident from the non-existence of different institution"
+    ],
+    [
+     "F017",
+     14,
+     "not_accepted",
+     "Short fall of designated staff, for Solid Waste Management, ranged from 90 to 10"
+    ],
+    [
+     "F020",
+     25,
+     "not_accepted",
+     "Further, as per Sections 27, 55, and 82 of BPRA, 2006, PRIs were authorised to i"
+    ],
+    [
+     "F021",
+     25,
+     "not_accepted",
+     "At the GP level, the Panchayat Secretary was the only full-time government emplo"
+    ],
+    [
+     "F023",
+     27,
+     "not_accepted",
+     "After completion of audit by the office of AG (Audit), IRs, containing audit fin"
+    ],
+    [
+     "F024",
+     28,
+     "not_accepted",
+     "Audit observed that no Departmental Level Committee meetings had been held since"
+    ],
+    [
+     "F025",
+     29,
+     "not_accepted",
+     "However, the Draft Bihar Local Government Ombudsman Rules, 2014, for appointment"
+    ],
+    [
+     "F026",
+     29,
+     "not_accepted",
+     "GoB had created (June 2015) various posts, on contractual basis, for functioning"
+    ],
+    [
+     "F027",
+     29,
+     "NON_FINDING:as\\s+(?:depicted|shown|given|detailed)\\s+in\\s",
+     "Audit observed that PRD had released grants amounting to ₹ 59,995.90 crore, unde"
+    ],
+    [
+     "F028",
+     30,
+     "not_accepted",
+     "The Department instructed (January 2020) all District Magistrates to complete au"
+    ],
+    [
+     "F029",
+     30,
+     "not_accepted",
+     "Further, a State Level Audit and Financial Management Consultant was to be appoi"
+    ],
+    [
+     "F030",
+     31,
+     "not_accepted",
+     "PRD, in the light of 5th SFC recommendations, released ₹ 194.05 crore to ZPs of "
+    ],
+    [
+     "F031",
+     31,
+     "NON_FINDING:during\\s+(?:the\\s+)?(?:FYs?\\s+)?\\d{4}[-–]\\d{2",
+     "During FYs 2012-13 to 2018-19, GoB had sanctioned construction of 3,200 PSBs to "
+    ],
+    [
+     "F033",
+     33,
+     "not_accepted",
+     "It is evident from Table 1.8 that PRD could not fully utilise its budgetary allo"
+    ],
+    [
+     "F034",
+     35,
+     "not_accepted",
+     "The Department decided (August 2018) to implement e-Panchayat in PRIs13, based o"
+    ],
+    [
+     "F035",
+     35,
+     "not_accepted",
+     "As of July 2022, DC bills, of ₹ 97.18 crore14, withdrawn through AC bills, durin"
+    ],
+    [
+     "F036",
+     35,
+     "not_accepted",
+     "Amount of ₹ 8.48 crore were suggested for recovery in the financial year 2021-22"
+    ],
+    [
+     "F041",
+     47,
+     "not_accepted",
+     "The 74th CAA, 1992 enables ULBs to perform functions relating to 18 subjects ref"
+    ],
+    [
+     "F044",
+     47,
+     "not_accepted",
+     "Further, it was observed that the dependence of ULBs on government grants, for m"
+    ],
+    [
+     "F045",
+     48,
+     "not_accepted",
+     "It is evident from the above table that 717 administrative posts had been sancti"
+    ],
+    [
+     "F046",
+     49,
+     "not_accepted",
+     "With regard to constitution of the Municipal Accounts Committees in ULBs, the Pr"
+    ],
+    [
+     "F047",
+     50,
+     "not_accepted",
+     "The UD&HD stated (January 2022) that Subject Committees, to be constituted in th"
+    ],
+    [
+     "F048",
+     50,
+     "not_accepted",
+     "In this regard, the UD&HD replied (January 2022) that Wards Committees had not b"
+    ],
+    [
+     "F050",
+     52,
+     "not_accepted",
+     "It is evident from the table above that, out of the 2,886 audit paragraphs conta"
+    ],
+    [
+     "F051",
+     53,
+     "not_accepted",
+     "It was, however, observed that during the financial years 2021-22, no District L"
+    ],
+    [
+     "F054",
+     54,
+     "not_accepted",
+     "However, no Social Audit of schemes implemented by ULBs had been conducted, (as "
+    ],
+    [
+     "F055",
+     54,
+     "not_accepted",
+     "UD&HD, GoB, had framed and notified (May 2013) the Bihar Property Tax Board Rule"
+    ],
+    [
+     "F057",
+     55,
+     "NON_FINDING:from\\s+(?:FYs?\\s+)?\\d{4}[-–]\\d{2,4}\\s+to\\s+\\d",
+     "As per data relating to UCs, compiled by the office of the AG (A&E), Bihar Patna"
+    ],
+    [
+     "F059",
+     56,
+     "not_accepted",
+     "About the present status of implementation of DEAS, the Department stated (May 2"
+    ],
+    [
+     "F060",
+     57,
+     "not_accepted",
+     "As evident from the preceding Table, UD&HD could not utilise its budgetary alloc"
+    ]
+   ],
+   "llm_rejected_candidates": 5,
+   "llm_rejected_that_were_real": 4,
+   "llm_rejected_real_examples": [
+    [
+     66,
+     "Thus, it shows that the concerned officials in the Nagar Parishad, Sheikhpura, made fraudulent payme"
+    ],
+    [
+     103,
+     "Audit noticed that, according to the State Policy and Strategy for SWM, the distribution of dustbins"
+    ],
+    [
+     124,
+     "As per the SWM Rules, 2016, and the agreement entered into (March 2021) for the IMSWM project, an au"
+    ],
+    [
+     142,
+     "Audit noticed that, four of the test-checked ULBs had procured battery operated hydraulic garbage e-"
+    ]
+   ],
+   "false_positive_categories": {
+    "mgmt_reply": 2,
+    "background/other": 2
+   },
+   "false_positive_examples": [
+    [
+     "016",
+     64,
+     0.0,
+     "mgmt_reply",
+     "In reply, the Executive Officer of the Nagar Parishad stated (May 2022) that the contribution of employees, fr"
+    ],
+    [
+     "058",
+     136,
+     0.6,
+     "background/other",
+     "5.6.3.3 Avoidable expenditure of ₹ 10.29 crore on hiring of Earth Mover Machine, for waste stacking, in the ab"
+    ],
+    [
+     "059",
+     137,
+     1.0,
+     "mgmt_reply",
+     "The reply was not acceptable because, as per NGT’s order and the SWM Rules, 2016, it is responsibility of ULBs"
+    ],
+    [
+     "082",
+     162,
+     0.0,
+     "background/other",
+     "As per Hon’ble NGT order (February 2020), an interim compensation scale had been laid down for continued failu"
+    ]
+   ]
+  },
+  "amounts": {
+   "pairs": 34,
+   "max_equals_gold": 25,
+   "sum_equals_gold": 24,
+   "sum_gt_1.5x_gold": 8,
+   "identify_primary_equals_gold": 25
+  },
+  "recommendations": {
+   "pipeline": 28,
+   "gold": 45,
+   "gold_core": 26,
+   "precision": 0.821,
+   "recall_core": 0.885,
+   "precision_by_strategy": {
+    "structural": "23/24",
+    "verb": "0/4"
+   },
+   "recall_by_form": {
+    "may_consider": "21/24",
+    "passive_may_be": "2/2"
+   },
+   "false_positive_examples": [
+    [
+     14,
+     "structural",
+     "Deficient monitoring was evident from the non-existence of different institutions, viz. District Level Review "
+    ],
+    [
+     51,
+     "verb",
+     "The 11th Finance Commission had recommended that (i) the CAG should be entrusted with the responsibility of ex"
+    ],
+    [
+     111,
+     "verb",
+     "The vehicles used for transportation are to be covered and the waste should not be visible to the public. The "
+    ],
+    [
+     117,
+     "verb",
+     "the wet fraction should preferably be used for composting and the dry waste should be sent for recycling. Tech"
+    ],
+    [
+     154,
+     "verb",
+     "In addition, Construction and Demolition (C&D) waste also needs to be managed properly, as such waste often fi"
+    ]
+   ],
+   "missed_examples": [
+    [
+     "R021",
+     92,
+     "may_consider",
+     "ULBs may collect user charges, as per the prescribed rates, and may develop penalties/ince"
+    ],
+    [
+     "R025",
+     100,
+     "may_consider",
+     "Department may take efforts for capacity building of staff, registered waste pickers and m"
+    ],
+    [
+     "R038",
+     154,
+     "may_consider",
+     "ULBs may avail free public facilities, available for storage of data and network connectiv"
+    ]
+   ]
+  }
+ }
+}

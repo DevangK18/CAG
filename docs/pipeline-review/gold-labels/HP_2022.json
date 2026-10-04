@@ -1,0 +1,2702 @@
+{
+  "report_id": "HP_2022_ATI_report_on_Panchayati_Raj_Institution_and_Urban_Local_Bodies_in_Himachal_Prad",
+  "labeller": "agent",
+  "pages_total": 142,
+  "pages_read": "0-141",
+  "unreadable_pages": [],
+  "labelling_notes": "Rupee sign extracts correctly as ₹ throughout (no backtick substitution). Pages 0 (cover), 1, 3, 7, 9, 27, 57, 83, 140 (blank), 11, 17, 29, 49, 59, 85 (coloured divider/blank) and 141 (back cover) carry no text; 10, 16, 28, 48, 58, 84 are section-title pages; none hold findings. Appendices (pp. 86-139) are tables only and are excluded. Printed page numbers come from the '<n> | P a g e' footer (Overview uses roman numerals). Location convention: findings in the audit-results chapters (Ch.2 PRIs, Ch.4 ULBs, ATIR deficiencies by theme across test-checked units) use 'atir_unit'; adverse items in the profile chapters (Ch.1, Ch.3) use 'chapter'; the Overview synopsis bullets use 'executive_summary'. All recommendations use 'atir'. Overview bullets restate chapter findings; they are labelled separately and linked only through para_no (duplicate_of is reserved for recommendations). The Overview gives ₹4.74 crore for 4.6.4 while the chapter lead line says ₹4.75 crore. Overview bullets that are pure profile statistics (numbers of PRIs/ULBs, funds allotted, audits conducted, PRIASoft adoption) are not labelled; vacancy bullets are labelled borderline. Each sub-para (a)/(b)/(i)/(ii) is one item. Finding text begins at the observation sentence (rule/criteria paragraphs and bold lead lines excluded) and normally ends before the management reply; audit rebuttals are left in the finding. Where the total impact appears only in the bold lead line (e.g. 2.2.1, 2.2.2(i), 2.6.2, 4.17), impact_amount uses that total and the note says so. Footnote reference digits stay attached to words as extracted (e.g. 'GPs3', '₹5.35 lakh5'). Text that crosses a page is joined with the running header/footer and footnotes removed. Recommendations: ATIR advice is sparse: the numbered TGS recommendations to the HP State Audit Department (1.8 and 3.7), the 'Department should pay adequate attention' line (1.10), the repeated generic 'The Department may initiate action to examine similar cases' (Ch.2 intro, 3.8, Ch.4 intro; form may_consider) and one 'The matter may be reviewed by the competent authority' (4.11, borderline). The report has no recommendation boxes and no Overview recommendation list. Form 'may_consider' is used for active 'X may <verb>' advice; 'numbered' for items in the numbered TGS lists.",
+  "findings": [
+    {
+      "id": "F001",
+      "page": 12,
+      "printed_page": "vii",
+      "para_no": "1.3.2",
+      "location": "executive_summary",
+      "anchor": "The Panchayati Raj Institutions (PRIs) have technical and non-technical staff in various cadres. There are 413",
+      "text": "The Panchayati Raj Institutions (PRIs) have technical and non-technical staff in various cadres. There are 413 vacant posts in PRIs against total sanctioned posts of 9,465 as of March 2019.",
+      "summary": "413 posts vacant in PRIs against 9,465 sanctioned (March 2019)",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Profile statistic in the Overview; vacancies are adverse but stated neutrally and without audit comment."
+    },
+    {
+      "id": "F002",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.1.2",
+      "location": "executive_summary",
+      "anchor": "Differences between figures of receipts and expenditure furnished to audit and those uploaded on PRIASoft.",
+      "text": "Differences between figures of receipts and expenditure furnished to audit and those uploaded on PRIASoft.",
+      "summary": "Receipt/expenditure figures furnished to audit differ from PRIASoft",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F003",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.1.4",
+      "location": "executive_summary",
+      "anchor": "Non-reconciliation of balances of cashbook with bank statements.",
+      "text": "Non-reconciliation of balances of cashbook with bank statements.",
+      "summary": "Cash book balances not reconciled with bank statements",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F004",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.1.6(ii)",
+      "location": "executive_summary",
+      "anchor": "Non-depositing of liquor cess amounting to ₹ 12.26 lakh in Account-A.",
+      "text": "Non-depositing of liquor cess amounting to ₹ 12.26 lakh in Account-A.",
+      "summary": "Liquor cess of Rs 12.26 lakh not deposited in Account-A",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹ 12.26 lakh",
+        "crore": 0.1226
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F005",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.3.1",
+      "location": "executive_summary",
+      "anchor": "Funds of ₹ 1.37 crore remained unspent due to non-commencement of works.",
+      "text": "Funds of ₹ 1.37 crore remained unspent due to non-commencement of works.",
+      "summary": "Rs 1.37 crore unspent due to non-commencement of works",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 1.37 crore",
+        "crore": 1.37
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F006",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.3.2",
+      "location": "executive_summary",
+      "anchor": "Funds of ₹ 1.95 crore remained unspent due to non-completion of works.",
+      "text": "Funds of ₹ 1.95 crore remained unspent due to non-completion of works.",
+      "summary": "Rs 1.95 crore unspent due to non-completion of works",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 1.95 crore",
+        "crore": 1.95
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F007",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.3.3",
+      "location": "executive_summary",
+      "anchor": "Funds of ₹ 5.12 crore received under 13th Finance Commission remained unutilised on account of non-start",
+      "text": "Funds of ₹ 5.12 crore received under 13th Finance Commission remained unutilised on account of non-start of works, incomplete works and non-release of funds.",
+      "summary": "13th FC funds of Rs 5.12 crore unutilised",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 5.12 crore",
+        "crore": 5.12
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F008",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.4.1",
+      "location": "executive_summary",
+      "anchor": "Funds of ₹ 8.16 crore under 14th FC remained unutilised owing to non-completion of works.",
+      "text": "Funds of ₹ 8.16 crore under 14th FC remained unutilised owing to non-completion of works.",
+      "summary": "14th FC funds of Rs 8.16 crore unutilised owing to non-completion of works",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 8.16 crore",
+        "crore": 8.16
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F009",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.6",
+      "location": "executive_summary",
+      "anchor": "Delay in release of wages amounting to ₹ 57.11 lakh under Mahatma Gandhi National Rural Employment",
+      "text": "Delay in release of wages amounting to ₹ 57.11 lakh under Mahatma Gandhi National Rural Employment Guarantee Scheme (MGNREGS) for period ranging between 15 and 518 days.",
+      "summary": "MGNREGS wages of Rs 57.11 lakh released with delays of 15-518 days",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 57.11 lakh",
+        "crore": 0.5711
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F010",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.10",
+      "location": "executive_summary",
+      "anchor": "One hundred twenty-two PRIs purchased material costing to ₹ 8.74 crore without inviting quotations/ tenders.",
+      "text": "One hundred twenty-two PRIs purchased material costing to ₹ 8.74 crore without inviting quotations/ tenders.",
+      "summary": "122 PRIs purchased material of Rs 8.74 crore without quotations/tenders",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹ 8.74 crore",
+        "crore": 8.74
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F011",
+      "page": 13,
+      "printed_page": "viii",
+      "para_no": "2.11",
+      "location": "executive_summary",
+      "anchor": "Irregular payment of Government money amounting to ₹ 72.39 lakh was done in 35 Gram panchayats.",
+      "text": "Irregular payment of Government money amounting to ₹ 72.39 lakh was done in 35 Gram panchayats.",
+      "summary": "Irregular payment of Rs 72.39 lakh in 35 GPs",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹ 72.39 lakh",
+        "crore": 0.7239
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F012",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": "3.3.2",
+      "location": "executive_summary",
+      "anchor": "There are 1,230 vacant posts in Urban Local Bodies (ULBs) against total sanctioned posts of 3,749",
+      "text": "There are 1,230 vacant posts in Urban Local Bodies (ULBs) against total sanctioned posts of 3,749 in various cadres as of March 2019.",
+      "summary": "1,230 posts vacant in ULBs against 3,749 sanctioned",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Profile statistic in the Overview, stated without audit comment."
+    },
+    {
+      "id": "F013",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": "3.6",
+      "location": "executive_summary",
+      "anchor": "During 2017-18 and 2018-19, 25 and 26 ULBs respectively were audited by the HP SAD whereas",
+      "text": "During 2017-18 and 2018-19, 25 and 26 ULBs respectively were audited by the HP SAD whereas there is no provision for a separate and independent internal audit agency under the control of the Director, Urban Development to conduct internal audit of ULBs.",
+      "summary": "No independent internal audit agency for ULBs",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Mixes neutral coverage statistic with a structural gap (no internal audit agency)."
+    },
+    {
+      "id": "F014",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": "4.5.1(a)",
+      "location": "executive_summary",
+      "anchor": "Due to ineffective monitoring, revenue of ₹ 11.80 crore on account of house tax in 17",
+      "text": "Due to ineffective monitoring, revenue of ₹ 11.80 crore on account of house tax in 17 ULBs remained unrealised.",
+      "summary": "House tax of Rs 11.80 crore unrealised in 17 ULBs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 11.80 crore",
+        "crore": 11.8
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F015",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": "4.5.2",
+      "location": "executive_summary",
+      "anchor": "Rent due from shops, booths and stalls amounting to ₹ 14.75 crore remained unrealised in 21",
+      "text": "Rent due from shops, booths and stalls amounting to ₹ 14.75 crore remained unrealised in 21 ULBs.",
+      "summary": "Rent of Rs 14.75 crore unrealised in 21 ULBs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 14.75 crore",
+        "crore": 14.75
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F016",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": "4.5.5",
+      "location": "executive_summary",
+      "anchor": "MC Shimla failed to realise lease money of ₹ 1.74 crore from shops and stalls.",
+      "text": "MC Shimla failed to realise lease money of ₹ 1.74 crore from shops and stalls.",
+      "summary": "MC Shimla failed to realise lease money of Rs 1.74 crore",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹ 1.74 crore",
+        "crore": 1.74
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F017",
+      "page": 14,
+      "printed_page": "ix",
+      "para_no": "4.6",
+      "location": "executive_summary",
+      "anchor": "Funds amounting to ₹ 8.97 crore under AMRUT, ₹ 2.67 crore under PMAY and ₹1.00 crore",
+      "text": "Funds amounting to ₹ 8.97 crore under AMRUT, ₹ 2.67 crore under PMAY and ₹1.00 crore under NULM remained unutilized.",
+      "summary": "AMRUT Rs 8.97 crore, PMAY Rs 2.67 crore, NULM Rs 1.00 crore unutilised",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 8.97 crore + ₹ 2.67 crore + ₹1.00 crore",
+        "crore": 12.64
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Impact is the sum of the three scheme amounts."
+    },
+    {
+      "id": "F018",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": "4.6.4",
+      "location": "executive_summary",
+      "anchor": "In three ULBs, funds amounting to ₹ 4.74 crore under 13th & 14th Finance Commission and",
+      "text": "In three ULBs, funds amounting to ₹ 4.74 crore under 13th & 14th Finance Commission and 4th State Finance Commission remained unutilized.",
+      "summary": "FC/SFC funds of Rs 4.74 crore unutilised in three ULBs",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 4.74 crore",
+        "crore": 4.74
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F019",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": "4.6.5",
+      "location": "executive_summary",
+      "anchor": "Funds amounting to ₹ 14.52 crore remained unspent in twelve test checked ULBs due to non-completion/",
+      "text": "Funds amounting to ₹ 14.52 crore remained unspent in twelve test checked ULBs due to non-completion/ commencement of works.",
+      "summary": "Rs 14.52 crore unspent in 12 ULBs due to non-completion/commencement of works",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 14.52 crore",
+        "crore": 14.52
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F020",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": "4.6.6",
+      "location": "executive_summary",
+      "anchor": "Funds amounting to ₹ 4.41 crore received for execution of sewerage schemes were lying unspent in",
+      "text": "Funds amounting to ₹ 4.41 crore received for execution of sewerage schemes were lying unspent in two ULBs depriving public of the sewerage facilities.",
+      "summary": "Sewerage funds of Rs 4.41 crore lying unspent in two ULBs",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹ 4.41 crore",
+        "crore": 4.41
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F021",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": "4.8",
+      "location": "executive_summary",
+      "anchor": "Non-allotment of 73 houses in MC Nalagarh resulted in unfruitful expenditure of ₹ 3.12 crore and",
+      "text": "Non-allotment of 73 houses in MC Nalagarh resulted in unfruitful expenditure of ₹ 3.12 crore and non-realisation of beneficiary share of ₹ 1.36 crore.",
+      "summary": "73 houses not allotted: unfruitful expenditure Rs 3.12 crore, beneficiary share Rs 1.36 crore not realised",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹ 3.12 crore",
+        "crore": 3.12
+      },
+      "other_amounts": [
+        "₹ 1.36 crore (beneficiary share not realised: second impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F022",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": "4.14",
+      "location": "executive_summary",
+      "anchor": "Utilisation Certificates of ₹ 3.97 crore were not obtained in two ULBs.",
+      "text": "Utilisation Certificates of ₹ 3.97 crore were not obtained in two ULBs.",
+      "summary": "UCs for Rs 3.97 crore not obtained in two ULBs",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 3.97 crore",
+        "crore": 3.97
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F023",
+      "page": 15,
+      "printed_page": "x",
+      "para_no": "4.16",
+      "location": "executive_summary",
+      "anchor": "Six ULBs sanctioned advances of ₹ 32.21 crore during 2015-18 without adjustment of previous advances.",
+      "text": "Six ULBs sanctioned advances of ₹ 32.21 crore during 2015-18 without adjustment of previous advances.",
+      "summary": "Six ULBs sanctioned Rs 32.21 crore of advances without adjusting previous ones",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹ 32.21 crore",
+        "crore": 32.21
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F024",
+      "page": 18,
+      "printed_page": "1",
+      "para_no": "1.1",
+      "location": "chapter",
+      "anchor": "The activity map for devolving functions, funds and functionaries (3Fs) of 15-line departments was notified vide",
+      "text": "The activity map for devolving functions, funds and functionaries (3Fs) of 15-line departments was notified vide notification No. PCH-HA (3)/9/2006, dated 19 October, 2009. Although all 29 functions relating to these 15-line departments (Appendix-2) have been assigned to PRIs, matching funds and functionaries have not been provided to the PRIs1.",
+      "summary": "29 functions assigned to PRIs without matching funds and functionaries",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Background paragraph in profile chapter; deficiency is attributed to a statement of the Director (footnote 1)."
+    },
+    {
+      "id": "F025",
+      "page": 21,
+      "printed_page": "4",
+      "para_no": "1.4.1",
+      "location": "chapter",
+      "anchor": "Non-release of funds under SBM during 2017-18 and 2018-19 was attributed (August 2021) by Rural Development",
+      "text": "Non-release of funds under SBM during 2017-18 and 2018-19 was attributed (August 2021) by Rural Development Department to previous funds lying unspent in Districts/Blocks.",
+      "summary": "SBM funds not released because earlier funds lay unspent in districts/blocks",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Stated as the Department's explanation (August 2021), not as an audit observation."
+    },
+    {
+      "id": "F026",
+      "page": 23,
+      "printed_page": "6",
+      "para_no": "1.4.2",
+      "location": "chapter",
+      "anchor": "It may be noted that all the funds provided by the Panchayati Raj Department to the",
+      "text": "It may be noted that all the funds provided by the Panchayati Raj Department to the PRIs have been shown as expenditure, instead of actual expenditure at ground level. The exact figures of expenditure by the PRIs were not available with the Panchayati Raj Department. Further, it was noticed that the Department had not prescribed any periodic returns to review/ control expenditure by the PRIs, which resulted in weak control mechanism and irregularities in functioning of PRIs as discussed in Chapter-2.",
+      "summary": "Funds released shown as expenditure; actual expenditure unknown; no periodic returns prescribed, weak control",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F027",
+      "page": 23,
+      "printed_page": "6",
+      "para_no": "1.4.2",
+      "location": "chapter",
+      "anchor": "The actual utilisation of funds in 57 PRIs test-checked by Audit for the period 2014-15 to",
+      "text": "The actual utilisation of funds in 57 PRIs test-checked by Audit for the period 2014-15 to 2016-17 ranged between 64 and 72 per cent and in 113 PRIs test-checked by Audit for the period 2015-16 to 2017-18 ranged between 57 and 61 per cent as detailed in Table-6 (i) and (ii) below:",
+      "summary": "Fund utilisation in test-checked PRIs only 57-72 per cent (persistent savings)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Analytical statistic introducing Table-6; adverse (low utilisation) but no explicit audit comment."
+    },
+    {
+      "id": "F028",
+      "page": 24,
+      "printed_page": "7",
+      "para_no": "1.7",
+      "location": "chapter",
+      "anchor": "It was noticed that the audit wing under Director, Panchayati Raj had not planned internal audit",
+      "text": "It was noticed that the audit wing under Director, Panchayati Raj had not planned internal audit of ZPs during 2017-18.",
+      "summary": "Internal audit of ZPs not planned during 2017-18",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F029",
+      "page": 25,
+      "printed_page": "8",
+      "para_no": "1.8",
+      "location": "chapter",
+      "anchor": "It may be noted that some similar recommendations for improvement had been made during previous years,",
+      "text": "It may be noted that some similar recommendations for improvement had been made during previous years, but the shortcomings persisted indicating that HP SAD had not taken adequate steps to address the same.",
+      "summary": "HP SAD did not act on earlier TGS recommendations; shortcomings persisted",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F030",
+      "page": 26,
+      "printed_page": "9",
+      "para_no": "1.10",
+      "location": "chapter",
+      "anchor": "Correspondence is being undertaken regularly with PRIs and Panchayati Raj Department to settle outstanding IRs/Paras, despite",
+      "text": "Correspondence is being undertaken regularly with PRIs and Panchayati Raj Department to settle outstanding IRs/Paras, despite this the number of outstanding paras has increased. Increasing trend of outstanding inspection reports and paras is indicative of inadequate attention towards compliance to audit observations, and weak control mechanism.",
+      "summary": "2,453 IRs / 16,882 paras outstanding; increasing trend shows inadequate compliance",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F031",
+      "page": 30,
+      "printed_page": "11",
+      "para_no": "2.1.1(i)",
+      "location": "atir_unit",
+      "anchor": "In 18 out of 45 test-checked GPs (Appendix-4), Audit observed that maintenance of accounts on PRIASoft",
+      "text": "In 18 out of 45 test-checked GPs (Appendix-4), Audit observed that maintenance of accounts on PRIASoft accounting system had started but accounts for the period April 2017 to January 2018 were not being maintained on PRIASoft.",
+      "summary": "18 of 45 GPs not maintaining accounts on PRIASoft (Apr 2017-Jan 2018)",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F032",
+      "page": 30,
+      "printed_page": "11",
+      "para_no": "2.1.1(i)",
+      "location": "atir_unit",
+      "anchor": "It was also noticed that in 22 out of 45 test-checked GPs (Appendix-4), only three registers",
+      "text": "It was also noticed that in 22 out of 45 test-checked GPs (Appendix-4), only three registers (register of annual receipt and payment account, consolidated abstract register, and monthly reconciliation statement) out of eight Model Accounting System registers were being maintained on PRIASoft while five registers (register of receivables and payables, register of immovable property, register of movable property, inventory (stock) register, and register of demand, collection and balance) were not being maintained. Books of accounts such as Journal Book, Ledger Book and Cheque receipts register were also not being maintained in these Gram Panchayats. Thus, PRIs were not fully adopting the PRIASoft defeating the purpose of transparent accounting.",
+      "summary": "22 GPs maintained only 3 of 8 Model Accounting System registers; journal/ledger not kept",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F033",
+      "page": 31,
+      "printed_page": "12",
+      "para_no": "2.1.1(ii)",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that in 40 out of 45 test checked GPs (except 5 GPs1), information of",
+      "text": "Audit noticed that in 40 out of 45 test checked GPs (except 5 GPs1), information of assets created by PRIs was not being uploaded on NAD application resulting in lack of effective monitoring of assets.",
+      "summary": "40 of 45 GPs not uploading assets on National Asset Directory",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F034",
+      "page": 31,
+      "printed_page": "12",
+      "para_no": "2.1.2(i)",
+      "location": "atir_unit",
+      "anchor": "(i) During 2017-18, it was noticed that in 21 test-checked PRIs, the figures of balance in",
+      "text": "(i) During 2017-18, it was noticed that in 21 test-checked PRIs, the figures of balance in bank pass book for the year 2016-17 did not match with the figures uploaded on PRIASoft. There was a difference of ₹ 1.37 crore (Figures in PRIAsoft were more in 09 PRIs by ₹1.08 crore and less in 12 PRIs by ₹0.29 crore.) in the figures of balance in bank pass book and that of uploaded on PRIASoft (Appendix-5(i)). Deviation in figures ranged between 0.08 and 219 per cent. The deviation was particularly high in GPs Jamni (219 per cent), Bandli (120 per cent) and Kotla Khanula (104 per cent). The deviations raise questions over the reliability of financial information being maintained.",
+      "summary": "Bank pass book balances differ from PRIASoft by Rs 1.37 crore in 21 PRIs",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 1.37 crore",
+        "crore": 1.37
+      },
+      "other_amounts": [
+        "₹1.08 crore (PRIASoft higher in 9 PRIs: part of total)",
+        "₹0.29 crore (PRIASoft lower in 12 PRIs: part of total)"
+      ],
+      "borderline": false,
+      "note": "Amount is an unreconciled difference rather than a loss."
+    },
+    {
+      "id": "F035",
+      "page": 31,
+      "printed_page": "12",
+      "para_no": "2.1.2(ii)",
+      "location": "atir_unit",
+      "anchor": "It was noticed in 93 (82 per cent of test-checked PRIs) out of 113 test-checked PRIs",
+      "text": "It was noticed in 93 (82 per cent of test-checked PRIs) out of 113 test-checked PRIs (Appendix-5(ii)) that the figures of receipts and expenditure for the year 2017-18 furnished by these PRIs did not match with the figures uploaded on PRIASoft. There was a difference of ₹25.13 crore in the figures of receipt and ₹13.19 crore in the figures of expenditure. Deviation in figures of receipts ranged between 0.47 and 117.07 per cent and that of expenditure ranged between 0.13 and 335.69 per cent. The deviation was particularly high in GPs Kotlu (117.07 per cent), Khundiyan (115.52 per cent) and Hal (83.09 per cent) in figures of receipts and similarly in GPs Jhakled (335.69 per cent), Balol (329.31 per cent) and Salihar (265.18 per cent) in case of expenditure. The large deviations raise questions over the reliability of financial information being maintained on PRIASoft.",
+      "summary": "Receipts differ by Rs 25.13 crore and expenditure by Rs 13.19 crore from PRIASoft in 93 PRIs",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹25.13 crore",
+        "crore": 25.13
+      },
+      "other_amounts": [
+        "₹13.19 crore (difference in expenditure figures: second discrepancy)"
+      ],
+      "borderline": false,
+      "note": "Preceding sentence of (ii) (PRIs maintaining accounts on PRIASoft) is neutral context and excluded."
+    },
+    {
+      "id": "F036",
+      "page": 32,
+      "printed_page": "13",
+      "para_no": "2.1.3(i)",
+      "location": "atir_unit",
+      "anchor": "(i) During 2017-18, it was observed that out of 57 test checked PRIs, in 35 GPs",
+      "text": "(i) During 2017-18, it was observed that out of 57 test checked PRIs, in 35 GPs and three Panchayat Samitis (Appendix-6), important registers like stock register, immovable property register, muster roll register, temporary advance register, travelling allowance register, contingency expenditure register, grants-in-aid register, cheque issue and receipt register, etc., were not maintained during 2017-18.",
+      "summary": "Important registers not maintained in 35 GPs and 3 PSs (2017-18)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F037",
+      "page": 32,
+      "printed_page": "13",
+      "para_no": "2.1.3(ii)",
+      "location": "atir_unit",
+      "anchor": "(ii) During 2018-19, it was observed that out of 113 test checked PRIs, in 94 GPs",
+      "text": "(ii) During 2018-19, it was observed that out of 113 test checked PRIs, in 94 GPs (82 per cent of test-checked PRIs) (Appendix-6), important registers like stock register, immovable property register, muster roll register, temporary advance register, stationary register, honorarium register, travelling allowance register, contingency expenditure register, grants- in-aid register, cheques issue and receipt register, etc. were not maintained by these GPs. Due to non-maintenance of these records, correctness of the relevant financial transactions could not be ascertained by audit.",
+      "summary": "Important registers not maintained in 94 GPs (2018-19)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F038",
+      "page": 32,
+      "printed_page": "13",
+      "para_no": "2.1.4",
+      "location": "atir_unit",
+      "anchor": "Audit noticed in 2017-18 and 2018-19 that difference between balances of cash books and bank pass",
+      "text": "Audit noticed in 2017-18 and 2018-19 that difference between balances of cash books and bank pass books amounting to ₹2.87 crore in 22 PRIs (Appendix-7) at the close of the year 2016-17 and ₹26.61 crore in 73 PRIs (Appendix-7) at the close of the year 2017-18 was not reconciled. Significant differences of ₹41.52 lakh and ₹38.11 lakh were noticed in GPs Nalka and Goyla respectively in 2017-18 whereas differences of ₹131.74 lakh, ₹287.99 lakh and ₹967.62 lakh were noticed in ZPs Hamirpur, Shimla and Kangra respectively in 2018-19.",
+      "summary": "Unreconciled cash book vs bank differences of Rs 2.87 crore (22 PRIs) and Rs 26.61 crore (73 PRIs)",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹2.87 crore + ₹26.61 crore",
+        "crore": 29.48
+      },
+      "other_amounts": [
+        "₹41.52 lakh, ₹38.11 lakh (GPs Nalka, Goyla: part of total)",
+        "₹131.74 lakh, ₹287.99 lakh, ₹967.62 lakh (ZPs Hamirpur, Shimla, Kangra: part of total)"
+      ],
+      "borderline": false,
+      "note": "Unreconciled differences, two years summed."
+    },
+    {
+      "id": "F039",
+      "page": 32,
+      "printed_page": "13",
+      "para_no": "2.1.4",
+      "location": "atir_unit",
+      "anchor": "Also, it was noticed in 2018-19 that in ZP Hamirpur, General and Panchayat Nidhi cashbooks showed",
+      "text": "Also, it was noticed in 2018-19 that in ZP Hamirpur, General and Panchayat Nidhi cashbooks showed more balance and 13th FC cashbook showed less balance in comparison to bank pass book. Similarly, In GP Dhakgaon, General and Panchayat Nidhi cashbooks showed more balance and 14th FC cash book showed less balance in comparison to bank pass book. In view of the huge differences in balances, the authenticity of accounts of these PRIs could not be relied upon and there might be chances of money received and spent through cash transactions being misappropriated or embezzled.",
+      "summary": "ZP Hamirpur and GP Dhakgaon cash books show mismatched balances by fund; risk of misappropriation",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Continuation observation of 2.1.4; could be merged with the preceding item."
+    },
+    {
+      "id": "F040",
+      "page": 33,
+      "printed_page": "14",
+      "para_no": "2.1.5(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed in GP Wakna (Solan district) that ₹ 1.00 lakh was",
+      "text": "(a) During 2017-18, it was noticed in GP Wakna (Solan district) that ₹ 1.00 lakh was withdrawn from bank account no. 100834001002430 of Jogindra Central Co-operative Bank in February 2013. Amount was neither entered in the cash book nor was any voucher of the transaction made available to Audit.",
+      "summary": "GP Wakna: Rs 1.00 lakh withdrawn but not entered in cash book, no voucher",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹ 1.00 lakh",
+        "crore": 0.01
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F041",
+      "page": 33,
+      "printed_page": "14",
+      "para_no": "2.1.5(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2017-18, it was noticed in GP Sayari (Solan district) that 0.59 lakh was transferred",
+      "text": "(b) During 2017-18, it was noticed in GP Sayari (Solan district) that 0.59 lakh was transferred from general cash book in December 2012 to MGNREGS cash book. Amount was neither entered in the MGNREGS cash book nor was any voucher regarding expenditure of this amount shown to audit.",
+      "summary": "GP Sayari: 0.59 lakh transferred to MGNREGS cash book but not entered, no voucher",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "0.59 lakh",
+        "crore": 0.0059
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Amount printed without rupee sign."
+    },
+    {
+      "id": "F042",
+      "page": 33,
+      "printed_page": "14",
+      "para_no": "2.1.5(c)",
+      "location": "atir_unit",
+      "anchor": "(c) During 2018-19, it was noticed that irregularities such as non-mentioning dates and numbers of vouchers,",
+      "text": "(c) During 2018-19, it was noticed that irregularities such as non-mentioning dates and numbers of vouchers, non-making the list of all income & expenditures at the year end, cuttings/ overwriting, use of erasers and fluids, non-attestation of vouchers, non-verification of closing balance of cashbooks, non-entering the payment made by cheques in chronological way, etc. were found in 35 GPs2.",
+      "summary": "Cash book irregularities (overwriting, unattested vouchers etc.) in 35 GPs",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F043",
+      "page": 33,
+      "printed_page": "14",
+      "para_no": "2.1.5(d)",
+      "location": "atir_unit",
+      "anchor": "(d) During 2018-19, it was noticed in three GPs (Lalung, Fariyan and Deothi) that cash books",
+      "text": "(d) During 2018-19, it was noticed in three GPs (Lalung, Fariyan and Deothi) that cash books and vouchers were not maintained for the years 2013-14 to 2015-16, 2015-16 and 2004-14 respectively.",
+      "summary": "Cash books and vouchers not maintained for several years in three GPs",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F044",
+      "page": 34,
+      "printed_page": "15",
+      "para_no": "2.1.6(i)",
+      "location": "atir_unit",
+      "anchor": "It was noticed during 2017-18 and 2018-19 that 115 GPs3 and 15 PSs4 out of 170",
+      "text": "It was noticed during 2017-18 and 2018-19 that 115 GPs3 and 15 PSs4 out of 170 test checked PRIs were not maintaining such accounts in the prescribed format and all transactions were carried out through a single account in contravention of the rule ibid. In absence of separate account 'A' and 'B', correctness of figures of income from own resources, grants-in-aid and loans received could not be verified.",
+      "summary": "115 GPs and 15 PSs not maintaining separate Account A and B",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F045",
+      "page": 34,
+      "printed_page": "15",
+      "para_no": "2.1.6(ii)",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, it was observed that in 10 GPs, liquor cess amounting to ₹12.26 lakh (Appendix-8)",
+      "text": "During 2018-19, it was observed that in 10 GPs, liquor cess amounting to ₹12.26 lakh (Appendix-8) collected was not deposited in Account ‘A’. The liquor cess was the part of own revenue of GPs and could be utilised in other developmental activities.",
+      "summary": "Liquor cess of Rs 12.26 lakh not deposited in Account A in 10 GPs",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹12.26 lakh",
+        "crore": 0.1226
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F046",
+      "page": 34,
+      "printed_page": "15",
+      "para_no": "2.1.7",
+      "location": "atir_unit",
+      "anchor": "It was noticed during 2017-18 in GP Sayari (Block Kandaghat, District Solan) that the GP received",
+      "text": "It was noticed during 2017-18 in GP Sayari (Block Kandaghat, District Solan) that the GP received ₹0.24 lakh as own receipts during 2014-17. Secretary had not deposited the receipts in the bank/ Gram Panchayat Fund and rather incurred expenditure of ₹0.23 lakh from these receipts on office expenses and refreshment of GP members. Expenditure from own receipts without crediting into Gram Panchayat Fund was contrary to the rule ibid.",
+      "summary": "GP Sayari spent own receipts without crediting them to GP Fund",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹0.23 lakh",
+        "crore": 0.0023
+      },
+      "other_amounts": [
+        "₹0.24 lakh (own receipts not deposited: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F047",
+      "page": 35,
+      "printed_page": "16",
+      "para_no": "2.1.8",
+      "location": "atir_unit",
+      "anchor": "It was noticed during 2018-19 that estimates for different works such as construction/ repair of panchayat",
+      "text": "It was noticed during 2018-19 that estimates for different works such as construction/ repair of panchayat ghar, community hall, public toilet, protection wall, path, irrigation tank, kuhal, etc. worth ₹2.28 crore pertaining to the period from 2013 to 2018, were not prepared to obtain the administrative approval and technical sanction for execution of the same and copies of estimates were not found in eight GPs5.",
+      "summary": "Estimates/AA/TS not prepared for works worth Rs 2.28 crore in eight GPs",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹2.28 crore",
+        "crore": 2.28
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F048",
+      "page": 35,
+      "printed_page": "16",
+      "para_no": "2.1.9",
+      "location": "atir_unit",
+      "anchor": "It was observed during 2017-18 that in 12 out of 45 test checked GPs, items of",
+      "text": "It was observed during 2017-18 that in 12 out of 45 test checked GPs, items of stores such as steel, timber, furniture, hardware items, solar lights, street lights, sports items, heaters, etc. purchased during 2011-17 at a cost of ₹0.44 crore were not accounted for in the stock registers (Appendix-9). This was indicative of poor record maintenance on the part of GPs and the possibility of pilferage or loss as a result of non-accounting of these stores cannot be ruled out.",
+      "summary": "Stores worth Rs 0.44 crore not entered in stock registers in 12 GPs",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹0.44 crore",
+        "crore": 0.44
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Para opens with a bold lead line 'Material of ₹0.44 crore was not accounted for in the stock register.'"
+    },
+    {
+      "id": "F049",
+      "page": 36,
+      "printed_page": "17",
+      "para_no": "2.1.10",
+      "location": "atir_unit",
+      "anchor": "Scrutiny of records showed that in 59 (Appendix-10) out of the test checked 170 PRIs (audited",
+      "text": "Scrutiny of records showed that in 59 (Appendix-10) out of the test checked 170 PRIs (audited during 2017-18 and 2018-19), physical verification of stores and stock had not been conducted. Due to non-conducting of physical verification actual position of stores/ stock was not verified by the concerned PRIs.",
+      "summary": "Physical verification of stores not conducted in 59 of 170 PRIs",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F050",
+      "page": 36,
+      "printed_page": "17",
+      "para_no": "2.2.1",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that in 39 out of 45 test checked GPs in 2017-18, house tax amounting",
+      "text": "Audit noticed that in 39 out of 45 test checked GPs in 2017-18, house tax amounting to ₹15.96 lakh (Appendix-11) upto 2016-17 was not recovered as of March 2018 and in 94 out of 103 GPs test checked in 2018-19, house tax amounting to ₹42.67 lakh (Appendix-11) up to the end of year 2017-18 was not recovered as of March 2019. Moreover, the GPs had not taken any action to levy penalty on the defaulters for non-payment of house tax in terms of Section 114 of HP Panchayati Raj Act, 1994. This had deprived the GPs concerned from their due share of revenue. The accumulation of arrears indicates ineffectiveness of GPs in collection of revenue.",
+      "summary": "House tax of Rs 58.63 lakh not recovered in 133 GPs; no penalty levied",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹58.63 lakh",
+        "crore": 0.5863
+      },
+      "other_amounts": [
+        "₹15.96 lakh (2017-18 audits: part of total)",
+        "₹42.67 lakh (2018-19 audits: part of total)"
+      ],
+      "borderline": false,
+      "note": "Total ₹58.63 lakh is stated in the bold lead line of the para, not in the observation paragraph itself."
+    },
+    {
+      "id": "F051",
+      "page": 37,
+      "printed_page": "18",
+      "para_no": "2.2.2(i)",
+      "location": "atir_unit",
+      "anchor": "Scrutiny of records revealed that in seven PRIs (audited during 2017-18) (Appendix-12), an amount of ₹9.99",
+      "text": "Scrutiny of records revealed that in seven PRIs (audited during 2017-18) (Appendix-12), an amount of ₹9.99 lakh on account of rent from 25 shops (for the period 2013-14 to 2016-17) was outstanding as of March 2018 and in 10 PRIs (audited during 2018-19) (Appendix-12), an amount of ₹9.81 lakh on account of rent from 45 shops (for the period 2006-07 to 2017-18) was outstanding as of March 2019. This indicated that timely collection of shop rent had not been given due attention by these PRIs, resulting in loss of revenue.",
+      "summary": "Shop rent of Rs 19.80 lakh outstanding in 17 PRIs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹19.80 lakh",
+        "crore": 0.198
+      },
+      "other_amounts": [
+        "₹9.99 lakh (7 PRIs, 2017-18: part of total)",
+        "₹9.81 lakh (10 PRIs, 2018-19: part of total)"
+      ],
+      "borderline": false,
+      "note": "Total ₹19.80 lakh is in the lead line (i)."
+    },
+    {
+      "id": "F052",
+      "page": 37,
+      "printed_page": "18",
+      "para_no": "2.2.2(ii)",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, scrutiny of records revealed that ZP Kangra at Dharamshala had rented out nine shops",
+      "text": "During 2018-19, scrutiny of records revealed that ZP Kangra at Dharamshala had rented out nine shops during March-May 2014. As per clause no. 03 of the agreement made with tenants of shops, shop rent was not enhanced at the rate of 10 per cent by ZP. This resulted in loss of revenue of ₹1.16 lakh as of January 2019.",
+      "summary": "ZP Kangra did not enhance shop rent by 10 per cent: loss Rs 1.16 lakh",
+      "finding_type": "loss_of_revenue",
+      "impact_amount": {
+        "raw": "₹1.16 lakh",
+        "crore": 0.0116
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F053",
+      "page": 37,
+      "printed_page": "18",
+      "para_no": "2.2.3",
+      "location": "atir_unit",
+      "anchor": "Audit noticed during 2017-18 and 2018-19 that in 48 out of 148 test-checked GPs, 81 mobile",
+      "text": "Audit noticed during 2017-18 and 2018-19 that in 48 out of 148 test-checked GPs, 81 mobile towers were installed during 2001-18 but installation and renewal fees amounting to ₹13.51 lakh (Appendix-13) had not been recovered from the mobile companies (The same issue has been highlighted under para 2.1.3 in ATIR for the year ending March 2015, para 2.2.3 in ATIR for the year ending March 2016 and para 2.2.3 in ATIR for the year ending March 2017). This deprived the GPs of their due share of revenue.",
+      "summary": "Mobile tower installation/renewal fees of Rs 13.51 lakh not recovered in 48 GPs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹13.51 lakh",
+        "crore": 0.1351
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F054",
+      "page": 38,
+      "printed_page": "19",
+      "para_no": "2.2.4",
+      "location": "atir_unit",
+      "anchor": "During scrutiny of records in 18 PRIs audited during 2017-18 and 2018-19, it was noticed that",
+      "text": "During scrutiny of records in 18 PRIs audited during 2017-18 and 2018-19, it was noticed that payment amounting to ₹1.04 crore was made to contractors/firms for use of JCB and carriage of materials such as stone, sand etc. during the period 2012-18 without deducting TDS of ₹1.55 lakh (Appendix-14).",
+      "summary": "18 PRIs paid contractors Rs 1.04 crore without deducting TDS of Rs 1.55 lakh",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹1.55 lakh",
+        "crore": 0.0155
+      },
+      "other_amounts": [
+        "₹1.04 crore (payments to contractors: base, not impact)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F055",
+      "page": 38,
+      "printed_page": "19",
+      "para_no": "2.3.1(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed that in seven out of 45 test checked GPs (Appendix-15(i)),",
+      "text": "(a) During 2017-18, it was noticed that in seven out of 45 test checked GPs (Appendix-15(i)), an amount of ₹26.02 lakh was received (2012-17) for execution of 19 development works under various schemes. However, no expenditure was incurred on execution of these works as of October 2017. Non-utilisation of funds for developmental activities resulted in blocking of funds in these Gram Panchayats besides depriving the beneficiaries of the intended benefits.",
+      "summary": "Rs 26.02 lakh for 19 works in seven GPs unspent (works not started)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹26.02 lakh",
+        "crore": 0.2602
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F056",
+      "page": 38,
+      "printed_page": "19",
+      "para_no": "2.3.1(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed that in 38 out of 113 test checked PRIs, an",
+      "text": "(b) During 2018-19, it was noticed that in 38 out of 113 test checked PRIs, an amount of ₹1.11 crore (Appendix-15(ii)) was received during 2012-19 for execution of 112 developmental works such as playground, rain shelter, mahila mandal, road, ambulance road, community hall, public toilet, etc. under various schemes viz. 5th Rajya Vit Ayoge (Zila Parishad/Panchayat Samiti), Members of Parliament Local Area Development Scheme (MPLAD), Mukhya Mantri Adarsh Gram Yojana (MMAGY), Vidhayak Keshetra Vikas Nidhi Yojna (VKVNY), State Disaster Response Fund (SDRF), etc. However, no expenditure was incurred on execution of these works as of September 2018 and the funds were lying with concerned PRIs. Thus, non-utilisation of funds for developmental activities resulted in blocking of funds, besides depriving the beneficiaries of the intended benefits of the schemes.",
+      "summary": "Rs 1.11 crore for 112 works in 38 PRIs unspent (works not started)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹1.11 crore",
+        "crore": 1.11
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Audit rebuttal on p.20 ('codal formalities ... should have been completed') is part of this finding."
+    },
+    {
+      "id": "F057",
+      "page": 39,
+      "printed_page": "20",
+      "para_no": "2.3.2(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed that in 15 out of 57 test-checked PRIs, against an",
+      "text": "(a) During 2017-18, it was noticed that in 15 out of 57 test-checked PRIs, against an amount of ₹1.90 crore received for execution of 118 works (scheduled for completion within three to 12 months) during 2011-17 under various schemes, expenditure of ₹0.93 crore was incurred, and the balance amount of ₹0.97 crore (51 per cent) was lying unutilised as of January 2018 (Appendix-16(i)). This had resulted in non-achievement of intended benefits to the public.",
+      "summary": "Rs 0.97 crore lying unutilised in 15 PRIs due to incomplete works",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹0.97 crore",
+        "crore": 0.97
+      },
+      "other_amounts": [
+        "₹1.90 crore (received: total)",
+        "₹0.93 crore (spent: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F058",
+      "page": 39,
+      "printed_page": "20",
+      "para_no": "2.3.2(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed that in 44 out of 103 test-checked GPs audit noticed",
+      "text": "(b) During 2018-19, it was noticed that in 44 out of 103 test-checked GPs audit noticed that against an amount of ₹2.34 crore (Appendix-16(ii)) received for execution of 121 works such as mahila mandal, playground, public toilet, community hall, pucca path, road, ambulance road, etc. during 2007-18 under various schemes viz Vikas Mein Jan Sahyog (VMJS), Members of Parliament Local Area Development Scheme (MPLAD), Mukhya Mantri Adarsh Gram Yojana (MMAGY), Satluj Jal Vidyut Nigam limited (SJVNL), Vidhayak Keshetra Vikas Nidhi Yojna (VKVNY), etc., expenditure of ₹1.36 crore was incurred and the balance amount of ₹0.98 crore (42 per cent) was lying unutilised till the date of audit (July 2018- March 2019).",
+      "summary": "Rs 0.98 crore lying unutilised in 44 GPs due to incomplete works",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹0.98 crore",
+        "crore": 0.98
+      },
+      "other_amounts": [
+        "₹2.34 crore (received: total)",
+        "₹1.36 crore (spent: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F059",
+      "page": 40,
+      "printed_page": "21",
+      "para_no": "2.3.3(i)",
+      "location": "atir_unit",
+      "anchor": "(i) In five out of nine test-checked Panchayat Samitis, against an amount of ₹1.07 crore received",
+      "text": "(i) In five out of nine test-checked Panchayat Samitis, against an amount of ₹1.07 crore received under 13th FC during 2012-16 for 128 developmental works, an amount of ₹0.57 crore was released to the executing agencies (Gram Panchayats) and the balance amount of ₹0.50 crore (47 per cent) was still lying unutilized with the Panchayat Samitis as of December 2017 (Appendix-17).",
+      "summary": "13th FC balance Rs 0.50 crore lying unutilised with five PSs",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹0.50 crore",
+        "crore": 0.5
+      },
+      "other_amounts": [
+        "₹1.07 crore (received: total)",
+        "₹0.57 crore (released: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F060",
+      "page": 40,
+      "printed_page": "21",
+      "para_no": "2.3.3(ii)",
+      "location": "atir_unit",
+      "anchor": "(ii) In four PRIs11 ₹2.00 crore was received during 2013-16 under 13th FC for 146 development",
+      "text": "(ii) In four PRIs11 ₹2.00 crore was received during 2013-16 under 13th FC for 146 development works which had not been taken up for execution as of January 2017. The entire amount remained blocked with the PRIs as of November 2017.",
+      "summary": "13th FC Rs 2.00 crore for 146 works blocked in four PRIs (works not taken up)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹2.00 crore",
+        "crore": 2.0
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F061",
+      "page": 40,
+      "printed_page": "21",
+      "para_no": "2.3.3(iii)",
+      "location": "atir_unit",
+      "anchor": "(iii) Out of ₹1.02 crore received during 2006-17 under 13th FC by six test-checked PRIs, ₹0.71",
+      "text": "(iii) Out of ₹1.02 crore received during 2006-17 under 13th FC by six test-checked PRIs, ₹0.71 crore was further released to various executing agencies while ₹0.31 crore remained unutilized12 with these PRIs.",
+      "summary": "13th FC Rs 0.31 crore unutilised with six PRIs",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹0.31 crore",
+        "crore": 0.31
+      },
+      "other_amounts": [
+        "₹1.02 crore (received: total)",
+        "₹0.71 crore (released: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F062",
+      "page": 40,
+      "printed_page": "21",
+      "para_no": "2.3.3(iv)",
+      "location": "atir_unit",
+      "anchor": "(iv) Panchayat Samiti Chauntra (District Mandi) was sanctioned ₹0.47 crore under 13th FC during 2013-16 for",
+      "text": "(iv) Panchayat Samiti Chauntra (District Mandi) was sanctioned ₹0.47 crore under 13th FC during 2013-16 for installation of Solar lights in various Gram Panchayats. Scrutiny revealed that the office had neither purchased any solar lights nor released any amount to the Gram Panchayats. The entire amount of ₹0.47 crore remained blocked, and the beneficiaries were deprived of the intended benefits of the scheme.",
+      "summary": "PS Chauntra: 13th FC Rs 0.47 crore for solar lights entirely blocked",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹0.47 crore",
+        "crore": 0.47
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Audit rebuttal on p.22 is part of this finding."
+    },
+    {
+      "id": "F063",
+      "page": 41,
+      "printed_page": "22",
+      "para_no": "2.3.3(v)",
+      "location": "atir_unit",
+      "anchor": "(v) In six out of 57 test-checked PRIs funds amounting to ₹6.74 crore were received during",
+      "text": "(v) In six out of 57 test-checked PRIs funds amounting to ₹6.74 crore were received during 2013-17 under 13th Finance Commission. Funds amounting to ₹4.90 crore were released/utilised during above period while ₹1.84 crore remained un-utilised13 with these PRIs. The Executive Officers/ Secretaries of the PRIs concerned stated (September-October 2018) that funds could not be utilised due to shortage of labour as multiple works were running simultaneously under MGNREGS. The reply is indicative of poor planning resulting in non-utilization of the funds within the stipulated time period.",
+      "summary": "13th FC Rs 1.84 crore unutilised in six PRIs; poor planning",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹1.84 crore",
+        "crore": 1.84
+      },
+      "other_amounts": [
+        "₹6.74 crore (received: total)",
+        "₹4.90 crore (utilised: context)"
+      ],
+      "borderline": false,
+      "note": "Text includes the management reply and audit's comment on it, which sit in the same sentence run."
+    },
+    {
+      "id": "F064",
+      "page": 41,
+      "printed_page": "22",
+      "para_no": "2.3.3",
+      "location": "atir_unit",
+      "anchor": "The above instances of blockade and non-utilization of funds had resulted in non-completion of works in",
+      "text": "The above instances of blockade and non-utilization of funds had resulted in non-completion of works in time and non-achievement of intended benefits to the public at large. This shows poor implementation and poor fund management by the PRIs.",
+      "summary": "Concluding comment: poor implementation and fund management by PRIs (13th FC)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Summary conclusion of sub-paras (i)-(v); not a separate observation."
+    },
+    {
+      "id": "F065",
+      "page": 41,
+      "printed_page": "22",
+      "para_no": "2.3.4",
+      "location": "atir_unit",
+      "anchor": "Scrutiny of records in 2017-18 revealed that in three14 out of nine test-checked PSs, funds amounting",
+      "text": "Scrutiny of records in 2017-18 revealed that in three14 out of nine test-checked PSs, funds amounting to ₹14.79 lakh received under 13th Finance Commission were diverted during 2012-16 to works such as other construction works, washing of seat covers and curtains of vehicles, expenses for diesel for vehicle which were not permissible as per 13th Finance Commission guidelines.",
+      "summary": "Three PSs diverted 13th FC funds of Rs 14.79 lakh to impermissible works",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹14.79 lakh",
+        "crore": 0.1479
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F066",
+      "page": 41,
+      "printed_page": "22",
+      "para_no": "2.4.1(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed that in 28 out of 45 test-checked GPs funds amounting",
+      "text": "(a) During 2017-18, it was noticed that in 28 out of 45 test-checked GPs funds amounting to ₹4.79 crore (Appendix-18(i)) were received during 2015-17 under 14th Finance Commission. Funds amounting to ₹1.43 crore were utilised during above period whereas ₹3.36 crore remained unutilised with these GPs due to non-receipt of approved shelf of works for the year 2015-16 from the District Panchayat Officer.",
+      "summary": "14th FC Rs 3.36 crore unutilised in 28 GPs (no approved shelf of works)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹3.36 crore",
+        "crore": 3.36
+      },
+      "other_amounts": [
+        "₹4.79 crore (received: total)",
+        "₹1.43 crore (utilised: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F067",
+      "page": 42,
+      "printed_page": "23",
+      "para_no": "2.4.1(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed that in 50 out of 103 test checked GPs, ₹10.24",
+      "text": "(b) During 2018-19, it was noticed that in 50 out of 103 test checked GPs, ₹10.24 crore (Appendix-18(ii)) were received during 2015-18 under 14th FC. Funds amounting to ₹5.44 crore were utilised during above period and a sum of ₹4.80 crore (47 per cent) remained unutilized with these GPs. Thus, it is the indicative of poor planning resulting in non-utilisation of the funds within the stipulated period.",
+      "summary": "14th FC Rs 4.80 crore unutilised in 50 GPs; poor planning",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹4.80 crore",
+        "crore": 4.8
+      },
+      "other_amounts": [
+        "₹10.24 crore (received: total)",
+        "₹5.44 crore (utilised: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F068",
+      "page": 42,
+      "printed_page": "23",
+      "para_no": "2.4.2(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed in three out of 45 test checked GPs (Appendix-19(i)) that",
+      "text": "(a) During 2017-18, it was noticed in three out of 45 test checked GPs (Appendix-19(i)) that funds amounting to ₹37.93 lakh were received during 2015-17 under 14th Finance Commission for various development works which had not been taken up for execution as of March 2017. The entire amount remained blocked with the PRIs as of January 2018.",
+      "summary": "14th FC Rs 37.93 lakh blocked in three GPs (works not taken up)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹37.93 lakh",
+        "crore": 0.3793
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F069",
+      "page": 42,
+      "printed_page": "23",
+      "para_no": "2.4.2(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed in seven (GPs Khundiyan, Badehar, Langcha, Hal, Daimul, Pujarli (Beolia)",
+      "text": "(b) During 2018-19, it was noticed in seven (GPs Khundiyan, Badehar, Langcha, Hal, Daimul, Pujarli (Beolia) and Jangal) out of 103 test checked GPs that funds amounting to ₹37.12 lakh (Appendix-19(ii)) were received during 2015-18 under 14th Finance Commission for various development works but these fund had not been utilised as of March 2018. The entire amount remained blocked with the GPs till the date of audit.",
+      "summary": "14th FC Rs 37.12 lakh blocked in seven GPs",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹37.12 lakh",
+        "crore": 0.3712
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F070",
+      "page": 42,
+      "printed_page": "23",
+      "para_no": "2.5",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, audit noticed in 27 GPs (13 GPs in Mandi and 14 GPs in Kullu)",
+      "text": "During 2017-18, audit noticed in 27 GPs (13 GPs in Mandi and 14 GPs in Kullu) out of 45 test checked GPs that received funds amounting to ₹4.17 lakh during 2011-17 under National Rural Health Mission (Appendix-20). Expenditure of ₹0.18 lakh only was incurred during 2011-17 leaving balance amount of ₹3.99 lakh unutilised as of January 2018 with the concerned Gram Panchayats. 24 GPs did not utilise funds for a period of two to five years without any reasons on record, thereby hampering the intended purposes.",
+      "summary": "NRHM funds of Rs 3.99 lakh unutilised in 27 GPs for 2-5 years",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹3.99 lakh",
+        "crore": 0.0399
+      },
+      "other_amounts": [
+        "₹4.17 lakh (received: total)",
+        "₹0.18 lakh (spent: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F071",
+      "page": 43,
+      "printed_page": "24",
+      "para_no": "2.6.1",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that during the years 2012-18, 14 GPs made payment of ₹57.11 lakh (Appendix-21) to",
+      "text": "Audit noticed that during the years 2012-18, 14 GPs made payment of ₹57.11 lakh (Appendix-21) to workers under MGNREGS after a delay ranging between 15 and 518 days beyond the permissible period of a fortnight. However, no compensation was paid to the labourers for delayed payment. Thus, due to delay in payment, persons who sought employment under MGNREGS were subjected to undue hardship and were also deprived of the compensation which was legally entitled to receive.",
+      "summary": "MGNREGS wages of Rs 57.11 lakh paid 15-518 days late in 14 GPs; no compensation paid",
+      "finding_type": "non_compliance",
+      "impact_amount": {
+        "raw": "₹57.11 lakh",
+        "crore": 0.5711
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Amount is the value of delayed wages, not a loss."
+    },
+    {
+      "id": "F072",
+      "page": 43,
+      "printed_page": "24",
+      "para_no": "2.6.2",
+      "location": "atir_unit",
+      "anchor": "It was noticed in two GPs (in 2017-18) and in eight GPs (in 2018-19) that same",
+      "text": "It was noticed in two GPs (in 2017-18) and in eight GPs (in 2018-19) that same labourers were shown as having been deployed on different works and different muster rolls in the same period during 2010-17 indicating doubtful deployment and double payment of wages of ₹0.59 lakh15 and ₹1.68 lakh16 respectively under MGNREGS. Deployment of same labourers on different works in the same period is indicative of inadequate and ineffective internal control mechanism and negligence on the part of the GPs.",
+      "summary": "Same labourers on different muster rolls in same period in 10 GPs: doubtful double payment Rs 2.27 lakh",
+      "finding_type": "fraud_misappropriation",
+      "impact_amount": {
+        "raw": "₹2.27 lakh",
+        "crore": 0.0227
+      },
+      "other_amounts": [
+        "₹0.59 lakh (2 GPs, 2017-18: part of total)",
+        "₹1.68 lakh (8 GPs, 2018-19: part of total)"
+      ],
+      "borderline": false,
+      "note": "Total ₹2.27 lakh is stated in the lead line of the para; the paragraph gives ₹0.59 lakh + ₹1.68 lakh."
+    },
+    {
+      "id": "F073",
+      "page": 44,
+      "printed_page": "25",
+      "para_no": "2.6.3(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, audit noticed that in GP Basha, Block Kandaghat, District Solan ten workers were",
+      "text": "(a) During 2017-18, audit noticed that in GP Basha, Block Kandaghat, District Solan ten workers were deployed on construction of water harvesting tank during 2012-13 and expenditure of ₹0.15 lakh was incurred on their wages. Contrary to provision ibid, muster-roll issued for this work was incomplete. The name of work for which this muster-roll was issued, and attendance of workers was not found marked. In the absence of marking of attendance of workers, payment of wages to labourers cannot be admitted as genuine and the possibility of misappropriation cannot be ruled out.",
+      "summary": "GP Basha: wages Rs 0.15 lakh paid on incomplete muster roll without attendance",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹0.15 lakh",
+        "crore": 0.0015
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F074",
+      "page": 44,
+      "printed_page": "25",
+      "para_no": "2.6.3(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, audit noticed that in 15 GPs17, muster rolls were not being obtained from",
+      "text": "(b) During 2018-19, audit noticed that in 15 GPs17, muster rolls were not being obtained from the District Panchayat Officer and were printed by Gram Panchayats. Moreover, neither serial number nor date and description of work had been mentioned on these muster rolls.",
+      "summary": "15 GPs printed their own muster rolls without serial number/date/work description",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F075",
+      "page": 44,
+      "printed_page": "25",
+      "para_no": "2.6.4",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that in five GPs19 , excess wages amounting to ₹0.38 lakh were paid to",
+      "text": "Audit noticed that in five GPs19 , excess wages amounting to ₹0.38 lakh were paid to daily wage workers due to marking of their attendance on the 31st of months having 30 days only. Moreover, in case of GP Barbog, irregular payment of ₹0.03 lakh was made without entering the name of workers in the muster roll whereas in case of GP Keylong, ₹0.01 lakh was paid without obtaining signature of workers in the muster roll.",
+      "summary": "Excess wages Rs 0.38 lakh paid in five GPs (attendance on 31st of 30-day months); other irregular payments",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹0.38 lakh",
+        "crore": 0.0038
+      },
+      "other_amounts": [
+        "₹0.03 lakh (GP Barbog, no names on muster roll: additional)",
+        "₹0.01 lakh (GP Keylong, no signatures: additional)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F076",
+      "page": 44,
+      "printed_page": "25",
+      "para_no": "2.6.5(i)",
+      "location": "atir_unit",
+      "anchor": "(i) Audit noticed in 2017-18 that out of 45 test checked GPs, in nine GPs20 wages",
+      "text": "(i) Audit noticed in 2017-18 that out of 45 test checked GPs, in nine GPs20 wages amounting to ₹5.06 lakh were paid to 15 workers during 2011-15 without taking acknowledgement receipt (signature) of the workers on the muster rolls. The payment of ₹5.06 lakh was therefore doubtful, and the possibility of misappropriation cannot be ruled out.",
+      "summary": "Wages Rs 5.06 lakh paid in nine GPs without workers' acknowledgement: doubtful",
+      "finding_type": "fraud_misappropriation",
+      "impact_amount": {
+        "raw": "₹5.06 lakh",
+        "crore": 0.0506
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F077",
+      "page": 45,
+      "printed_page": "26",
+      "para_no": "2.6.5(ii)",
+      "location": "atir_unit",
+      "anchor": "(ii) Out of 45 test checked GPs audited during 2017-18, in two21 GPs payment amounting to",
+      "text": "(ii) Out of 45 test checked GPs audited during 2017-18, in two21 GPs payment amounting to ₹0.50 lakh was made to elected members of the Gram Panchayats as honorarium during 2011-16 without taking acknowledgement receipt (signature).",
+      "summary": "Honorarium Rs 0.50 lakh paid to elected members in two GPs without acknowledgement",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹0.50 lakh",
+        "crore": 0.005
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F078",
+      "page": 45,
+      "printed_page": "26",
+      "para_no": "2.7",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, scrutiny of records showed that out of 45 GPs, in four GPs22 expenditure of",
+      "text": "During 2017-18, scrutiny of records showed that out of 45 GPs, in four GPs22 expenditure of ₹2.89 lakh was incurred during 2012-15 on works under Mahatma Gandhi National Rural Employment Guarantee Scheme (MGNREGS) and for making various payments such as payment of electricity bills, renovation of Panchayat Ghar, repair of computer, payment of solar lights, etc., whereas bills and vouchers were not produced to Audit. In the absence of vouchers, the expenditure could not be verified, and the possibility of misappropriation cannot be ruled out.",
+      "summary": "Expenditure Rs 2.89 lakh in four GPs without bills/vouchers: doubtful",
+      "finding_type": "fraud_misappropriation",
+      "impact_amount": {
+        "raw": "₹2.89 lakh",
+        "crore": 0.0289
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F079",
+      "page": 45,
+      "printed_page": "26",
+      "para_no": "2.8",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that temporary advances of ₹9.46 lakh23 were sanctioned between the period from 1998-99 to",
+      "text": "Audit noticed that temporary advances of ₹9.46 lakh23 were sanctioned between the period from 1998-99 to 2016-17 for different purpose to Pradhans of seven GPs. Out of these advances, amount of ₹9.24 lakh was pending for adjustment for a period ranging from two to 20 years. Thus, the possibility of misuse of these advances cannot be ruled out.",
+      "summary": "Temporary advances of Rs 9.24 lakh to Pradhans of seven GPs unadjusted for 2-20 years",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹9.24 lakh",
+        "crore": 0.0924
+      },
+      "other_amounts": [
+        "₹9.46 lakh (advances sanctioned: total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F080",
+      "page": 46,
+      "printed_page": "27",
+      "para_no": "2.9",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that 30 Gram Panchayats24 did not prepare budget estimates for the period ranging from",
+      "text": "Audit noticed that 30 Gram Panchayats24 did not prepare budget estimates for the period ranging from 2013-14 to 2017-18 whereas budget estimates for the year 2017-18 was not prepared in GP Barwala.",
+      "summary": "30 GPs did not prepare budget estimates (2013-14 to 2017-18)",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Audit rebuttal ('lack of financial planning') is part of this finding."
+    },
+    {
+      "id": "F081",
+      "page": 46,
+      "printed_page": "27",
+      "para_no": "2.10",
+      "location": "atir_unit",
+      "anchor": "During 2017-18 and 2018-19, it was observed that in 122 out of 170 test checked PRIs,",
+      "text": "During 2017-18 and 2018-19, it was observed that in 122 out of 170 test checked PRIs, different materials for construction works, furniture, office equipment, etc. costing ₹8.74 crore (Appendix-22) was purchased during the period from 2013-14 to 2017-18 without inviting quotations/tenders. As such the purchases were made without observing the prescribed procedures, the possibility of payment of higher rates could not be ruled out.",
+      "summary": "122 PRIs bought material of Rs 8.74 crore without quotations/tenders",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹8.74 crore",
+        "crore": 8.74
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F082",
+      "page": 47,
+      "printed_page": "28",
+      "para_no": "2.11",
+      "location": "atir_unit",
+      "anchor": "It was observed that in 35 GPs, ₹72.39 lakh (Appendix-23) were paid in irregular manner such",
+      "text": "It was observed that in 35 GPs, ₹72.39 lakh (Appendix-23) were paid in irregular manner such as payment to Panchayat members for work done as per muster roll and honorarium for attendance in Gram Sabha meeting on the same day, issue of cheques not in name of workers/ contractors, payment to contractors without revenue tickets on bills above ₹5000/-, non- obtaining receipts for payment to workers, non- verification of vouchers, etc. Thus, this showed negligence on the part of GPs and resulted in irregular payment to that extent.",
+      "summary": "Irregular payments of Rs 72.39 lakh in 35 GPs (double payments, cheques not in workers' names etc.)",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹72.39 lakh",
+        "crore": 0.7239
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F083",
+      "page": 47,
+      "printed_page": "28",
+      "para_no": "2.12",
+      "location": "atir_unit",
+      "anchor": "Scrutiny of records during 2017-18 revealed that bills amounting to ₹5.55 lakh produced to audit by",
+      "text": "Scrutiny of records during 2017-18 revealed that bills amounting to ₹5.55 lakh produced to audit by six GPs26 on account of material purchased were irregular in nature. The serial number of bills and dates mentioned therein were not in coherence and vouchers were not stamped ‘paid’, signed and dated by the Secretary. Separate acknowledgement had not been taken from the persons receiving payment and was not found attached to the voucher concerned. Thus, payment of ₹5.55 lakh was irregular, and reliability of these transactions could not be authenticated by audit.",
+      "summary": "Irregular bills of Rs 5.55 lakh in six GPs (unstamped vouchers, no acknowledgements)",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹5.55 lakh",
+        "crore": 0.0555
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F084",
+      "page": 50,
+      "printed_page": "29",
+      "para_no": "3.1",
+      "location": "chapter",
+      "anchor": "In Himachal Pradesh, 17 functions stand transferred (August 1994) to ULBs (except fire services); however, the",
+      "text": "In Himachal Pradesh, 17 functions stand transferred (August 1994) to ULBs (except fire services); however, the corresponding funds and functionaries were yet to be made available to the ULBs.",
+      "summary": "17 functions transferred to ULBs without corresponding funds and functionaries",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Background paragraph in profile chapter; adverse but not framed as an audit observation."
+    },
+    {
+      "id": "F085",
+      "page": 51,
+      "printed_page": "30",
+      "para_no": "3.3.2",
+      "location": "chapter",
+      "anchor": "In the Directorate of Urban Development, posts of one Project Officer and two Statistical Assistants have",
+      "text": "In the Directorate of Urban Development, posts of one Project Officer and two Statistical Assistants have been sanctioned in the project section to oversee implementation of various schemes by the ULBs. During 2017-18, posts of Statistical Assistants were vacant.",
+      "summary": "Statistical Assistant posts in the UDD project section vacant in 2017-18 (ULB vacancies 32-33 per cent)",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": true,
+      "note": "Vacancy statement without audit comment; vacancy percentages otherwise only in a table."
+    },
+    {
+      "id": "F086",
+      "page": 53,
+      "printed_page": "32",
+      "para_no": "3.4.2",
+      "location": "chapter",
+      "anchor": "It may be noted that all the funds released by the Urban Development Department to the",
+      "text": "It may be noted that all the funds released by the Urban Development Department to the ULBs have been shown as expenditure, instead of actual expenditure at ground level. The exact figures of expenditure by the ULBs were not available with the Urban Development Department. Further, it was also noticed that the Department had not prescribed any periodic returns to review/ control expenditure by ULBs, which resulted in weak control mechanism and irregularities in functioning of ULBs as mentioned in Chapter-4.",
+      "summary": "ULB fund releases booked as expenditure; actual expenditure unknown; no periodic returns, weak control",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F087",
+      "page": 54,
+      "printed_page": "33",
+      "para_no": "3.6",
+      "location": "chapter",
+      "anchor": "There is no provision for a separate and independent internal audit agency under the control of",
+      "text": "There is no provision for a separate and independent internal audit agency under the control of the Director, Urban Development to conduct internal audit of ULBs with a view to ensure internal control on income and expenditure.",
+      "summary": "No independent internal audit agency for ULBs",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F088",
+      "page": 55,
+      "printed_page": "34",
+      "para_no": "3.7",
+      "location": "chapter",
+      "anchor": "It may be noticed that similar recommendations for improvement had been made during previous years, but",
+      "text": "It may be noticed that similar recommendations for improvement had been made during previous years, but the shortcomings persisted indicating that HP SAD had not taken adequate steps to address the same.",
+      "summary": "HP SAD did not act on earlier TGS recommendations for ULB audits; shortcomings persisted",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F089",
+      "page": 56,
+      "printed_page": "35",
+      "para_no": "3.9",
+      "location": "chapter",
+      "anchor": "Correspondence is being undertaken to settle IRs/ Paras, despite this the number of paras pending for",
+      "text": "Correspondence is being undertaken to settle IRs/ Paras, despite this the number of paras pending for settlement has increased which is indicative of lack of required attention and effective action which undermines accountability.",
+      "summary": "215 IRs / 1,576 paras of ULBs outstanding; pendency increasing",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F090",
+      "page": 60,
+      "printed_page": "37",
+      "para_no": "4.1.1",
+      "location": "atir_unit",
+      "anchor": "During test check of records in 2018-19, it was noticed in four1 ULBs (Municipal Corporation Shimla,",
+      "text": "During test check of records in 2018-19, it was noticed in four1 ULBs (Municipal Corporation Shimla, Municipal Councils Sujanpur and Nerchowk, and NP Bhuntar) that annual accounts had not been prepared whereas these accounts were required to be prepared and approved by the elected house of the Municipality.",
+      "summary": "Annual accounts not prepared in four ULBs",
+      "finding_type": "non_compliance",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F091",
+      "page": 61,
+      "printed_page": "38",
+      "para_no": "4.2(i)",
+      "location": "atir_unit",
+      "anchor": "It is evident from Table-15(i) that there were persistent savings ranging between 32 and 42 per",
+      "text": "It is evident from Table-15(i) that there were persistent savings ranging between 32 and 42 per cent during 2014-17 indicating that the budget estimates were not realistic.",
+      "summary": "Persistent savings of 32-42 per cent in 12 ULBs (2014-17): unrealistic budgets",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Narrative below Table-15(i); savings amounts are only in the table."
+    },
+    {
+      "id": "F092",
+      "page": 61,
+      "printed_page": "38",
+      "para_no": "4.2(ii)",
+      "location": "atir_unit",
+      "anchor": "It is evident from Table-15(ii) that there were persistent savings ranging between 51 and 62 per",
+      "text": "It is evident from Table-15(ii) that there were persistent savings ranging between 51 and 62 per cent during 2015-18 indicating that the budget estimates were not realistic. This resulted in blockade of funds as this amount could have been used for other developmental works.",
+      "summary": "Persistent savings of 51-62 per cent in 14 ULBs (2015-18): unrealistic budgets, blocked funds",
+      "finding_type": "system_deficiency",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Narrative below Table-15(ii); amounts only in the table."
+    },
+    {
+      "id": "F093",
+      "page": 62,
+      "printed_page": "39",
+      "para_no": "4.3",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed that four ULBs (MCorp. Dharamshala, NPs Banjar, Bhuntar and Karsog) had purchased",
+      "text": "During 2018-19, audit noticed that four ULBs (MCorp. Dharamshala, NPs Banjar, Bhuntar and Karsog) had purchased items/materials like cement, furniture, computer etc. worth ₹9.79 lakh2 during 2014-15 to 2017-18 without inviting quotations. This was in contravention to the rules ibid. This might have led to uneconomical purchases by the ULBs.",
+      "summary": "Four ULBs bought materials of Rs 9.79 lakh without quotations",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹9.79 lakh",
+        "crore": 0.0979
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F094",
+      "page": 62,
+      "printed_page": "39",
+      "para_no": "4.4(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed in MC Nalagarh that the following registers had not been",
+      "text": "(a) During 2017-18, it was noticed in MC Nalagarh that the following registers had not been maintained: 1) Immovable properties (including maps and inventory of immovable property vested on in possession of MC). 2) Register of securities. 3) Register of earnest money. 4) Classified abstract. 5) Register of medical claims. 6) Register of maintenance of vehicle repairs. 7) Register of tender forms It was further noticed that in NPs Sunni and Arki, Pay Bill Register for the establishment was not being maintained in violation of Financial Rules. Non-maintenance of these registers in the above mentioned ULBs indicated lack of control mechanism.",
+      "summary": "MC Nalagarh did not maintain seven registers; NPs Sunni and Arki no pay bill register",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Includes the numbered list of registers and the 'It was further noticed' sentence on NPs Sunni and Arki."
+    },
+    {
+      "id": "F095",
+      "page": 62,
+      "printed_page": "39",
+      "para_no": "4.4(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed in NP Karsog that the following registers had not been",
+      "text": "(b) During 2018-19, it was noticed in NP Karsog that the following registers had not been maintained: 1) Stock & issue register 2) House tax (Demand & Collection) register 3) MAS register related to works executed 4) Shop rent (Demand & Collection) register 5) Mobile tower fee register 6) Electricity cess and liquor fee register This is a non-compliance of the provision of the Act ibid and can lead to possibility of misappropriation of Government resources. Non-maintenance of these registers also indicated lack of control mechanism.",
+      "summary": "NP Karsog did not maintain six registers (stock, house tax, shop rent etc.)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F096",
+      "page": 63,
+      "printed_page": "40",
+      "para_no": "4.5.1(a)",
+      "location": "atir_unit",
+      "anchor": "Audit noticed that in eight out of 12 test-checked ULBs in 2017-18, recovery of house tax",
+      "text": "Audit noticed that in eight out of 12 test-checked ULBs in 2017-18, recovery of house tax of ₹4.47 crore was outstanding as on April 2016 whereas in nine out of 14 test-checked ULBs in 2018-19, recovery of house tax of ₹4.45 crore was outstanding as on 1st April 2017. Demand of ₹11.94 crore (₹6.17 crore in 2016-17 and ₹5.77 crore in 2017-18) of house tax was raised during the years 2016-17 and 2017-18. Total demand was ₹20.86 crore (₹10.64 crore up to March 2017 and ₹10.22 crore up to March 2018) against which collection of ₹8.98 crore (₹3.06 crore in 2016-17 and ₹5.92 crore in 2017-18) was made. Rebate of ₹0.08 crore was also allowed in 2018-19 in MC Kullu and NP Nadaun. Thus, total revenue of ₹11.80 crore (₹7.58 crore as of March 2017 and ₹4.22 crore as of March 2018) on account of house tax remained outstanding in these ULBs. This indicated that effective action had not been taken as per rule ibid to recover the tax outstanding for long periods. This also deprived the ULBs concerned of revenue amounting to ₹11.80 crore (Appendix-25) which could have been utilised for other developmental works in ULBs.",
+      "summary": "House tax of Rs 11.80 crore outstanding in 17 ULBs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹11.80 crore",
+        "crore": 11.8
+      },
+      "other_amounts": [
+        "₹4.47 crore, ₹4.45 crore (opening arrears: part of computation)",
+        "₹11.94 crore (demand raised: context)",
+        "₹20.86 crore (total demand: context)",
+        "₹8.98 crore (collected: context)",
+        "₹0.08 crore (rebate allowed: context)",
+        "₹7.58 crore / ₹4.22 crore (split of outstanding)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F097",
+      "page": 63,
+      "printed_page": "40",
+      "para_no": "4.5.1(b)(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, audit noticed that MCs Solan and Nalagarh were providing various facilities to households",
+      "text": "(a) During 2017-18, audit noticed that MCs Solan and Nalagarh were providing various facilities to households falling within the MC area such as maintenance of roads, paths, streetlights, cleanliness, collection of garbage, etc. but house tax as per the above provision had not been imposed by the MCs. In the case of Municipal Council Solan, scrutiny further revealed that correspondence made with Director, Urban Development regarding imposition of house tax was discussed in various meetings of the elected House of MC and proposal was rejected by the House with the plea that sanitary/ conservancy tax was already being collected. However, all resolutions passed by the House were rejected by the Director, Urban Development who directed the MC to impose the house tax. In the case of Municipal Council Nalagarh, it was noticed that the elected house passed the resolution to impose house tax excluding domestic buildings. Despite this, the MC had not imposed house tax on any kind of building (domestic/ commercial). Scrutiny further revealed that MC had not conducted any survey regarding number of households (domestic/ commercial) falling under the jurisdiction of the MC in order to assess the amount of realisable revenue.",
+      "summary": "MCs Solan and Nalagarh did not impose house tax; no household survey in Nalagarh",
+      "finding_type": "loss_of_revenue",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": "Includes the two follow-on paragraphs on p.41 describing MC Solan and MC Nalagarh."
+    },
+    {
+      "id": "F098",
+      "page": 64,
+      "printed_page": "41",
+      "para_no": "4.5.1(b)(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, audit noticed that in NPs Jawali and Karsog who were providing various facilities",
+      "text": "(b) During 2018-19, audit noticed that in NPs Jawali and Karsog who were providing various facilities to the households falling within its area, no house tax had been imposed. There were 3,918 houses in these NPs (NP Karsog: 952 houses and NP Jawali: 2,966 houses) on which House Tax had not been imposed thereby resulting in substantial loss of revenue to NPs.",
+      "summary": "NPs Jawali and Karsog imposed no house tax on 3,918 houses",
+      "finding_type": "loss_of_revenue",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F099",
+      "page": 64,
+      "printed_page": "41",
+      "para_no": "4.5.1(c)",
+      "location": "atir_unit",
+      "anchor": "In three ULBs (MCs Ghumarwin, Hamirpur and Manali) audited during 2018-19, audit noticed that an amount",
+      "text": "In three ULBs (MCs Ghumarwin, Hamirpur and Manali) audited during 2018-19, audit noticed that an amount of ₹8.03 lakh3 was taken less in the opening balances during the period from 2014-15 to 2017-18 in the house tax registers. MCs had taken opening balance ₹13.41 lakh instead of ₹21.44 lakh in these test checked cases. This resulted in suspected misappropriation of MC funds.",
+      "summary": "Opening balances in house tax registers understated by Rs 8.03 lakh in three MCs: suspected misappropriation",
+      "finding_type": "fraud_misappropriation",
+      "impact_amount": {
+        "raw": "₹8.03 lakh",
+        "crore": 0.0803
+      },
+      "other_amounts": [
+        "₹13.41 lakh (opening balance taken: context)",
+        "₹21.44 lakh (correct opening balance: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F100",
+      "page": 64,
+      "printed_page": "41",
+      "para_no": "4.5.2",
+      "location": "atir_unit",
+      "anchor": "It was noticed that rental charges amounting to ₹7.60 crore (Appendix-26) were pending for recovery as",
+      "text": "It was noticed that rental charges amounting to ₹7.60 crore (Appendix-26) were pending for recovery as of April 2016 in 10 out of 12 test-checked ULBs during 2017-18 whereas rental charges amounting to ₹6.72 crore (Appendix-26) were pending for recovery as of March 2017 in 11 out of 14 test-checked ULBs during 2018-19 against tenants and lessees of shops and stalls owned and rented out by these ULBs. Further, demand of ₹9.56 crore (₹4.66 crore during 2016-17 and ₹4.90 crore during 2017-18) was raised. Against the total demand of ₹23.88 crore (₹12.26 crore up to March 2017and ₹11.62 crore up to March 2018), ₹9.13 crore (₹4.27 crore in 2016-17 and ₹4.86 crore in 2017-18) were recovered leaving recovery of ₹14.75 crore (₹7.99 crore as of March 2017 and ₹6.76 crore as of March 2018) pending in these ULBs. This adversely affected the income of ULBs.",
+      "summary": "Rent of Rs 14.75 crore pending recovery in 21 ULBs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹14.75 crore",
+        "crore": 14.75
+      },
+      "other_amounts": [
+        "₹7.60 crore, ₹6.72 crore (opening arrears: part of computation)",
+        "₹9.56 crore (demand: context)",
+        "₹23.88 crore (total demand: context)",
+        "₹9.13 crore (recovered: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F101",
+      "page": 65,
+      "printed_page": "42",
+      "para_no": "4.5.3",
+      "location": "atir_unit",
+      "anchor": "Scrutiny of records revealed that in 18 out of 26 test-checked ULBs during 2017-18 and 2018-19",
+      "text": "Scrutiny of records revealed that in 18 out of 26 test-checked ULBs during 2017-18 and 2018-19 (Appendix-27), mobile towers were installed during 2004-17 but the ULBs concerned had not recovered installation and renewal fees of ₹56.69 lakh (₹25.21 lakh as of March 2017 and ₹31.48 lakh as of March 2018). This deprived the ULBs of their due share of revenue.",
+      "summary": "Mobile tower fees of Rs 56.69 lakh not recovered in 18 ULBs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹56.69 lakh",
+        "crore": 0.5669
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F102",
+      "page": 65,
+      "printed_page": "42",
+      "para_no": "4.5.4(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2018-19, it was noticed that in three ULBs (MCorp. Shimla, MC Sujanpur and NP",
+      "text": "(a) During 2018-19, it was noticed that in three ULBs (MCorp. Shimla, MC Sujanpur and NP Bhuntar), an amount of ₹41.35 lakh4 was outstanding on account of rehri/tehbazari fee from the allottees of 343 sites/ khokhas. No specific effort was made by the ULBs to recover the outstanding amount which adversely affected the revenue of ULBs.",
+      "summary": "Tehbazari fee of Rs 41.35 lakh outstanding in three ULBs",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹41.35 lakh",
+        "crore": 0.4135
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F103",
+      "page": 66,
+      "printed_page": "43",
+      "para_no": "4.5.4(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed that in NP Karsog, no resolution was passed by the",
+      "text": "(b) During 2018-19, it was noticed that in NP Karsog, no resolution was passed by the house of NP for identification of street vendors and collection of rehri/ tehbazari fees for the site allotted.",
+      "summary": "NP Karsog passed no resolution to identify street vendors or collect tehbazari fees",
+      "finding_type": "loss_of_revenue",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F104",
+      "page": 66,
+      "printed_page": "43",
+      "para_no": "4.5.4(c)",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, it was noticed in MCorp. Shimla that show tax of ₹11.94 lakh (including interest",
+      "text": "During 2018-19, it was noticed in MCorp. Shimla that show tax of ₹11.94 lakh (including interest of ₹6.41 lakh) was outstanding from the owners of two cinema halls (Ritz and Shahi) running in MC jurisdiction for the period of 2012-18.",
+      "summary": "Show tax of Rs 11.94 lakh (incl. interest) outstanding from two cinema halls, MCorp. Shimla",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹11.94 lakh",
+        "crore": 0.1194
+      },
+      "other_amounts": [
+        "₹6.41 lakh (interest: part of total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F105",
+      "page": 66,
+      "printed_page": "43",
+      "para_no": "4.5.4(d)",
+      "location": "atir_unit",
+      "anchor": "(d) During 2018-19, it was noticed in MC Dehra that trade tax amounting to ₹1.85 lakh",
+      "text": "(d) During 2018-19, it was noticed in MC Dehra that trade tax amounting to ₹1.85 lakh was pending for recovery as of March 2015. Further, demand of ₹0.76 lakh was raised against traders during 2015-18. Out of total demand of ₹2.61 lakh, ₹0.41 lakh were recovered leaving trade tax of ₹2.20 lakh (84.29 per cent of total demand) pending as of March 2018.",
+      "summary": "Trade tax of Rs 2.20 lakh pending in MC Dehra",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹2.20 lakh",
+        "crore": 0.022
+      },
+      "other_amounts": [
+        "₹1.85 lakh (opening arrears)",
+        "₹0.76 lakh (demand)",
+        "₹2.61 lakh (total demand)",
+        "₹0.41 lakh (recovered)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F106",
+      "page": 66,
+      "printed_page": "43",
+      "para_no": "4.5.4(f)",
+      "location": "atir_unit",
+      "anchor": "(f) During 2018-19, it was noticed in Municipal Council, Kullu that eight women were living in",
+      "text": "(f) During 2018-19, it was noticed in Municipal Council, Kullu that eight women were living in working women hostel on monthly rent basis (w.e.f. 1992/2003 till date of audit) which was under the jurisdiction of MC. But the hostel rent was neither paid by occupants nor demanded by the MC. Against the total demand on account of rent for hostel of ₹0.43 lakh (including opening balance of ₹0.32 lakh as of March 2017), ₹0.08 lakh were recovered during 2017-18 leaving rent amount of ₹0.36 lakh pending from occupants as of March, 2018.",
+      "summary": "Working women hostel rent of Rs 0.36 lakh neither paid nor demanded, MC Kullu",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹0.36 lakh",
+        "crore": 0.0036
+      },
+      "other_amounts": [
+        "₹0.43 lakh (total demand)",
+        "₹0.32 lakh (opening balance)",
+        "₹0.08 lakh (recovered)"
+      ],
+      "borderline": false,
+      "note": "Report numbers this sub-para (f); there is no (e)."
+    },
+    {
+      "id": "F107",
+      "page": 67,
+      "printed_page": "44",
+      "para_no": "4.5.5",
+      "location": "atir_unit",
+      "anchor": "Scrutiny of records during 2017-18, it was noticed that Municipal Corporation, Shimla had leased out shops/stalls",
+      "text": "Scrutiny of records during 2017-18, it was noticed that Municipal Corporation, Shimla had leased out shops/stalls to 153 parties on rent basis. It was noticed that lease money amounting to ₹0.53 crore was pending for recovery against these 153 shops and stalls as of April 2016. Further, demand of ₹1.63 crore was raised during 2016-17. Against the total demand of ₹2.16 crore, ₹0.42 crore was recovered leaving recovery of ₹1.74 crore pending as of March 2017. Lack of action in recovering the lease money had resulted in loss of revenue.",
+      "summary": "MCorp. Shimla lease money of Rs 1.74 crore pending recovery",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹1.74 crore",
+        "crore": 1.74
+      },
+      "other_amounts": [
+        "₹0.53 crore (arrears)",
+        "₹1.63 crore (demand)",
+        "₹2.16 crore (total demand)",
+        "₹0.42 crore (recovered)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F108",
+      "page": 67,
+      "printed_page": "44",
+      "para_no": "4.5.6",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, it was noticed that in two Municipal Councils, Hamirpur and Sujanpur had leased out",
+      "text": "During 2018-19, it was noticed that in two Municipal Councils, Hamirpur and Sujanpur had leased out 24 shops for five or ten years with the conditions that the premises would be given for a period of five years at first time and after expiry of the period it would be extended by enhancing rent of 5% or 10% of the amount being charged at the time of signing the lease deeds. It was noticed that the validity of lease deeds has elapsed for the period ranging between two months and 108 months. Neither the period of lease deed had been extended nor was the rate of shops enhanced by the MCs. This resulted in a loss of revenue to MCs amounting to ₹5.35 lakh5.",
+      "summary": "Lease deeds of 24 shops not renewed or rent enhanced: loss Rs 5.35 lakh",
+      "finding_type": "loss_of_revenue",
+      "impact_amount": {
+        "raw": "₹5.35 lakh",
+        "crore": 0.0535
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F109",
+      "page": 68,
+      "printed_page": "45",
+      "para_no": "4.5.7",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, it was noticed in two Municipal Councils Kullu and Ner Chowk that seven offices6",
+      "text": "During 2018-19, it was noticed in two Municipal Councils Kullu and Ner Chowk that seven offices6 were running in the buildings of the MCs since 2004 and 2017 respectively. MCs had not prepared any rent agreement for running these offices. It was further noticed that MC Kullu had fixed rent at ₹7,500/- per month and 10% increase after every five years. Accordingly, a rent of ₹13.81 lakh (including ₹10.54 lakh as opening balance in April 2015) had not been paid by the office of District Election Officer as of March 2019. Whereas MC, Ner Chowk had neither fixed any rent for the space provided to different offices nor these offices were paying any amount of rent to MC as of February 2019. This resulted in a loss of revenue to MCs to that extent.",
+      "summary": "Rent of Rs 13.81 lakh not realised from government offices in MC buildings; no rent agreements",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹13.81 lakh",
+        "crore": 0.1381
+      },
+      "other_amounts": [
+        "₹10.54 lakh (opening balance: part of total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F110",
+      "page": 68,
+      "printed_page": "45",
+      "para_no": "4.5.8(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed in Municipal Council (MC) Nalagarh that the MC had not",
+      "text": "(a) During 2017-18, it was noticed in Municipal Council (MC) Nalagarh that the MC had not recovered/ collected electricity cess amounting to ₹11.19 lakh from HPSEB for the last four years i.e., 2013-17 as per the above provision.",
+      "summary": "MC Nalagarh did not collect electricity cess of Rs 11.19 lakh from HPSEB",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹11.19 lakh",
+        "crore": 0.1119
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F111",
+      "page": 68,
+      "printed_page": "45",
+      "para_no": "4.5.8(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed in four ULBs7 that the electricity cess had not been",
+      "text": "(b) During 2018-19, it was noticed in four ULBs7 that the electricity cess had not been recovered/collected by these ULBs from the HPSEB as per the above provision. In the cases of NPs, the cess was pending from its inception whereas dues were pending for year 2017-18 in MC, Ghumarwin. Thus, due to non-recovery of electricity tax, ULBs suffered a loss of revenue to that extent.",
+      "summary": "Four ULBs did not collect electricity cess from HPSEB",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F112",
+      "page": 69,
+      "printed_page": "46",
+      "para_no": "4.5.9",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, test-check of records of Municipal Council, Solan revealed that MC had raised bills for",
+      "text": "During 2017-18, test-check of records of Municipal Council, Solan revealed that MC had raised bills for water charges amounting to ₹63.67 lakh for the period 2015-17 but collection of the charges remained pending as of January 2018. Municipal Council, Solan had not initiated any action to recover the water charges in the manner prescribed ibid. Thus, MC Solan had not taken any steps for recovery of water charges.",
+      "summary": "MC Solan did not collect water charges of Rs 63.67 lakh",
+      "finding_type": "non_realization_of_dues",
+      "impact_amount": {
+        "raw": "₹63.67 lakh",
+        "crore": 0.6367
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F113",
+      "page": 69,
+      "printed_page": "46",
+      "para_no": "4.5.10",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, scrutiny of cash book and receipt books of Municipal Council Nalagarh revealed that the",
+      "text": "During 2017-18, scrutiny of cash book and receipt books of Municipal Council Nalagarh revealed that the actual amount as per receipt books had not been entered on the receipt side of the cash book. For the period 2014-16, the entries in the cash book were made for lesser amount (₹14,079) than the actual receipts (₹18,351) resulting in less deposit of amount (₹4,272) in the bank account. It was further noticed that the totals recorded on the receipt side of the cash book was incorrect (pages 7, 32, 35, 36, 39, 47, 59, 77, 110, 170, 179, 189, 190, 196) resulting in less deposit of ₹8,727/- in the bank account. On the payment side of the cash book for the period 2015-16, more amount (₹17.57 lakh) had been entered whereas actual amount (₹16.11 lakh) was less as per vouchers, resulting in excess withdrawal (₹1.46 lakh) from bank. This shows weak control of the MC over financial transactions.",
+      "summary": "MC Nalagarh cash book short-entries and excess withdrawal: suspected misappropriation Rs 1.59 lakh",
+      "finding_type": "fraud_misappropriation",
+      "impact_amount": {
+        "raw": "₹1.59 lakh",
+        "crore": 0.0159
+      },
+      "other_amounts": [
+        "₹4,272 (less deposit: part)",
+        "₹8,727 (less deposit: part)",
+        "₹1.46 lakh (excess withdrawal: part)",
+        "₹14,079 / ₹18,351 / ₹17.57 lakh / ₹16.11 lakh (computation)"
+      ],
+      "borderline": false,
+      "note": "Two paragraphs (receipt side, payment side) as one item; total ₹1.59 lakh is from the lead line and the rebuttal."
+    },
+    {
+      "id": "F114",
+      "page": 70,
+      "printed_page": "47",
+      "para_no": "4.6.1",
+      "location": "atir_unit",
+      "anchor": "Thus, non-execution of these projects due to non-approval of DPR/ estimates not only resulted in blockade",
+      "text": "Thus, non-execution of these projects due to non-approval of DPR/ estimates not only resulted in blockade of funds of ₹8.97 crore (₹8.72 crore with MC + ₹0.25 crore returned after project cancellation) but also deprived the beneficiaries from the intended benefits of the scheme.",
+      "summary": "AMRUT funds of Rs 8.97 crore blocked in MC Kullu (projects not executed)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹8.97 crore",
+        "crore": 8.97
+      },
+      "other_amounts": [
+        "₹12.97 crore, ₹0.25 crore (received: context, p.46)"
+      ],
+      "borderline": false,
+      "note": "Finding statement follows the project table on p.47; the preceding paragraph on p.46 (page 69) only describes receipts."
+    },
+    {
+      "id": "F115",
+      "page": 70,
+      "printed_page": "47",
+      "para_no": "4.6.2",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, scrutiny of records revealed that Municipal Corporation, Dharamshala and Municipal Council, Kullu had targeted",
+      "text": "During 2018-19, scrutiny of records revealed that Municipal Corporation, Dharamshala and Municipal Council, Kullu had targeted 986 beneficiaries8 to be covered during 2015-22 and a grant of ₹8.29 crore under PMAY was received during 2016-17 to 2017-18. Out of these funds, only ₹5.11 crore had been disbursed to 420 beneficiaries out of whom 141 beneficiaries had completed their houses and got full benefits of the scheme. 279 beneficiaries have partially completed the construction work to plinth, lintel and roof level. Rest of 566 beneficiaries had not started the construction work due to having pucca house, having not enough money to start even foundation work, land dispute etc. Also, as per instruction of Director (UDD), an amount of ₹70.00 lakh had been refunded to the department by MCorp. Dharamshala. Hence, remaining ₹2.67 crore9 (including interest) was lying undisbursed till the date of audit resulting into blocking of funds with ULBs and deprived the beneficiaries from intended benefits of the scheme. This also shows that the selection of beneficiaries was not done properly by these ULBs as some beneficiaries were already having pucca houses and there is a possibility that eligible beneficiaries being left out.",
+      "summary": "PMAY Rs 2.67 crore lying undisbursed in two ULBs; improper beneficiary selection",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹2.67 crore",
+        "crore": 2.67
+      },
+      "other_amounts": [
+        "₹8.29 crore (grant received: total)",
+        "₹5.11 crore (disbursed: context)",
+        "₹70.00 lakh (refunded: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F116",
+      "page": 71,
+      "printed_page": "48",
+      "para_no": "4.6.3",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed that Director, Urban Development Department had released ₹1.00 crore under NULM to",
+      "text": "During 2018-19, audit noticed that Director, Urban Development Department had released ₹1.00 crore under NULM to Municipal Corporation, Dharamshala for development of vendors' market in August 2016. MC had held these funds in the bank account for a period of more than six months and thereafter the same was released to the Superintendent Engineer, H.P. Housing and Urban Development Authority (HIMUDA), Rakkar, Dharamshala in February 2017 for the development of market for street vendors and construction of prefabricated market. HIMUDA had submitted the preliminary estimate amounting to ₹4.07 crore to MC with the request that necessary administrative approval & expenditure sanction may be arranged, and 50 per cent of total estimated cost may be deposited with HIMUDA to start the work. MC had not accorded administrative approval & expenditure sanction from the competent authority and requested HIMUDA to return the amount in October 2018 by stating the reason of non-availability of land. This not only resulted in blockade of fund of ₹1.00 crore with HIMUDA for 21 months from the release of fund till the date of audit (November 2018) but also deprived the public from the intended benefits of the scheme. This showed improper planning on the part of MCorp. Dharamshala.",
+      "summary": "NULM Rs 1.00 crore blocked with HIMUDA for 21 months (vendor market not built)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹1.00 crore",
+        "crore": 1.0
+      },
+      "other_amounts": [
+        "₹4.07 crore (HIMUDA estimate: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F117",
+      "page": 72,
+      "printed_page": "49",
+      "para_no": "4.6.4(a)",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, it was noticed that Director, Urban Development, Shimla had released grants amounting to ₹35.09",
+      "text": "During 2018-19, it was noticed that Director, Urban Development, Shimla had released grants amounting to ₹35.09 lakh under 13th Finance Commission during the period from 2014-15 to 2015-16 to MC Ghumarwin. Out of total amount, an expenditure of ₹6.49 lakh had been incurred upto March 2018 by the MC. Moreover, the remaining amount was neither utilised by the MC in above duration nor returned to the funding agency as period of the Commission had ended. This not only resulted in blockade of funds amounting to ₹28.60 lakh but also deprived the public from the intended benefits of the grants.",
+      "summary": "13th FC Rs 28.60 lakh blocked in MC Ghumarwin, neither used nor returned",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹28.60 lakh",
+        "crore": 0.286
+      },
+      "other_amounts": [
+        "₹35.09 lakh (released: total)",
+        "₹6.49 lakh (spent: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F118",
+      "page": 72,
+      "printed_page": "49",
+      "para_no": "4.6.4(b)",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed in two (NPs Karsog and Jawali) out of 14 ULBs that funds",
+      "text": "During 2018-19, audit noticed in two (NPs Karsog and Jawali) out of 14 ULBs that funds amounting to ₹1.32 crore10 were received under 14th Finance Commission during 2016-17 to 2017-18 out of which an expenditure of ₹45.17 lakh was incurred. These ULBs, after lapse of one to two years, utilised only 34 per cent of total funds received under 14th FC. Thus, amount of ₹86.75 lakh11 was blocked and remained unutilized as of March 2019.",
+      "summary": "14th FC Rs 86.75 lakh unutilised in NPs Karsog and Jawali",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹86.75 lakh",
+        "crore": 0.8675
+      },
+      "other_amounts": [
+        "₹1.32 crore (received: total)",
+        "₹45.17 lakh (spent: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F119",
+      "page": 72,
+      "printed_page": "49",
+      "para_no": "4.6.4(c)",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed in two (NPs Karsog and Jawali) out of 14 ULBs that funds",
+      "text": "During 2018-19, audit noticed in two (NPs Karsog and Jawali) out of 14 ULBs that funds amounting to ₹4.95 crore12 were received under 4th State Finance Commission during 2016-17 to 2017-18 out of which an expenditure of ₹1.36 crore was incurred. Thus, amount of ₹3.59 crore13 (73 per cent of total fund) was blocked and remained unutilized as of March 2019.",
+      "summary": "4th SFC Rs 3.59 crore unutilised in NPs Karsog and Jawali",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹3.59 crore",
+        "crore": 3.59
+      },
+      "other_amounts": [
+        "₹4.95 crore (received: total)",
+        "₹1.36 crore (spent: context)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F120",
+      "page": 73,
+      "printed_page": "50",
+      "para_no": "4.6.5(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, it was noticed in five out of 12 test checked ULBs that funds",
+      "text": "(a) During 2017-18, it was noticed in five out of 12 test checked ULBs that funds amounting to ₹9.46 crore14 were available during 2014-17 for execution of 32 development works such as construction of retaining walls, boundary walls, shed, repair of paths, sarai bhawan, construction/ restoration of office, parking, parks, etc. These works were to be completed within a period of six months to one year. However, no expenditure had been incurred out of these funds on execution of these works as of January 2018 which resulted in depriving the beneficiaries of intended benefits.",
+      "summary": "Rs 9.46 crore for 32 works unspent in five ULBs",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹9.46 crore",
+        "crore": 9.46
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F121",
+      "page": 73,
+      "printed_page": "50",
+      "para_no": "4.6.5(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2018-19, it was noticed in seven out of 14 ULBs that funds amounting to",
+      "text": "(b) During 2018-19, it was noticed in seven out of 14 ULBs that funds amounting to ₹5.13 crore 15 under schemes such as Vidhayak Keshetra Vikas Nidhi Yojna (VKVNY), Central Road Funds (CRF), Sectoral Decentralized Planning (SDP), Members of Parliament Local Area Development Scheme (MPLADS), National Urban Livelihood Mission (NULM), Swachh Bharat Mission (SBM), etc. were received during 2012-18 for execution of development works such as construction of roads, parking, parks, shed, retaining walls, pucca path, samshan ghat, sarain, sewerage works, etc. However, no expenditure had been incurred out of the funds on execution of these works due to different reasons16 as of March 2019 whereas in NP Jawali funds of ₹7.17 lakh was utilised for works under Civic Amenities and NULM as of January 2019 and remaining funds of ₹1.69 crore remained unspent with the NP due to non-completion of work. Non-utilisation of funds for developmental activities resulted in blocking of funds amounting to ₹5.06 crore besides depriving the beneficiaries of the intended benefits from these development works.",
+      "summary": "Rs 5.06 crore blocked in seven ULBs (works not started/completed)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹5.06 crore",
+        "crore": 5.06
+      },
+      "other_amounts": [
+        "₹5.13 crore (received: total)",
+        "₹7.17 lakh (utilised by NP Jawali: context)",
+        "₹1.69 crore (unspent in NP Jawali: part of total)"
+      ],
+      "borderline": false,
+      "note": "Audit rebuttal on p.51 ('codal formalities should have been completed') is part of this finding."
+    },
+    {
+      "id": "F122",
+      "page": 74,
+      "printed_page": "51",
+      "para_no": "4.6.6",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, audit noticed that the work of sewerage schemes had either not been executed (NP",
+      "text": "During 2017-18, audit noticed that the work of sewerage schemes had either not been executed (NP Sunni) or lying incomplete (MC Solan) as of January 2018 and funds amounting to ₹4.41 crore were lying blocked in the bank accounts of respective ULBs and the facility of sewerage schemes could not be provided to the public of the area.",
+      "summary": "Sewerage funds of Rs 4.41 crore blocked in NP Sunni and MC Solan",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹4.41 crore",
+        "crore": 4.41
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F123",
+      "page": 74,
+      "printed_page": "51",
+      "para_no": "4.6.7",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, it was noticed that the Director, Urban Development released funds amounting to ₹95.00 lakh18",
+      "text": "During 2017-18, it was noticed that the Director, Urban Development released funds amounting to ₹95.00 lakh18 for the construction of parks in their jurisdiction during 2016-18. It was noticed that more than six months to one year had lapsed from the date of release of funds but both ULBs could not finalize the site for the said works and funds of ₹1.42 crore (₹95.00 lakh + matching share of ₹47.42 lakh) had been deposited in bank accounts. Blocking of funds deprived the public of intended facility of the parks.",
+      "summary": "Park funds of Rs 1.42 crore blocked in two ULBs (sites not finalised)",
+      "finding_type": "fund_utilization_failure",
+      "impact_amount": {
+        "raw": "₹1.42 crore",
+        "crore": 1.42
+      },
+      "other_amounts": [
+        "₹95.00 lakh (state grant: part)",
+        "₹47.42 lakh (matching share: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F124",
+      "page": 75,
+      "printed_page": "52",
+      "para_no": "4.7(i)",
+      "location": "atir_unit",
+      "anchor": "(i) During 2017-18, audit noticed that Director, Urban Development released funds amounting to ₹15.24 crore under",
+      "text": "(i) During 2017-18, audit noticed that Director, Urban Development released funds amounting to ₹15.24 crore under 4th State Finance Commission (SFC) to three ULBs19 during 2014-17 with the direction to utilize the grant for the purpose for which it had been sanctioned/ provided. The SFC had recommended the grant for maintenance of assets (streets, street lighting, public toilets, parks, office buildings, town halls, drainage, etc.), performance of statutory and delegated functions and honorarium to elected representatives. Scrutiny of records revealed that ULBs had incurred expenditure amounting to ₹9.48 crore on pay and allowances, pension, and gratuity, leave encashment and payment of provident fund which were not covered under the components recommended by the 4th SFC.",
+      "summary": "Three ULBs diverted 4th SFC grants of Rs 9.48 crore to pay, pension etc.",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹9.48 crore",
+        "crore": 9.48
+      },
+      "other_amounts": [
+        "₹15.24 crore (released: total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F125",
+      "page": 75,
+      "printed_page": "52",
+      "para_no": "4.7(ii)",
+      "location": "atir_unit",
+      "anchor": "(ii) During 2017-18, test check of records revealed that NP Baijnath received funds amounting to ₹1.00",
+      "text": "(ii) During 2017-18, test check of records revealed that NP Baijnath received funds amounting to ₹1.00 crore from Director, Urban Development during 2015-16 for construction and creation of infrastructure facilities in new office building. Scrutiny revealed that the NP had not identified the land for construction of office building even though more than two years had elapsed from the date of release of funds. Instead, the NP had incurred expenditure of ₹0.81 crore on salary of staff, sanitation and other office expenses which was irregular.",
+      "summary": "NP Baijnath diverted Rs 0.81 crore of office-building grant to salary and office expenses",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹0.81 crore",
+        "crore": 0.81
+      },
+      "other_amounts": [
+        "₹1.00 crore (received: total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F126",
+      "page": 75,
+      "printed_page": "52",
+      "para_no": "4.8",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, scrutiny of records revealed that MC Nalagarh had prepared a DPR for 128 houses",
+      "text": "During 2017-18, scrutiny of records revealed that MC Nalagarh had prepared a DPR for 128 houses for identified urban poor under the scheme. For the construction of these houses, funds amounting to ₹5.46 crore were released by the Director, Urban Development to the CEO-cum Secretary HIMUDA in two instalments (February 2010: ₹2.57 crore and April 2013: ₹2.89 crore). HIMUDA had completed construction of these houses (construction cost per dwelling unit: ₹4.27 lakh) and handed over the same to MC Nalagarh in February 2016. It was noticed that out of 128 houses, MC Nalagarh had allotted only 55 houses to the beneficiaries of identified urban poor after receiving an amount of ₹1.87 lakh from each beneficiary. Non- allotment of the remaining 73 houses (August 2021) resulted in unfruitful expenditure of ₹3.12 crore (₹4.27 lakh x 73) and non-realisation of beneficiary share of ₹1.36 crore (₹1.87 lakh x 73) to be received from the beneficiaries to whom these houses were to be allotted.",
+      "summary": "73 of 128 IHSDP houses not allotted: unfruitful Rs 3.12 crore, beneficiary share Rs 1.36 crore not realised",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹3.12 crore",
+        "crore": 3.12
+      },
+      "other_amounts": [
+        "₹1.36 crore (beneficiary share not realised: second impact)",
+        "₹5.46 crore (released: total)",
+        "₹2.57 crore, ₹2.89 crore (instalments)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F127",
+      "page": 76,
+      "printed_page": "53",
+      "para_no": "4.9",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, it was noticed in NP Bhuntar that the Director, Urban Development had released funds",
+      "text": "During 2018-19, it was noticed in NP Bhuntar that the Director, Urban Development had released funds amounting to ₹20.00 lakh for construction of park in July 2017. The work was awarded to a contractor in March 2018 with stipulated period of two months for construction. Out of these funds, ₹11.55 lakh was incurred on the construction of park, but the work was not completed as of July 2021. Thus, non- completion of park resulted not only in unfruitful expenditure of ₹11.55 lakh but also in blocking of funds amounting to ₹8.45 lakh. Besides, public of the area were deprived of the intended benefits of the park.",
+      "summary": "NP Bhuntar park incomplete: unfruitful Rs 11.55 lakh, Rs 8.45 lakh blocked",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹11.55 lakh",
+        "crore": 0.1155
+      },
+      "other_amounts": [
+        "₹8.45 lakh (blocked: second impact)",
+        "₹20.00 lakh (released: total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F128",
+      "page": 77,
+      "printed_page": "54",
+      "para_no": "4.10",
+      "location": "atir_unit",
+      "anchor": "It was noticed that the work of construction of 296 dwelling units, Community Center and Children",
+      "text": "It was noticed that the work of construction of 296 dwelling units, Community Center and Children Park were awarded to different contractors at a tendered cost of ₹ 32.57 crore against which funds of ₹10.67 crore (Central Share: ₹ 9.21 crore and State Share: ₹1.46 crore) were released (November 2013) by the State Government to MCorp. Shimla with the stipulation to complete the work within two to 24 months. Scrutiny of records revealed that only ₹4.93 crore had been utilized during 2013-18 and the works were left incomplete (except construction of Children Park) by the contractors. It was further noticed that no penal action was initiated against the contractors for incomplete works as required under clause-3 of individual contract agreement. Further scrutiny of records revealed that MCorp. Shimla had requested (August 2017) the Director, Urban Development to take up the matter of release of balance grant of ₹23.32 crore. Thus, the project scheduled to be completed during 2013-17 was still incomplete and the possibility of lapse of balance GOI grant of ₹23.32 crore could not be ruled out. Besides, housing facilities had not been provided to the slum dwellers of Krishna Nagar area as envisaged. There was also the possibility of cost overrun which would entail additional financial burden on the State exchequer and the beneficiaries.",
+      "summary": "RAY Krishna Nagar housing incomplete; Rs 23.32 crore GOI grant likely to lapse; no penal action on contractors",
+      "finding_type": "incomplete_infrastructure",
+      "impact_amount": {
+        "raw": "₹23.32 crore",
+        "crore": 23.32
+      },
+      "other_amounts": [
+        "₹ 32.57 crore (tendered cost: context)",
+        "₹10.67 crore (released: context)",
+        "₹4.93 crore (utilised: context)"
+      ],
+      "borderline": false,
+      "note": "Preceding paragraph on p.53 (page 76) describes the DPR; finding begins on p.54."
+    },
+    {
+      "id": "F129",
+      "page": 77,
+      "printed_page": "54",
+      "para_no": "4.11",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, it was noticed in MC Nagrota Bagwan that Director Urban Development regularised (August 2007)",
+      "text": "During 2017-18, it was noticed in MC Nagrota Bagwan that Director Urban Development regularised (August 2007) services of a Library Attendant (LA) against a newly created post. LA joined duty on 23.08.2007. An amount of ₹15.95 lakh was paid to LA on account of salary (August 2007 to November 2017). It was noticed that services of the incumbent were not being used as Library Attendant because no library existed in Nagrota Bagwan.",
+      "summary": "Rs 15.95 lakh salary paid to a Library Attendant where no library exists",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹15.95 lakh",
+        "crore": 0.1595
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F130",
+      "page": 78,
+      "printed_page": "55",
+      "para_no": "4.12",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, scrutiny of records of NP Bhuntar revealed that electricity bills of street light amounting",
+      "text": "During 2018-19, scrutiny of records of NP Bhuntar revealed that electricity bills of street light amounting to ₹37.42 lakh including surcharge for the month of March 2017 (continued from previous outstanding bills) was issued by the Assistant Engineer (AE), HPSEBL, Electrical Sub-Division, Bhuntar. NP had deposited ₹1.00 lakh and ₹7.00 lakh against these bills on dated 17.03.2017 and 24.03.2017 respectively leaving a balance of ₹29.42 lakh. The AE had again issued the electricity bills amounting to ₹34.09 lakh (including surcharge of ₹0.67 lakh) in September 2018, but NP failed to deposit the same as of February 2019. Thus, delay in depositing the electricity bills resulted in not only unnecessary liability of NP but also excess payment of surcharge amounting to ₹0.67 lakh.",
+      "summary": "NP Bhuntar did not pay street-light bills: liability Rs 34.09 lakh incl. surcharge Rs 0.67 lakh",
+      "finding_type": "wasteful_expenditure",
+      "impact_amount": {
+        "raw": "₹34.09 lakh",
+        "crore": 0.3409
+      },
+      "other_amounts": [
+        "₹0.67 lakh (surcharge: avoidable excess payment)",
+        "₹37.42 lakh (earlier bill)",
+        "₹1.00 lakh, ₹7.00 lakh (deposited)",
+        "₹29.42 lakh (balance)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F131",
+      "page": 78,
+      "printed_page": "55",
+      "para_no": "4.13",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed in NP Karsog that four works20 amounting to ₹14.40 lakh were awarded",
+      "text": "During 2018-19, audit noticed in NP Karsog that four works20 amounting to ₹14.40 lakh were awarded to three contractors for the period from November 2014 to January 2015. Each of these works was split up in two works to avoid wide publicity and to avoid sanction of the higher authority. Splitting up of works resulted in violation of tendering process of ensuring maximum competition and transparency. Besides, possibility of extension of undue favour to the contractors cannot be ruled out in Audit.",
+      "summary": "NP Karsog split four works of Rs 14.40 lakh to avoid tendering/sanction",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹14.40 lakh",
+        "crore": 0.144
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F132",
+      "page": 78,
+      "printed_page": "55",
+      "para_no": "4.14",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed that NP Karsog and MC Dehra have received ₹22.41 lakh and ₹3.75",
+      "text": "During 2018-19, audit noticed that NP Karsog and MC Dehra have received ₹22.41 lakh and ₹3.75 crore from Urban Development Department for construction of road/ toilets and sewerage work respectively during 2014-15 to 2017-18. The funds were released to the executive agencies (HPPWD, BDO office, IPH Department) during 2016-17 to 2018-19. Even after lapse of eight to 32 months, Utilization Certificates of ₹3.97 crore relating to these works were not obtained by ULBs as of February 2019. Further, physical reports were also not obtained by NP Karsog till the date of audit. In case of MC Dehra, physical report for the work under sewerage scheme were obtained which showed that only 75% of the total work was completed as of January 2019. As a result, public of the area had been deprived of the intended benefits of the schemes.",
+      "summary": "UCs for Rs 3.97 crore not obtained from executing agencies; works incomplete",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹3.97 crore",
+        "crore": 3.97
+      },
+      "other_amounts": [
+        "₹22.41 lakh, ₹3.75 crore (received: parts of total)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F133",
+      "page": 79,
+      "printed_page": "56",
+      "para_no": "4.15",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed that in Municipal Council Manali, an expenditure of ₹37.00 lakh was incurred",
+      "text": "During 2018-19, audit noticed that in Municipal Council Manali, an expenditure of ₹37.00 lakh was incurred on three works for repairing road and extension of garbage dumping site during 2017-18. The amount in each case was more than ₹50,000/-, but MC did not obtain technical sanction of the Competent Authority for these expenditures. Thus, expenditure of ₹37.00 lakh without obtaining technical sanction of the Competent Authority was irregular and contrary to the rule ibid.",
+      "summary": "MC Manali spent Rs 37.00 lakh on three works without technical sanction",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹37.00 lakh",
+        "crore": 0.37
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F134",
+      "page": 79,
+      "printed_page": "56",
+      "para_no": "4.16(a)",
+      "location": "atir_unit",
+      "anchor": "(a) During 2017-18, audit noticed that in two Municipal Councils (Nalagarh and Solan), temporary/contingent advances of",
+      "text": "(a) During 2017-18, audit noticed that in two Municipal Councils (Nalagarh and Solan), temporary/contingent advances of ₹1.09 crore sanctioned between 1999-2017 to 20 Government officials/Departments for carrying out development works, establishment expenditure, store purchase, etc. were pending for adjustment for a period of more than one to 18 years (Appendix-28) as of January 2018. Subsequent advances were being given to the officials without adjustment of previous advances. In MC Nalagarh, two officials had retired from service but the adjustment bills for amount of ₹3.33 lakh advanced to them between December 1999 and July 2012 were neither submitted by them nor adjusted by the Department at the time of their retirement.",
+      "summary": "Advances of Rs 1.09 crore unadjusted for 1-18 years in MCs Nalagarh and Solan",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹1.09 crore",
+        "crore": 1.09
+      },
+      "other_amounts": [
+        "₹3.33 lakh (advances to retired officials: part)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F135",
+      "page": 80,
+      "printed_page": "57",
+      "para_no": "4.16(b)",
+      "location": "atir_unit",
+      "anchor": "(b) During 2017-18, it was observed in Municipal Corporation Shimla that ₹31.03 crore sanctioned by the",
+      "text": "(b) During 2017-18, it was observed in Municipal Corporation Shimla that ₹31.03 crore sanctioned by the Municipal Corporation during 1963-2017 as contingent advances to various departments for different purposes (under detail heads public works, store material, project, scheme, temporary advances, street light, water supply, etc.) were pending for adjustment (Appendix-28) as of December 2017. Subsequent advances were being given to the departments without adjustment of previous advances. It was further noticed that temporary advances amounting to ₹17.68 crore sanctioned during 1963-2017 were pending for adjustment as of December 2017 and record relating to these advances was not available with the Municipal Corporation. This indicated laxity on the part of the Municipal Corporation in enforcing codal provisions regarding adjustment of advances involving substantial amounts.",
+      "summary": "MCorp. Shimla: advances of Rs 31.03 crore unadjusted since 1963; records of Rs 17.68 crore not available",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹31.03 crore",
+        "crore": 31.03
+      },
+      "other_amounts": [
+        "₹17.68 crore (temporary advances without records: subset/related)"
+      ],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F136",
+      "page": 80,
+      "printed_page": "57",
+      "para_no": "4.16(c)",
+      "location": "atir_unit",
+      "anchor": "(c) During 2018-19, audit noticed in three ULBs21 that temporary /contingent advances of ₹9.42 lakh (Appendix-28)",
+      "text": "(c) During 2018-19, audit noticed in three ULBs21 that temporary /contingent advances of ₹9.42 lakh (Appendix-28) had been sanctioned between 2015-16 and 2017-18 to six Government officials. The advances were given for carrying out different purposes such as purchases of stores for development works, establishment expenditure, door to door garbage collection etc. which were pending for adjustment for a period of more than 17 to 43 months from the date of granting of such advances ranging from December 2018 to March 2019. Subsequent advances were given to the officials without adjustment of previous advances. This indicated laxity on the part of these ULBs in enforcing codal provisions regarding adjustment of advances.",
+      "summary": "Advances of Rs 9.42 lakh unadjusted for 17-43 months in three ULBs",
+      "finding_type": "procedural_lapse",
+      "impact_amount": {
+        "raw": "₹9.42 lakh",
+        "crore": 0.0942
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F137",
+      "page": 80,
+      "printed_page": "57",
+      "para_no": "4.17",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, scrutiny of records in two ULBs (MC Dehra and NP Jawali) revealed that NP",
+      "text": "During 2018-19, scrutiny of records in two ULBs (MC Dehra and NP Jawali) revealed that NP Jawali had purchased dust bins amounting to ₹3.32 lakh from the firm 'Himalaya Engineering Works, Dehra' during 2016-17. Similarly, Municipal Council, Dehra had hired a firm named 'Plan Foundation, Broadway enclave, Sanjauli, Shimla' for getting services in respect of house tax assessment work, survey, development of software and its renewal and paid ₹3.37 lakh to this firm during 2014-15 to 2016-17. In both the cases, amount of the goods purchased/ services obtained were more than ₹1.00 lakh, but tenders were not invited by these ULBs. This was a violation of the provisions of the rule ibid. By not inviting tenders, ULBs had been deprived of the benefit of goods and services at competitive prices. Besides, possibility of passing undue favour to the firms cannot be ruled out.",
+      "summary": "NP Jawali and MC Dehra procured goods/services of Rs 6.69 lakh without tenders",
+      "finding_type": "irregular_expenditure",
+      "impact_amount": {
+        "raw": "₹6.69 lakh",
+        "crore": 0.0669
+      },
+      "other_amounts": [
+        "₹3.32 lakh (NP Jawali dust bins: part)",
+        "₹3.37 lakh (MC Dehra services: part)"
+      ],
+      "borderline": false,
+      "note": "Total ₹6.69 lakh appears only in the para heading."
+    },
+    {
+      "id": "F138",
+      "page": 81,
+      "printed_page": "58",
+      "para_no": "4.18",
+      "location": "atir_unit",
+      "anchor": "During 2017-18, scrutiny of records of Municipal Council, Hamirpur showed that cement bags and drain covers",
+      "text": "During 2017-18, scrutiny of records of Municipal Council, Hamirpur showed that cement bags and drain covers purchased at a cost of ₹1.14 lakh were not accounted for in the relevant store and stock register. Hence, the possibility of pilferage or loss cannot be ruled out. This was indicative of poor record maintenance on the part of the MC.",
+      "summary": "MC Hamirpur: material of Rs 1.14 lakh not entered in stock register",
+      "finding_type": "accounting_irregularity",
+      "impact_amount": {
+        "raw": "₹1.14 lakh",
+        "crore": 0.0114
+      },
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "F139",
+      "page": 81,
+      "printed_page": "58",
+      "para_no": "4.19",
+      "location": "atir_unit",
+      "anchor": "During 2018-19, audit noticed that in four 22 out of 14 ULBs, physical verification of stores/stock",
+      "text": "During 2018-19, audit noticed that in four 22 out of 14 ULBs, physical verification of stores/stock had not been conducted for the period ranging between 1999 and 2018. Consequently, physical existence of stores/ stock could not be verified in audit. Moreover, due to non-conducting of physical verification, there is a risk of misuse of store items.",
+      "summary": "Physical verification of stores not done in four ULBs (since 1999-2018)",
+      "finding_type": "procedural_lapse",
+      "impact_amount": null,
+      "other_amounts": [],
+      "borderline": false,
+      "note": ""
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "R001",
+      "page": 25,
+      "printed_page": "8",
+      "rec_number": "1.8(i)",
+      "location": "atir",
+      "anchor": "Reference to rules may be mentioned clearly in separate paragraphs while raising objections.",
+      "text": "Reference to rules may be mentioned clearly in separate paragraphs while raising objections.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "TGS recommendations made to the primary auditor on its inspection reports ('The following recommendations were made')."
+    },
+    {
+      "id": "R002",
+      "page": 25,
+      "printed_page": "8",
+      "rec_number": "1.8(ii)",
+      "location": "atir",
+      "anchor": "Audit memos may be issued to the auditee unit.",
+      "text": "Audit memos may be issued to the auditee unit.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R003",
+      "page": 25,
+      "printed_page": "8",
+      "rec_number": "1.8(iii)",
+      "location": "atir",
+      "anchor": "The reply of the Secretary, Gram Panchayat may be incorporated in audit paras.",
+      "text": "The reply of the Secretary, Gram Panchayat may be incorporated in audit paras.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R004",
+      "page": 26,
+      "printed_page": "9",
+      "rec_number": "1.10",
+      "location": "atir",
+      "anchor": "The Department should pay adequate attention towards compliance/ settlement and follow up of audit observations in",
+      "text": "The Department should pay adequate attention towards compliance/ settlement and follow up of audit observations in order to minimise recurring nature of irregularities in the PRIs.",
+      "addressee": "Panchayati Raj Department",
+      "form": "should",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R005",
+      "page": 30,
+      "printed_page": "11",
+      "rec_number": "Ch.2 intro",
+      "location": "atir",
+      "anchor": "The Department may initiate action to examine similar cases and take necessary corrective action.",
+      "text": "The Department may initiate action to examine similar cases and take necessary corrective action.",
+      "addressee": "Panchayati Raj Department",
+      "form": "may_consider",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "Generic advice at the head of Chapter 2 ('The Department may initiate action...')."
+    },
+    {
+      "id": "R006",
+      "page": 55,
+      "printed_page": "34",
+      "rec_number": "3.7(i)",
+      "location": "atir",
+      "anchor": "Reference to rules may be mentioned clearly in separate paragraphs while raising audit objections.",
+      "text": "Reference to rules may be mentioned clearly in separate paragraphs while raising audit objections.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "Same wording as 1.8(i) but addressed for ULB audits; separate recommendation, not a duplicate of an Overview item."
+    },
+    {
+      "id": "R007",
+      "page": 55,
+      "printed_page": "34",
+      "rec_number": "3.7(ii)",
+      "location": "atir",
+      "anchor": "Audit memos may be issued to the auditee unit.",
+      "text": "Audit memos may be issued to the auditee unit.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R008",
+      "page": 55,
+      "printed_page": "34",
+      "rec_number": "3.7(iii)",
+      "location": "atir",
+      "anchor": "The reply of the Secretary and Executive Officer of the ULBs concerned may be incorporated in",
+      "text": "The reply of the Secretary and Executive Officer of the ULBs concerned may be incorporated in audit paras.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R009",
+      "page": 55,
+      "printed_page": "34",
+      "rec_number": "3.7(iv)",
+      "location": "atir",
+      "anchor": "The calculation may be shown clearly in table format.",
+      "text": "The calculation may be shown clearly in table format.",
+      "addressee": "HP State Audit Department (primary auditor)",
+      "form": "numbered",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": ""
+    },
+    {
+      "id": "R010",
+      "page": 55,
+      "printed_page": "34",
+      "rec_number": "3.8",
+      "location": "atir",
+      "anchor": "The Department may initiate action to examine similar cases and take necessary corrective action.",
+      "text": "The Department may initiate action to examine similar cases and take necessary corrective action.",
+      "addressee": "Urban Development Department",
+      "form": "may_consider",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "Generic advice at end of 3.8 (Audit Coverage) for ULBs."
+    },
+    {
+      "id": "R011",
+      "page": 60,
+      "printed_page": "37",
+      "rec_number": "Ch.4 intro",
+      "location": "atir",
+      "anchor": "The Department may initiate action to examine similar cases and take necessary corrective action.",
+      "text": "The Department may initiate action to examine similar cases and take necessary corrective action.",
+      "addressee": "Urban Development Department",
+      "form": "may_consider",
+      "duplicate_of": null,
+      "borderline": false,
+      "note": "Generic advice at head of Chapter 4; same wording as Ch.2 intro and 3.8."
+    },
+    {
+      "id": "R012",
+      "page": 77,
+      "printed_page": "54",
+      "rec_number": "4.11",
+      "location": "atir",
+      "anchor": "The matter may be reviewed by the competent authority.",
+      "text": "The matter may be reviewed by the competent authority.",
+      "addressee": "Competent authority (Urban Development Department)",
+      "form": "passive_may_be",
+      "duplicate_of": null,
+      "borderline": true,
+      "note": "One-line advisory at end of audit's rebuttal on the Library Attendant case."
+    }
+  ]
+}
