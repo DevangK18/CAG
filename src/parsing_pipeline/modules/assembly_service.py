@@ -966,17 +966,36 @@ class AssemblyService:
         if entry is None:
             entry = {"report_id": report_id, "parent_chunks": 0, "child_chunks": 0, "output_file": None}
             self.manifest["reports"].append(entry)
+        quarantined = self._quarantine_outputs(report_id)
         entry.update(
             {
                 "status": "failed",
                 "failed_phase": phase,
                 "error": error[:500],
                 # output_file (if any) is from the last successful run, not this one
-                "stale_output": entry.get("output_file") is not None,
+                "stale_output": entry.get("output_file") is not None or bool(quarantined),
+                "quarantined_files": quarantined,
                 "last_updated": now,
             }
         )
         self._save_manifest()
+
+    def _quarantine_outputs(self, report_id: str) -> List[str]:
+        """
+        Rename a failed report's outputs from earlier runs to *.stale.
+
+        Leaving them as *_chunks.json lets the indexer and API serve a previous run's
+        output for a report that failed in this one.
+        """
+        moved = []
+        for suffix in ("_chunks.json", "_overview.json"):
+            for path in self.output_dir.glob(f"*/{report_id}{suffix}"):
+                stale = path.with_name(path.name + ".stale")
+                path.replace(stale)
+                moved.append(str(stale.relative_to(self.output_dir)))
+        if moved:
+            logger.warning(f"Quarantined stale output for failed report {report_id}: {moved}")
+        return moved
 
     def _save_manifest(self) -> None:
         """Recompute totals over completed reports and write the manifest."""

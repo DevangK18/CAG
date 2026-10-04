@@ -83,3 +83,18 @@ def test_parse_skip_phases(raw, expected):
 def test_parse_skip_phases_rejects_unknown():
     with pytest.raises(ValueError):
         parse_skip_phases(["10a,11"])
+
+
+def test_mark_failed_quarantines_old_output(tmp_path):
+    from src.parsing_pipeline.modules.assembly_service import AssemblyService
+    out = tmp_path / "processed"
+    (out / "state").mkdir(parents=True)
+    (out / "state" / "X_chunks.json").write_text("{}")
+    (out / "state" / "X_overview.json").write_text("{}")
+    svc = AssemblyService(output_dir=str(out))
+    svc.mark_failed("X", "ocr", "timeout")
+    assert not (out / "state" / "X_chunks.json").exists()
+    assert (out / "state" / "X_chunks.json.stale").exists()
+    entry = next(r for r in json.loads((out / "manifest.json").read_text())["reports"] if r["report_id"] == "X")
+    assert entry["status"] == "failed" and entry["stale_output"] is True
+    assert sorted(entry["quarantined_files"]) == ["state/X_chunks.json.stale", "state/X_overview.json.stale"]

@@ -15,6 +15,7 @@ Usage:
 """
 
 import json
+import re
 import argparse
 import logging
 import uuid
@@ -58,6 +59,31 @@ class Indexer:
         self.embedding_service = EmbeddingService(self.config)
         self.qdrant_service = QdrantService(self.config)
 
+    @staticmethod
+    def _drop_unfinished_reports(json_files, input_path: Path):
+        """
+        Keep only reports that processed/manifest.json lists as completed.
+
+        A report that failed in its latest run can still have a *_chunks.json from an
+        earlier run; indexing it would serve outdated content. Without a manifest,
+        every file is kept.
+        """
+        manifest_path = next(
+            (p for p in (input_path / "manifest.json", input_path.parent / "manifest.json") if p.exists()),
+            None,
+        )
+        if manifest_path is None:
+            logger.warning("No manifest.json found; indexing every chunks file")
+            return json_files
+        reports = json.loads(manifest_path.read_text()).get("reports", [])
+        completed = {r["report_id"] for r in reports if r.get("status") == "completed"}
+        report_id = lambda f: re.sub(r"_(chunks|enriched)\.json$", "", f.name)
+        kept = [f for f in json_files if report_id(f) in completed]
+        skipped = [report_id(f) for f in json_files if report_id(f) not in completed]
+        if skipped:
+            logger.warning(f"Skipping {len(skipped)} report(s) not completed in {manifest_path}: {skipped}")
+        return kept
+
     def index_all(
         self,
         input_dir: str,
@@ -84,6 +110,10 @@ class Indexer:
 
         if not json_files:
             raise ValueError(f"No JSON files found in {input_dir}")
+
+        json_files = self._drop_unfinished_reports(json_files, input_path)
+        if not json_files:
+            raise ValueError(f"No completed reports to index in {input_dir}")
 
         logger.info(f"Found {len(json_files)} files to index")
 
