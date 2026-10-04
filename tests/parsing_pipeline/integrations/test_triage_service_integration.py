@@ -1,153 +1,124 @@
-import pytest
+"""
+Integration tests for TriageService and TriageCache on real CAG report PDFs.
+
+PDFs are taken from CAG_TEST_PDF_DIR, or data/raw/ under the repo root: the
+smallest PDF in each tier directory (union, state, local_body), else the
+smallest few anywhere below it. Neither is in git, so the real-PDF tests are
+skipped when no PDFs are present.
+"""
+
+import os
+import shutil
 from pathlib import Path
-from services.parsing_pipeline.src.modules.triage_service import TriageService
-from services.parsing_pipeline.src.modules.data_contracts import DocumentTask
+
+import pytest
+
+from src.core.data_contracts import DocumentTask
+from src.parsing_pipeline.modules.triage_service import TriageCache, TriageService
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PDF_DIR = Path(os.getenv("CAG_TEST_PDF_DIR") or REPO_ROOT / "data" / "raw")
+TIERS = ("union", "state", "local_body")
+
+
+def _smallest(pdfs, n):
+    return sorted(pdfs, key=lambda p: p.stat().st_size)[:n]
+
+
+def _sample_pdfs():
+    if not PDF_DIR.is_dir():
+        return []
+    per_tier = [
+        pdf for tier in TIERS if (PDF_DIR / tier).is_dir()
+        for pdf in _smallest((PDF_DIR / tier).glob("*.pdf"), 1)
+    ]
+    return per_tier or _smallest(PDF_DIR.rglob("*.pdf"), 3)
+
+
+PDFS = _sample_pdfs()
+requires_pdfs = pytest.mark.skipif(
+    not PDFS, reason=f"no report PDFs under {PDF_DIR} (set CAG_TEST_PDF_DIR)"
+)
+
+
+def _task(pdf_path, report_id=None) -> DocumentTask:
+    pdf_path = Path(pdf_path)
+    return DocumentTask(
+        report_id=report_id or pdf_path.stem[:40],
+        source_url=f"https://example.com/{pdf_path.name}",
+        local_pdf_path=str(pdf_path),
+        initial_metadata={},
+    )
 
 
 @pytest.fixture
 def triage_service():
-    """TriageService fixture with conservative settings for testing."""
-    return TriageService(sample_pages=10, text_threshold=150)
+    """Service built from parsing_config.yaml, as main.py builds it."""
+    return TriageService()
 
 
-def test_triage_real_pdf_solar_parks(triage_service):
-    """Integration test with actual CAG-Union Audit Reports.xlsx PDF file."""
-    pdf_path = Path(
-        "data/raw/report_004_solar_parks_and_ultra_mega_solar_power_projects_a.pdf"
-    )
+@requires_pdfs
+@pytest.mark.parametrize("pdf_path", PDFS, ids=lambda p: f"{p.parent.name}-{p.stem[:25]}")
+def test_triage_real_pdf(triage_service, pdf_path):
+    result = triage_service.triage_document(_task(pdf_path, report_id="real_report"))
 
-    # Check if the file exists (some PDFs might not be available)
-    if not pdf_path.exists():
-        pytest.skip(f"Test PDF not found: {pdf_path}")
-
-    task = DocumentTask(
-        report_id="report_004_solar_parks",
-        source_url="https://example.com/solar.pdf",
-        local_pdf_path=str(pdf_path),
-        initial_metadata={"Title": "Solar Parks Report"},
-    )
-
-    result = triage_service.triage_document(task)
-
-    # For CAG audit reports, we expect native text (OCR was already applied if needed)
-    assert result.classification in ["native_text", "scanned"]
-    assert result.processing_status in ["triaged_native", "triaged_scanned"]
-    assert len(result.error_log) == 0
+    assert result.error_log == []
+    assert (result.classification, result.processing_status) in {
+        ("native_text", "triaged_native"),
+        ("scanned", "triaged_scanned"),
+    }
+    assert result.report_id == "real_report"
 
 
-def test_triage_real_pdf_cleanliness(triage_service):
-    """Integration test with actual CAG-Union Audit Reports.xlsx PDF file."""
-    pdf_path = Path(
-        "data/raw/report_001_cag_report_on_cleanliness_and_sanitation_in_indian.pdf"
-    )
+@requires_pdfs
+def test_triage_is_repeatable(triage_service):
+    pdf_path = PDFS[0]
+    first = triage_service.triage_document(_task(pdf_path, "run_1"))
+    second = triage_service.triage_document(_task(pdf_path, "run_2"))
 
-    if not pdf_path.exists():
-        pytest.skip(f"Test PDF not found: {pdf_path}")
-
-    task = DocumentTask(
-        report_id="report_001_cleanliness",
-        source_url="https://example.com/cleanliness.pdf",
-        local_pdf_path=str(pdf_path),
-        initial_metadata={"Title": "Cleanliness Report"},
-    )
-
-    result = triage_service.triage_document(task)
-
-    # Verify the result structure
-    assert result.classification in ["native_text", "scanned"]
-    assert result.processing_status in ["triaged_native", "triaged_scanned"]
-    assert len(result.error_log) == 0
-    assert result.report_id == "report_001_cleanliness"
+    assert first.classification == second.classification
+    assert first.processing_status == second.processing_status
+    assert first.error_log == second.error_log == []
 
 
-@pytest.mark.parametrize(
-    "pdf_filename",
-    [
-        "report_001_cag_report_on_cleanliness_and_sanitation_in_indian.pdf",
-        "report_002_direct_taxes_audit_report_union_government_revenu.pdf",
-        "report_003_cag_report_on_fiscal_responsibility_and_budget_man.pdf",
-        "report_004_solar_parks_and_ultra_mega_solar_power_projects_a.pdf",
-        "report_005_cag_report_on_indian_national_centre_for_ocean_inf.pdf",
-    ],
-)
-def test_triage_all_pilot_pdfs(triage_service, pdf_filename):
-    """Integration test with all 5 pilot PDFs from the manifest."""
-    pdf_path = Path(f"data/raw/{pdf_filename}")
+@requires_pdfs
+def test_cache_follows_pdf_content(tmp_path, triage_service):
+    """A cache hit needs the same bytes; a re-downloaded, changed PDF is triaged again."""
+    pdf_path = shutil.copy(PDFS[0], tmp_path / "report.pdf")
+    cache = TriageCache(tmp_path / ".cache")
 
-    if not pdf_path.exists():
-        pytest.skip(f"Pilot PDF not found: {pdf_path}")
+    task = triage_service.triage_document(_task(pdf_path, "cached_report"))
+    if task.classification == "scanned":
+        pytest.skip("a scanned hit also needs an OCR'd PDF (see test_ocr_service_integration)")
+    cache.store_triage(task)
 
-    # Extract report ID from filename
-    report_id = pdf_filename.split(".")[0]
+    hit = cache.load(_task(pdf_path, "cached_report"))
+    assert hit is not None
+    assert hit.classification == task.classification
+    assert hit.processing_status == "triage_complete"
 
-    task = DocumentTask(
-        report_id=report_id,
-        source_url=f"https://example.com/{report_id}.pdf",
-        local_pdf_path=str(pdf_path),
-        initial_metadata={"Title": f"Pilot Report {report_id}"},
-    )
+    # Another run's cache instance, same PDF: still a hit
+    assert TriageCache(tmp_path / ".cache").load(_task(pdf_path, "cached_report")) is not None
 
-    result = triage_service.triage_document(task)
-
-    # All results should be valid (either native or scanned)
-    assert result.classification in ["native_text", "scanned"]
-    assert result.processing_status in ["triaged_native", "triaged_scanned"]
-    assert len(result.error_log) == 0
-    assert result.report_id == report_id
+    with open(pdf_path, "ab") as f:
+        f.write(b"\n% appended by a later download\n")
+    assert TriageCache(tmp_path / ".cache").load(_task(pdf_path, "cached_report")) is None
 
 
-def test_triage_service_consistency(triage_service):
-    """Test that triage is consistent across multiple runs on same file."""
-    pdf_path = Path(
-        "data/raw/report_001_cag_report_on_cleanliness_and_sanitation_in_indian.pdf"
-    )
+def test_missing_pdf_fails(triage_service, tmp_path):
+    result = triage_service.triage_document(_task(tmp_path / "gone.pdf"))
 
-    if not pdf_path.exists():
-        pytest.skip("Test PDF not found")
-
-    task1 = DocumentTask(
-        report_id="test_consistency_1",
-        source_url="https://example.com/test.pdf",
-        local_pdf_path=str(pdf_path),
-        initial_metadata={},
-    )
-
-    task2 = DocumentTask(
-        report_id="test_consistency_2",
-        source_url="https://example.com/test.pdf",
-        local_pdf_path=str(pdf_path),
-        initial_metadata={},
-    )
-
-    result1 = triage_service.triage_document(task1)
-    result2 = triage_service.triage_document(task2)
-
-    # Both should classify the same way
-    assert result1.classification == result2.classification
-    assert result1.processing_status == result2.processing_status
-    assert len(result1.error_log) == len(result2.error_log) == 0
+    assert result.classification is None
+    assert result.processing_status == "failed_triage"
+    assert "PDF path does not exist" in result.error_log[-1]
 
 
-def test_triage_error_handling_corrupted():
-    """Test error handling with a potentially corrupted PDF path."""
-    service = TriageService()
+def test_corrupted_pdf_fails_without_raising(triage_service, tmp_path):
+    corrupt = tmp_path / "corrupt.pdf"
+    corrupt.write_bytes(b"This is not a PDF. " * 50)
 
-    # Use a text file as PDF to simulate corruption
-    text_file_path = Path("README.md")
+    result = triage_service.triage_document(_task(corrupt))
 
-    if not text_file_path.exists():
-        pytest.skip("README.md not found for corruption test")
-
-    task = DocumentTask(
-        report_id="test_corrupted",
-        source_url="https://example.com/test.pdf",
-        local_pdf_path=str(text_file_path),  # Wrong file type, should fail
-        initial_metadata={},
-    )
-
-    result = service.triage_document(task)
-
-    # Should fail gracefully without crashing
     assert result.classification is None
     assert result.processing_status == "failed_triage"
     assert len(result.error_log) == 1

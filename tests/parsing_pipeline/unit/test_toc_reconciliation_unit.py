@@ -715,8 +715,8 @@ class TestP004L1CountCheck:
     """P0-04: Test L1 count sanity check."""
 
     def test_max_l1_count_constant(self):
-        """P0-04: MAX_L1_COUNT is set to 15."""
-        assert TOCReconciliationService.MAX_L1_COUNT == 15
+        """P0-04 / C2: MAX_L1_COUNT re-tuned from 15 to 35 on the 37-report corpus."""
+        assert TOCReconciliationService.MAX_L1_COUNT == 35
 
 
 class TestP004OrphanDetection:
@@ -740,7 +740,28 @@ class TestP004OrphanDetection:
         assert len(orphans) == 1
         assert orphans[0]["expected_chapter"] == 3
         assert "3.1" in orphans[0]["title"]
+        # D7: one orphan in two sections (50%) is below the 0.75 red-flag ratio
+        mock_emitter.emit_red_flag.assert_not_called()
+
+    def test_orphan_red_flag_above_ratio_threshold(self):
+        """D7: The red flag fires only when most L2+ sections are orphans."""
+        toc = [
+            [1, "Chapter 1 Introduction", 5],
+            [2, "1.1 Background", 7],
+            [2, "3.1 Missing Chapter Reference", 20],
+            [2, "3.2 Another Orphan", 22],
+            [2, "4.1 Yet Another Orphan", 30],
+            [2, "4.2 Last Orphan", 32],
+        ]
+        mock_emitter = Mock()
+
+        orphans = self.service._detect_orphan_sections(toc, mock_emitter)
+
+        assert len(orphans) == 4
         mock_emitter.emit_red_flag.assert_called_once()
+        args = mock_emitter.emit_red_flag.call_args.args
+        assert args[:2] == ("5.5", "orphan_sections_detected")
+        assert args[2]["ratio"] == 0.8
 
     def test_no_orphans_when_all_have_parents(self):
         """P0-04: No orphans when all sections have L1 parents."""

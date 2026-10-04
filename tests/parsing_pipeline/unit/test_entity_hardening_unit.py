@@ -1,18 +1,18 @@
 """
-Unit tests for P3-1: Entity Extraction Hardening
+Unit tests for P3-1: Entity Extraction Hardening (EntityExtractor)
 
 Tests the enhanced entity extraction patterns and post-processing filters
 that reduce false positives from ~40-60% to <10%.
 """
 
 import pytest
-from src.parsing_pipeline.modules.semantic_enrichment_service import SemanticEnrichmentService
+from src.parsing_pipeline.modules.enrichment.entity_extractor import EntityExtractor
 
 
 @pytest.fixture
 def service():
-    """Create a SemanticEnrichmentService instance."""
-    return SemanticEnrichmentService()
+    """Entity extraction moved out of SemanticEnrichmentService into EntityExtractor."""
+    return EntityExtractor()
 
 
 class TestCleanEntityFilter:
@@ -47,8 +47,10 @@ class TestCleanEntityFilter:
         assert service._clean_entity("the aforementioned Corporation") is None
 
     def test_too_many_words_rejected(self, service):
-        """Entities with more than 6 words should be rejected."""
-        assert service._clean_entity("This is a very long sentence fragment Corporation") is None
+        """Entities with more than 8 words should be rejected."""
+        assert service._clean_entity("Central Public Works Department Delhi Circle Zone Office Unit") is None
+        # Eight words still fit names like "Ministry of Micro, Small & Medium Enterprises"
+        assert service._clean_entity("Central Public Works Department Delhi Circle Zone Office") is not None
 
     def test_sentence_punctuation_rejected(self, service):
         """Entities containing mid-sentence punctuation should be rejected."""
@@ -68,20 +70,20 @@ class TestEnhancedPatterns:
     def test_scheme_requires_capital_start(self, service):
         """Scheme patterns should require capital letter start."""
         # Valid - starts with capital
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "Under the Pradhan Mantri Gram Sadak Yojana (PMGSY), roads were constructed."
         )
         assert any("Pradhan Mantri Gram Sadak Yojana" in e for e in entities)
 
         # Invalid - lowercase start should not match
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "the aforementioned scheme was implemented"
         )
         assert len([e for e in entities if "scheme" in e.lower()]) == 0
 
     def test_ministry_requires_capital_start(self, service):
         """Ministry patterns should require capital letter start."""
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "Ministry of Finance and Ministry of Defence were audited."
         )
         assert "Ministry of Finance" in entities
@@ -90,13 +92,13 @@ class TestEnhancedPatterns:
     def test_organization_requires_capitalized_words(self, service):
         """Organization patterns should require capitalized words before suffix."""
         # Valid - capitalized words
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "National Highways Authority of India and Municipal Corporation were reviewed."
         )
         assert any("Authority" in e for e in entities)
 
         # Invalid - should not capture fragments
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "the aforementioned Corporation was found"
         )
         # Lowercase start should be filtered out by _clean_entity
@@ -104,7 +106,7 @@ class TestEnhancedPatterns:
 
     def test_acronym_pattern_captured(self, service):
         """Scheme acronyms in parentheses should be captured."""
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "Pradhan Mantri Gram Sadak Yojana (PMGSY) received funding."
         )
         # Should capture the full name with acronym
@@ -113,7 +115,7 @@ class TestEnhancedPatterns:
     def test_common_cag_acronyms_captured(self, service):
         """Common CAG acronyms should be explicitly matched."""
         text = "NHAI, ONGC, BHEL, SAIL, HAL, AAI, and FCI were audited."
-        entities = service._extract_entities_from_text(text)
+        entities = service.extract_entities_from_text(text)
 
         # At least some of these should be captured
         acronyms = ["NHAI", "ONGC", "BHEL", "SAIL", "HAL", "AAI", "FCI"]
@@ -133,17 +135,13 @@ class TestEntityDeduplication:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
-        orgs = entities.get("organizations", [])
+        entities = service.extract_entities(child_chunks)
+        assert entities["organizations"] == ["National Highways Authority"]
 
-        # Should keep only the longer version
-        if orgs:
-            # Check that if both exist, the longer one is preferred
-            full_names = [e for e in orgs if "National Highways Authority" in e]
-            if len(full_names) > 1:
-                # Ensure the longer one is kept
-                longest = max(full_names, key=len)
-                assert longest in orgs
+        deduped = service._deduplicate_by_substring(
+            {"National Highways Authority", "National Highways Authority of India"}
+        )
+        assert deduped == {"National Highways Authority of India"}
 
     def test_no_false_deduplication(self, service):
         """Different entities should not be deduplicated."""
@@ -153,7 +151,7 @@ class TestEntityDeduplication:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
         ministries = entities.get("ministries", [])
 
         # Both should be present (not deduplicated)
@@ -168,12 +166,12 @@ class TestEntityDeduplication:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
         orgs = entities.get("organizations", [])
 
         # Should only have one version
         nha_count = len([e for e in orgs if "national highways authority" in e.lower()])
-        assert nha_count <= 2  # At most 2 (with/without full name)
+        assert nha_count == 1
 
 
 class TestEndToEndExtraction:
@@ -192,7 +190,7 @@ class TestEndToEndExtraction:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
 
         # Check ministries
         ministries = entities.get("ministries", [])
@@ -222,7 +220,7 @@ class TestEndToEndExtraction:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
 
         # Get all extracted entities
         all_entities = []
@@ -250,7 +248,7 @@ class TestEndToEndExtraction:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
 
         # Check all entities
         for entity_type, entity_list in entities.items():
@@ -265,7 +263,7 @@ class TestEndToEndExtraction:
             {"content": "\n\n\n"},
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
 
         # Should return empty or minimal results without crashing
         assert isinstance(entities, dict)
@@ -278,15 +276,14 @@ class TestEdgeCases:
 
     def test_unicode_entities(self, service):
         """Entities with Unicode characters should be handled."""
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "Pradhan Mantri Āyushman Bhārat Yojana was launched."
         )
-        # Should extract if pattern matches
-        assert isinstance(entities, list)
+        assert "Pradhan Mantri Āyushman Bhārat Yojana" in entities
 
     def test_special_characters_in_names(self, service):
         """Entities with ampersands and hyphens should be captured."""
-        entities = service._extract_entities_from_text(
+        entities = service.extract_entities_from_text(
             "Ministry of Micro, Small & Medium Enterprises reported."
         )
         # Should extract ministry with commas and ampersands
@@ -304,7 +301,7 @@ class TestEdgeCases:
             }
         ]
 
-        entities = service._extract_entities(child_chunks)
+        entities = service.extract_entities(child_chunks)
         ministries = entities.get("ministries", [])
 
         # Count occurrences of "Ministry of Finance"
@@ -314,17 +311,10 @@ class TestEdgeCases:
     def test_nested_patterns_not_double_counted(self, service):
         """Overlapping pattern matches should not create duplicates."""
         text = "Department of Revenue, Ministry of Finance participated."
-        entities = service._extract_entities_from_text(text)
+        entities = service.extract_entities_from_text(text)
 
-        # Should extract both, but each only once
-        assert isinstance(entities, list)
-        # No duplicate substrings
-        for i, e1 in enumerate(entities):
-            for e2 in entities[i+1:]:
-                # Neither should be a substring of the other
-                if e1.lower() in e2.lower() or e2.lower() in e1.lower():
-                    # This is acceptable if they're truly different entities
-                    pass
+        # Should extract both, each only once
+        assert sorted(entities) == ["Department of Revenue", "Ministry of Finance"]
 
 
 if __name__ == "__main__":

@@ -1,167 +1,182 @@
+"""
+Unit tests for LayoutAnalysisService (Phase 5): Docling conversion is mocked,
+so no layout models are loaded.
+"""
+
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import fitz
 import pytest
-import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-from ..src.modules.layout_analysis_service import LayoutAnalysisService
-from ..src.modules.data_contracts import DocumentTask
+
+from src.core.data_contracts import DocumentTask
+from src.parsing_pipeline.config import LayoutAnalysisConfig
+from src.parsing_pipeline.modules.layout_analysis_service import LayoutAnalysisService
+
+MODULE = "src.parsing_pipeline.modules.layout_analysis_service"
 
 
 @pytest.fixture
-def layout_service(tmp_path):
-    """LayoutAnalysisService fixture with temporary model directory."""
-    return LayoutAnalysisService(model_cache_dir=str(tmp_path / "models"))
+def mock_converter_cls():
+    with patch(f"{MODULE}.DocumentConverter") as converter_cls:
+        yield converter_cls
+
+
+@pytest.fixture
+def layout_service(mock_converter_cls):
+    """Service on CPU with the Docling converter mocked out."""
+    return LayoutAnalysisService(config=LayoutAnalysisConfig(accelerator_device="cpu"))
+
+
+def _write_pdf(path, pages=1):
+    doc = fitz.open()
+    for i in range(pages):
+        doc.new_page().insert_text((50, 50), f"Page {i + 1}")
+    doc.save(str(path))
+    doc.close()
+    return path
 
 
 @pytest.fixture
 def mock_document_task(tmp_path):
-    """Create a mock DocumentTask with valid PDF path."""
-    pdf_path = tmp_path / "test.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4\ntest content")  # Minimal valid PDF
+    """DocumentTask whose local PDF exists."""
+    pdf_path = _write_pdf(tmp_path / "test.pdf", pages=2)
     return DocumentTask(
         report_id="report_001_test",
         source_url="https://example.com/test.pdf",
         local_pdf_path=str(pdf_path),
         initial_metadata={"Title": "Test Report"},
-        scaffolding={"pages": [0, 1, 2]},  # Mock scaffolding data
     )
 
 
 @pytest.fixture
 def mock_ocred_task(tmp_path):
-    """Create a mock DocumentTask with OCR'd PDF path."""
-    ocred_path = tmp_path / "test_ocred.pdf"
-    ocred_path.write_bytes(b"%PDF-1.4\ntest ocred content")
+    """DocumentTask with both an original and an OCR'd PDF."""
+    local = _write_pdf(tmp_path / "test.pdf")
+    ocred = _write_pdf(tmp_path / "test_ocred.pdf")
     return DocumentTask(
         report_id="report_002_ocred",
         source_url="https://example.com/test.pdf",
-        local_pdf_path=str(tmp_path / "test.pdf"),
-        ocred_pdf_path=str(ocred_path),
+        local_pdf_path=str(local),
+        ocred_pdf_path=str(ocred),
         initial_metadata={"Title": "OCR'd Report"},
-        scaffolding={"pages": [0, 1]},
     )
 
 
-def test_layout_analysis_service_init(tmp_path):
-    """Test LayoutAnalysisService initialization with custom parameters."""
-    model_dir = tmp_path / "custom_models"
+# ── Initialisation ──────────────────────────────────────────────────────────
+
+
+def test_init_reads_layout_config(mock_converter_cls):
+    config = LayoutAnalysisConfig(
+        confidence_threshold=0.5,
+        accelerator_device="cpu",
+        table_min_non_empty_cells=4,
+        conversion_timeout=60,
+        conversion_timeout_per_page=2.0,
+    )
+    service = LayoutAnalysisService(config=config)
+
+    assert service.confidence_threshold == 0.5
+    assert service.accelerator_device == "cpu"
+    assert service.table_min_non_empty_cells == 4
+    assert service.conversion_timeout == 60
+    assert service.conversion_timeout_per_page == 2.0
+    mock_converter_cls.assert_called_once()
+
+
+def test_confidence_threshold_argument_overrides_config(mock_converter_cls):
     service = LayoutAnalysisService(
-        model_cache_dir=str(model_dir),
-        device="cpu",
         confidence_threshold=0.8,
-        dpi=150,
+        config=LayoutAnalysisConfig(confidence_threshold=0.5, accelerator_device="cpu"),
     )
-
-    assert model_dir.exists()
-    assert service.model_cache_dir == model_dir
-    assert service.device == "cpu"
     assert service.confidence_threshold == 0.8
-    assert service.dpi == 150
 
 
-def test_layout_analysis_service_default_init(tmp_path):
-    """Test LayoutAnalysisService with default parameters."""
-    service = LayoutAnalysisService()
-    assert service.device == "auto"
-    assert service.confidence_threshold == 0.7
-    assert service.dpi == 300
-    assert service.model_cache_dir.exists()
+def test_converter_failure_raises_runtime_error(mock_converter_cls):
+    mock_converter_cls.side_effect = Exception("no models")
+    with pytest.raises(RuntimeError, match="Could not initialize Docling"):
+        LayoutAnalysisService(config=LayoutAnalysisConfig(accelerator_device="cpu"))
+
+
+def test_explicit_accelerator_device_kept(layout_service):
+    assert layout_service._resolve_accelerator_device("mps") == "mps"
+    assert layout_service._resolve_accelerator_device("cpu") == "cpu"
+
+
+# ── PDF selection ───────────────────────────────────────────────────────────
 
 
 def test_get_pdf_path_local(layout_service, mock_document_task):
-    """Test PDF path selection prefers local PDF."""
-    pdf_path = layout_service._get_pdf_path(mock_document_task)
-    assert pdf_path == mock_document_task.local_pdf_path
+    assert layout_service._get_pdf_path(mock_document_task) == mock_document_task.local_pdf_path
 
 
 def test_get_pdf_path_ocred(layout_service, mock_ocred_task):
-    """Test PDF path selection prefers OCR'd PDF when available."""
-    pdf_path = layout_service._get_pdf_path(mock_ocred_task)
-    assert pdf_path == mock_ocred_task.ocred_pdf_path
+    assert layout_service._get_pdf_path(mock_ocred_task) == mock_ocred_task.ocred_pdf_path
 
 
 def test_get_pdf_path_neither_available(layout_service):
-    """Test PDF path selection when neither path is available."""
     task = DocumentTask(
         report_id="report_empty",
         source_url="https://example.com/test.pdf",
         local_pdf_path="/nonexistent/path.pdf",
         initial_metadata={},
     )
-    pdf_path = layout_service._get_pdf_path(task)
-    assert pdf_path is None
+    assert layout_service._get_pdf_path(task) is None
 
 
 def test_get_pdf_path_file_not_exists(layout_service, tmp_path):
-    """Test PDF path selection when file doesn't exist."""
     task = DocumentTask(
         report_id="report_missing",
         source_url="https://example.com/test.pdf",
         local_pdf_path=str(tmp_path / "missing.pdf"),
         initial_metadata={},
     )
-    pdf_path = layout_service._get_pdf_path(task)
-    assert pdf_path is None
+    assert layout_service._get_pdf_path(task) is None
 
 
-@patch(
-    "services.parsing_pipeline.src.modules.layout_analysis_service.LayoutAnalysisService._initialize_docling_pipeline"
-)
-@patch("pathlib.Path.exists")
-def test_analyze_layout_pdf_not_found(
-    mock_path_exists, mock_init_pipeline, layout_service, mock_document_task
-):
-    """Test layout analysis with missing PDF file."""
-    mock_path_exists.return_value = False
+# ── analyze_layout ──────────────────────────────────────────────────────────
 
-    result = layout_service.analyze_layout(mock_document_task)
+
+def test_analyze_layout_pdf_not_found(layout_service, tmp_path):
+    task = DocumentTask(
+        report_id="report_missing",
+        source_url="https://example.com/test.pdf",
+        local_pdf_path=str(tmp_path / "missing.pdf"),
+        initial_metadata={},
+    )
+
+    result = layout_service.analyze_layout(task)
 
     assert result.processing_status == "failed_layout"
     assert "PDF path not available" in result.error_log[0]
-    mock_init_pipeline.assert_not_called()
+    layout_service.converter.convert.assert_not_called()
 
 
-@patch(
-    "services.parsing_pipeline.src.modules.layout_analysis_service.LayoutAnalysisService._process_document_pages"
-)
-@patch(
-    "services.parsing_pipeline.src.modules.layout_analysis_service.LayoutAnalysisService._initialize_docling_pipeline"
-)
-def test_analyze_layout_success(
-    mock_init_pipeline, mock_process_pages, layout_service, mock_document_task
-):
-    """Test successful layout analysis workflow."""
-    mock_pipeline = MagicMock()
-    mock_init_pipeline.return_value = mock_pipeline
-
-    # Mock successful processing
-    mock_results = {
+def test_analyze_layout_success(layout_service, mock_document_task):
+    blocks = {
+        1: [
+            {"bbox": [15, 60, 95, 80], "label": "Table", "confidence": 0.92},
+            {"bbox": [10, 20, 100, 50], "label": "Text", "confidence": 0.85},
+        ],
         0: [{"bbox": [10, 20, 100, 50], "label": "Text", "confidence": 0.85}],
-        1: [{"bbox": [15, 25, 95, 45], "label": "Table", "confidence": 0.92}],
     }
-    mock_process_pages.return_value = mock_results
-
-    result = layout_service.analyze_layout(mock_document_task)
+    with patch.object(
+        layout_service, "_convert_docling_doc_to_standard_format", return_value=blocks
+    ):
+        result = layout_service.analyze_layout(mock_document_task)
 
     assert result.processing_status == "layout_complete"
-    assert result.layout == mock_results
-    assert "Layout analysis completed: 2 blocks detected" in result.error_log[-1]
-    mock_init_pipeline.assert_called_once()
-    mock_process_pages.assert_called_once()
+    assert set(result.layout) == {0, 1}
+    # Blocks are sorted top-down within each page
+    assert [b["label"] for b in result.layout[1]] == ["Text", "Table"]
+    assert "Layout analysis completed: 3 blocks detected." in result.error_log[-1]
+    layout_service.converter.convert.assert_called_once_with(
+        source=mock_document_task.local_pdf_path
+    )
 
 
-@patch(
-    "services.parsing_pipeline.src.modules.layout_analysis_service.LayoutAnalysisService._process_document_pages"
-)
-@patch(
-    "services.parsing_pipeline.src.modules.layout_analysis_service.LayoutAnalysisService._initialize_docling_pipeline"
-)
-def test_analyze_layout_processing_failure(
-    mock_init_pipeline, mock_process_pages, layout_service, mock_document_task
-):
-    """Test layout analysis with processing failure."""
-    mock_pipeline = MagicMock()
-    mock_init_pipeline.return_value = mock_pipeline
-    mock_process_pages.side_effect = Exception("PDF processing failed")
+def test_analyze_layout_processing_failure(layout_service, mock_document_task):
+    layout_service.converter.convert.side_effect = Exception("PDF processing failed")
 
     result = layout_service.analyze_layout(mock_document_task)
 
@@ -169,205 +184,165 @@ def test_analyze_layout_processing_failure(
     assert "Layout analysis failed: PDF processing failed" in result.error_log[-1]
 
 
-def test_validate_and_merge_results_empty():
-    """Test result validation with empty results."""
-    service = LayoutAnalysisService()
-    result = service._validate_and_merge_results({})
-    assert result == {}
+def test_analyze_layout_empty_result_still_completes(layout_service, mock_document_task):
+    with patch.object(layout_service, "_convert_docling_doc_to_standard_format", return_value={}):
+        result = layout_service.analyze_layout(mock_document_task)
+
+    assert result.processing_status == "layout_complete"
+    assert result.layout == {}
 
 
-def test_validate_and_merge_results_single_page(layout_service):
-    """Test result validation with single page results."""
-    raw_results = {
+# ── Sorting and label mapping ───────────────────────────────────────────────
+
+
+def test_validate_and_sort_results_empty(layout_service):
+    assert layout_service._validate_and_sort_results({}) == {}
+
+
+def test_validate_and_sort_results_reading_order(layout_service):
+    raw = {
         0: [
-            {"bbox": [10, 20, 100, 50], "label": "Text", "confidence": 0.85},
-            {"bbox": [60, 70, 120, 90], "label": "Table", "confidence": 0.75},
+            {"bbox": [300, 100, 500, 120], "label": "Text"},
+            {"bbox": [10, 100, 200, 120], "label": "Text"},
+            {"bbox": [10, 20, 500, 40], "label": "Section-header"},
         ]
     }
-    result = layout_service._validate_and_merge_results(raw_results)
-    assert 0 in result
-    assert len(result[0]) == 2
+    result = layout_service._validate_and_sort_results(raw)
+    assert [b["bbox"][:2] for b in result[0]] == [[10, 20], [10, 100], [300, 100]]
 
 
-def test_validate_and_merge_results_overlap_filtering(layout_service):
-    """Test result validation with minimal overlapping block filtering."""
-    # Use blocks that have minimal overlap
-    raw_results = {
-        0: [
-            {"bbox": [10, 20, 50, 40], "label": "Text", "confidence": 0.95},
-            {
-                "bbox": [60, 20, 100, 40],
-                "label": "Text",
-                "confidence": 0.85,
-            },  # No significant overlap
-            {
-                "bbox": [10, 60, 50, 80],
-                "label": "Table",
-                "confidence": 0.75,
-            },  # No overlap
-        ]
-    }
-    result = layout_service._validate_and_merge_results(raw_results)
-    assert 0 in result
-    # Should keep all blocks (no significant overlap)
-    assert len(result[0]) == 3
+def test_map_docling_label(layout_service):
+    assert layout_service._map_docling_label("PageHeader") == "Page-header"
+    assert layout_service._map_docling_label("PageFooter") == "Page-footer"
+    assert layout_service._map_docling_label("SectionHeader") == "Section-header"
+    assert layout_service._map_docling_label("ListItem") == "List-item"
+    assert layout_service._map_docling_label("Picture") == "Picture"
+    assert layout_service._map_docling_label("Table") == "Table"
+    assert layout_service._map_docling_label("Caption") == "Text"
+    # Unknown item types fall back to Text
+    assert layout_service._map_docling_label("UnknownLabel") == "Text"
 
 
-def test_map_doclaynet_label(layout_service):
-    """Test DocLayNet label mapping."""
-    # Test mapped labels
-    assert layout_service._map_doclaynet_label("Page-header") == "Header"
-    assert layout_service._map_doclaynet_label("Section-header") == "SectionHeader"
-    assert layout_service._map_doclaynet_label("Figure") == "Picture"
-    assert layout_service._map_doclaynet_label("Text") == "Text"
-    assert layout_service._map_doclaynet_label("Table") == "Table"
-
-    # Test unmapped label returns as-is
-    assert layout_service._map_doclaynet_label("UnknownLabel") == "UnknownLabel"
+# The separator regex has no inner "|", so a multi-column separator row ("|---|---|")
+# is counted as content and sparse Docling tables pass the quality gate.
+SEPARATOR_BUG = pytest.mark.xfail(
+    strict=True,
+    reason="_count_non_empty_cells counts the cells of a multi-column |---|---| "
+    "separator row as content (fidelity PR)",
+)
 
 
 @pytest.mark.parametrize(
-    "block1,block2,expected_overlap",
+    "markdown,expected",
     [
-        # Significant overlap (>80% IoU) - boxes almost identical
-        (
-            {"bbox": [10, 10, 90, 90]},
-            {"bbox": [11, 11, 89, 89]},
-            True,
-        ),
-        # Moderate overlap (~56% IoU)
-        (
-            {"bbox": [10, 10, 90, 90]},
-            {"bbox": [20, 20, 80, 80]},
-            False,  # Actually ~56% IoU, so False for 80% threshold
-        ),
-        # Minimal overlap (<80% IoU)
-        (
-            {"bbox": [10, 10, 50, 50]},
-            {"bbox": [60, 60, 100, 100]},
-            False,
-        ),
-        # Exact overlap
-        (
-            {"bbox": [10, 10, 90, 90]},
-            {"bbox": [10, 10, 90, 90]},
-            True,
-        ),
-        # No overlap
-        (
-            {"bbox": [10, 10, 40, 40]},
-            {"bbox": [50, 50, 80, 80]},
-            False,
-        ),
+        ("| A |\n|---|\n| 1 |", 2),
+        ("", 0),
+        pytest.param("| A | B |\n|---|---|\n| 1 | 2 |", 4, marks=SEPARATOR_BUG),
+        pytest.param("| A |  |\n|---|---|\n|  |  |", 1, marks=SEPARATOR_BUG),
     ],
 )
-def test_blocks_overlap_significantly(layout_service, block1, block2, expected_overlap):
-    """Test block overlap detection with different scenarios."""
-    result = layout_service._blocks_overlap_significantly(block1, block2)
-    assert result == expected_overlap
+def test_count_non_empty_cells(layout_service, markdown, expected):
+    assert layout_service._count_non_empty_cells(markdown) == expected
 
 
-def test_initialize_docling_pipeline_placeholder_fallback(layout_service):
-    """Test that pipeline initialization falls back to placeholder."""
-    with patch("sys.modules", {"docling.pipeline.standard_pdf_pipeline": None}):
-        pipeline = layout_service._initialize_docling_pipeline()
-
-    # Should return the placeholder class since import fails
-    from ..src.modules.layout_analysis_service import DocLingPipelinePlaceholder
-
-    assert isinstance(pipeline, DocLingPipelinePlaceholder)
+# ── Docling document conversion ─────────────────────────────────────────────
 
 
-def test_docling_pipeline_placeholder_process_image():
-    """Test the placeholder pipeline's process_image method."""
-    from ..src.modules.layout_analysis_service import DocLingPipelinePlaceholder
+class _BBox:
+    """Bottom-left-origin box as Docling reports it."""
 
-    pipeline = DocLingPipelinePlaceholder()
+    def __init__(self, l, t, r, b):
+        self.l, self.t, self.r, self.b = l, t, r, b
 
-    # Test with any image (PIL Image not needed since it's mocked)
-    result = pipeline.process_image(None)  # Mock image
-
-    assert hasattr(result, "predictions")
-    assert len(result.predictions) == 1
-
-    prediction = result.predictions[0]
-    assert hasattr(prediction, "bbox")
-    assert hasattr(prediction, "label")
-    assert hasattr(prediction, "confidence")
-    assert prediction.label == "Text"
-    assert prediction.confidence == 0.85
+    def to_top_left_origin(self, page_height):
+        return SimpleNamespace(l=self.l, t=page_height - self.t, r=self.r, b=page_height - self.b)
 
 
-@pytest.mark.parametrize(
-    "docling_bbox,expected_standardized",
-    [
-        ([0.1, 0.2, 0.8, 0.9], [72.0, 144.0, 576.0, 648.0]),  # 72 DPI scaling
-        ([0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 720.0, 720.0]),  # Full page in inches
-    ],
-)
-def test_convert_docling_to_standard_format(
-    layout_service, docling_bbox, expected_standardized
-):
-    """Test DocLing result conversion to standard format."""
-    # Mock pixmap for coordinate scaling
-    mock_pixmap = MagicMock()
-    mock_pixmap.width = 720  # 10 inches at 72 DPI
-    mock_pixmap.xres = 72  # 72 pixels per inch
-    mock_pixmap.yres = 72  # Same as xres for square pixels
-    mock_pixmap.height = 720
+class TextItem:
+    def __init__(self, page_no, bbox, score=None):
+        self.prov = [SimpleNamespace(page_no=page_no, bbox=bbox)]
+        self.score = score
 
-    # Mock docling result
-    mock_result = MagicMock()
-    mock_result.predictions = [
-        MagicMock(
-            bbox=docling_bbox,
-            label="Text",
-            confidence=0.87,
-        )
-    ]
 
-    # Add detections fallback
-    mock_result.detections = mock_result.predictions
+class SectionHeaderItem(TextItem):
+    pass
 
-    result = layout_service._convert_docling_to_standard_format(
-        mock_result, mock_pixmap
-    )
 
-    assert len(result) == 1
-    block = result[0]
-    assert block["bbox"] == expected_standardized
+class TableItem(TextItem):
+    def __init__(self, page_no, bbox, markdown):
+        super().__init__(page_no, bbox)
+        self._markdown = markdown
+
+    def export_to_markdown(self, doc):
+        return self._markdown
+
+
+def _docling_doc(items, page_height=800.0):
+    doc = MagicMock()
+    doc.iterate_items.return_value = [(item, 0) for item in items]
+    doc.pages = {1: SimpleNamespace(size=SimpleNamespace(height=page_height)),
+                 2: SimpleNamespace(size=SimpleNamespace(height=page_height))}
+    return doc
+
+
+def test_convert_flips_bbox_and_uses_zero_based_pages(layout_service):
+    doc = _docling_doc([TextItem(2, _BBox(50, 700, 300, 650))])
+
+    result = layout_service._convert_docling_doc_to_standard_format(doc)
+
+    assert list(result) == [1]
+    block = result[1][0]
+    assert block["bbox"] == [50, 100, 300, 150]
     assert block["label"] == "Text"
-    assert block["confidence"] == 0.87
     assert block["content_type"] == "Text"
+    assert block["confidence"] == 1.0  # Missing score treated as confident
+    assert block["docling_table_available"] is False
 
 
-def test_convert_docling_to_standard_format_unrecognized(layout_service):
-    """Test DocLing result conversion with unrecognized result format."""
-    mock_result = MagicMock()
-    # No predictions or detections attributes
-    del mock_result.predictions
-    del mock_result.detections
-
-    mock_pixmap = MagicMock()
-    result = layout_service._convert_docling_to_standard_format(
-        mock_result, mock_pixmap
-    )
-
-    assert result == []
+def test_convert_maps_item_type_to_label(layout_service):
+    doc = _docling_doc([SectionHeaderItem(1, _BBox(50, 780, 300, 760))])
+    block = layout_service._convert_docling_doc_to_standard_format(doc)[0][0]
+    assert block["label"] == "Section-header"
+    assert block["content_type"] == "SectionHeader"
 
 
-def test_convert_docling_to_standard_format_missing_bbox(layout_service):
-    """Test DocLing result conversion when prediction lacks bbox."""
-    mock_result = MagicMock()
-    mock_prediction = MagicMock()
-    # No bbox attribute
-    del mock_prediction.bbox
-    del mock_prediction.box
-    mock_result.predictions = [mock_prediction]
+def test_convert_filters_low_confidence(layout_service):
+    layout_service.confidence_threshold = 0.65
+    doc = _docling_doc([
+        TextItem(1, _BBox(50, 700, 300, 650), score=0.4),
+        TextItem(1, _BBox(50, 600, 300, 550), score=0.9),
+    ])
 
-    mock_pixmap = MagicMock()
-    result = layout_service._convert_docling_to_standard_format(
-        mock_result, mock_pixmap
-    )
+    result = layout_service._convert_docling_doc_to_standard_format(doc)
 
-    assert result == []
+    assert len(result[0]) == 1
+    assert result[0][0]["confidence"] == 0.9
+
+
+def test_convert_skips_items_without_provenance(layout_service):
+    item = TextItem(1, _BBox(0, 10, 10, 0))
+    item.prov = []
+    assert layout_service._convert_docling_doc_to_standard_format(_docling_doc([item])) == {}
+
+
+def test_convert_keeps_docling_table_markdown(layout_service):
+    layout_service.table_min_non_empty_cells = 3
+    markdown = "| Year | Amount |\n|---|---|\n| 2022-23 | 120.5 |"
+    doc = _docling_doc([TableItem(1, _BBox(50, 700, 500, 500), markdown)])
+
+    block = layout_service._convert_docling_doc_to_standard_format(doc)[0][0]
+
+    assert block["label"] == "Table"
+    assert block["docling_table_available"] is True
+    assert block["docling_table_markdown"] == markdown
+
+
+@SEPARATOR_BUG
+def test_convert_rejects_sparse_docling_table(layout_service):
+    layout_service.table_min_non_empty_cells = 3
+    doc = _docling_doc([TableItem(1, _BBox(50, 700, 500, 500), "| A |  |\n|---|---|\n|  |  |")])
+
+    block = layout_service._convert_docling_doc_to_standard_format(doc)[0][0]
+
+    assert block["docling_table_available"] is False
+    assert "docling_table_markdown" not in block

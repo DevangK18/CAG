@@ -29,7 +29,7 @@ def test_extract_audit_period_covering_pattern(extractor):
 
     assert result is not None
     assert result["start_year"] == 2019
-    assert result["end_year"] == 2022
+    assert result["end_year"] == 2023  # FY 2022-23 ends in 2023
 
 
 def test_extract_audit_period_during_pattern(extractor):
@@ -39,7 +39,7 @@ def test_extract_audit_period_during_pattern(extractor):
 
     assert result is not None
     assert result["start_year"] == 2018
-    assert result["end_year"] == 2021
+    assert result["end_year"] == 2022  # FY 2021-22 ends in 2022
 
 
 def test_extract_audit_period_from_to_pattern(extractor):
@@ -49,7 +49,7 @@ def test_extract_audit_period_from_to_pattern(extractor):
 
     assert result is not None
     assert result["start_year"] == 2020
-    assert result["end_year"] == 2023
+    assert result["end_year"] == 2024  # FY 2023-24 ends in 2024
 
 
 def test_extract_audit_period_for_years_pattern(extractor):
@@ -59,7 +59,7 @@ def test_extract_audit_period_for_years_pattern(extractor):
 
     assert result is not None
     assert result["start_year"] == 2017
-    assert result["end_year"] == 2020
+    assert result["end_year"] == 2021  # FY 2020-21 ends in 2021
 
 
 def test_extract_audit_period_month_names(extractor):
@@ -242,7 +242,7 @@ def test_extract_temporal_metadata_with_intro_sections(extractor):
 
     assert result["audit_period"] is not None
     assert result["audit_period"]["start_year"] == 2019
-    assert result["audit_period"]["end_year"] == 2022
+    assert result["audit_period"]["end_year"] == 2023  # FY 2022-23 ends in 2023
     assert 2020 in result["reference_years"]
     assert 2018 in result["reference_years"]
     assert len(result["previous_audit_refs"]) >= 1
@@ -259,7 +259,7 @@ def test_extract_temporal_metadata_without_section_classifications(extractor):
 
     assert result["audit_period"] is not None
     assert result["audit_period"]["start_year"] == 2020
-    assert result["audit_period"]["end_year"] == 2023
+    assert result["audit_period"]["end_year"] == 2024  # FY 2023-24 ends in 2024
     assert 2021 in result["reference_years"]
     assert 2022 in result["reference_years"]
 

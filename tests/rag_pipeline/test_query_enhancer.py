@@ -18,17 +18,23 @@ from unittest.mock import Mock, MagicMock
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.config import QueryEnhancementConfig
+from src.core.config import LLMProvider, QueryEnhancementConfig
 from src.rag_pipeline.query_enhancer import QueryEnhancer, QueryEnhancement
 
 
 @pytest.fixture
 def mock_openai_client():
-    """Mock OpenAI client for testing."""
+    """OpenAI client handed to the enhancer (only used when provider is OPENAI)."""
     client = Mock()
     client.chat = Mock()
     client.chat.completions = Mock()
     return client
+
+
+@pytest.fixture
+def gemini_client():
+    """Mock Gemini client: the default provider."""
+    return Mock()
 
 
 @pytest.fixture
@@ -37,10 +43,16 @@ def config():
     return QueryEnhancementConfig()
 
 
+def _make_enhancer(config, openai_client, gemini_client):
+    enhancer = QueryEnhancer(config, openai_client)
+    enhancer._gemini_client = gemini_client
+    return enhancer
+
+
 @pytest.fixture
-def enhancer(config, mock_openai_client):
-    """QueryEnhancer instance with mocked client."""
-    return QueryEnhancer(config, mock_openai_client)
+def enhancer(config, mock_openai_client, gemini_client):
+    """QueryEnhancer instance with mocked clients."""
+    return _make_enhancer(config, mock_openai_client, gemini_client)
 
 
 class TestQueryEnhancerInit:
@@ -50,7 +62,8 @@ class TestQueryEnhancerInit:
         """Test successful initialization."""
         enhancer = QueryEnhancer(config, mock_openai_client)
         assert enhancer.config == config
-        assert enhancer.client == mock_openai_client
+        assert enhancer.openai_client == mock_openai_client
+        assert enhancer._gemini_client is None  # created on first Gemini call
 
     def test_init_with_disabled_config(self, mock_openai_client):
         """Test initialization with disabled enhancement."""
@@ -62,10 +75,10 @@ class TestQueryEnhancerInit:
 class TestQueryEnhancerFallback:
     """Test fallback behavior when enhancement fails or is disabled."""
 
-    def test_fallback_when_disabled(self, mock_openai_client):
+    def test_fallback_when_disabled(self, mock_openai_client, gemini_client):
         """Test fallback when enhancement is disabled."""
         config = QueryEnhancementConfig(enabled=False)
-        enhancer = QueryEnhancer(config, mock_openai_client)
+        enhancer = _make_enhancer(config, mock_openai_client, gemini_client)
 
         result = enhancer.enhance("What are the key findings?")
 
@@ -75,12 +88,11 @@ class TestQueryEnhancerFallback:
         assert result.top_k == 10
         assert result.initial_candidates == 50
         assert result.max_context_chars == 15000
+        gemini_client.models.generate_content.assert_not_called()
 
-    def test_fallback_on_exception(self, enhancer, mock_openai_client):
+    def test_fallback_on_exception(self, enhancer, gemini_client):
         """Test fallback when LLM call raises exception."""
-        mock_openai_client.chat.completions.create.side_effect = Exception(
-            "API error"
-        )
+        gemini_client.models.generate_content.side_effect = Exception("API error")
 
         result = enhancer.enhance("What are the key findings?")
 
@@ -88,15 +100,23 @@ class TestQueryEnhancerFallback:
         assert result.expanded_queries == ["What are the key findings?"]
         assert result.suggested_filters == {}
 
+    def test_fallback_on_invalid_json(self, enhancer, gemini_client):
+        """A non-JSON reply falls back to the original query."""
+        gemini_client.models.generate_content.return_value = Mock(text="not json")
+
+        result = enhancer.enhance("What are the key findings?")
+
+        assert result.expanded_queries == ["What are the key findings?"]
+
 
 class TestQueryEnhancerEnhance:
     """Test query enhancement with mocked LLM responses."""
 
-    def test_enhance_factual_question(self, enhancer, mock_openai_client):
+    def test_enhance_factual_question(self, enhancer, gemini_client):
         """Test enhancement of a factual question."""
         # Mock LLM response
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = """
+        mock_response = Mock()
+        mock_response.text = """
         {
           "question_type": "factual",
           "expanded_queries": [
@@ -112,7 +132,7 @@ class TestQueryEnhancerEnhance:
           "recommended_style": "concise"
         }
         """
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        gemini_client.models.generate_content.return_value = mock_response
 
         result = enhancer.enhance("What are the key findings?")
 
@@ -125,10 +145,10 @@ class TestQueryEnhancerEnhance:
         assert result.max_context_chars == 10000
         assert result.recommended_style == "concise"
 
-    def test_enhance_list_question(self, enhancer, mock_openai_client):
+    def test_enhance_list_question(self, enhancer, gemini_client):
         """Test enhancement of a list question."""
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = """
+        mock_response = Mock()
+        mock_response.text = """
         {
           "question_type": "list",
           "expanded_queries": [
@@ -144,7 +164,7 @@ class TestQueryEnhancerEnhance:
           "recommended_style": "detailed"
         }
         """
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        gemini_client.models.generate_content.return_value = mock_response
 
         result = enhancer.enhance("List all the key findings")
 
@@ -154,10 +174,10 @@ class TestQueryEnhancerEnhance:
         assert result.max_context_chars == 25000
         assert result.recommended_style == "detailed"
 
-    def test_enhance_with_filter_suggestions(self, enhancer, mock_openai_client):
+    def test_enhance_with_filter_suggestions(self, enhancer, gemini_client):
         """Test enhancement with filter suggestions."""
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = """
+        mock_response = Mock()
+        mock_response.text = """
         {
           "question_type": "explanation",
           "expanded_queries": [
@@ -175,7 +195,7 @@ class TestQueryEnhancerEnhance:
           "recommended_style": "explanatory"
         }
         """
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        gemini_client.models.generate_content.return_value = mock_response
 
         result = enhancer.enhance("What went wrong with toll collection?")
 
@@ -183,10 +203,10 @@ class TestQueryEnhancerEnhance:
         assert result.suggested_filters == {"finding_type": "loss_of_revenue"}
         assert result.recommended_style == "explanatory"
 
-    def test_enhance_comparison_question(self, enhancer, mock_openai_client):
+    def test_enhance_comparison_question(self, enhancer, gemini_client):
         """Test enhancement of a comparison question."""
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = """
+        mock_response = Mock()
+        mock_response.text = """
         {
           "question_type": "comparison",
           "expanded_queries": [
@@ -202,7 +222,7 @@ class TestQueryEnhancerEnhance:
           "recommended_style": "comparative"
         }
         """
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        gemini_client.models.generate_content.return_value = mock_response
 
         result = enhancer.enhance("How has the fiscal deficit changed over the years?")
 
@@ -210,10 +230,10 @@ class TestQueryEnhancerEnhance:
         assert result.top_k == 15
         assert result.recommended_style == "comparative"
 
-    def test_enhance_with_user_style_override(self, enhancer, mock_openai_client):
+    def test_enhance_with_user_style_override(self, enhancer, gemini_client):
         """Test that user-selected style overrides recommendation."""
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = """
+        mock_response = Mock()
+        mock_response.text = """
         {
           "question_type": "factual",
           "expanded_queries": ["query 1", "query 2"],
@@ -226,20 +246,20 @@ class TestQueryEnhancerEnhance:
           "recommended_style": "concise"
         }
         """
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        gemini_client.models.generate_content.return_value = mock_response
 
         result = enhancer.enhance("What are the key findings?", style="technical")
 
         # Should NOT have recommended_style when user overrides
         assert result.recommended_style is None
 
-    def test_enhance_respects_num_expansions_limit(self, enhancer, mock_openai_client):
+    def test_enhance_respects_num_expansions_limit(self, enhancer, gemini_client):
         """Test that expanded queries are limited by config."""
         config = QueryEnhancementConfig(num_expansions=2)
-        enhancer = QueryEnhancer(config, mock_openai_client)
+        enhancer = _make_enhancer(config, Mock(), gemini_client)
 
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = """
+        mock_response = Mock()
+        mock_response.text = """
         {
           "question_type": "factual",
           "expanded_queries": ["query 1", "query 2", "query 3", "query 4"],
@@ -252,13 +272,37 @@ class TestQueryEnhancerEnhance:
           "recommended_style": "concise"
         }
         """
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        gemini_client.models.generate_content.return_value = mock_response
 
         result = enhancer.enhance("test query")
 
         # Original + only 1 expansion (limit is 2 total)
-        assert len(result.expanded_queries) <= 2
-        assert result.expanded_queries[0] == "test query"
+        assert result.expanded_queries == ["test query", "query 1"]
+
+    def test_gemini_model_used(self, enhancer, gemini_client):
+        """The Gemini call uses the configured gemini_model and JSON output."""
+        gemini_client.models.generate_content.return_value = Mock(text='{"question_type": "factual"}')
+
+        enhancer.enhance("What are the key findings?")
+
+        kwargs = gemini_client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] == enhancer.config.gemini_model
+        assert kwargs["config"].response_mime_type == "application/json"
+
+    def test_openai_provider(self, mock_openai_client, gemini_client):
+        """With provider OPENAI the OpenAI client is called instead."""
+        config = QueryEnhancementConfig(provider=LLMProvider.OPENAI, model="gpt-4o-mini")
+        enhancer = _make_enhancer(config, mock_openai_client, gemini_client)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = '{"question_type": "list", "expanded_queries": ["q1"]}'
+        mock_openai_client.chat.completions.create.return_value = mock_response
+
+        result = enhancer.enhance("List the findings")
+
+        assert result.question_type == "list"
+        assert result.expanded_queries == ["List the findings", "q1"]
+        assert mock_openai_client.chat.completions.create.call_args.kwargs["model"] == "gpt-4o-mini"
+        gemini_client.models.generate_content.assert_not_called()
 
 
 class TestQueryEnhancementDataclass:
@@ -310,7 +354,9 @@ class TestQueryEnhancementConfig:
         assert config.enable_query_expansion is True
         assert config.enable_passage_reordering is True
         assert config.enable_sufficiency_check is True
-        assert config.model == "gpt-4o-mini"
+        assert config.provider == LLMProvider.GEMINI
+        assert config.model == "gemini-3.5-flash-lite"
+        assert config.gemini_model == "gemini-3.5-flash-lite"
         assert config.max_tokens == 300
         assert config.temperature == 0.0
         assert config.num_expansions == 3
