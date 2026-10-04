@@ -186,22 +186,22 @@ class TestUnknownModel:
     def test_unknown_model_cost_is_null_and_warns_once(self, caplog):
         client = _client(_response(), _response())
         with caplog.at_level(logging.WARNING, logger=gc.__name__):
-            gc.generate_with_retry(client=client, tag="t", model="gemini-3.8-flash", contents="x")
-            gc.generate_with_retry(client=client, tag="t", model="gemini-3.8-flash", contents="x")
+            gc.generate_with_retry(client=client, tag="t", model="gemini-unpriced-test", contents="x")
+            gc.generate_with_retry(client=client, tag="t", model="gemini-unpriced-test", contents="x")
             s = gc.get_usage_summary()
 
         warnings = [r for r in caplog.records
-                    if r.levelno == logging.WARNING and "gemini-3.8-flash" in r.getMessage()]
+                    if r.levelno == logging.WARNING and "gemini-unpriced-test" in r.getMessage()]
         assert len(warnings) == 1
-        assert s["by_model"]["gemini-3.8-flash"]["estimated_cost_usd"] is None
-        assert s["by_model"]["gemini-3.8-flash"]["tokens"]["prompt"] == 200
+        assert s["by_model"]["gemini-unpriced-test"]["estimated_cost_usd"] is None
+        assert s["by_model"]["gemini-unpriced-test"]["tokens"]["prompt"] == 200
         assert s["totals"]["estimated_cost_usd"] is None
-        assert s["totals"]["unpriced_models"] == ["gemini-3.8-flash"]
+        assert s["totals"]["unpriced_models"] == ["gemini-unpriced-test"]
 
     def test_mixed_group_cost_null_but_priced_part_reported(self):
         client = _client(_response(prompt=1_000_000, candidates=0, thoughts=0), _response())
         gc.generate_with_retry(client=client, tag="mix", model="gemini-3.5-flash", contents="x")
-        gc.generate_with_retry(client=client, tag="mix", model="gemini-3.8-flash", contents="x")
+        gc.generate_with_retry(client=client, tag="mix", model="gemini-unpriced-test", contents="x")
         tag = gc.get_usage_summary()["by_tag"]["mix"]
         assert tag["estimated_cost_usd"] is None
         assert tag["estimated_cost_usd_priced_models"] == pytest.approx(0.50)
@@ -229,7 +229,7 @@ class TestSummaryOutput:
                                                  "tool_use_prompt", "input", "output"}
         assert {(e["model"], e["tag"]) for e in data["by_model_tag"]} == {
             ("gemini-3.5-flash", "phase10a.summary"), ("gemini-3.8-flash", "phase10b.visual.chart")}
-        assert data["prices_usd_per_1m"]["gemini-3.5-flash"] == {"input": 0.5, "output": 3.0}
+        assert data["prices_usd_per_1m"]["gemini-3.5-flash"] == [{"input": 0.5, "output": 3.0}]
 
     def test_merge_usage_from_worker_summary(self):
         gc.generate_with_retry(client=_client(_response(prompt=7)), tag="phase5.7.toc",
@@ -287,4 +287,29 @@ class TestCallSiteTags:
                 config=types.GenerateContentConfig(temperature=0)))
         s = gc.get_usage_summary()
         assert list(s["by_tag"]) == ["phase10b.visual.chart"]
-        assert s["by_model"]["gemini-3.8-flash"]["estimated_cost_usd"] is None
+        assert s["by_model"]["gemini-3.8-flash"]["estimated_cost_usd"] is not None
+
+
+class TestDatedPrices:
+    def test_flash_intro_then_standard_rate(self):
+        from datetime import date
+        from src.core.gemini_client import _price_for
+        assert _price_for("gemini-3.8-flash", 0, date(2026, 12, 31)) == {"input": 0.75, "output": 3.75}
+        assert _price_for("gemini-3.8-flash", 0, date(2027, 1, 1)) == {"input": 1.50, "output": 7.50}
+
+    def test_pro_long_context_rate(self):
+        from datetime import date
+        from src.core.gemini_client import _cost_usd
+        short = _cost_usd("gemini-3.1-pro-preview", {"prompt": 200_000, "candidates": 1_000_000}, date(2026, 10, 4))
+        long = _cost_usd("gemini-3.1-pro-preview", {"prompt": 200_001, "candidates": 1_000_000}, date(2026, 10, 4))
+        assert short == pytest.approx(0.4 + 12.0)
+        assert long == pytest.approx(200_001 * 4.0 / 1e6 + 18.0)
+
+    def test_cost_accumulates_per_call(self):
+        from src.core import gemini_client as gc
+        gc.reset_usage()
+        gc._record("gemini-3.1-pro-preview", "t", {**gc._empty_tokens(), "prompt": 300_000})
+        gc._record("gemini-3.1-pro-preview", "t", {**gc._empty_tokens(), "prompt": 100_000})
+        total = gc.get_usage_summary()["totals"]["estimated_cost_usd"]
+        assert total == pytest.approx((300_000 * 4.0 + 100_000 * 2.0) / 1e6)
+        gc.reset_usage()

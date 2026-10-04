@@ -27,9 +27,9 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -168,18 +168,32 @@ def reset_client():
 # USAGE AND COST ACCOUNTING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# USD per 1M tokens (input, output). Source: the "Gemini Models" table in the
-# repo's CLAUDE.md (Vertex AI list prices recorded there). Thinking tokens are
-# billed as output. Cached tokens are priced at the full input rate, so the
-# estimate is an upper bound when context caching is used. Models missing here
-# (e.g. gemini-3.8-flash, gemini-3.1-pro-preview) get cost=None: add their
-# published price here rather than guessing.
-MODEL_PRICES_USD_PER_1M: Dict[str, Dict[str, float]] = {
-    "gemini-3.5-flash": {"input": 0.50, "output": 3.00},
-    "gemini-3.6-flash": {"input": 1.50, "output": 7.50},
+# Vertex AI list prices, USD per 1M tokens, as recorded on 2026-10-04.
+# Each model has rate periods in date order: "until" is the last day (inclusive) a
+# rate applies; the final period has no end. "long_context" rates apply to a
+# request whose prompt exceeds "above_prompt_tokens". Thinking tokens bill as
+# output. Cached tokens are priced at the full input rate, so the estimate is an
+# upper bound when context caching is used. Unlisted models get cost=None: add
+# their published price here rather than guessing.
+MODEL_PRICES_USD_PER_1M: Dict[str, List[Dict[str, Any]]] = {
+    # Introductory rate through 2026-12-31, then the standard rate
+    "gemini-3.8-flash": [
+        {"until": "2026-12-31", "input": 0.75, "output": 3.75},
+        {"input": 1.50, "output": 7.50},
+    ],
+    "gemini-3.1-pro-preview": [
+        {
+            "input": 2.00,
+            "output": 12.00,
+            "long_context": {"above_prompt_tokens": 200_000, "input": 4.00, "output": 18.00},
+        },
+    ],
+    # From the CLAUDE.md Gemini Models table
+    "gemini-3.5-flash": [{"input": 0.50, "output": 3.00}],
+    "gemini-3.6-flash": [{"input": 1.50, "output": 7.50}],
 }
 
-PRICE_SOURCE = "CLAUDE.md Gemini Models table (USD per 1M tokens)"
+PRICE_SOURCE = "Vertex AI list prices recorded 2026-10-04 (USD per 1M tokens)"
 
 # usage_metadata attribute -> token kind
 _USAGE_FIELDS = {
@@ -234,8 +248,20 @@ def _caller_module() -> str:
     return frame.f_globals.get("__name__", "unknown") if frame is not None else "unknown"
 
 
-def _price_for(model: str) -> Optional[Dict[str, float]]:
-    price = MODEL_PRICES_USD_PER_1M.get(model)
+def _price_for(
+    model: str, prompt_tokens: int = 0, on: Optional[date] = None
+) -> Optional[Dict[str, float]]:
+    """Input/output rate for one request on a given day (default today); None if unpriced."""
+    periods = MODEL_PRICES_USD_PER_1M.get(model)
+    price = None
+    if periods:
+        day = (on or date.today()).isoformat()
+        period = next((p for p in periods if "until" not in p or day <= p["until"]), periods[-1])
+        long_context = period.get("long_context")
+        if long_context and prompt_tokens > long_context["above_prompt_tokens"]:
+            price = {"input": long_context["input"], "output": long_context["output"]}
+        else:
+            price = {"input": period["input"], "output": period["output"]}
     if price is None:
         with _usage_lock:
             first = model not in _warned_unpriced
@@ -248,9 +274,9 @@ def _price_for(model: str) -> Optional[Dict[str, float]]:
     return price
 
 
-def _cost_usd(model: str, tokens: Dict[str, int]) -> Optional[float]:
-    """Estimated cost; None when the model has no price. Thinking tokens bill as output."""
-    price = _price_for(model)
+def _cost_usd(model: str, tokens: Dict[str, int], on: Optional[date] = None) -> Optional[float]:
+    """Estimated cost of one request; None when the model has no price. Thinking bills as output."""
+    price = _price_for(model, tokens.get("prompt", 0), on)
     if price is None:
         return None
     input_tokens = tokens.get("prompt", 0) + tokens.get("tool_use_prompt", 0)
@@ -265,6 +291,9 @@ def _new_bucket() -> Dict[str, Any]:
         "retries": 0,
         "latency_s": 0.0,
         "tokens": _empty_tokens(),
+        # Priced per call (rates depend on the date and on each request's prompt size)
+        "cost_usd": 0.0,
+        "unpriced_calls": 0,
     }
 
 
@@ -289,6 +318,10 @@ def _record(
         bucket["retries"] += int(retries)
         bucket["latency_s"] += latency_s
         _add_tokens(bucket["tokens"], tokens)
+        if cost is None:
+            bucket["unpriced_calls"] += 1
+        else:
+            bucket["cost_usd"] += cost
 
     logger.debug(
         f"Gemini usage tag={tag} model={model} ok={success} "
@@ -349,11 +382,9 @@ def _summarize(entries) -> Dict[str, Any]:
         out["retries"] += bucket["retries"]
         out["latency_s"] += bucket["latency_s"]
         _add_tokens(out["tokens"], bucket["tokens"])
-        cost = _cost_usd(model, bucket["tokens"])
-        if cost is None:
+        priced_cost += bucket.get("cost_usd", 0.0)
+        if bucket.get("unpriced_calls"):
             unpriced.add(model)
-        else:
-            priced_cost += cost
     out["latency_s"] = round(out["latency_s"], 3)
     out["tokens"]["input"] = out["tokens"]["prompt"] + out["tokens"]["tool_use_prompt"]
     out["tokens"]["output"] = out["tokens"]["candidates"] + out["tokens"]["thoughts"]
@@ -361,6 +392,8 @@ def _summarize(entries) -> Dict[str, Any]:
     out["estimated_cost_usd"] = None if unpriced else round(priced_cost, 6)
     out["estimated_cost_usd_priced_models"] = round(priced_cost, 6)
     out["unpriced_models"] = sorted(unpriced)
+    out.pop("cost_usd")
+    out.pop("unpriced_calls")
     return out
 
 
@@ -385,7 +418,7 @@ def get_usage_summary() -> Dict[str, Any]:
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "price_source": PRICE_SOURCE,
-        "prices_usd_per_1m": {m: dict(p) for m, p in MODEL_PRICES_USD_PER_1M.items()},
+        "prices_usd_per_1m": {m: [dict(p) for p in periods] for m, periods in MODEL_PRICES_USD_PER_1M.items()},
         "totals": _summarize((m, b) for (m, _), b in snapshot.items()),
         "by_model": {
             model: _summarize((m, b) for (m, _), b in snapshot.items() if m == model)
@@ -413,6 +446,8 @@ def merge_usage(summary: Dict[str, Any]) -> None:
             bucket["retries"] += int(entry.get("retries", 0))
             bucket["latency_s"] += float(entry.get("latency_s", 0.0))
             _add_tokens(bucket["tokens"], entry.get("tokens", {}))
+            bucket["cost_usd"] += float(entry.get("estimated_cost_usd_priced_models", 0.0))
+            bucket["unpriced_calls"] += int(bool(entry.get("unpriced_models")))
 
 
 def reset_usage() -> None:
