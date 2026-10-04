@@ -161,3 +161,16 @@ def test_phase10b_losses_from_tracker(tmp_path, monkeypatch):
     (tmp_path / "job1.json").write_text(json.dumps({"error_count": 4}))
     orch._record_phase10b_losses(SimpleNamespace(visual_extraction_dir=tmp_path), "job1")
     assert orch.state.phase10_losses["10b_items_failed"] == 4
+
+
+def test_run_summary_lists_quarantined_files(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    a, b = _complete(orch, "A", "B")
+    orch.state.enrichment_complete = [a]
+    orch.state.failed["enrichment"].append((b, "boom"))
+    (tmp_path / "data/processed/state").mkdir(parents=True)
+    (tmp_path / "data/processed/state/B_chunks.json").write_text("{}")
+    orch._record_failures_in_manifest()
+    orch.exit_code = orch._compute_exit_code()
+    data = json.loads(orch._write_run_summary().read_text())
+    assert data["quarantined_files"] == ["state/B_chunks.json"]

@@ -1,7 +1,7 @@
 # =============================================================================
 # CI Pipeline - Lint and Test
 # =============================================================================
-# Runs on every PR and push to main branch.
+# Runs on pushes to main and on PRs into main or feature/gcp-migration.
 # Validates code quality and runs test suite.
 
 name: CI
@@ -10,7 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feature/gcp-migration]
 
 env:
   PYTHON_VERSION: "3.11"
@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -34,10 +36,38 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
+      # The existing tree has known lint and format debt being cleared separately.
+      # PRs may not add to it: each changed file must have no more ruff findings than
+      # on the base branch, and new files must be formatted. Pushes lint everything.
+      - name: Run ruff (no new findings in changed files)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          count() { poetry run ruff check --output-format=json --exit-zero --stdin-filename "$1" - | python -c "import json,sys;print(len(json.load(sys.stdin)))"; }
+          FAILED=0
+          for f in $(git diff --name-only --diff-filter=ACMR FETCH_HEAD...HEAD -- 'src/*.py' 'src/**/*.py'); do
+            HEAD_N=$(count "$f" < "$f")
+            BASE_N=$(git show "FETCH_HEAD:$f" 2>/dev/null | count "$f" || echo 0)
+            echo "$f: ${BASE_N} -> ${HEAD_N}"
+            if [ "${HEAD_N}" -gt "${BASE_N:-0}" ]; then
+              poetry run ruff check "$f" || true
+              FAILED=1
+            fi
+          done
+          exit ${FAILED}
+
+      - name: Run ruff format check (new files)
+        if: github.event_name == 'pull_request'
+        run: |
+          NEW=$(git diff --name-only --diff-filter=A FETCH_HEAD...HEAD -- 'src/*.py' 'src/**/*.py')
+          if [ -n "${NEW}" ]; then poetry run ruff format --check ${NEW}; else echo "No new files"; fi
+
       - name: Run ruff (linter)
+        if: github.event_name != 'pull_request'
         run: poetry run ruff check src/
 
       - name: Run ruff (format check)
+        if: github.event_name != 'pull_request'
         run: poetry run ruff format --check src/
 
   test:

@@ -168,6 +168,8 @@ class PipelineOrchestrator:
         self.started_at = datetime.now()
         self.fatal_error: Optional[str] = None
         self.missing_report_ids: List[str] = []
+        # Outputs renamed *.stale this run (paths relative to data/processed, original names)
+        self.quarantined_files: List[str] = []
         self.exit_code = EXIT_OK
         self.skip = set(skip_phases or [])
         self.quiet = quiet
@@ -1766,7 +1768,8 @@ class PipelineOrchestrator:
             return
         manifest_service = AssemblyService(output_dir="data/processed")
         for phase, task, err in failures:
-            manifest_service.mark_failed(task.report_id, phase, str(err))
+            moved = manifest_service.mark_failed(task.report_id, phase, str(err))
+            self.quarantined_files.extend(p[: -len(".stale")] for p in moved)
         self._log(f"Manifest: marked {len(failures)} failed report(s)", force=True)
 
     def _print_summary(self):
@@ -2039,6 +2042,8 @@ class PipelineOrchestrator:
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
             "phase10_losses": self.state.phase10_losses,
+            # The workflow deletes exactly these objects from GCS processed/
+            "quarantined_files": self.quarantined_files,
             "report_status": statuses,
             "red_flags": self.state.trace_emitter.get_red_flags(),
             "gemini_usage": log_usage_summary(),
