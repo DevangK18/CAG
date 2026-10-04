@@ -143,6 +143,7 @@ jobs:
           MANIFEST="${MANIFEST}"
           SKIP_ARG="${SKIP_ARG}"
           REPORTS_ARG="${REPORTS_ARG}"
+          RUN_ID="${RUN_ID}"
 
           echo "============================================="
           echo "CAG Parsing Pipeline"
@@ -158,6 +159,10 @@ jobs:
 
           # Use /var/tmp for Container-Optimized OS (root is read-only)
           WORK_DIR=/var/tmp/cag
+          # Start from the GCS state every run: anything deleted or quarantined in GCS
+          # must not come back from this VM's copy of an earlier run (raw/ is ~600 MB)
+          echo "Clearing previous run data in ${WORK_DIR}"
+          sudo -n rm -rf ${WORK_DIR}/data ${WORK_DIR}/logs
           echo "Setting up work directory: ${WORK_DIR}"
           mkdir -p ${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
           mkdir -p ${WORK_DIR}/data/processed/ocred
@@ -220,6 +225,9 @@ jobs:
           # --network=host allows container to access GCE metadata server for Vertex AI ADC
           # Named so the detached wrapper can stop it when max_hours is exceeded
           docker rm -f cag-parsing-run 2>/dev/null || true
+          # Keep going on a non-zero exit (3 = partial, 4 = nothing selected) so the
+          # results, logs and run summary are still uploaded; the code is returned at the end
+          set +e
           docker run --rm --name cag-parsing-run --network=host ${GPU_FLAG} \
             -v ${WORK_DIR}/data:/app/data \
             -v ${WORK_DIR}/logs:/app/logs \
@@ -230,11 +238,16 @@ jobs:
             -e USE_VERTEX_AI=true \
             -e USE_VERTEX_EMBEDDINGS=true \
             -e LLM_PROVIDER=gemini \
+            -e RUN_ID=${RUN_ID} \
             ${PARSING_IMAGE} \
             manifest.xlsx ${SKIP_ARG} ${REPORTS_ARG}
+          PIPELINE_RC=$?
+          set -e
+          echo "Pipeline exit code: ${PIPELINE_RC}"
 
           echo "Uploading results to GCS..."
-          run_gsutil -m rsync -r /workspace/data/processed gs://${DATA_BUCKET}/processed/
+          # Quarantined *.stale files stay on the VM
+          run_gsutil -m rsync -r -x '.*\.stale$' /workspace/data/processed gs://${DATA_BUCKET}/processed/
           run_gsutil -m rsync -r /workspace/data/raw gs://${DATA_BUCKET}/raw/
           run_gsutil -m rsync -r /workspace/data/batch_jobs gs://${DATA_BUCKET}/batch_jobs/
           run_gsutil -m rsync -r /workspace/data/extraction_images gs://${DATA_BUCKET}/extraction_images/ 2>/dev/null || true
@@ -242,11 +255,29 @@ jobs:
           run_gsutil -m rsync -r /workspace/data/canonical gs://${DATA_BUCKET}/canonical/ 2>/dev/null || true
           run_gsutil -m rsync -r /workspace/logs/traces gs://${DATA_BUCKET}/traces/ 2>/dev/null || true
           run_gsutil -m cp /workspace/logs/*.log gs://${DATA_BUCKET}/logs/ 2>/dev/null || true
+          run_gsutil -m cp /workspace/logs/run_summary_*.json gs://${DATA_BUCKET}/runs/${RUN_ID}/ 2>/dev/null || true
+          run_gsutil -m rsync -r /workspace/data/dead_letter_queue gs://${DATA_BUCKET}/dead_letter_queue/ 2>/dev/null || true
+
+          # A report that failed this run has its previous output quarantined locally
+          # (renamed *.stale); remove the original from GCS so the API stops serving it
+          QUARANTINED=$(docker run --rm -v ${WORK_DIR}:/workspace ${GCLOUD_IMAGE} python3 -c '
+          import json, pathlib
+          m = pathlib.Path("/workspace/data/processed/manifest.json")
+          reports = json.loads(m.read_text()).get("reports", []) if m.exists() else []
+          for r in reports:
+              for f in r.get("quarantined_files") or []:
+                  print(f[: -len(".stale")])
+          ')
+          for f in ${QUARANTINED}; do
+            echo "Removing stale output from GCS: processed/${f}"
+            run_gsutil -q rm "gs://${DATA_BUCKET}/processed/${f}" 2>/dev/null || true
+          done
 
           echo ""
           echo "============================================="
-          echo "Parsing pipeline complete!"
+          echo "Parsing pipeline finished (exit code ${PIPELINE_RC})"
           echo "============================================="
+          exit ${PIPELINE_RC}
           SCRIPT_EOF
 
           # Replace placeholders with actual values
@@ -265,6 +296,7 @@ jobs:
           sed -i "s|\${MANIFEST}|${{ inputs.manifest }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${SKIP_ARG}|${SKIP_ARG}|g" /tmp/run_pipeline.sh
           sed -i "s|\${REPORTS_ARG}|${REPORTS_ARG}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${RUN_ID}|${{ github.run_id }}|g" /tmp/run_pipeline.sh
 
           chmod +x /tmp/run_pipeline.sh
 
@@ -312,6 +344,10 @@ jobs:
             FINAL="timeout"
           elif [ ${RC} -eq 0 ]; then
             FINAL="success"
+          elif [ ${RC} -eq 3 ]; then
+            FINAL="partial"
+          elif [ ${RC} -eq 4 ]; then
+            FINAL="nothing_selected"
           else
             FINAL="failed:${RC}"
           fi
@@ -370,6 +406,14 @@ jobs:
                 echo "✅ Pipeline completed successfully"
                 echo "finished=true" >> $GITHUB_OUTPUT
                 exit 0 ;;
+              partial)
+                echo "::error::Pipeline finished with failures (some reports, Phase 10 items or requested IDs). See ${GCS_RUN}/run_summary_${{ github.run_id }}.json"
+                echo "finished=true" >> $GITHUB_OUTPUT
+                exit 1 ;;
+              nothing_selected)
+                echo "::error::No reports were selected (empty manifest or --reports matched nothing)"
+                echo "finished=true" >> $GITHUB_OUTPUT
+                exit 1 ;;
               failed:*|timeout)
                 echo "::error::Pipeline ${STATUS}. Full log: ${GCS_RUN}/pipeline.log"
                 echo "finished=true" >> $GITHUB_OUTPUT
