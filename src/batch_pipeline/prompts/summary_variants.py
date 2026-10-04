@@ -361,12 +361,23 @@ def get_summary_prompt(variant: str, summary_input: str, json_data: dict) -> str
         "policy": _get_policy_prompt(tier, state_name),
     }
 
-    return (prompts[variant] + ACCURACY_RULES).format(
+    prompt = (prompts[variant] + ACCURACY_RULES).format(
         input=summary_input,
         report_title=meta.get("report_title", "N/A"),
         report_type=meta.get("report_type", "N/A"),
         ministry=meta.get("department") or meta.get("ministry", "N/A"),
     )
+
+    # A template that interpolates {input} inside an f-string renders Python's
+    # built-in input() instead of the report data. Fail loudly rather than send
+    # a prompt with no report in it.
+    if "<built-in function" in prompt or summary_input not in prompt:
+        raise ValueError(
+            f"Summary prompt for variant '{variant}' (tier '{tier}') did not render "
+            "the report data: check the template's {input} placeholder"
+        )
+
+    return prompt
 
 
 def _get_executive_prompt(tier: str = "union", state_name: str = None) -> str:
@@ -501,7 +512,7 @@ def _get_executive_prompt_state(state_name: str = None) -> str:
 - Use tables where they aid comprehension
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write the Executive Brief in clean markdown format. Target ~2000-2300 words total.
@@ -578,7 +589,7 @@ def _get_executive_prompt_local(state_name: str = None) -> str:
 - NO meta-commentary - start directly with content
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write the Executive Brief in clean markdown format. Target ~1800-2200 words total.
@@ -751,7 +762,7 @@ Extract 5-7 findings suitable for pull-quotes:
 - NO meta-commentary - write as if filing an actual story
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write as if you're filing for the state edition. ~2000-2200 words total.
@@ -848,7 +859,7 @@ Extract 5-7 findings about local governance:
 - NO meta-commentary - write as if filing an actual local story
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write for local readers who deal with these institutions daily. ~2000-2200 words total.
@@ -1053,7 +1064,7 @@ For EACH major thematic area:
 - Place findings in comparative state context where possible
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write as a comprehensive research summary suitable for state governance research. ~3500-4000 words total.
@@ -1165,7 +1176,7 @@ For each theme: findings with references, patterns across local bodies, severity
 - Maintain analytical objectivity
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write as a comprehensive research summary for local governance scholars. ~3500-4000 words total.
@@ -1320,7 +1331,7 @@ Make this completely understandable to:
 - Be honest and clear, but not angry or preachy
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write in a friendly, clear, conversational tone. Use headers as questions people would ask.
@@ -1419,7 +1430,7 @@ Make this completely understandable to:
 - Be empowering, not angry—help people ask the right questions
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write in a friendly, clear tone that villagers and city residents can understand.
@@ -1644,7 +1655,7 @@ Outline the department's formal response, filled in with this report's paragraph
 - Consider state-specific administrative constraints
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write in formal policy document style suitable for state government circulation. ~2200-2500 words total.
@@ -1769,7 +1780,7 @@ Fill each outline with this report's findings, amounts and local bodies (not a b
 - Focus on strengthening local self-governance, not just compliance
 
 ## Report Data:
-{input}
+{{input}}
 
 ## Output:
 Write in formal policy document style suitable for state and district circulation. ~2200-2500 words total.
