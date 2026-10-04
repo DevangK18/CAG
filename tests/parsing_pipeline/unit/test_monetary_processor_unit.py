@@ -4,7 +4,7 @@ P0-01: Unit tests for MonetaryProcessor fixes.
 Tests:
 - Indian comma grouping (e.g., ₹2,41,220.26 crore)
 - Year-like pattern rejection (e.g., Rs 2003)
-- Amount-based deduplication with 5% tolerance
+- No amount-based deduplication: one value per text span (M6)
 - Explicit-total preference heuristic
 - Unit validation at boundaries
 """
@@ -71,23 +71,20 @@ class TestYearRejection:
         assert values[0].amount == 2003.50
 
 
-class TestAmountBasedDedup:
-    """Test amount-based deduplication (P0-01.B)."""
+class TestSpanDedup:
+    """M6: only the same text span is deduplicated, never nearby values."""
 
-    def test_dedup_same_amount_different_format(self, processor):
-        """Test dedup of ₹62.76 crore and 62.76 crore."""
+    def test_each_mention_is_kept(self, processor):
+        """₹62.76 crore and (Rs. 62.76 crore) are two mentions, two values."""
         text = "The loss of ₹62.76 crore (Rs. 62.76 crore) was observed."
         values = processor.extract_monetary_values(text)
-        # Should only extract one value
-        assert len(values) == 1
-        assert values[0].amount == pytest.approx(62.76, rel=0.05)
+        assert [v.amount for v in values] == [62.76, 62.76]
 
-    def test_dedup_within_tolerance(self, processor):
-        """Test dedup of amounts within 5% tolerance."""
+    def test_close_amounts_are_not_merged(self, processor):
+        """₹100 crore and ₹102 crore are different amounts (was a 5% dedup)."""
         text = "The amount was ₹100 crore (approximately ₹102 crore)."
         values = processor.extract_monetary_values(text)
-        # 102 is within 5% of 100, should dedup
-        assert len(values) == 1
+        assert [v.amount for v in values] == [100, 102]
 
     def test_keep_different_amounts(self, processor):
         """Test keeping distinct amounts."""
@@ -155,13 +152,13 @@ class TestValidation:
     """Test unit validation at boundaries (P0-01.F)."""
 
     def test_validate_negative_raises(self, processor):
-        """Test that negative values raise assertion."""
-        with pytest.raises(AssertionError):
+        """M17: negative values raise ValueError (not a stripped assert)."""
+        with pytest.raises(ValueError):
             processor._validate_monetary_value(-100, "test")
 
     def test_validate_non_int_raises(self, processor):
-        """Test that non-integer values raise assertion."""
-        with pytest.raises(AssertionError):
+        """M17: non-integer values raise TypeError (not a stripped assert)."""
+        with pytest.raises(TypeError):
             processor._validate_monetary_value(100.5, "test")
 
     def test_validate_large_value_logs_warning(self, processor, caplog):

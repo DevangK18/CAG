@@ -1140,8 +1140,14 @@ def propagate_semantic_enrichment_to_chunks(
 
             sd["finding_type"] = primary_finding.get("finding_type")
             sd["severity"] = primary_finding.get("severity")
-            sd["total_amount_crore"] = primary_finding.get("monetary_value_crore")
-            sd["total_amount_inr"] = primary_finding.get("total_amount_inr")
+            # Paise (1e9 = ₹1 crore). The *_inr name is an alias kept until the full re-run
+            sd["monetary_value_paise"] = primary_finding.get("monetary_value_paise") or primary_finding.get("monetary_value")
+            sd["monetary_value_crore"] = primary_finding.get("monetary_value_crore")
+            total_paise = primary_finding.get("total_amount_paise") or primary_finding.get("total_amount_inr") or 0
+            sd["total_amount_paise"] = total_paise
+            sd["total_amount_inr"] = total_paise
+            # The total, as in the Qdrant payload (it was the primary amount here)
+            sd["total_amount_crore"] = round(total_paise / 1e9, 4) if total_paise else None
             sd["is_finding"] = True
 
             # Store all finding IDs if multiple findings reference this chunk

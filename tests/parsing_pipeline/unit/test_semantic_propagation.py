@@ -65,7 +65,7 @@ def sample_semantic_enrichment() -> Dict[str, Any]:
                 "severity": "critical",
                 "source_chunk_id": "report_001_child_p010_paragraph_001",
                 "monetary_value_crore": 847.71,
-                "total_amount_inr": 8477100000000,  # in paise
+                "total_amount_inr": 847710000000,  # paise: ₹847.71 crore (1e9 paise = 1 crore)
                 "entities_mentioned": ["Ministry of Railways", "NHAI"],
                 "text": "The Ministry of Railways failed to collect ₹847.71 crore.",
             },
@@ -189,7 +189,8 @@ class TestPropagateFindings:
 
         chunk_1 = sample_child_chunks[0]
         assert chunk_1["structured_data"]["total_amount_crore"] == 847.71
-        assert chunk_1["structured_data"]["total_amount_inr"] == 8477100000000
+        assert chunk_1["structured_data"]["total_amount_inr"] == 847710000000
+        assert chunk_1["structured_data"]["total_amount_paise"] == 847710000000
 
     def test_is_finding_flag_set(
         self, sample_child_chunks, sample_semantic_enrichment

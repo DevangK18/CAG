@@ -507,9 +507,9 @@ class SemanticPayloadExtractor:
                 payload["severity"] = finding.get("severity")
 
                 # Convert to crore for easier filtering
-                total_inr = finding.get("total_amount_inr", 0)
-                if total_inr:
-                    payload["total_amount_crore"] = total_inr / 10_000_000_00
+                total_paise = finding.get("total_amount_paise") or finding.get("total_amount_inr", 0)
+                if total_paise:
+                    payload["total_amount_crore"] = total_paise / 10_000_000_00
 
                 payload["entities_mentioned"] = finding.get("entities_mentioned", [])
                 break
