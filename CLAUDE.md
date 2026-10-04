@@ -145,6 +145,35 @@ python -m src.module.name
 - One-line summary, max 72 characters
 - No verbose explanations unless absolutely necessary
 
+## Git Workflow (pipeline-review fixes)
+
+The fixes in `docs/pipeline-review/step3_fix_list.md` land through one PR per work package.
+
+**Branches**
+- Integration branch: `feature/gcp-migration`. Never commit to it directly, never force-push or rewrite it, never push to `main`.
+- Per PR: `git switch feature/gcp-migration && git pull`, then `git switch -c fix/<nn>-<short-name>`.
+- Never branch one PR branch from another. Parallel PRs rebase onto `feature/gcp-migration` after the earlier one merges.
+
+**Agents and worktrees**
+- Agents work in worktrees spawned while the PR branch is checked out (`worktree.baseRef` is `head`).
+- List each agent's files before spawning; two agents never edit the same file.
+- Main session only: `main.py`, `parallel_runner.py`, `semantic_enrichment_service.py`, `assembly_service.py`, `src/core/data_contracts.py`, `parsing_config.yaml`, `enrichment_patterns.yaml`, `.github/workflows/*`, `docs/pipeline-review/implementation_log.md`.
+- Agents commit only in their worktree: no push, PR, merge, workflow dispatch or GCS writes.
+- No poetry env per worktree: use the main checkout's interpreter and confirm `import src` resolves to the worktree.
+
+**Integration**
+- One commit per fix-list row on the PR branch (`git merge --squash worktree-<name>`).
+- Message: `<type>(<phase>): <what changed> [<issue IDs>]`, e.g. `fix(phase10a): escape {input} in summary prompts [D-10a-01]`.
+- Keep the PR branch linear; remove each worktree and its branch after integrating.
+
+**Before pushing**
+- On the PR branch: unit tests, `score_gold.py`, `preflight_check.py` and the Step 1 scripts for the issues claimed. Log before/after numbers in `implementation_log.md`.
+
+**Pull request**
+- Push only the PR branch. `gh pr create --base feature/gcp-migration`, titled `PR <nn>: <work packages> - <summary>`, body = fix IDs (one line each) then before/after numbers.
+- Wait for approval; the user squash-merges. Then pull `feature/gcp-migration`, delete the local PR branch, `git worktree prune`, and check no `fix/*` or `worktree-*` branches remain.
+- Workflow file changes go in their own PR.
+
 ## Pipeline Configuration
 
 Centralized in `parsing_config.yaml`:
