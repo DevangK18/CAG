@@ -202,6 +202,7 @@ jobs:
           OUTPUT_PREFIX="${OUTPUT_PREFIX}"
           CONTAINER_NAME="${CONTAINER_NAME}"
           RUN_ID="${RUN_ID}"
+          MAX_HOURS="${MAX_HOURS}"
           GCS_OUT="gs://${DATA_BUCKET}/${OUTPUT_PREFIX}"
 
           echo "============================================="
@@ -226,7 +227,7 @@ jobs:
           # Start from the GCS state every run: anything deleted or quarantined in GCS
           # must not come back from this VM's copy of an earlier run
           echo "Clearing previous run data in ${WORK_DIR}"
-          sudo -n rm -rf ${WORK_DIR}/data ${WORK_DIR}/logs
+          sudo -n rm -rf "${WORK_DIR:?}/data" "${WORK_DIR:?}/logs"
           mkdir -p ${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
           mkdir -p ${WORK_DIR}/data/processed/ocred
           mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction,enrichment,chart_extraction}
@@ -252,8 +253,17 @@ jobs:
           # PDFs are read from the shared raw/ cache (read-only); processed state
           # comes only from the output prefix so production data is never mixed in
           echo "Syncing data from GCS..."
-          run_gsutil -m rsync -r gs://${DATA_BUCKET}/raw/ /workspace/data/raw/ 2>/dev/null || true
-          run_gsutil -m rsync -r ${GCS_OUT}/processed/ /workspace/data/processed/ 2>/dev/null || true
+          # Fatal on failure: running from a partial copy would upload a mixed state
+          run_gsutil -m rsync -r gs://${DATA_BUCKET}/raw/ /workspace/data/raw/
+          # A new output prefix has no processed/ yet; anything else that fails here is fatal
+          if run_gsutil ls "${GCS_OUT}/processed/" > /tmp/prefix_ls.txt 2>&1; then
+            run_gsutil -m rsync -r ${GCS_OUT}/processed/ /workspace/data/processed/
+          elif grep -q "matched no objects" /tmp/prefix_ls.txt; then
+            echo "No previous output under ${GCS_OUT}/processed/ (new prefix)"
+          else
+            cat /tmp/prefix_ls.txt
+            exit 12
+          fi
 
           echo "Downloading manifest..."
           run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
@@ -282,7 +292,7 @@ jobs:
           # Keep going on a non-zero exit (3 = partial, 4 = nothing selected) so the
           # results, logs and run summary are still uploaded; the code is returned at the end
           set +e
-          docker run --rm --name ${CONTAINER_NAME} --network=host --gpus all --shm-size=8g \
+          timeout --kill-after=2m "${MAX_HOURS}h" docker run --rm --name ${CONTAINER_NAME} --network=host --gpus all --shm-size=8g \
             -v ${WORK_DIR}/data:/app/data \
             -v ${WORK_DIR}/logs:/app/logs \
             -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
@@ -298,6 +308,11 @@ jobs:
           PIPELINE_RC=$?
           set -e
           echo "Pipeline exit code: ${PIPELINE_RC}"
+          if [ ${PIPELINE_RC} -eq 124 ] || [ ${PIPELINE_RC} -eq 137 ]; then
+            # Killing the docker client does not stop the container
+            echo "Pipeline exceeded ${MAX_HOURS}h; stopping the container and uploading what exists"
+            docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
+          fi
 
           # Results go under the output prefix only. processed/manifest.json is
           # excluded (the CPU run owns it; last writer would win). raw/ is not
@@ -317,15 +332,13 @@ jobs:
           # (renamed *.stale); remove the original from GCS so it is not served
           QUARANTINED=$(docker run --rm -v ${WORK_DIR}:/workspace ${GCLOUD_IMAGE} python3 -c '
           import json, pathlib
-          m = pathlib.Path("/workspace/data/processed/manifest.json")
-          reports = json.loads(m.read_text()).get("reports", []) if m.exists() else []
-          for r in reports:
-              for f in r.get("quarantined_files") or []:
-                  print(f[: -len(".stale")])
+          s = pathlib.Path("/workspace/logs/run_summary_${RUN_ID}.json")
+          for f in (json.loads(s.read_text()).get("quarantined_files") or []) if s.exists() else []:
+              print(f)
           ')
           for f in ${QUARANTINED}; do
             echo "Removing stale output from GCS: ${OUTPUT_PREFIX}/processed/${f}"
-            run_gsutil -q rm "${GCS_OUT}/processed/${f}" 2>/dev/null || true
+            run_gsutil -q rm "${GCS_OUT}/processed/${f}" || echo "  (not in GCS)"
           done
 
           echo ""
@@ -353,6 +366,7 @@ jobs:
           sed -i "s|\${OUTPUT_PREFIX}|${{ env.OUTPUT_PREFIX }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${CONTAINER_NAME}|${{ env.CONTAINER_NAME }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${RUN_ID}|${{ github.run_id }}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${MAX_HOURS}|${{ inputs.max_hours || '12' }}|g" /tmp/run_pipeline.sh
 
           chmod +x /tmp/run_pipeline.sh
 
@@ -390,12 +404,15 @@ jobs:
           ( while sleep 300; do gcs_cp pipeline.log; done ) &
           SYNC_PID=$!
 
-          timeout --kill-after=2m "${MAX_HOURS}h" bash /tmp/run_pipeline.sh > ${RUN_DIR}/pipeline.log 2>&1
+          # The pipeline itself is limited to MAX_HOURS inside run_pipeline.sh, which still
+          # uploads results afterwards; this outer cap only guards against a hung upload
+          OUTER_SECS=$(awk "BEGIN { printf \"%d\", (${MAX_HOURS} + 1) * 3600 }")
+          timeout --kill-after=2m "${OUTER_SECS}s" bash /tmp/run_pipeline.sh > ${RUN_DIR}/pipeline.log 2>&1
           RC=$?
 
           kill ${SYNC_PID} 2>/dev/null
           if [ ${RC} -eq 124 ] || [ ${RC} -eq 137 ]; then
-            echo "Pipeline exceeded ${MAX_HOURS}h limit; stopping container" >> ${RUN_DIR}/pipeline.log
+            echo "Run exceeded its time limit (${MAX_HOURS}h pipeline + 1h upload); stopping container" >> ${RUN_DIR}/pipeline.log
             docker rm -f ${CONTAINER_NAME} >> ${RUN_DIR}/pipeline.log 2>&1
             FINAL="timeout"
           elif [ ${RC} -eq 0 ]; then
