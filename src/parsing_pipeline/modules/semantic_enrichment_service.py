@@ -18,10 +18,16 @@ Enables cross-report analytics queries like:
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING, List, Dict, Optional, Any
 
 if TYPE_CHECKING:
     from src.parsing_pipeline.instrumentation import TraceEmitter
+
+
+# Leading paragraph number of a section heading ("3.2.1 Delay in ..."), and content words
+_SECTION_NO = re.compile(r"\s*(\d+(?:\.\d+)+)")
+_WORD = re.compile(r"[a-z]{4,}")
 
 logger = logging.getLogger(__name__)
 
@@ -713,17 +719,43 @@ class SemanticEnrichmentService:
         findings: List[Finding],
         recommendations: List[Recommendation],
     ) -> None:
-        """Link related findings and recommendations based on proximity and content."""
-        for rec in recommendations:
-            related = []
-            for finding in findings:
-                # Same chapter
-                if rec.chapter and finding.chapter and rec.chapter == finding.chapter:
-                    # Within 5 pages
-                    if abs(rec.page - finding.page) <= 5:
-                        related.append(finding.finding_id)
+        """
+        Link each recommendation to at most 5 findings (C-9-12).
 
-            rec.related_finding_ids = related[:5]  # Max 5 related findings
+        Candidates, first non-empty pool wins: findings in the paragraphs the
+        recommendation cites (or its number), then findings in the same section at
+        any distance, then the same chapter within 5 pages. Ranked by shared words.
+        """
+
+        def section_no(text):
+            m = _SECTION_NO.match(text or "")
+            return m.group(1) if m else None
+
+        def words(text):
+            return set(_WORD.findall((text or "").lower()))
+
+        sections = {f.finding_id: section_no(f.section) for f in findings}
+        finding_words = {f.finding_id: words(f.text) for f in findings}
+        for rec in recommendations:
+            cited = list(rec.paragraph_citations or [])
+            m = re.search(r"\d+\.\d+(?:\.\d+)*", rec.rec_number or "")
+            if m:
+                cited.append(m.group(0))
+            pool = [
+                f for f in findings
+                if sections[f.finding_id]
+                and any(sections[f.finding_id] == c or sections[f.finding_id].startswith(c + ".") for c in cited)
+            ]
+            if not pool and rec.section:
+                pool = [f for f in findings if f.section and f.section == rec.section]
+            if not pool:
+                pool = [
+                    f for f in findings
+                    if rec.chapter and f.chapter == rec.chapter and abs(rec.page - f.page) <= 5
+                ]
+            rec_words = words(rec.text)
+            pool.sort(key=lambda f: len(rec_words & finding_words[f.finding_id]), reverse=True)
+            rec.related_finding_ids = [f.finding_id for f in pool[:5]]
 
     def _link_evidence_to_findings(
         self,

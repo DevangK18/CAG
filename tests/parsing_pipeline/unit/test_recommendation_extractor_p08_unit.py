@@ -232,3 +232,55 @@ class TestRecNumberExtraction:
         recs = extractor._extract_list_after_cue(chunks, "test_report")
         assert recs[0].rec_number == "Recommendation 1"
         assert recs[1].rec_number == "Recommendation 2"
+
+
+class TestInterimVerbPatterns:
+    """PR 6 section 5: recommendation forms from the gold labels."""
+
+    @staticmethod
+    def _verb_recs(extractor, text):
+        chunks = [{"content": text, "chunk_id": "c1", "source_page_physical": 14,
+                   "content_type": "paragraph", "hierarchy": {"level_1": "Chapter 2"}}]
+        return extractor._extract_verb_based(chunks, "r")
+
+    @pytest.mark.parametrize("text", [
+        # 2025_08 R002: "N)" numbering, mixed-case acronym
+        "2) MoES may clearly define the revised targets commensurate with the resources during "
+        "reformulation to enable assessment of achievements against the targets.",
+        # OD_2025_05 R017: "The Department may <verb>"
+        "The Department may take steps to maintain the normative Pupil- Teacher Ratio by engaging "
+        "additional teachers in the schools experiencing shortfalls.",
+        # OD_2025_05 R003 / HP_2022 R002: passive "may be ..."
+        "Efficient utilisation of allocated funds may be ensured to deliver the educational needs "
+        "of the students to the best extent.",
+        "Audit memos may be issued to the auditee unit.",
+        # HP_2019: roman numeral item
+        "ii. Income and expenditure of the Panchayat may be shown separately in the cash book.",
+        # BR_2024_03 R001: acronym followed by a comma
+        "The UD&HD may ensure, by effective monitoring, timely collection of user charges.",
+        # BR_2024_03 R005: plural acronym subject
+        "ULBs may strictly ensure segregation of waste at source and door-to-door collection.",
+    ])
+    def test_recommendation_forms_found(self, extractor, text):
+        assert len(self._verb_recs(extractor, text)) == 1
+
+    @pytest.mark.parametrize("text", [
+        # OD p.128: under IGNORECASE "[A-Z]{2,8}" matched any word ("uniforms should")
+        "During 2018-23, free uniforms should reach students before the session began, but the "
+        "supply was delayed in all the sampled districts.",
+        # audit rebuttals (2025_08, 2025_38)
+        "The reply needs to be viewed in light of the fact that only 30 per cent of the Automatic "
+        "Weather Stations were functional.",
+        "Reply of the Management may be viewed in the light of the fact that the management has "
+        "accepted that there were delays.",
+        # passive narrative, not advice
+        "It may be noted that funds were released in the last month of the financial year.",
+        "It may be noticed that similar recommendations had been made during previous years.",
+    ])
+    def test_non_recommendations_rejected(self, extractor, text):
+        assert self._verb_recs(extractor, text) == []
+
+    def test_acronym_pattern_is_case_sensitive(self, extractor):
+        acronym = extractor._verb[3]
+        assert acronym.search("CBDT may ensure that all cases are reviewed. ")
+        assert not acronym.search("schools should be provided with labs. ")

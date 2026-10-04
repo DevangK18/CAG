@@ -64,6 +64,8 @@ class RecommendationExtractor:
         re.compile(r"As\s+per\s+(?:the\s+)?\w+\s+(?:Act|Rules|Manual|Guidelines)", re.IGNORECASE),
         re.compile(r"(?:Section|Rule|Clause)\s+\d+\s+(?:of|stipulates|provides|states)", re.IGNORECASE),
         re.compile(r"(?:Ministry|Government)\s+(?:has\s+)?(?:issued|stated|observed)\s+that", re.IGNORECASE),
+        # Audit rebuttals of a management reply: "The reply needs to be viewed in the light of ..."
+        re.compile(r"\b(?:may|needs?\s+to)\s+be\s+viewed\s+in\s+(?:the\s+)?light\s+of", re.IGNORECASE),
     ]
 
     # ══════════════════════════════════════════════════════════════
@@ -111,8 +113,21 @@ class RecommendationExtractor:
         # "Ministry/Department/Government/GoI should/may/needs to..."
         r"(?:The\s+)?(?:Ministry|Department|Government|GoI|NHAI|Railways?|Board|Corporation|Authority)"
         r"\s+(?:should|may\s+consider|needs?\s+to|is\s+required\s+to|must)\s+(.+?)(?:\.\s|$)",
-        # "CBDT may ensure that..." / "NHA may ensure..."
-        r"(?:The\s+)?(?:[A-Z]{2,8})\s+(?:should|may\s+(?:consider|ensure)|needs?\s+to)\s+(.+?)(?:\.\s|$)",
+        # "CBDT may ensure that..." / "MoES may clearly define...". The acronym is
+        # matched case-sensitively (two or more capitals): under IGNORECASE it
+        # matched any word ("uniforms should")
+        r"(?:The\s+)?\b(?-i:(?=[A-Za-z&/]*[A-Z][a-z]*[A-Z])[A-Z][A-Za-z&/]{1,11})\s+"
+        r"(?:should|may\s+(?:also\s+|clearly\s+)?(?!be\b|have\b|not\b)[a-z]+|needs?\s+to)[\s,]+(.+?)(?:\.\s|$)",
+        # "The Department may take steps...", "State Government may fix...", "ULBs may avoid..."
+        r"(?:The\s+)?(?:State\s+Government|Government|(?:[A-Z][\w&]*\s+){0,4}Department|Ministry|Company|"
+        r"Management|Board|Corporation|Authority|ULBs?|PRIs?|GPs?)"
+        r"\s+may\s+(?:also\s+)?(?!be\b|have\b|not\b)[a-z]+[\s,]+(.+?)(?:\.\s|$)",
+        # Passive advice: "... may be ensured", "Audit memos may be issued", "... should be assessed"
+        r"\b(?:may|should|needs?\s+to)\s+(?:also\s+)?be\s+(?!noted|noticed|seen|viewed|mentioned|stated|recalled|"
+        r"pointed|due\b|possible\b|because\b|that\b)[a-z]+(?:ed|en|wn|ne|de|ld|ut|et)\b(.*?)(?:\.\s|$)",
+        # "2) MoES may ...", "ii. Reference to rules may be given ...": a numbered directive
+        r"^\s*(?:\(?\d{1,2}\)|\(?(?-i:[ivx]{1,5})[.)])\s+.{0,120}?\b(?:may|should|must|needs?\s+to)\s+"
+        r"(?!have\b)(.+?)(?:\.\s|$)",
     ]
 
     # ══════════════════════════════════════════════════════════════
