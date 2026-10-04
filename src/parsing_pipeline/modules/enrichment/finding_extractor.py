@@ -212,15 +212,9 @@ class FindingExtractor:
         re.compile(r"^\s*Chart\s+[\d.]+[\s:]+", re.IGNORECASE),  # Chart captions
         re.compile(r"^\s*Figure\s+[\d.]+[\s:]+", re.IGNORECASE),  # Figure captions
         re.compile(r"^\s*Box\s+[\d.]+[\s:]+", re.IGNORECASE),  # Box captions
-        # R1: Multi-year span patterns (statistical data, not findings)
-        # These capture historical aggregate data like "released ₹60,000 crore during 2003-2022"
-        re.compile(r"during\s+(?:the\s+)?(?:FYs?\s+)?\d{4}[-–]\d{2,4}\s+to\s+\d{4}", re.IGNORECASE),
-        re.compile(r"during\s+(?:the\s+)?(?:financial\s+)?years?\s+\d{4}\s*[-–]\s*\d{4}", re.IGNORECASE),
-        re.compile(r"from\s+(?:FYs?\s+)?\d{4}[-–]\d{2,4}\s+to\s+\d{4}", re.IGNORECASE),
-        re.compile(r"(?:for|during)\s+the\s+period\s+(?:from\s+)?(?:FYs?\s+)?\d{4}", re.IGNORECASE),
-        # R1: Table reference patterns (presenting data, not findings)
-        re.compile(r"as\s+(?:depicted|shown|given|detailed)\s+in\s+Table\s+[\d.]+", re.IGNORECASE),
-        re.compile(r"(?:details?\s+(?:is|are)\s+)?(?:given|shown|depicted)\s+in\s+(?:the\s+)?(?:following\s+)?Table", re.IGNORECASE),
+        # Audit-period openers ("During 2018-23, Audit observed ...") and table
+        # references ("... as detailed in Table 3.2") are not rejected: CAG findings
+        # routinely use both, and these rules discarded 11% of the missed gold findings
         # R1: Source compilation patterns (data from external sources)
         re.compile(r"compiled\s+by\s+(?:the\s+)?(?:office\s+of\s+)?(?:the\s+)?(?:AG|Accountant\s+General)", re.IGNORECASE),
         re.compile(r"\(Source:\s*(?:Office|AG|Data|Department)", re.IGNORECASE),
@@ -239,6 +233,27 @@ class FindingExtractor:
             r"[₹Rs.\s]*[\d,]+(?:\.\d+)?\s*(?:crore|lakh)?\s*(?:\(.{0,20}per\s*cent\))?(?:\s+only)?"
             r"(?:\s*,)?\s*(?:\()?as\s+(?:of|on)\s+(?:March|April|January)",
             re.IGNORECASE
+        ),
+    ]
+
+    # P9-13: management replies and audit rebuttals are not findings. Only the
+    # chunk opening is checked, so a finding that ends with a reply is kept.
+    REPLY_PATTERNS = [
+        # "MoES stated (December 2023) that ...", "In reply, the Executive Officer of
+        # the Nagar Parishad stated (May 2022) that ...", "Admitting the facts, ..."
+        re.compile(
+            r"^\s*(?:(?:In\s+reply|In\s+response|Admitting\s+the\s+facts?|However),?\s+)?"
+            r"(?:(?:[A-Z][\w.&/’'()-]*|of|the|and|in),?\s+){1,10}?(?:had\s+|has\s+)?"
+            r"(?:stated|replied|informed|intimated|assured|contended|accepted|admitted)\b"
+            r"(?:\s*\([^)]{0,80}\))?\s+(?:that|in|to)\b"
+        ),
+        # "The Department’s reply (October 2024) was silent ..."
+        re.compile(r"^\s*(?:The\s+)?(?:[A-Z][\w&/-]*\s+){0,3}?[A-Z][\w&/-]*['’]s?\s+reply\b"),
+        # "In reply, ...", "The reply was not acceptable ...", "Reply of the Government ..."
+        re.compile(r"^\s*(?:In\s+(?:its\s+)?reply\b|(?:However,?\s+)?the\s+reply\b|Reply\s+of\b)", re.IGNORECASE),
+        re.compile(
+            r"^\s*The\s+(?:Department|Government|Ministry|Management)\s+did\s+not\s+"
+            r"(?:offer|furnish|give|provide)\s+any\s+(?:specific\s+)?(?:views|reply|comments)"
         ),
     ]
 
@@ -973,7 +988,11 @@ class FindingExtractor:
             if pattern.search(intro_text):
                 return True
 
-        return False
+        return self._is_reply(text)
+
+    def _is_reply(self, text: str) -> bool:
+        """P9-13: the chunk opens with a management reply or an audit rebuttal."""
+        return any(p.search(text[:300]) for p in self.REPLY_PATTERNS)
 
     def _is_executive_summary_section(
         self,

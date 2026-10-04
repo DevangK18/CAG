@@ -33,28 +33,38 @@ class TestMultiYearSpanPatterns:
         )
         assert extractor._is_non_finding(text) is True
 
-    def test_reject_during_years_dash_format(self, extractor):
-        """Reject 'during years 2003-2022' format."""
+    # PR 6 section 5: period openers are no longer rejected (11% of missed gold
+    # findings were dropped by them); the background-release rule still applies.
+    def test_accept_during_years_dash_format(self, extractor):
+        """'during the years 2003-2022' alone no longer rejects a chunk."""
         text = (
             "As per data compiled, UD&HD had sanctioned Grants-in-Aids of ₹ 31,564.70 crore, "
             "during the years 2003-2022 against which UCs were pending."
         )
-        assert extractor._is_non_finding(text) is True
+        assert extractor._is_non_finding(text) is False
 
-    def test_reject_from_fy_to_format(self, extractor):
-        """Reject 'from FY 2015-16 to 2021-22' format."""
+    def test_accept_from_fy_to_format(self, extractor):
+        """'from FY 2015-16 to 2021-22' no longer rejects a chunk."""
         text = (
             "The total allocation from FY 2015-16 to 2021-22 was ₹ 500 crore "
             "as shown in Table 3.1."
         )
-        assert extractor._is_non_finding(text) is True
+        assert extractor._is_non_finding(text) is False
 
-    def test_reject_for_period_from_format(self, extractor):
-        """Reject 'for the period from FY 2018' format."""
+    def test_accept_for_period_from_format(self, extractor):
+        """'for the period from FY 2018' no longer rejects a chunk."""
         text = (
             "Grants released for the period from FY 2018 onwards amounted to ₹ 200 crore."
         )
-        assert extractor._is_non_finding(text) is True
+        assert extractor._is_non_finding(text) is False
+
+    def test_accept_audit_period_opener(self, extractor):
+        """The common CAG opener "During 2018-19 to 2022-23, Audit observed ..." is kept."""
+        text = (
+            "During 2018-19 to 2022-23, Audit observed that the Department did not "
+            "release ₹ 12.40 crore of the State share to the implementing agencies."
+        )
+        assert extractor._is_non_finding(text) is False
 
     def test_accept_current_year_finding(self, extractor):
         """Accept findings about current year with monetary values."""
@@ -74,28 +84,29 @@ class TestMultiYearSpanPatterns:
 
 
 class TestTableReferencePatterns:
-    """Test R1 table reference pattern rejection."""
+    """PR 6 section 5: table references no longer reject a chunk; findings often
+    end "... as detailed in Table 3.2"."""
 
-    def test_reject_as_depicted_in_table(self, extractor):
-        """Reject 'as depicted in Table X.X' format."""
+    def test_accept_as_depicted_in_table(self, extractor):
+        """'as depicted in Table X.X' no longer rejects a chunk."""
         text = (
             "The position of release and adjustment of grants is as depicted in Table 1.6."
         )
-        assert extractor._is_non_finding(text) is True
+        assert extractor._is_non_finding(text) is False
 
-    def test_reject_as_shown_in_table(self, extractor):
-        """Reject 'as shown in Table X.X' format."""
+    def test_accept_as_shown_in_table(self, extractor):
+        """'as shown in Table X.X' no longer rejects a chunk."""
         text = (
             "Details of pendency of UCs are as shown in Table 3.7 below."
         )
-        assert extractor._is_non_finding(text) is True
+        assert extractor._is_non_finding(text) is False
 
-    def test_reject_given_in_following_table(self, extractor):
-        """Reject 'given in the following Table' format."""
+    def test_accept_given_in_following_table(self, extractor):
+        """'given in the following Table' no longer rejects a chunk."""
         text = (
             "The year-wise position of grants released is given in the following Table."
         )
-        assert extractor._is_non_finding(text) is True
+        assert extractor._is_non_finding(text) is False
 
     def test_accept_finding_referencing_table_later(self, extractor):
         """Accept finding that happens to reference a table later in text."""
@@ -292,4 +303,38 @@ class TestBRReportProblematicCases:
             "contributions, to the Employees' Provident Fund, resulted in an avoidable "
             "expenditure towards penalty for damages and interest of ₹ 1.14 crore."
         )
+        assert extractor._is_non_finding(text) is False
+
+
+class TestReplyPatterns:
+    """P9-13: chunks that open with a management reply or an audit rebuttal."""
+
+    @pytest.mark.parametrize("text", [
+        # gold false positives (2025_08, 2025_38, HP_2022, OD_2025_05, BR_2024_03)
+        "MoES stated (December 2023) that from the experience of operating various ocean "
+        "observations for the past 20 years, the platforms were deployed.",
+        "Management/Ministry replied (November 2023/July 2024/February 2025 & April 2025) that "
+        "the project of BF#1 of RSP was delayed.",
+        "Admitting the facts, the Executive Officer stated (November 2017) that necessary "
+        "corrections would be made in the records.",
+        "The Executive Officer, MCorp. Dharamshala stated (August 2021) that the fund could not "
+        "be utilised due to unavailability of land.",
+        "The Department’s reply (October 2024) was silent on the increase in dropout rate.",
+        "In reply, the Executive Officer of the Nagar Parishad stated (May 2022) that the "
+        "contribution of employees was deposited.",
+        "The reply was not acceptable because, as per NGT’s order and the SWM Rules, 2016, it is "
+        "responsibility of ULBs.",
+        "The Department did not offer any specific views on the discrepancies in enrolment data.",
+    ])
+    def test_reply_is_not_a_finding(self, extractor, text):
+        assert extractor._is_non_finding(text) is True
+
+    @pytest.mark.parametrize("text", [
+        "Audit observed that the Department stated in its records that ₹ 5 crore was released, "
+        "but the funds remained unspent.",
+        "Funds of ₹1.37 crore remained unspent. The Department stated (May 2023) that the works "
+        "would be completed.",
+        "The Department had not recovered ₹ 2.15 crore from the contractors.",
+    ])
+    def test_finding_with_later_reply_is_kept(self, extractor, text):
         assert extractor._is_non_finding(text) is False
