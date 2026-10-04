@@ -1106,7 +1106,7 @@ class ScaffoldingService:
             return toc, heading_positions
 
         except Exception as e:
-            self.logger.error(f"Heuristic ToC generation failed: {e}")
+            logger.error(f"Heuristic ToC generation failed: {e}")
             return [], {}
 
     def _extract_text_blocks(
