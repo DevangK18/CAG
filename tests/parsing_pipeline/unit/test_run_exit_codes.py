@@ -4,7 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.parsing_pipeline.main import PipelineOrchestrator, parse_skip_phases
+from src.parsing_pipeline.main import (
+    EXIT_NOTHING_SELECTED,
+    EXIT_OK,
+    EXIT_PARTIAL,
+    PipelineOrchestrator,
+    parse_skip_phases,
+)
 
 
 def _orch(tmp_path, monkeypatch, skip=()):
@@ -25,15 +31,15 @@ def _complete(orch, *ids, phase10=True):
 def test_all_completed_is_zero(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch)
     _complete(orch, "A", "B")
-    assert orch._compute_exit_code() == 0
+    assert orch._compute_exit_code() == EXIT_OK
 
 
-def test_failed_report_is_one(tmp_path, monkeypatch):
+def test_failed_report_is_partial(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch)
     a, b = _complete(orch, "A", "B")
     orch.state.enrichment_complete = [a]
     orch.state.failed["enrichment"].append((b, "boom"))
-    assert orch._compute_exit_code() == 1
+    assert orch._compute_exit_code() == EXIT_PARTIAL
     statuses = {s["report_id"]: s for s in orch._report_statuses()}
     assert statuses["B"]["status"] == "failed" and statuses["B"]["phase"] == "enrichment"
 
@@ -45,23 +51,23 @@ def test_ocr_failure_counts(tmp_path, monkeypatch):
                  "chunking_complete", "assembly_complete", "enrichment_complete"):
         setattr(orch.state, name, [a])
     orch.state.failed["ocr"].append((b, "timeout"))
-    assert orch._compute_exit_code() == 1
+    assert orch._compute_exit_code() == EXIT_PARTIAL
 
 
-def test_phase10_not_run_is_one_unless_skipped(tmp_path, monkeypatch):
+def test_phase10_not_run_is_partial_unless_skipped(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch)
     _complete(orch, "A", phase10=False)
-    assert orch._compute_exit_code() == 1
+    assert orch._compute_exit_code() == EXIT_PARTIAL
     orch = _orch(tmp_path, monkeypatch, skip=["10a", "10b", "10c"])
     _complete(orch, "A", phase10=False)
-    assert orch._compute_exit_code() == 0
+    assert orch._compute_exit_code() == EXIT_OK
 
 
-def test_nothing_selected_is_two(tmp_path, monkeypatch):
+def test_nothing_selected(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch)
     orch.state.tasks = []
     orch.fatal_error = "no reports selected"
-    assert orch._compute_exit_code() == 2
+    assert orch._compute_exit_code() == EXIT_NOTHING_SELECTED
 
 
 def test_run_summary_written(tmp_path, monkeypatch):
@@ -109,3 +115,49 @@ def test_red_flags_kept_when_tracing_off():
     assert emitter.get_red_flags("R1")[0]["flag"] == "monetary_total_implausible"
     assert emitter.get_red_flags("R2")[0]["details"]["error"] == "x"
     assert set(emitter.get_red_flags()) == {"R1", "R2"}
+
+
+def test_exit_codes_avoid_python_reserved():
+    assert {EXIT_PARTIAL, EXIT_NOTHING_SELECTED}.isdisjoint({1, 2})
+
+
+def test_phase10_item_losses_are_partial(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    _complete(orch, "A")
+    orch.state.phase10_losses = {"10a": {"A": {"summary_variants": ["policy"]}}}
+    assert orch._compute_exit_code() == EXIT_PARTIAL
+    orch.exit_code = orch._compute_exit_code()
+    data = json.loads(orch._write_run_summary().read_text())
+    assert data["phase10_losses"]["10a"]["A"]["summary_variants"] == ["policy"]
+
+
+def test_missing_requested_ids_are_partial(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    _complete(orch, "A")
+    orch.missing_report_ids = ["TYPO_2025_01"]
+    assert orch._compute_exit_code() == EXIT_PARTIAL
+
+
+def test_phase10a_losses_counted_from_summary_files(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    _complete(orch, "A", "B")
+    sums = tmp_path / "summaries"
+    sums.mkdir()
+    (sums / "A.json").write_text(json.dumps({"variants": {v: {} for v in
+        ["executive", "journalist", "deep_dive", "simple"]}, "errors": [{"variant": "policy"}]}))
+    (tmp_path / "A_ov.json").write_text("{}")
+    service = SimpleNamespace(
+        get_summary_output_path=lambda rid: sums / f"{rid}.json",
+        get_overview_output_path=lambda rid: tmp_path / f"{rid}_ov.json",
+    )
+    orch._record_phase10a_losses(service, ["A", "B"], merge_failed=0)
+    losses = orch.state.phase10_losses["10a"]
+    assert losses["A"] == {"summary_variants": ["policy"]}
+    assert losses["B"]["llm_overview"] is True and len(losses["B"]["summary_variants"]) == 5
+
+
+def test_phase10b_losses_from_tracker(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    (tmp_path / "job1.json").write_text(json.dumps({"error_count": 4}))
+    orch._record_phase10b_losses(SimpleNamespace(visual_extraction_dir=tmp_path), "job1")
+    assert orch.state.phase10_losses["10b_items_failed"] == 4

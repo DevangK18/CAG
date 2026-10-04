@@ -118,6 +118,11 @@ from src.core.data_contracts import ParentChunk, ChildChunk, DocumentTask
 # Import instrumentation
 from src.parsing_pipeline.instrumentation import ReportMetadata
 
+# Process exit codes. 1 (uncaught exception) and 2 (argparse) are Python's own.
+EXIT_OK = 0
+EXIT_PARTIAL = 3
+EXIT_NOTHING_SELECTED = 4
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PROGRESS BAR HELPERS
@@ -162,7 +167,8 @@ class PipelineOrchestrator:
         self.run_id = run_id or resolve_run_id()
         self.started_at = datetime.now()
         self.fatal_error: Optional[str] = None
-        self.exit_code = 0
+        self.missing_report_ids: List[str] = []
+        self.exit_code = EXIT_OK
         self.skip = set(skip_phases or [])
         self.quiet = quiet
         self.report_filter = report_filter
@@ -264,6 +270,7 @@ class PipelineOrchestrator:
             )
             missing = sorted(set(self.report_filter) - {t.report_id for t in all_tasks})
             if missing:
+                self.missing_report_ids = missing
                 self._log(f"Not in manifest: {', '.join(missing)}", force=True)
         if not all_tasks:
             self.fatal_error = "no reports selected (empty manifest or --reports matched nothing)"
@@ -1509,6 +1516,7 @@ class PipelineOrchestrator:
                             json.dump(tracker, f, indent=2)
 
                         self.state.phase10a_completed = merged > 0
+                        self._record_phase10a_losses(service, report_ids, merge_failed)
                         self._log(
                             f"\n✅ Phase 10a complete: {merged} overview(s) created, "
                             f"{merge_failed} failed",
@@ -1622,6 +1630,7 @@ class PipelineOrchestrator:
                     )
                     self.state.phase10b_completed = True
                     self.state.chunk_files = chunk_files
+                    self._record_phase10b_losses(gemini_extractor, job_id)
 
                     # P1-14a: Validate hydration completion
                     self._validate_phase_10b_completion(chunk_files)
@@ -1889,7 +1898,7 @@ class PipelineOrchestrator:
             print("Phase 10c (Visual Post-Processing): NOT RUN")
 
         # Final success evaluation (same rule as the exit code)
-        final_success = self.exit_code == 0
+        final_success = self.exit_code == EXIT_OK
 
         if final_success:
             print("\n🎉 FULL PIPELINE COMPLETE! End-to-end processing successful!")
@@ -1953,14 +1962,55 @@ class PipelineOrchestrator:
             shortfalls.append("10c")
         return shortfalls
 
+    def _record_phase10a_losses(self, service, report_ids: List[str], merge_failed: int) -> None:
+        """Count summary variants and overviews that were not produced, per report."""
+        from src.batch_pipeline.prompts.summary_variants import VARIANTS
+
+        losses = self.state.phase10_losses.setdefault("10a", {})
+        for report_id in report_ids:
+            lost = {}
+            path = service.get_summary_output_path(report_id)
+            if path.exists():
+                data = json.loads(path.read_text())
+                missing = [v for v in VARIANTS if v not in (data.get("variants") or {})]
+            else:
+                missing = list(VARIANTS)
+            if missing:
+                lost["summary_variants"] = missing
+            if not service.get_overview_output_path(report_id).exists():
+                lost["llm_overview"] = True
+            if lost:
+                losses[report_id] = lost
+        if merge_failed:
+            self.state.phase10_losses["10a_overview_merge_failed"] = merge_failed
+
+    def _record_phase10b_losses(self, extractor, job_id: str) -> None:
+        """Visual items (tables/charts) that failed after retries, from the 10b job tracker."""
+        tracker_path = extractor.visual_extraction_dir / f"{job_id}.json"
+        if tracker_path.exists():
+            errors = json.loads(tracker_path.read_text()).get("error_count", 0)
+            if errors:
+                self.state.phase10_losses["10b_items_failed"] = errors
+
     def _compute_exit_code(self) -> int:
-        """0 = every selected report completed; 1 = some report or phase failed; 2 = nothing ran."""
+        """
+        EXIT_OK: every selected report and requested phase completed in full.
+        EXIT_PARTIAL: a report failed, a requested Phase 10 step or item was lost, or a
+            requested report ID is not in the manifest.
+        EXIT_NOTHING_SELECTED: no report was selected.
+        Codes 1 and 2 are left to Python (uncaught crash) and argparse (bad arguments).
+        """
         if self.fatal_error or not self.state.tasks:
-            return 2
+            return EXIT_NOTHING_SELECTED
         statuses = self._report_statuses()
-        if any(s["status"] != "completed" for s in statuses) or self._phase10_shortfalls():
-            return 1
-        return 0
+        if (
+            any(s["status"] != "completed" for s in statuses)
+            or self._phase10_shortfalls()
+            or self.state.phase10_losses
+            or self.missing_report_ids
+        ):
+            return EXIT_PARTIAL
+        return EXIT_OK
 
     def _write_run_summary(self) -> Path:
         """Write logs/run_summary_<run_id>.json so the workflow (and humans) can see what happened."""
@@ -1974,6 +2024,7 @@ class PipelineOrchestrator:
             "skipped_phases": sorted(self.skip),
             "exit_code": self.exit_code,
             "fatal_error": self.fatal_error,
+            "missing_report_ids": self.missing_report_ids,
             "reports": {
                 "selected": len(self.state.tasks or []),
                 "completed": sum(s["status"] == "completed" for s in statuses),
@@ -1987,6 +2038,7 @@ class PipelineOrchestrator:
                 "10b": "skipped" if "10b" in self.skip else ("completed" if self.state.phase10b_completed else "not_run"),
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
+            "phase10_losses": self.state.phase10_losses,
             "report_status": statuses,
             "red_flags": self.state.trace_emitter.get_red_flags(),
             "gemini_usage": log_usage_summary(),
@@ -2230,7 +2282,7 @@ Examples:
             manifest_path = str(default_manifest.resolve())
         else:
             print(f"Error: Manifest file not found: {args.manifest_path}")
-            return 2
+            return EXIT_NOTHING_SELECTED
     else:
         manifest_path = str(manifest_file.resolve())
 

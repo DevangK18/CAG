@@ -55,6 +55,8 @@ class PipelineState:
 
     # Phase 10 tracking flags
     phase10a_submitted: bool = False
+    # Per-report Phase 10 items lost (summary variants, overviews, visual items)
+    phase10_losses: dict = field(default_factory=dict)
     phase10a_completed: bool = False
     phase10b_completed: bool = False
     phase10c_completed: bool = False
