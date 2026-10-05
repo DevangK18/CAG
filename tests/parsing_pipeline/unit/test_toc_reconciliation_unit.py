@@ -117,13 +117,12 @@ class TestLevelInference:
         )
         assert level == 3
 
-    def test_large_bbox_level_1(self):
-        """Large bounding box implies level 1 heading."""
-        # bbox height = 30 (> 25)
+    def test_unnumbered_header_never_level_1_by_box_height(self):
+        """A large box no longer makes an unnumbered header a chapter (A-5.5-05)."""
         level = self.service._infer_level_from_docling(
             "Important Section", [50, 60, 500, 90]
         )
-        assert level == 1
+        assert level == 2
 
 
 class TestTitleCleaning:
@@ -246,11 +245,15 @@ class TestPreferDoclingLowQuality:
             {"title": "Conclusion", "page": 30, "y_position": 72.0,
              "confidence": 0.9, "bbox": [50, 72, 500, 90], "level": 1},
         ]
+        # A non-empty Phase 4 TOC is kept and supplemented, never replaced (A-5.5-05)
         result, method = self.service._prefer_docling_low_quality(
             current_toc, docling_headers, "test_report"
         )
-        assert len(result) == 3
-        assert method == "docling_primary"
+        assert method == "merged"
+        assert [1, "Chapter I", 5] in result and len(result) == 4
+
+        result, method = self.service._prefer_docling_low_quality([], docling_headers, "test_report")
+        assert method == "docling_primary" and len(result) == 3
 
 
 class TestHeadingPositionsFormat:
@@ -400,7 +403,7 @@ class TestReconcileIntegration:
         result = self.service.reconcile(task)
 
         # Should have called PyMuPDF
-        mock_fitz.open.assert_called_once()
+        assert mock_fitz.open.called
 
         # Scaffold should be updated
         assert "toc" in result.scaffold
@@ -561,12 +564,11 @@ class TestP002Deduplication:
         assert len(result) == 2
 
 
-class TestP002QualityCap:
-    """P0-02: Test quality cap at 85."""
+class TestQualityNotCapped:
+    """The reconciled score is the TOC's own score, not a constant (A-5.5-02)."""
 
-    def test_quality_cap_constant(self):
-        """P0-02: QUALITY_CAP is set to 85."""
-        assert TOCReconciliationService.QUALITY_CAP == 85
+    def test_no_quality_cap(self):
+        assert not hasattr(TOCReconciliationService, "QUALITY_CAP")
 
 
 class TestP002EmptyTOC:
