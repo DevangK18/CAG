@@ -87,6 +87,18 @@ def chunk_pages(chunk: Dict) -> List[int]:
     return sorted(p for p in pages if isinstance(p, int))
 
 
+BAND = 0.09  # share of the page height treated as header/footer band
+
+
+def _body_text(page) -> str:
+    height = page.rect.height or 1.0
+    return "\n".join(
+        b[4]
+        for b in page.get_text("blocks")
+        if b[6] == 0 and not (b[3] < BAND * height or b[1] > (1 - BAND) * height)
+    )
+
+
 def default_max_chunk_chars() -> int:
     from src.parsing_pipeline.config import get_config
 
@@ -138,8 +150,10 @@ def check_report(
     data = chunks_json
     children, parents = data.get("child_chunks") or [], data.get("parent_chunks") or []
     with fitz.open(str(pdf_path)) as doc:
-        # Decode font-shifted lines so they compare with the repaired output
-        page_text = [repair_font_shift(page.get_text("text")) for page in doc]
+        # Decode font-shifted lines so they compare with the repaired output. Running
+        # headers, footers and page numbers sit in the top/bottom bands and are dropped
+        # on purpose, so they are not expected in the chunks
+        page_text = [repair_font_shift(_body_text(page)) for page in doc]
         printed, _ = parse_printed_toc(doc)
         page_count = doc.page_count
     pdf_vocab = set(WORD_RE.findall(" ".join(page_text).lower()))

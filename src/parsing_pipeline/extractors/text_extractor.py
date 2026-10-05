@@ -15,6 +15,7 @@ from src.parsing_pipeline.extractors.text_repair import (
     is_letter_spaced,
     is_reversed,
     repair_font_shift,
+    repair_rupee_backtick,
     respace_letter_spaced,
     reverse_words,
 )
@@ -22,6 +23,7 @@ from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 
 
 logger = logging.getLogger(__name__)
+
 
 class TextExtractor:
     """
@@ -40,7 +42,9 @@ class TextExtractor:
             with fitz.open(pdf_path) as doc:
                 pages = [page.get_text("text") for page in doc]
             self._vocab_cache = {
-                pdf_path: build_vocabulary(" ".join(t for t in pages if not is_letter_spaced(t)))
+                pdf_path: build_vocabulary(
+                    " ".join(t for t in pages if not is_letter_spaced(t))
+                )
             }
         return self._vocab_cache[pdf_path]
 
@@ -84,10 +88,10 @@ class TextExtractor:
             "\u00a0": " ",  # Non-breaking space
             "–": "-",  # En dash
             "—": "-",  # Em dash
-            '"': '"',  # Left double quote
-            '"': '"',  # Right double quote
-            """: "'",          # Left single quote
-            """: "'",  # Right single quote
+            "\u201c": '"',  # Left double quote
+            "\u201d": '"',  # Right double quote
+            "\u2018": "'",  # Left single quote
+            "\u2019": "'",  # Right single quote
             "…": "...",  # Ellipsis
             "′": "'",  # Prime
             "″": '"',  # Double prime
@@ -96,8 +100,14 @@ class TextExtractor:
         for char, replacement in special_chars.items():
             text = text.replace(char, replacement)
 
-        # Step 3: Rejoin hyphenated words at line breaks
-        text = re.sub(r"-\s*\n\s*", "", text)  # Remove hyphen + newline
+        # Rupee sign drawn with the backtick glyph ("` 23.89 crore")
+        text = repair_rupee_backtick(text)
+
+        # Step 3: Rejoin hyphenated words at line breaks. A hyphen before a digit or a
+        # capital is real ("2018-\n19", "Inter-\nState"); after a space it is a dash.
+        text = re.sub(r"(?<=\S)-[ \t]*\n\s*(?=[\dA-Z])", "-", text)
+        text = re.sub(r"(?<=\s)-[ \t]*\n\s*", "- ", text)
+        text = re.sub(r"-[ \t]*\n\s*", "", text)  # Soft hyphenation: join the word
 
         # Step 4: Normalize whitespace
         text = re.sub(r"\s+", " ", text)
@@ -232,7 +242,6 @@ class TextExtractor:
             # Decode lines set in fonts whose glyphs are shifted 29 code points low
             normalized_text = repair_font_shift(normalized_text)
 
-
             # P2-17: Apply OCR header normalization (fixes Roman numeral corruptions)
             normalized_text = get_ocr_normalizer().normalize_headers(normalized_text)
 
@@ -243,13 +252,17 @@ class TextExtractor:
             # Apply detection as a final fallback for all pages
             content_was_reversed = False
             if self._detect_reversed_content(normalized_text):
-                logger.debug(f"C2/M3: Detected reversed content on page {page_num} (rotation={rotation}), applying correction")
+                logger.debug(
+                    f"C2/M3: Detected reversed content on page {page_num} (rotation={rotation}), applying correction"
+                )
                 normalized_text = self._reverse_text_content(normalized_text)
                 content_was_reversed = True
 
             # Rejoin text whose PDF text layer has spaces between letters
             if is_letter_spaced(normalized_text):
-                normalized_text = respace_letter_spaced(normalized_text, self._vocabulary(pdf_path))
+                normalized_text = respace_letter_spaced(
+                    normalized_text, self._vocabulary(pdf_path)
+                )
 
             # Skip if no meaningful text was extracted
             if not normalized_text or normalized_text.isspace():
@@ -261,7 +274,9 @@ class TextExtractor:
 
             # P1-11: Log rotation for debugging if non-zero
             if rotation != 0:
-                logger.debug(f"P1-11: Extracted text from rotated page {page_num} (rotation={rotation})")
+                logger.debug(
+                    f"P1-11: Extracted text from rotated page {page_num} (rotation={rotation})"
+                )
 
             # Create ExtractedContent object
             # P1-11: Include rotation in structured_data if non-zero

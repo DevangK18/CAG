@@ -10,27 +10,94 @@ Text repair for PDF extraction artifacts found in CAG reports.
    Repaired by adding 29 back, applied per line only when the result reads as English.
 """
 
+import math
 import re
+from collections import Counter
 from typing import List
 
 # Reversed forms of frequent English/CAG words; rare or non-existent forwards.
 # Don't add words that are valid both ways (saw/was, ton/not, no/on).
 REVERSED_WORDS = {
-    "eht", "dna", "rof", "htiw", "morf", "evah", "siht", "taht", "erew", "neeb",
-    "elbaliava", "tegdub", "tnemucod", "troper", "tidua", "hkal", "erorc",
-    "tnemnrevog", "tnemtraped", "yrtsinim", "detroper", "devresbo", "dehsilbup",
-    "stneduts", "loohcs", "noitacude", "srehcaet", "gniniart", "seiticapac",
-    "margorp", "semmargorp", "tcirtsid", "gnidneps", "deviecer", "detubirtsid",
-    "noitatnemelp", "tnemeganam", "erutidnepxe", "secruoser", "seitivitca",
-    "stifeneb", "serudecorp", "stnuocca", "ecnanif", "sdnuf", "tneiciffe",
-    "fo", "ot", "ni", "si", "yb", "hcihw", "gnirud", "rednu", "osla", "latot",
+    "eht",
+    "dna",
+    "rof",
+    "htiw",
+    "morf",
+    "evah",
+    "siht",
+    "taht",
+    "erew",
+    "neeb",
+    "elbaliava",
+    "tegdub",
+    "tnemucod",
+    "troper",
+    "tidua",
+    "hkal",
+    "erorc",
+    "tnemnrevog",
+    "tnemtraped",
+    "yrtsinim",
+    "detroper",
+    "devresbo",
+    "dehsilbup",
+    "stneduts",
+    "loohcs",
+    "noitacude",
+    "srehcaet",
+    "gniniart",
+    "seiticapac",
+    "margorp",
+    "semmargorp",
+    "tcirtsid",
+    "gnidneps",
+    "deviecer",
+    "detubirtsid",
+    "noitatnemelp",
+    "tnemeganam",
+    "erutidnepxe",
+    "secruoser",
+    "seitivitca",
+    "stifeneb",
+    "serudecorp",
+    "stnuocca",
+    "ecnanif",
+    "sdnuf",
+    "tneiciffe",
+    "fo",
+    "ot",
+    "ni",
+    "si",
+    "yb",
+    "hcihw",
+    "gnirud",
+    "rednu",
+    "osla",
+    "latot",
 }
 
 # Forward forms plus common stopwords: real English is full of these, so they veto
 # reversal even when a reversed pattern happens to match.
 FORWARD_WORDS = {w[::-1] for w in REVERSED_WORDS} | {
-    "of", "to", "in", "is", "was", "by", "on", "as", "at", "an", "be",
-    "which", "are", "not", "per", "total", "during", "under", "also",
+    "of",
+    "to",
+    "in",
+    "is",
+    "was",
+    "by",
+    "on",
+    "as",
+    "at",
+    "an",
+    "be",
+    "which",
+    "are",
+    "not",
+    "per",
+    "total",
+    "during",
+    "under",
+    "also",
 }
 
 _WORD_RE = re.compile(r"[A-Za-z]+")
@@ -41,7 +108,8 @@ def is_reversed(text: str) -> bool:
     if not text or len(text) < 20:
         return False
 
-    tokens = [t.lower() for t in _WORD_RE.findall(text)]
+    # Short all-caps abbreviations ("DNA": data not available) are not reversed words
+    tokens = [t.lower() for t in _WORD_RE.findall(text) if not (t.isupper() and len(t) <= 4)]
     if not tokens:
         return False
 
@@ -56,7 +124,11 @@ def is_reversed(text: str) -> bool:
     # Reversed proper nouns: "gnarabaN" (Nabarang) has a lowercase->uppercase transition
     words = text.split()
     reversed_caps = re.findall(r"[a-z][A-Z]", text)
-    return len(words) > 3 and len(reversed_caps) / len(words) > 0.3 and forward_hits * 5 < len(tokens)
+    return (
+        len(words) > 3
+        and len(reversed_caps) / len(words) > 0.3
+        and forward_hits * 5 < len(tokens)
+    )
 
 
 def reverse_words(text: str) -> str:
@@ -83,12 +155,57 @@ FONT_SHIFT = 29
 
 # Words that identify English once a shifted line is decoded
 _KNOWN_WORDS = {
-    "the", "and", "of", "to", "in", "for", "with", "was", "were", "on", "by", "is",
-    "from", "that", "have", "been", "as", "at", "an", "be", "which", "are", "not",
-    "report", "chapter", "audit", "auditor", "comptroller", "general", "india",
-    "government", "ministry", "national", "authority", "project", "projects",
-    "annexure", "table", "figure", "chart", "para", "paragraph", "crore", "lakh",
-    "deputy", "principal", "director", "dated", "new", "delhi", "countersigned",
+    "the",
+    "and",
+    "of",
+    "to",
+    "in",
+    "for",
+    "with",
+    "was",
+    "were",
+    "on",
+    "by",
+    "is",
+    "from",
+    "that",
+    "have",
+    "been",
+    "as",
+    "at",
+    "an",
+    "be",
+    "which",
+    "are",
+    "not",
+    "report",
+    "chapter",
+    "audit",
+    "auditor",
+    "comptroller",
+    "general",
+    "india",
+    "government",
+    "ministry",
+    "national",
+    "authority",
+    "project",
+    "projects",
+    "annexure",
+    "table",
+    "figure",
+    "chart",
+    "para",
+    "paragraph",
+    "crore",
+    "lakh",
+    "deputy",
+    "principal",
+    "director",
+    "dated",
+    "new",
+    "delhi",
+    "countersigned",
 }
 _SHIFT_SIGNATURE = re.compile(r"[$&%#()*+,\-./0-9:;<=>?@\[\\\]]")
 
@@ -165,17 +282,58 @@ def has_cid_shift(text: str) -> bool:
     return len(_CID_RE.findall(text)) >= 3 and _known_count(decode_cid_shift(text)) >= 1
 
 
-# ==================== LETTER-SPACED TEXT ====================
+# ==================== RUPEE SIGN ====================
 
-import math
-from collections import Counter
+# Older reports set the rupee sign in the "Rupee Foradian" font, which draws the
+# backtick glyph as the rupee sign; the text layer still says "`". Without the font,
+# a backtick before an amount, "(" or a unit is the rupee sign ("` 23.89 crore",
+# "(` in crore)", "Amount in ` crore"); a backtick in prose ("`NULL`") is left alone.
+_RUPEE_BACKTICK_RE = re.compile(
+    r"`(?=\s*(?:[\d(]|\)|in\s+(?:crore|lakh|thousand|million|billion)\b"
+    r"|(?:crore|lakh|thousand|million|billion)\b|one\s+(?:crore|lakh)\b))",
+    re.IGNORECASE,
+)
+
+
+def is_rupee_font(font_name: str) -> bool:
+    """True for the fonts that draw the rupee sign at the backtick code point."""
+    return "rupee" in (font_name or "").lower()
+
+
+def repair_rupee_backtick(text: str) -> str:
+    """Turn a backtick standing for the rupee sign into "₹"."""
+    if not text or "`" not in text:
+        return text
+    return _RUPEE_BACKTICK_RE.sub("₹", text)
+
+
+# ==================== LETTER-SPACED TEXT ====================
 
 _TOKEN_RE = re.compile(r"[A-Za-z]+|[^A-Za-z\s]+")
 
 
 _SHORT_WORDS = {
-    "a", "i", "an", "as", "at", "be", "by", "do", "if", "in", "is", "it", "no", "of",
-    "on", "or", "so", "to", "up", "us", "we",
+    "a",
+    "i",
+    "an",
+    "as",
+    "at",
+    "be",
+    "by",
+    "do",
+    "if",
+    "in",
+    "is",
+    "it",
+    "no",
+    "of",
+    "on",
+    "or",
+    "so",
+    "to",
+    "up",
+    "us",
+    "we",
 }
 
 
@@ -189,7 +347,11 @@ def is_letter_spaced(text: str) -> bool:
     if sum(c.isalpha() for c in visible) < 0.7 * len(visible):
         return False
     # Fragments, not real short words or upper-case abbreviations ("of", "EC", "a)")
-    fragments = [t for t in tokens if len(t) <= 2 and t.lower() not in _SHORT_WORDS and not t.isupper()]
+    fragments = [
+        t
+        for t in tokens
+        if len(t) <= 2 and t.lower() not in _SHORT_WORDS and not t.isupper()
+    ]
     return len(fragments) / len(tokens) > 0.35
 
 
@@ -217,7 +379,7 @@ def _segment(pieces: List[str], vocab: Counter, total: int) -> List[str]:
                 best[end], back[end] = best[start] + cost, start
     words, end = [], n
     while end > 0:
-        words.append("".join(pieces[back[end]:end]))
+        words.append("".join(pieces[back[end] : end]))
         end = back[end]
     return words[::-1]
 
