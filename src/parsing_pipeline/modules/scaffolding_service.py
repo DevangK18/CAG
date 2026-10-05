@@ -31,8 +31,20 @@ from datetime import datetime
 
 from src.core.data_contracts import DocumentTask, TOCQualityMetrics
 from src.parsing_pipeline.extractors.text_repair import repair_font_shift
-from src.parsing_pipeline.modules.printed_toc_parser import parse_printed_toc
-from src.parsing_pipeline.modules.toc_quality import assess_toc_quality
+from src.parsing_pipeline.modules.printed_toc_parser import (
+    fold_part_rows,
+    logical_page_labels,
+    parse_printed_toc,
+)
+from src.parsing_pipeline.modules.toc_quality import (
+    ACCEPT_THRESHOLD,
+    assess_toc_quality,
+    chapter_agreement,
+    is_garbage_title,
+    is_junk_title,
+    junk_share,
+    score_toc,
+)
 from src.parsing_pipeline.config import get_config, ScaffoldingConfig
 
 if TYPE_CHECKING:
@@ -478,15 +490,27 @@ class ScaffoldingService:
                 if task.scaffold["toc"]:
                     toc_method = task.scaffold.get("toc_method", "embedded_bookmarks")
 
-                # Phase 2: Printed contents page (chapters, sections, annexures with
-                # printed page numbers). Far more reliable than heading heuristics.
-                if not task.scaffold["toc"]:
-                    printed_toc, printed_confidence = self._extract_printed_toc(doc, task.report_id)
-                    printed_quality = min(
-                        assess_toc_quality(printed_toc, doc.page_count),
-                        int(printed_confidence * 100),
+                # Phase 2: Printed contents page, the author's own structure. A verified
+                # printed contents page beats bookmarks, unless the bookmarks are richer
+                # and agree with it on the chapters (FRBM/Accounts reports) (A-4-02)
+                printed_toc, printed_confidence = self._extract_printed_toc(doc, task.report_id)
+                printed_quality = assess_toc_quality(printed_toc, doc.page_count)
+                printed_ok = (
+                    len(printed_toc) >= 5
+                    and printed_confidence >= 0.8
+                    and printed_quality >= ACCEPT_THRESHOLD
+                )
+                bookmarks = task.scaffold["toc"]
+                if printed_ok and bookmarks and not (
+                    len(bookmarks) > len(printed_toc)
+                    and chapter_agreement(printed_toc, bookmarks) >= 0.7
+                ):
+                    task.scaffold["toc"] = []
+                    task.error_log.append(
+                        f"Bookmarks set aside: printed contents verified ({printed_confidence:.2f})"
                     )
-                    if len(printed_toc) >= 5 and printed_quality >= 60:
+                if not task.scaffold["toc"]:
+                    if printed_ok:
                         task.scaffold["toc"] = printed_toc
                         task.scaffold["toc_method"] = "printed_toc"
                         task.scaffold["toc_quality"] = printed_quality
@@ -505,12 +529,29 @@ class ScaffoldingService:
                 # Phase 3: Fallback to heuristic ToC generation if none found
                 if not task.scaffold["toc"]:
                     heuristic_toc, heading_positions = self._generate_heuristic_toc(doc, task.report_id)
-                    if heuristic_toc:
+                    heuristic_quality = assess_toc_quality(heuristic_toc, doc.page_count)
+                    # A good printed contents page that verifies only in part (OCR'd scans
+                    # print page numbers poorly) still beats a weaker heuristic TOC
+                    if (
+                        len(printed_toc) >= 5
+                        and printed_confidence >= 0.6
+                        and printed_quality >= ACCEPT_THRESHOLD
+                        and printed_quality > heuristic_quality
+                    ):
+                        task.scaffold["toc"] = printed_toc
+                        task.scaffold["toc_method"] = "printed_toc"
+                        task.scaffold["toc_quality"] = printed_quality
+                        toc_method = "printed_toc"
+                        task.error_log.append(
+                            f"Printed TOC used (partly verified {printed_confidence:.2f}): "
+                            f"{len(printed_toc)} entries, quality={printed_quality}"
+                        )
+                    elif heuristic_toc:
                         task.scaffold["toc"] = heuristic_toc
                         task.scaffold["heading_positions"] = heading_positions
                         # Score it: without a score, later phases defaulted to 50 and
                         # low-quality TOCs never reached LLM validation
-                        task.scaffold["toc_quality"] = assess_toc_quality(heuristic_toc, doc.page_count)
+                        task.scaffold["toc_quality"] = heuristic_quality
                         toc_method = "heuristic"
                         task.error_log.append(
                             f"Heuristic ToC generated with {len(heuristic_toc)} entries"
@@ -541,6 +582,10 @@ class ScaffoldingService:
                             },
                         )
                         self._last_toc_alert = None
+
+                # PART-A/B banners on a chapter's page would become empty parents
+                if task.scaffold["toc"]:
+                    task.scaffold["toc"] = fold_part_rows(task.scaffold["toc"])
 
                 # Phase 3: Generate page number mappings (always done)
                 task = self._build_page_mappings(task, doc)
@@ -654,13 +699,31 @@ class ScaffoldingService:
 
         try:
             toc = doc.get_toc(simple=False)
-
-            # Score the bookmarks (replaces binary validation)
             metrics = self._score_embedded_toc(toc, doc.page_count)
-            score = metrics.score()
 
-            # Threshold check: score() returns 0-100, threshold is 0-1
-            threshold_score = self.bookmark_quality_threshold * 100
+            # PDF-merger bookmarks ("Blank Page", "Binder1.pdf", "2 TOC", every target on
+            # page 1) reject the whole set; otherwise junk entries are dropped and the
+            # rest is scored on content, not shape (A-4-02, A-TQ-01)
+            entries = [e[:3] for e in toc if len(e) >= 3]
+            low_targets = sum(1 for e in entries if e[2] <= 1) / len(entries) if entries else 0.0
+            share = junk_share(entries)
+            if share > 0.3 or low_targets > 0.3:
+                cleaned_toc = []
+                reject_reason = f"merger bookmarks (junk {share:.0%}, page-1 targets {low_targets:.0%})"
+            else:
+                cleaned_toc = []
+                for level, title, page in entries:
+                    if is_junk_title(str(title)):
+                        continue
+                    cleaned_title = self._clean_toc_title(title)
+                    if cleaned_title:
+                        cleaned_toc.append([level, cleaned_title, self._bookmark_page(doc, page)])
+                reject_reason = None
+            scored = score_toc(cleaned_toc, doc.page_count, doc) if cleaned_toc else score_toc([])
+            score = scored["score"] if len(cleaned_toc) >= 5 else 0
+            threshold_score = ACCEPT_THRESHOLD
+            task.scaffold["bookmark_score"] = {"score": score, "deductions": scored["deductions"],
+                                               "rejected": reject_reason}
 
             # Trace the bookmark quality scoring decision
             trace_emitter.emit_decision(
@@ -681,15 +744,6 @@ class ScaffoldingService:
                 trace_emitter.emit_sample("4", "bookmark_entries", sample_titles)
 
             if score >= threshold_score:
-                # Clean the embedded TOC entries
-                cleaned_toc = []
-                for entry in toc:
-                    if len(entry) >= 3:
-                        level, title, page = entry[:3]
-                        cleaned_title = self._clean_toc_title(title)
-                        if cleaned_title:  # Skip empty titles
-                            cleaned_toc.append([level, cleaned_title, self._bookmark_page(doc, page)])
-
                 task.scaffold["toc"] = cleaned_toc
                 task.scaffold["toc_quality_metrics"] = {
                     "source": metrics.source,
@@ -704,14 +758,12 @@ class ScaffoldingService:
                 task.scaffold["toc_quality"] = int(score)
                 task.scaffold["toc_method"] = "embedded_bookmarks"
                 task.error_log.append(
-                    f"Embedded ToC extracted: {len(cleaned_toc)} entries, "
-                    f"score={score:.1f}, confidence={metrics.confidence:.2f}"
+                    f"Embedded ToC extracted: {len(cleaned_toc)} entries, score={score}"
                 )
             else:
                 task.error_log.append(
-                    f"Embedded ToC rejected: {len(toc)} entries, score={score:.1f} "
-                    f"(threshold={threshold_score:.1f}), confidence={metrics.confidence:.2f}, "
-                    f"proceeding to heuristic generation"
+                    f"Embedded ToC rejected: {len(toc)} entries, score={score} "
+                    f"(threshold={threshold_score}){', ' + reject_reason if reject_reason else ''}"
                 )
                 task.scaffold["toc"] = []
                 # Store metrics even for rejected TOC (useful for debugging)
@@ -1051,10 +1103,8 @@ class ScaffoldingService:
         # Step 4: Remove dots/leaders before page numbers (if any remain)
         title = re.sub(r"\.{2,}\s*\d*\s*$", "", title)  # "Chapter I..........12"
 
-        # Step 5: Clean trailing punctuation artifacts
-        title = title.rstrip(".:;")
-        while title.endswith("..") or title.endswith("--"):
-            title = title[:-1]
+        # Step 5: Clean trailing punctuation artifacts ("Section A--", "Audit findings:")
+        title = re.sub(r"[\s.:;\-–—]+$", "", title)
 
         return title.strip()
 
@@ -1063,7 +1113,7 @@ class ScaffoldingService:
     # =========================================================================
 
     def _generate_heuristic_toc(
-        self, doc: fitz.Document, report_id: str, max_sample_pages: int = 100
+        self, doc: fitz.Document, report_id: str, max_sample_pages: Optional[int] = None
     ) -> Tuple[List[List], Dict[str, float]]:
         """
         Generate ToC using heuristic analysis of document structure.
@@ -1075,7 +1125,8 @@ class ScaffoldingService:
         Args:
             doc: Opened PDF document
             report_id: Report identifier for logging
-            max_sample_pages: Maximum pages to analyze
+            max_sample_pages: Maximum pages to analyze (all when None: a cap lost every
+                heading after page 100 of a long report)
 
         Returns:
             Tuple of (toc_entries, heading_positions)
@@ -1090,7 +1141,7 @@ class ScaffoldingService:
                 return [], {}
 
             # Phase 2: Statistical style profiling
-            style_profile = self._build_style_profile(text_blocks)
+            style_profile = self._build_style_profile(text_blocks, doc)
 
             # Phase 3: Advanced heading detection WITH LOGGING
             heading_candidates = self._detect_headings(
@@ -1110,11 +1161,11 @@ class ScaffoldingService:
             return [], {}
 
     def _extract_text_blocks(
-        self, doc: fitz.Document, max_pages: int = 100
+        self, doc: fitz.Document, max_pages: Optional[int] = None
     ) -> List[TextBlock]:
         """Extract rich text blocks from PDF pages."""
         text_blocks = []
-        pages_to_process = min(len(doc), max_pages)
+        pages_to_process = len(doc) if max_pages is None else min(len(doc), max_pages)
 
         for page_num in range(pages_to_process):
             page = doc[page_num]
@@ -1178,7 +1229,9 @@ class ScaffoldingService:
 
         return text_blocks
 
-    def _build_style_profile(self, text_blocks: List[TextBlock]) -> StyleProfile:
+    def _build_style_profile(
+        self, text_blocks: List[TextBlock], doc: Optional[fitz.Document] = None
+    ) -> StyleProfile:
         """Build statistical profile of document typography."""
         if not text_blocks:
             return StyleProfile(12.0, [], set(), {})
@@ -1210,11 +1263,22 @@ class ScaffoldingService:
             if count > len(text_blocks) * 0.1
         }
 
+        # Page geometry from the document itself (A-4-07): A4 portrait with a 72 pt
+        # margin is wrong for landscape pages and other paper sizes
+        width, height, left_margin = 595.0, 842.0, 72.0
+        if doc is not None and doc.page_count:
+            widths = [doc[i].rect.width for i in range(0, doc.page_count, max(1, doc.page_count // 20))]
+            heights = [doc[i].rect.height for i in range(0, doc.page_count, max(1, doc.page_count // 20))]
+            width, height = float(np.median(widths)), float(np.median(heights))
+            body_x = [b.position[0] for b in text_blocks if b.word_count >= 8]
+            if body_x:
+                left_margin = float(np.percentile(body_x, 10))
+
         return StyleProfile(
             body_font_size_baseline=body_baseline,
             body_font_families=body_font_families,
             body_text_flags=common_flags,
-            page_stats={"width": 595.0, "height": 842.0, "left_margin": 72.0},
+            page_stats={"width": width, "height": height, "left_margin": left_margin},
         )
 
     def _normalize_font_family(self, font_name: str) -> str:
@@ -1239,13 +1303,19 @@ class ScaffoldingService:
         heading_candidates = []
         seen_entries: set = set()
 
-        for block in text_blocks:
-            # Calculate style-based score
-            heading_score = self._calculate_heading_score(block, style_profile)
-
-            # Must meet minimum score threshold
-            if heading_score < 75:
-                continue  # Not a heading candidate, don't log
+        scored = [
+            block for block in text_blocks
+            if self._calculate_heading_score(block, style_profile) >= 75
+        ]
+        for block in self._merge_heading_lines(scored):
+            # Table cells in a large or bold font are not headings (A-4-04):
+            # "Total (iii) 1,00,000 4. Sh. Victor Bhisty", "(₹ in lakh) Sl. No"
+            if self._looks_like_table_row(block.text):
+                self.toc_rejection_logger.log_rejection(
+                    text=block.text, page_num=block.page_num, reason="table_row",
+                    pattern_matched=None, font_size=block.font_size,
+                )
+                continue
 
             # Clean the text for validation
             cleaned_text = self._clean_toc_title(block.text)
@@ -1254,6 +1324,9 @@ class ScaffoldingService:
             is_valid, rejection_reason, matched_pattern = self._is_valid_toc_entry(
                 cleaned_text, block.page_num, seen_entries, block.font_size
             )
+            # Sentences, junk and OCR debris are never headings (A-TQ-01 predicates)
+            if is_valid and is_garbage_title(cleaned_text):
+                is_valid, rejection_reason, matched_pattern = False, "garbage_title", None
 
             if not is_valid:
                 self.toc_rejection_logger.log_rejection(
@@ -1285,6 +1358,51 @@ class ScaffoldingService:
             }
 
         return heading_candidates
+
+    TABLE_ROW_NUMBER_RE = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w.])")
+    TABLE_ROW_WORDS_RE = re.compile(r"\bSl\.?\s*No\b|\(\s*(?:₹|`|Rs\.?)\s*in\s+\w+\s*\)|\bTotal\b", re.IGNORECASE)
+
+    def _looks_like_table_row(self, text: str) -> bool:
+        """Two or more standalone numbers, or table furniture (Sl. No, unit, Total)."""
+        numbers = self.TABLE_ROW_NUMBER_RE.findall(text)
+        if len(numbers) >= 2:
+            return True
+        return bool(self.TABLE_ROW_WORDS_RE.search(text)) and not re.match(
+            r"^\s*(chapter|part|appendix|annexure)\b", text, re.IGNORECASE
+        )
+
+    def _merge_heading_lines(self, blocks: List[TextBlock]) -> List[TextBlock]:
+        """
+        Join a heading set as several blocks (A-4-04): "Chapter-1" / "Profile of
+        Panchayati Raj" / "Institutions" on one page, same font size, stacked with a
+        gap under 1.5 line heights, is one heading.
+        """
+        merged: List[TextBlock] = []
+        for block in sorted(blocks, key=lambda b: (b.page_num, b.bbox[1])):
+            prev = merged[-1] if merged else None
+            if (
+                prev is not None
+                and prev.page_num == block.page_num
+                and round(prev.font_size) == round(block.font_size)
+                and 0 <= block.bbox[1] - prev.bbox[3] < 1.5 * max(block.font_size, 1.0)
+                and prev.word_count + block.word_count <= 20
+            ):
+                merged[-1] = TextBlock(
+                    page_num=prev.page_num,
+                    bbox=(min(prev.bbox[0], block.bbox[0]), prev.bbox[1],
+                          max(prev.bbox[2], block.bbox[2]), block.bbox[3]),
+                    text=f"{prev.text} {block.text}",
+                    font_name=prev.font_name,
+                    font_size=prev.font_size,
+                    font_flags=prev.font_flags,
+                    line_height=block.bbox[3] - prev.bbox[1],
+                    position=prev.position,
+                    word_count=prev.word_count + block.word_count,
+                    char_count=prev.char_count + block.char_count + 1,
+                )
+            else:
+                merged.append(block)
+        return merged
 
     def _calculate_heading_score(
         self, block: TextBlock, style_profile: StyleProfile
@@ -1437,17 +1555,9 @@ class ScaffoldingService:
         self, task: DocumentTask, doc: fitz.Document
     ) -> DocumentTask:
         """Build physical to logical page number mappings."""
-        page_map = {}
-
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            label = page.get_label()
-            if label:
-                page_map[page_num] = label
-            else:
-                page_map[page_num] = str(page_num + 1)
-
-        task.scaffold["page_map"] = page_map
+        # The printed page number of each page, interpolated inside a numbered run;
+        # None where no number is printed, never physical + 1 (A-4-06)
+        task.scaffold["page_map"] = logical_page_labels(doc)
         return task
 
     def _validate_and_set_status(self, task: DocumentTask) -> DocumentTask:

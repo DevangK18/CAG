@@ -40,11 +40,18 @@ def sample_task(tmp_path):
     )
 
 
-def _make_pdf(path, pages=12, toc=None, labels=None):
+def _make_pdf(path, pages=12, toc=None, labels=None, footers=None):
+    """footers: {page index: printed page number text in the footer band}."""
     doc = fitz.open()
     for n in range(pages):
-        doc.new_page().insert_text((72, 72), f"Page {n + 1} body text")
+        page = doc.new_page()
+        page.insert_text((72, 72), f"Page {n + 1} body text")
+        if footers and n in footers:
+            page.insert_text((290, page.rect.height - 30), str(footers[n]))
     if toc:
+        # Each bookmark's heading is printed on its target page, as in a real report
+        for i, (_, title, target) in enumerate(toc):
+            doc[target - 1].insert_text((72, 120 + 14 * i), title)
         doc.set_toc(toc)
     if labels:
         doc.set_page_labels(labels)
@@ -176,25 +183,35 @@ class TestScoreEmbeddedToc:
 
 
 class TestScaffoldingServicePageMappings:
-    def test_build_page_mappings_from_labels(self, scaffolding_service, sample_task, tmp_path):
-        labels = [
-            {"startpage": 0, "style": "r", "prefix": "", "firstpagenum": 1},
-            {"startpage": 3, "style": "D", "prefix": "", "firstpagenum": 1},
-        ]
-        doc = fitz.open(_make_pdf(tmp_path / "l.pdf", pages=5, labels=labels))
+    def test_build_page_mappings_from_printed_numbers(self, scaffolding_service, sample_task, tmp_path):
+        # Cover unnumbered, front matter i-ii, body 1-4 (A-4-06)
+        footers = {1: "i", 2: "ii", 3: "1", 4: "2", 5: "3", 6: "4"}
+        doc = fitz.open(_make_pdf(tmp_path / "l.pdf", pages=7, footers=footers))
         sample_task.scaffold = {"toc": []}
 
         result = scaffolding_service._build_page_mappings(sample_task, doc)
 
-        assert result.scaffold["page_map"] == {0: "i", 1: "ii", 2: "iii", 3: "1", 4: "2"}
+        page_map = result.scaffold["page_map"]
+        assert page_map[0] is None
+        assert [page_map[i] for i in range(3, 7)] == ["1", "2", "3", "4"]
 
-    def test_build_page_mappings_without_labels(self, scaffolding_service, sample_task, tmp_path):
+    def test_build_page_mappings_without_numbers_is_none(self, scaffolding_service, sample_task, tmp_path):
         doc = fitz.open(_make_pdf(tmp_path / "n.pdf", pages=3))
         sample_task.scaffold = {"toc": []}
 
         result = scaffolding_service._build_page_mappings(sample_task, doc)
 
-        assert result.scaffold["page_map"] == {0: "1", 1: "2", 2: "3"}
+        # Never physical + 1
+        assert result.scaffold["page_map"] == {0: None, 1: None, 2: None}
+
+    def test_merger_bookmarks_rejected(self, scaffolding_service, sample_task, tmp_path):
+        junk = [[1, "1 Cover pages", 1], [1, "2 TOC", 1], [1, "Blank Page", 1],
+                [1, "5 Chapter 1 HP ATIR", 3], [1, "Blank Page", 1], [1, "Binder1.pdf", 1]]
+        doc = fitz.open(_make_pdf(tmp_path / "j.pdf", toc=junk))
+        sample_task.scaffold = {"toc": [], "page_map": {}, "heading_positions": {}}
+        result = scaffolding_service._extract_embedded_toc(sample_task, doc)
+        assert result.scaffold["toc"] == []
+        assert "merger bookmarks" in result.scaffold["bookmark_score"]["rejected"]
 
 
 class TestValidateAndSetStatus:
@@ -308,12 +325,30 @@ class TestHeuristicTocCore:
         # A number after a label word is part of the title
         assert scaffolding_service._clean_toc_title("Annexure 4") == "Annexure 4"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="_clean_toc_title trims a trailing '--' to '-' instead of removing it (structure PR)",
-    )
     def test_clean_toc_title_trailing_dashes(self, scaffolding_service):
         assert scaffolding_service._clean_toc_title("Section A--") == "Section A"
+        assert scaffolding_service._clean_toc_title("Audit findings: ") == "Audit findings"
+
+    def test_heading_lines_of_one_banner_are_merged(self, scaffolding_service):
+        blocks = [
+            _block("Chapter-1", 20.0, 16, y=100),
+            _block("Profile of Panchayati Raj", 20.0, 16, y=126),
+            _block("Institutions", 20.0, 16, y=152),
+            _block("1.1 Introduction", 14.0, 16, y=300),
+        ]
+        merged = scaffolding_service._merge_heading_lines(blocks)
+        assert [b.text for b in merged] == [
+            "Chapter-1 Profile of Panchayati Raj Institutions", "1.1 Introduction",
+        ]
+
+    @pytest.mark.parametrize("text,expected", [
+        ("Total (iii) 1,00,000 4. Sh. Victor Bhisty", True),
+        ("Municipal Council, Chamba (` in lakh) Sl. No", True),
+        ("Chapter-2 Results of Audit", False),
+        ("2.3 Utilisation of grants", False),
+    ])
+    def test_table_rows_are_not_headings(self, scaffolding_service, text, expected):
+        assert scaffolding_service._looks_like_table_row(text) is expected
 
     def test_detect_headings_with_candidates(self, scaffolding_service):
         text_blocks = [
