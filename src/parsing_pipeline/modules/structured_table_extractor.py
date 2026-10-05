@@ -26,6 +26,72 @@ from src.core.table_contracts import (
     TableExtractionMetadata,
 )
 
+# B-6-10: a printed table caption ("Table 3.2: ...", "Statement No. 5", "Chart IV").
+# Running headers such as "Report No. 8 of 2025" are not captions.
+TABLE_CAPTION_RE = re.compile(
+    r"^[\s*_#]*(?:Table|Statement|Chart)\s*(?:No\.?\s*)?[-–:]?\s*"
+    r"((?:\d+|[IVX]+\b)(?:\s*\.\s*\d+)*)",
+    re.IGNORECASE,
+)
+# An appendix or annexure heading printed over its table: a title, but its number
+# is not a table number
+APPENDIX_TITLE_RE = re.compile(r"^[\s*_#]*(?:Appendix|Annexure|Annex)\s*[-–:]?\s*[\dIVX]", re.IGNORECASE)
+# A markdown delimiter row: | --- | :---: | (each cell three or more dashes)
+_SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
+# A serial number cell: "1", "1.", "(1)", "23)", "iv.", "(ii)"
+_SERIAL_RE = re.compile(r"^(?:\(?\d{1,3}[.)]?|\(?[ivx]{1,5}[.)])$", re.IGNORECASE)
+
+
+def split_markdown_cells(line: str) -> List[str]:
+    """Cells of one markdown table line; "\\|" inside a cell is a literal pipe."""
+    cells = [cell.strip().replace("\\|", "|") for cell in re.split(r"(?<!\\)\|", line.strip())]
+    # Leading/trailing pipes leave empty first/last elements
+    if cells and cells[0] == "":
+        cells = cells[1:]
+    if cells and cells[-1] == "":
+        cells = cells[:-1]
+    return cells
+
+
+def is_markdown_separator(line: str) -> bool:
+    """True for a markdown delimiter row, wherever it sits in the table."""
+    if "|" not in line or "-" not in line:
+        return False
+    cells = split_markdown_cells(line)
+    return bool(cells) and all(_SEPARATOR_CELL_RE.match(c.replace(" ", "")) for c in cells)
+
+
+def split_table_markdown(markdown: str) -> Tuple[List[str], List[str], List[str]]:
+    """
+    Split table markdown into (leading non-pipe lines, table lines, trailing lines).
+
+    Docling's export puts whatever it bound as caption (often a running header) on a
+    line before the table; those lines are caption candidates, not row 0.
+    """
+    lines = [line.strip() for line in (markdown or "").strip().split("\n") if line.strip()]
+    first = next((i for i, line in enumerate(lines) if "|" in line), None)
+    if first is None:
+        return lines, [], []
+    last = max(i for i, line in enumerate(lines) if "|" in line)
+    table = [line for line in lines[first:last + 1] if "|" in line]
+    return lines[:first], table, lines[last + 1:]
+
+
+def parse_table_caption(text: Optional[str]) -> Optional[Tuple[str, str]]:
+    """(caption, table_number) if text is a printed table caption, else None."""
+    if not text:
+        return None
+    caption = " ".join(text.strip().strip("*_#").split())
+    match = TABLE_CAPTION_RE.match(caption)
+    if not match:
+        return None
+    return caption, re.sub(r"\s+", "", match.group(1))
+
+
+def is_serial_number(text: str) -> bool:
+    """A cell holding only a serial number ("1.", "(2)", "iv)")."""
+    return bool(_SERIAL_RE.match((text or "").strip()))
+
 
 class StructuredTableExtractor:
     """
@@ -151,6 +217,7 @@ class StructuredTableExtractor:
         source_chunk_id: str,
         source_page_physical: int,
         source_bbox: List[float],
+        caption: Optional[str] = None,
     ) -> Optional[StructuredTable]:
         """
         Convert markdown table to structured representation.
@@ -158,26 +225,30 @@ class StructuredTableExtractor:
         Args:
             markdown_table: GitHub-flavored markdown table string
             table_id: Unique identifier for this table
-            source_chunk_id: Parent chunk ID
+            source_chunk_id: Phase 6 block ID of the table
             source_page_physical: 0-indexed page number
             source_bbox: [x0, y0, x1, y1] bounding box
+            caption: Caption bound to the table by the caller, if any; otherwise a
+                leading "Table x.y" line of the markdown is used
 
         Returns:
             StructuredTable object or None if parsing fails
         """
         self.warnings = []  # Reset warnings
 
-        # Step 1: Parse markdown to raw 2D array
-        raw_data = self._parse_markdown_table(markdown_table)
+        # Step 1: Parse markdown to raw 2D array; rows above the separator are headers
+        raw_data, separator_rows = self._parse_markdown_rows(markdown_table)
         if not raw_data:
             self.warnings.append("Failed to parse markdown table structure")
             return None
 
+        # B-6-10: width is the widest row, not row 0 (which may be a caption line)
         num_rows = len(raw_data)
-        num_cols = len(raw_data[0]) if raw_data else 0
+        num_cols = max(len(row) for row in raw_data)
+        raw_data = [row + [""] * (num_cols - len(row)) for row in raw_data]
 
         # Step 2: Detect header rows (typically 1, but can be more)
-        num_header_rows = self._detect_header_rows(raw_data)
+        num_header_rows = self._detect_header_rows(raw_data, separator_rows)
 
         # Step 3: Classify columns
         columns = self._classify_columns(raw_data, num_header_rows)
@@ -192,7 +263,15 @@ class StructuredTableExtractor:
         rows = self._parse_rows(raw_data, columns, num_header_rows, column_units)
 
         # Step 5: Extract metadata
-        title = self._extract_title(markdown_table)
+        parsed_caption = parse_table_caption(caption) if caption else None
+        if parsed_caption is None:
+            parsed_caption = self._extract_caption(markdown_table)
+        if parsed_caption:
+            title, table_number = parsed_caption
+        else:
+            # A bound caption without a number is still the title
+            title = " ".join(caption.split()) if caption else None
+            table_number = None
         monetary_unit = self._detect_monetary_unit(markdown_table, rows)
         time_periods = self._extract_time_periods(columns, rows)
         entities = self._extract_entities(columns, rows)
@@ -210,6 +289,8 @@ class StructuredTableExtractor:
             num_cols=num_cols,
             num_header_rows=num_header_rows,
             title=title,
+            caption=title,
+            table_number=table_number,
             monetary_unit=monetary_unit,
             time_periods_covered=time_periods,
             entities_covered=entities,
@@ -231,74 +312,105 @@ class StructuredTableExtractor:
         Returns:
             2D list of cell strings (empty list on failure)
         """
-        # Lines without a pipe are captions such as "Table 3.2 (₹ in crore)": they
-        # are read by _extract_title / _detect_table_unit, not parsed as rows
-        lines = [
-            line.strip() for line in markdown.strip().split("\n")
-            if line.strip() and "|" in line
-        ]
+        return self._parse_markdown_rows(markdown)[0]
 
-        if len(lines) < 2:
-            return []
+    def _parse_markdown_rows(self, markdown: str) -> Tuple[List[List[str]], Optional[int]]:
+        """
+        Parse markdown into rows, and the number of rows above the first separator.
 
-        rows = []
-        for i, line in enumerate(lines):
-            # Skip separator row (second line with ---)
-            if i == 1 and re.match(r"^\|?[\s\-:|]+\|?$", line):
+        B-6-10: lines without a pipe (captions such as "Table 3.2 (₹ in crore)", or a
+        running header Docling bound as caption) are not rows; separator rows are
+        found by pattern on any line and are never data rows.
+
+        Returns:
+            (2D list of cell strings, rows above the separator or None if there is none)
+        """
+        _, lines, _ = split_table_markdown(markdown)
+        rows: List[List[str]] = []
+        separator_rows: Optional[int] = None
+        for line in lines:
+            if is_markdown_separator(line):
+                if separator_rows is None:
+                    separator_rows = len(rows)
                 continue
-
-            # Parse cell values
-            # Remove leading/trailing pipes and split
-            cells = [cell.strip() for cell in line.split("|")]
-            # Remove empty first/last elements (from leading/trailing pipes)
-            if cells and cells[0] == "":
-                cells = cells[1:]
-            if cells and cells[-1] == "":
-                cells = cells[:-1]
-
+            cells = split_markdown_cells(line)
             if cells:
                 rows.append(cells)
 
-        return rows
+        # A lone row is a caption or a fragment, not a table
+        if len(rows) < 2 and not (rows and separator_rows is not None):
+            return [], None
+        return rows, separator_rows
 
-    def _detect_header_rows(self, raw_data: List[List[str]]) -> int:
+    def _detect_header_rows(
+        self, raw_data: List[List[str]], separator_rows: Optional[int] = None
+    ) -> int:
         """
-        Detect number of header rows (typically 1, sometimes multi-level).
+        Detect number of header rows.
 
-        Heuristics:
-        - First row is always a header
-        - Additional rows are headers if they contain mostly short text
-        - Stop at first row with predominantly numeric data
+        B-6-09: the header is the rows above the markdown separator (row 0 when there
+        is none). A further row is a header only in the multi-level pattern: no
+        numeric cell, and an empty or spanned cell, under a row that spans columns
+        this row splits. A row led by a serial number ("1. | Nor | Kullu | 0.39") is
+        data, never a header, so a continuation fragment can have no header at all.
 
         Args:
             raw_data: 2D list of cell strings
+            separator_rows: Rows above the markdown separator, if one was found
 
         Returns:
-            Number of header rows (minimum 1)
+            Number of header rows
         """
         if not raw_data:
             return 1
 
-        # Always count first row as header
-        num_headers = 1
+        base = separator_rows if separator_rows else 1
+        base = min(base, len(raw_data))
+        num_headers = 0
+        while num_headers < base and not self._is_serial_led(raw_data[num_headers]):
+            num_headers += 1
+        if num_headers < base:
+            return num_headers
 
-        # Check subsequent rows
-        for i in range(1, min(3, len(raw_data))):  # Check up to 3 rows
-            row = raw_data[i]
-            numeric_count = sum(1 for cell in row if self._is_numeric(cell))
-
-            # If more than 50% of cells are numeric, this is a data row
-            if numeric_count > len(row) * 0.5:
-                break
-
-            # If most cells are short text, it's likely a header
-            short_text_count = sum(1 for cell in row if len(cell) < 30)
-            if short_text_count > len(row) * 0.7:
+        # Up to two sub-header rows under the separator header
+        while num_headers < min(base + 2, len(raw_data) - 1):
+            if self._is_sub_header_row(raw_data[num_headers], raw_data[num_headers - 1]):
                 num_headers += 1
             else:
                 break
-
         return num_headers
+
+    @staticmethod
+    def _is_serial_led(row: List[str]) -> bool:
+        """True if the row's first non-empty cell (within the first two) is a serial number."""
+        for cell in row[:2]:
+            if cell.strip():
+                return is_serial_number(cell)
+        return False
+
+    def _is_sub_header_row(self, row: List[str], above: List[str]) -> bool:
+        """Multi-level header pattern: sub-headings under a header that spans columns."""
+        if self._is_serial_led(row):
+            return False
+        if any(self._is_numeric(cell) for cell in row if cell.strip()):
+            return False
+        if any(len(cell) >= 40 for cell in row):
+            return False
+
+        def spanned(cells: List[str], i: int) -> bool:
+            # Empty, or Docling's copy of a spanning cell's text
+            return not cells[i].strip() or (i > 0 and cells[i] == cells[i - 1])
+
+        has_span = any(
+            spanned(row, i) or (i < len(above) and row[i] == above[i] and row[i].strip())
+            for i in range(len(row))
+        )
+        # The row above spans a column this row gives its own heading
+        splits_above = any(
+            i < len(above) and spanned(above, i) and row[i].strip() and row[i] != above[i]
+            for i in range(len(row))
+        )
+        return has_span and splits_above
 
     # ==================== COLUMN CLASSIFICATION ====================
 
@@ -318,7 +430,7 @@ class StructuredTableExtractor:
         if not raw_data:
             return []
 
-        num_cols = len(raw_data[0])
+        num_cols = max(len(row) for row in raw_data)
         columns = []
 
         for col_idx in range(num_cols):
@@ -369,6 +481,10 @@ class StructuredTableExtractor:
             ColumnType enum value
         """
         header_lower = header.lower()
+
+        # A fiscal-year heading ("2021-22") makes a per-year column
+        if self._parse_fiscal_year(header):
+            return ColumnType.TIME_PERIOD
 
         # Check header keywords
         if any(kw in header_lower for kw in self.ENTITY_KEYWORDS):
@@ -495,12 +611,20 @@ class StructuredTableExtractor:
         if not row:
             return "data"
 
-        # Check first cell for total indicators
-        first_cell = row[0].lower().strip()
+        # The row label is the first cell, or the next one when column 1 is a serial
+        # number or empty ("| 23 | Total | ... |", "| | Total | 42.67 |")
+        label = ""
+        for idx, cell in enumerate(row[:3]):
+            text = cell.lower().strip()
+            if text and not is_serial_number(text):
+                # Past column 1 only a short label counts ("Total", not
+                # "Total Sanitation Campaign works in 12 districts")
+                label = text if idx == 0 or len(text) <= 30 else ""
+                break
 
         for pattern in self.TOTAL_INDICATORS:
-            if re.search(pattern, first_cell, re.IGNORECASE):
-                if "sub" in first_cell:
+            if re.search(pattern, label, re.IGNORECASE):
+                if "sub" in label:
                     return "subtotal"
                 return "total"
 
@@ -785,21 +909,22 @@ class StructuredTableExtractor:
 
     # ==================== METADATA EXTRACTION ====================
 
-    def _extract_title(self, markdown: str) -> Optional[str]:
+    def _extract_caption(self, markdown: str) -> Optional[Tuple[str, Optional[str]]]:
         """
-        Extract table title from markdown (if present above table).
+        B-6-10: (caption, table_number) from a leading "Table x.y" line, or (title,
+        None) from a leading "Appendix 5.2 ..." line.
 
-        Args:
-            markdown: Full markdown string
-
-        Returns:
-            Title string or None
+        Other leading lines (a running header such as "Report No. 8 of 2025", a unit
+        or source line) are not titles.
         """
-        # Look for text before first pipe character
-        lines = markdown.split("\n")
-        for line in lines[:3]:  # Check first 3 lines
-            if "|" not in line and line.strip():
-                return line.strip()
+        leading, _, _ = split_table_markdown(markdown)
+        for line in leading:
+            parsed = parse_table_caption(line)
+            if parsed:
+                return parsed
+        for line in leading:
+            if APPENDIX_TITLE_RE.match(line):
+                return " ".join(line.strip().strip("*_#").split()), None
         return None
 
     def _detect_table_unit(

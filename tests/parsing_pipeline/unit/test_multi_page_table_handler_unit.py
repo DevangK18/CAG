@@ -1036,3 +1036,210 @@ class TestMultiPageTableHandler:
         # Should detect missing pages (2, 4, 6, 8)
         stats = handler.get_statistics()
         assert stats["missing_pages_detected"] == 4
+
+
+# ==================== PR 7: repeated headers, sections, gap pages ====================
+
+
+def _mk_table(table_id, page, rows, num_header_rows=1, source_chunk_id="temp", row_types=None):
+    """Table from lists of cell texts; the first num_header_rows rows are headers."""
+    table_rows = []
+    for idx, values in enumerate(rows):
+        row_type = (row_types or {}).get(idx) or ("header" if idx < num_header_rows else "data")
+        cells = [
+            TableCell(row_idx=idx, col_idx=i, raw_text=v, cleaned_text=v,
+                      data_type=CellDataType.TEXT, semantic_type=CellSemanticType.DATA)
+            for i, v in enumerate(values)
+        ]
+        table_rows.append(TableRow(row_idx=idx, cells=cells, row_type=row_type))
+    header = rows[0] if num_header_rows else [""] * len(rows[0])
+    columns = [
+        TableColumn(col_idx=i, header_text=h, column_type=ColumnType.OTHER,
+                    dominant_data_type=CellDataType.TEXT)
+        for i, h in enumerate(header)
+    ]
+    return StructuredTable(
+        table_id=table_id, source_chunk_id=source_chunk_id, source_page_physical=page,
+        source_bbox=[0, 0, 100, 100], columns=columns, rows=table_rows,
+        num_rows=len(table_rows), num_cols=len(rows[0]), num_header_rows=num_header_rows,
+        markdown_representation="",
+    )
+
+
+HEAD = ["Sl. No.", "Name of Gram Panchayat", "Amount"]
+
+
+class TestRepeatedHeaderRows:
+    """B-7-04: a continuation page's reprinted header is dropped even if unclassified."""
+
+    def test_unclassified_repeated_header_dropped(self):
+        handler = MultiPageTableHandler()
+        base = _mk_table("t1", 10, [HEAD, ["1.", "Nor", "0.39"]])
+        # Continuation parsed without a header: its first row is the reprinted header
+        cont = _mk_table("t2", 11, [HEAD, ["2.", "Kot", "0.61"]], num_header_rows=0)
+        merged = handler._merge_fragments([base, cont])
+        texts = [[c.cleaned_text for c in r.cells] for r in merged.rows]
+        assert texts == [HEAD, ["1.", "Nor", "0.39"], ["2.", "Kot", "0.61"]]
+        assert [r.row_type for r in merged.rows] == ["header", "data", "data"]
+
+    def test_column_number_row_dropped_on_continuation(self):
+        handler = MultiPageTableHandler()
+        base = _mk_table("t1", 10, [HEAD, ["(1)", "(2)", "(3)"], ["1.", "Nor", "0.39"]])
+        cont = _mk_table("t2", 11, [HEAD, ["(1)", "(2)", "(3)"], ["2.", "Kot", "0.61"]])
+        merged = handler._merge_fragments([base, cont])
+        assert [r.cells[0].cleaned_text for r in merged.rows] == ["Sl. No.", "(1)", "1.", "2."]
+
+    def test_unmatched_header_of_continuation_kept_as_data(self):
+        handler = MultiPageTableHandler()
+        base = _mk_table("t1", 10, [HEAD, ["1.", "Nor", "0.39"]])
+        cont = _mk_table("t2", 11, [["2.", "Kot", "0.61"], ["3.", "Dansa", "0.40"]])
+        merged = handler._merge_fragments([base, cont])
+        assert [r.row_type for r in merged.rows] == ["header", "data", "data", "data"]
+        markdown = handler._regenerate_markdown(merged.rows, merged.columns)
+        assert "| 2. | Kot | 0.61 |" in markdown  # no longer hidden from the markdown
+
+    def test_empty_cells_do_not_make_headers_match(self):
+        handler = MultiPageTableHandler()
+        prev = _mk_table("t1", 10, [["", "2017-18", "", ""], ["1.", "a", "b", "c"]])
+        curr = _mk_table("t2", 11, [["", "Total", "", ""], ["2.", "d", "e", "f"]])
+        assert handler._has_repeated_header(prev, curr) is False
+
+    def test_markdown_escapes_pipes(self):
+        handler = MultiPageTableHandler()
+        table = _mk_table("t1", 10, [["A", "B"], ["x | y", "1"]])
+        assert "x \\| y" in handler._regenerate_markdown(table.rows, table.columns)
+
+
+class TestSectionKeys:
+    """B-6-01: tables in known, different sections never merge; unknown never blocks."""
+
+    def _pair(self):
+        a = _mk_table("t1", 10, [HEAD, ["1.", "Nor", "0.39"]], source_chunk_id="b1")
+        b = _mk_table("t2", 11, [HEAD, ["2.", "Kot", "0.61"]], source_chunk_id="b2")
+        return a, b
+
+    def test_different_sections_do_not_merge(self):
+        handler = MultiPageTableHandler()
+        a, b = self._pair()
+        result = handler.detect_and_merge(
+            [a, b], contiguous_pairs={("t1", "t2")}, section_keys={"b1": "s1", "b2": "s2"}
+        )
+        assert len(result) == 2
+
+    def test_same_or_unknown_section_merges(self):
+        for keys in ({"b1": "s1", "b2": "s1"}, {"b1": "s1"}, {"b1": None, "b2": "s2"}, None):
+            handler = MultiPageTableHandler()
+            a, b = self._pair()
+            result = handler.detect_and_merge([a, b], contiguous_pairs={("t1", "t2")}, section_keys=keys)
+            assert len(result) == 1, keys
+
+    def test_heading_section_keys(self):
+        from src.core.data_contracts import ExtractedContent
+        from src.parsing_pipeline.modules.multi_page_table_handler import heading_section_keys
+
+        def item(kind, page, y, text="", block=None):
+            return ExtractedContent(
+                content_type=kind, content=text, source_page_physical=page,
+                source_bbox=[0, y, 10, y + 5], model_used="m", layout_label="x",
+                structured_data={"source_chunk_id": block} if block else None,
+            )
+
+        content = [
+            item("table_markdown", 1, 50, block="b0"),
+            item("header", 2, 10, "Appendix 4"),
+            item("table_markdown", 2, 50, block="b1"),
+            item("table_markdown", 3, 50, block="b2"),
+            item("table_markdown", 3, 90, block="temp"),
+        ]
+        keys = heading_section_keys(content, lambda i: (i.source_page_physical, i.source_bbox[1]))
+        assert keys == {"b0": None, "b1": "2:Appendix 4", "b2": "2:Appendix 4"}
+
+
+class TestGapPages:
+    """B-6-02: a gap page is flagged only for a would-be continuation over a table page."""
+
+    def _tables(self):
+        a = _mk_table("t1", 10, [HEAD, ["1.", "Nor", "0.39"]])
+        b = _mk_table("t2", 12, [HEAD, ["9.", "Kot", "0.61"]])
+        return a, b
+
+    def test_flagged_when_page_holds_a_table(self):
+        handler = MultiPageTableHandler()
+        handler.detect_and_merge(list(self._tables()), contiguous_pairs=set(), gap_page_probe=lambda p: p == 11)
+        entries = handler.get_statistics()["dlq_entry_list"]
+        assert [e["page"] for e in entries] == [11]
+        assert entries[0]["context"]["section_id"] is None
+
+    def test_not_flagged_when_page_has_no_table(self):
+        handler = MultiPageTableHandler()
+        handler.detect_and_merge(list(self._tables()), contiguous_pairs=set(), gap_page_probe=lambda p: False)
+        assert handler.get_statistics()["dlq_entry_list"] == []
+
+    def test_not_flagged_without_probe(self):
+        handler = MultiPageTableHandler()
+        handler.detect_and_merge(list(self._tables()), contiguous_pairs=set())
+        assert handler.get_statistics()["dlq_entry_list"] == []
+
+    def test_not_flagged_for_unrelated_tables(self):
+        handler = MultiPageTableHandler()
+        a = _mk_table("t1", 10, [HEAD, ["1.", "Nor", "0.39"]])
+        a.rows.append(a.rows[1].model_copy(update={"row_type": "total"}))
+        b = _mk_table("t2", 12, [["State", "Ministry"], ["Bihar", "Health"]])
+        handler.detect_and_merge([a, b], contiguous_pairs=set(), gap_page_probe=lambda p: True)
+        assert handler.get_statistics()["dlq_entry_list"] == []
+
+    def test_lost_layout_table_flagged_between_unrelated_tables(self):
+        handler = MultiPageTableHandler()
+        a = _mk_table("t1", 10, [HEAD, ["1.", "Nor", "0.39"]])
+        b = _mk_table("t2", 12, [["State", "Ministry"], ["Bihar", "Health"]])
+        handler.detect_and_merge([a, b], contiguous_pairs=set(), lost_table_pages={11, 30})
+        entries = handler.get_statistics()["dlq_entry_list"]
+        assert [(e["page"], e["reason"]) for e in entries] == [(11, "layout_table_not_extracted")]
+
+    def test_not_flagged_across_sections(self):
+        handler = MultiPageTableHandler()
+        a, b = self._tables()
+        a.source_chunk_id, b.source_chunk_id = "b1", "b2"
+        handler.detect_and_merge(
+            [a, b], contiguous_pairs=set(), section_keys={"b1": "s1", "b2": "s2"},
+            gap_page_probe=lambda p: True,
+        )
+        assert handler.get_statistics()["dlq_entry_list"] == []
+
+
+class TestGapPageProbe:
+    def test_extracted_pages_and_no_pdf(self):
+        from src.parsing_pipeline.modules.multi_page_table_handler import GapPageProbe
+
+        probe = GapPageProbe(None, extracted_table_pages={4})
+        assert probe(4) is False  # extracted, e.g. as a Tier 3 table image
+        assert probe(5) is False  # no PDF to inspect
+
+    def test_numeric_rows_and_prose(self, tmp_path):
+        import fitz
+
+        from src.parsing_pipeline.modules.multi_page_table_handler import GapPageProbe
+
+        doc = fitz.open()
+        table_page = doc.new_page()
+        for i, y in enumerate((100, 120, 140, 160)):
+            table_page.insert_text((60, y), f"{i + 1}.   Gaya   {12.5 + i}   {300 + i}   {4 + i}")
+        prose_page = doc.new_page()
+        for y in (100, 120, 140, 160):
+            prose_page.insert_text(
+                (60, y), "During 2017-18 the department spent 12.50 crore on 23 works in the district"
+            )
+        path = tmp_path / "gap.pdf"
+        doc.save(path)
+        probe = GapPageProbe(str(path))
+        try:
+            assert probe(0) is True
+            assert probe(1) is False
+        finally:
+            probe.close()
+        # The same numbers inside an extracted chart are chart labels, not a table
+        probe = GapPageProbe(str(path), figure_boxes={0: [[0, 0, 600, 800]]})
+        try:
+            assert probe(0) is False
+        finally:
+            probe.close()

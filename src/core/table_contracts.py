@@ -138,6 +138,12 @@ class StructuredTable(BaseModel):
 
     # Semantic metadata
     title: Optional[str] = Field(None, description="Table title/caption if detected")
+    caption: Optional[str] = Field(
+        None, description="Printed caption, e.g. 'Table 3.2: Details of grants'"
+    )
+    table_number: Optional[str] = Field(
+        None, description="Number from the printed caption, e.g. '3.2'"
+    )
     monetary_unit: Optional[str] = Field(
         None, description="Currency unit context: '₹ in crore', 'Rs. lakh', etc."
     )

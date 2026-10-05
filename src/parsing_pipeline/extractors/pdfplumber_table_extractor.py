@@ -15,22 +15,29 @@ Interface matches TableExtractor exactly:
   - shutdown()
 """
 
+import io
 import logging
+import os
 import re
+import threading
 from collections import Counter
 from typing import List, Optional, Dict, Any, Tuple
 
+import fitz  # PyMuPDF
 import pdfplumber
-from pathlib import Path
 
 from src.core.data_contracts import ExtractedContent
 from src.parsing_pipeline.extractors.text_repair import (
+    FORWARD_WORDS,
+    REVERSED_WORDS,
     decode_cid_shift,
     has_cid_shift,
     is_reversed,
+    is_rupee_font,
     repair_font_shift,
     repair_rupee_backtick,
 )
+from src.parsing_pipeline.extractors.text_repair import _WORD_RE as WORD_RE
 from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
 from src.parsing_pipeline.config import get_config, ContentExtractionConfig
 
@@ -83,11 +90,33 @@ class PdfplumberTableExtractor:
         }
 
         self.structured_extractor = StructuredTableExtractor()
+
+        # B-6-12: the document is opened once, and the current page's words, vocabulary
+        # and orientation are computed once, not per table
+        self._lock = threading.Lock()
+        self._doc_key: Optional[Tuple[str, float]] = None
+        self._pdf = None
+        self._fitz_doc = None
+        self._page_num: Optional[int] = None
+        self._page_state: Optional[Dict[str, Any]] = None
         logger.info("PdfplumberTableExtractor initialized (no GPU required)")
 
     def shutdown(self):
-        """No-op: pdfplumber has no persistent resources to clean up."""
-        pass
+        """Close the cached document."""
+        self.close()
+
+    def close(self):
+        """Release the cached document and page (call after each report)."""
+        with self._lock:
+            self._release_page()
+            for doc in (self._pdf, self._fitz_doc):
+                if doc is not None:
+                    try:
+                        doc.close()
+                    except Exception:
+                        pass
+            self._pdf = self._fitz_doc = None
+            self._doc_key = None
 
     def extract(
         self, pdf_path: str, page_num: int, bbox: List[float], **kwargs
@@ -122,7 +151,7 @@ class PdfplumberTableExtractor:
             if confidence < self.config.table_min_confidence:
                 logger.warning(
                     f"pdfplumber: Low confidence ({confidence:.2f}) on page {page_num}, "
-                    f"skipping (will fall through to Tier 3)"
+                    f"skipping (falls through to Docling, Tier 2)"
                 )
                 return None
 
@@ -133,7 +162,8 @@ class PdfplumberTableExtractor:
 
             # Step 4: Generate StructuredTable JSON
             structured_data = self._build_structured_data(
-                markdown_table, page_num, bbox
+                markdown_table, page_num, bbox,
+                source_chunk_id=kwargs.get("source_chunk_id") or "temp",
             )
 
             # Step 5: Build ExtractedContent
@@ -178,74 +208,273 @@ class PdfplumberTableExtractor:
         Returns:
             Tuple of (2D list of cell strings, extraction_method) or (None, "")
         """
-        with pdfplumber.open(pdf_path) as pdf:
-            if page_num >= len(pdf.pages):
-                logger.error(
-                    f"Page {page_num} out of range (PDF has {len(pdf.pages)} pages)"
-                )
+        with self._lock:
+            state = self._get_page_state(pdf_path, page_num)
+            if state is None:
                 return None, ""
+            return self._extract_from_page(state, page_num, bbox)
 
-            page = pdf.pages[page_num]
-
-            # pdfplumber returns rotated pages' text in reversed order and in unrotated
-            # coordinates; leave those tables to Docling (Tier 2), which handles rotation
-            rotation = page.rotation % 360
-            if rotation != 0:
-                logger.debug(f"Table on rotated page {page_num} (rotation={rotation}°): deferring to Docling")
-                return None, ""
-
-            # Crop to Docling's bounding box
-            # pdfplumber uses (x0, top, x1, bottom) — same as our [x0, y0, x1, y1]
-            cropped = page.crop(
-                (
-                    max(0, bbox[0] - 2),  # small margin for edge tables
-                    max(0, bbox[1] - 2),
-                    min(page.width, bbox[2] + 2),
-                    min(page.height, bbox[3] + 2),
-                )
-            )
-
-            # Attempt 1: ruling lines and rectangle edges (CAG tables are ruled). Some tables
-            # rule only the title/header, so "lines" can return a fragment: keep it only if
-            # it covers the region's text, else take whichever strategy covers more.
-            region_tokens = self._tokens(cropped.extract_text() or "")
-            candidates = []
-            tables = cropped.find_tables(table_settings=self.TABLE_SETTINGS)
-            if tables:
-                # Double rules and merged cells leave empty columns/rows; drop them
-                # before judging fill ratio, or valid tables get rejected
-                raw = self._drop_empty_lines([row for t in tables for row in t.extract()])
-                if raw and self._has_meaningful_data(raw):
-                    candidates.append((self._coverage(raw, region_tokens), 1, raw, "lines"))
-
-            # Attempt 2: text-based fallback (for borderless tables)
-            if not candidates or candidates[0][0] < 0.9:
-                tables_fb = cropped.find_tables(table_settings=self.TABLE_SETTINGS_FALLBACK)
-                if tables_fb:
-                    # Whitespace columns cut words ("Typ | e"); stitch them back
-                    vocabulary = set(re.findall(r"[a-z]+", (page.extract_text() or "").lower()))
-                    raw = self._stitch_split_cells(
-                        self._drop_empty_lines(tables_fb[0].extract()), vocabulary
-                    )
-                    if raw and self._has_meaningful_data(raw):
-                        candidates.append((self._coverage(raw, region_tokens), 0, raw, "text_fallback"))
-
-            if candidates:
-                # Prefer ruling lines unless the whitespace strategy captures clearly more
-                best = max(candidates, key=lambda c: (round(c[0] + 0.05 * c[1], 2), c[1]))
-                return self._clean_raw_table(best[2], rotation), best[3]
-
-            # Attempt 3: Extract ALL text as single-column if table was detected
-            # by Docling but pdfplumber can't parse structure
-            text = cropped.extract_text()
-            if text and len(text.strip()) > 20:
-                # Return as single-column pseudo-table for downstream Tier 3
-                logger.info(
-                    f"pdfplumber: No table structure found, returning raw text for page {page_num}"
-                )
-                return None, ""
-
+    def _extract_from_page(
+        self, state: Dict[str, Any], page_num: int, bbox: List[float]
+    ) -> Tuple[Optional[List[List[str]]], str]:
+        # pdfplumber returns rotated pages' text in reversed order and in unrotated
+        # coordinates; leave those tables to Docling (Tier 2), which handles rotation
+        rotation = state["rotation"]
+        if rotation != 0:
+            logger.debug(f"Table on rotated page {page_num} (rotation={rotation}°): deferring to Docling")
             return None, ""
+
+        # B-6-05: a landscape table typeset sideways on a /Rotate 0 page is read from
+        # an upright copy of the page, with the bbox moved into its coordinates
+        page = state["page"]
+        if state["upright_page"] is not None:
+            page = state["upright_page"]
+            bbox = self._upright_bbox(bbox, state["direction"], state["width"], state["height"])
+
+        # Crop to Docling's bounding box
+        # pdfplumber uses (x0, top, x1, bottom) — same as our [x0, y0, x1, y1]
+        crop_box = (
+            max(0, bbox[0] - 2),  # small margin for edge tables
+            max(0, bbox[1] - 2),
+            min(page.width, bbox[2] + 2),
+            min(page.height, bbox[3] + 2),
+        )
+        if crop_box[2] <= crop_box[0] or crop_box[3] <= crop_box[1]:
+            return None, ""
+        cropped = page.crop(crop_box)
+
+        # Attempt 1: ruling lines and rectangle edges (CAG tables are ruled). Some tables
+        # rule only the title/header, so "lines" can return a fragment: keep it only if
+        # it covers the region's text, else take whichever strategy covers more.
+        region_tokens = self._tokens(cropped.extract_text() or "")
+        candidates = []
+        tables = cropped.find_tables(table_settings=self.TABLE_SETTINGS)
+        if tables:
+            # B-6-12: several tables in one bbox are not concatenated into one
+            raw = self._best_table(tables, region_tokens)
+            if raw and self._has_meaningful_data(raw):
+                candidates.append((self._coverage(raw, region_tokens), 1, raw, "lines"))
+
+        # Attempt 2: text-based fallback (for borderless tables)
+        if not candidates or candidates[0][0] < 0.9:
+            tables_fb = cropped.find_tables(table_settings=self.TABLE_SETTINGS_FALLBACK)
+            if tables_fb:
+                # Whitespace columns cut words ("Typ | e"); stitch them back
+                raw = self._stitch_split_cells(
+                    self._best_table(tables_fb, region_tokens), state["vocabulary"]
+                )
+                if raw and self._has_meaningful_data(raw):
+                    candidates.append((self._coverage(raw, region_tokens), 0, raw, "text_fallback"))
+
+        if candidates:
+            # Prefer ruling lines unless the whitespace strategy captures clearly more
+            best = max(candidates, key=lambda c: (round(c[0] + 0.05 * c[1], 2), c[1]))
+            # Text on the upright copy is known to read forwards
+            check_reversal = state["upright_page"] is None
+            return self._clean_raw_table(best[2], rotation, check_reversal), best[3]
+
+        return None, ""
+
+    def _best_table(self, tables, region_tokens: List[str]) -> List[List[Optional[str]]]:
+        """
+        The table in the region, from pdfplumber's tables found there.
+
+        Tables that follow each other with the same width or the same left and right
+        edges are one table cut by a gap in the ruling and are joined; otherwise the
+        one covering most of the region's text is kept (B-6-12: different tables are
+        no longer concatenated). Tables nested in another are dropped first.
+        """
+        # Header cells drawn as filled rectangles come back as small tables inside
+        # the real one; their text is already in it
+        def inside(a, b) -> bool:
+            return a is not b and a.bbox[0] >= b.bbox[0] - 1 and a.bbox[1] >= b.bbox[1] - 1 \
+                and a.bbox[2] <= b.bbox[2] + 1 and a.bbox[3] <= b.bbox[3] + 1
+        tables = [t for t in tables if not any(inside(t, other) for other in tables)]
+
+        groups: List[List[List[Optional[str]]]] = []
+        width = None
+        extent = None
+        for table in sorted(tables, key=lambda t: t.bbox[1]):
+            raw = self._drop_empty_lines(table.extract())
+            if not raw:
+                continue
+            raw_width = max(len(row) for row in raw)
+            same_extent = extent is not None and abs(table.bbox[0] - extent[0]) <= 3 \
+                and abs(table.bbox[2] - extent[1]) <= 3
+            if groups and (raw_width == width or same_extent):
+                groups[-1].extend(raw)
+            else:
+                groups.append(list(raw))
+            width, extent = raw_width, (table.bbox[0], table.bbox[2])
+        if not groups:
+            return []
+        if len(groups) > 1:
+            logger.debug(f"pdfplumber: {len(groups)} tables in one region; keeping the best")
+        best = max(groups, key=lambda raw: (self._coverage(raw, region_tokens), len(raw)))
+        # Joined pieces can differ in width: pad to a rectangle
+        width = max(len(row) for row in best)
+        return [list(row) + [None] * (width - len(row)) for row in best]
+
+    # ========== DOCUMENT AND PAGE CACHE ==========
+
+    def _get_page_state(self, pdf_path: str, page_num: int) -> Optional[Dict[str, Any]]:
+        """Open the document once per report and analyse each page once."""
+        try:
+            key = (str(pdf_path), os.path.getmtime(pdf_path))
+        except OSError:
+            key = (str(pdf_path), 0.0)
+        if key != self._doc_key:
+            self._release_page()
+            for doc in (self._pdf, self._fitz_doc):
+                if doc is not None:
+                    doc.close()
+            self._pdf = pdfplumber.open(pdf_path)
+            self._fitz_doc = None
+            self._doc_key = key
+
+        if page_num >= len(self._pdf.pages):
+            logger.error(f"Page {page_num} out of range (PDF has {len(self._pdf.pages)} pages)")
+            return None
+        if self._page_num == page_num and self._page_state is not None:
+            return self._page_state
+
+        self._release_page()
+        page = self._pdf.pages[page_num]
+        rotation = page.rotation % 360
+        state: Dict[str, Any] = {
+            "page": page,
+            "rotation": rotation,
+            "direction": 0,
+            "upright_page": None,
+            "upright_pdf": None,
+            "width": float(page.width),
+            "height": float(page.height),
+            "vocabulary": None,
+        }
+        if rotation == 0:
+            direction = self._vertical_direction(pdf_path, page_num)
+            if direction:
+                upright_pdf = self._upright_copy(page_num, direction)
+                if upright_pdf is not None:
+                    state.update(
+                        direction=direction,
+                        upright_pdf=upright_pdf,
+                        upright_page=upright_pdf.pages[0],
+                    )
+        text_page = state["upright_page"] or page
+        self._mark_chars(text_page)
+        state["vocabulary"] = set(re.findall(r"[a-z]+", (text_page.extract_text() or "").lower()))
+        self._page_num, self._page_state = page_num, state
+        return state
+
+    @staticmethod
+    def _mark_chars(page) -> None:
+        """
+        Character fixes before cells are read (B-6-19, B-6-06): a raised small digit
+        right after a letter is a footnote marker and becomes "[^N]", so "Taxes2"
+        reads "Taxes[^2]"; a backtick in a Rupee font is the rupee sign.
+        """
+        chars = page.chars
+        i = 0
+        while i < len(chars):
+            c = chars[i]
+            if c.get("text") == "`" and is_rupee_font(c.get("fontname")):
+                c["text"] = "₹"
+            prev = chars[i - 1] if i else None
+            if (
+                prev is not None
+                and c.get("text", "").isdigit()
+                and prev.get("text", "").isalpha()
+                and c.get("size", 0) < 0.8 * prev.get("size", 0)
+                and c.get("bottom", 0) < prev.get("bottom", 0) - 0.15 * prev.get("size", 0)
+                and not (prev["text"] == "m" and i > 1 and not chars[i - 2].get("text", "").isalpha())
+            ):
+                j = i
+                while (
+                    j + 1 < len(chars)
+                    and chars[j + 1].get("text", "").isdigit()
+                    and abs(chars[j + 1].get("size", 0) - c.get("size", 0)) < 0.5
+                ):
+                    j += 1
+                digits = "".join(chars[k]["text"] for k in range(i, j + 1))
+                c["text"] = f"[^{digits}]"
+                for k in range(i + 1, j + 1):
+                    chars[k]["text"] = ""
+                i = j + 1
+                continue
+            i += 1
+
+    def _release_page(self):
+        """Free the cached page's parsed objects and its upright copy."""
+        state, self._page_state, self._page_num = self._page_state, None, None
+        if not state:
+            return
+        if state.get("upright_pdf") is not None:
+            try:
+                state["upright_pdf"].close()
+            except Exception:
+                pass
+        try:
+            state["page"].close()
+        except Exception:
+            pass
+
+    def _vertical_direction(self, pdf_path: str, page_num: int) -> int:
+        """
+        B-6-05: -1 if most of the page's text runs bottom-to-top (dir ≈ (0,-1)), +1 if
+        top-to-bottom (dir ≈ (0,1)), 0 if the text is horizontal.
+        """
+        try:
+            if self._fitz_doc is None:
+                self._fitz_doc = fitz.open(pdf_path)
+            blocks = self._fitz_doc[page_num].get_text("dict")["blocks"]
+        except Exception as e:
+            logger.debug(f"Orientation check failed on page {page_num}: {e}")
+            return 0
+        return self._dominant_vertical_direction(blocks)
+
+    @staticmethod
+    def _dominant_vertical_direction(blocks: List[Dict[str, Any]]) -> int:
+        """Direction of the vertical text if over half of the characters are vertical."""
+        total = 0
+        by_direction = {-1: 0, 1: 0}
+        for block in blocks:
+            for line in block.get("lines", []):
+                chars = sum(len(span.get("text", "").strip()) for span in line.get("spans", []))
+                total += chars
+                dx, dy = line.get("dir", (1.0, 0.0))
+                if abs(dx) < 0.1 and abs(abs(dy) - 1) < 0.1:
+                    by_direction[1 if dy > 0 else -1] += chars
+        if not total:
+            return 0
+        direction = max(by_direction, key=by_direction.get)
+        return direction if by_direction[direction] > total * 0.5 else 0
+
+    def _upright_copy(self, page_num: int, direction: int):
+        """A one-page pdfplumber document with the page turned so its text reads left to right."""
+        try:
+            src = self._fitz_doc
+            rect = src[page_num].rect
+            out = fitz.open()
+            new_page = out.new_page(width=rect.height, height=rect.width)
+            # Text running upwards is turned clockwise; downwards, anticlockwise
+            new_page.show_pdf_page(new_page.rect, src, page_num, rotate=-90 if direction < 0 else 90)
+            data = out.tobytes()
+            out.close()
+            return pdfplumber.open(io.BytesIO(data))
+        except Exception as e:
+            logger.warning(f"Could not derotate page {page_num}: {e}")
+            return None
+
+    @staticmethod
+    def _upright_bbox(bbox: List[float], direction: int, width: float, height: float) -> List[float]:
+        """Move a top-left-origin bbox from the sideways page into the upright copy."""
+        x0, y0, x1, y1 = bbox
+        if direction < 0:
+            # (x, y) -> (H - y, x)
+            return [height - y1, x0, height - y0, x1]
+        # (x, y) -> (y, W - x)
+        return [y0, width - x1, y1, width - x0]
 
     @staticmethod
     def _tokens(text: str) -> List[str]:
@@ -337,7 +566,7 @@ class PdfplumberTableExtractor:
         return " ".join(corrected)
 
     def _clean_raw_table(
-        self, raw: List[List[Optional[str]]], rotation: int = 0
+        self, raw: List[List[Optional[str]]], rotation: int = 0, check_reversal: bool = True
     ) -> List[List[str]]:
         """
         Clean pdfplumber's raw extraction output.
@@ -359,7 +588,7 @@ class PdfplumberTableExtractor:
         needs_cid_decode = has_cid_shift(table_text)
         if needs_cid_decode:
             table_text = decode_cid_shift(table_text)
-        needs_reversal = is_reversed(table_text)
+        needs_reversal = check_reversal and is_reversed(table_text)
         if needs_reversal:
             logger.debug("D9-FIX: Detected content-baked reversal in table")
 
@@ -379,10 +608,23 @@ class PdfplumberTableExtractor:
                     text = repair_rupee_backtick(repair_font_shift(text))
                     if needs_reversal and text:
                         text = self._reverse_cell_text(text)
+                    elif not check_reversal and self._cell_reads_backwards(text):
+                        # Header cells set vertically inside an already sideways table
+                        # still read backwards on the upright copy (BR p.194)
+                        text = text[::-1]
                     cleaned_row.append(text)
             cleaned.append(cleaned_row)
         # Cells holding only decoded spaces leave empty rows/columns
         return self._drop_empty_lines(cleaned) or cleaned
+
+    @staticmethod
+    def _cell_reads_backwards(text: str) -> bool:
+        """A cell of two or more words with more reversed stop words than forward ones."""
+        tokens = [t.lower() for t in WORD_RE.findall(text or "")]
+        if len(tokens) < 2:
+            return False
+        backwards = sum(t in REVERSED_WORDS for t in tokens)
+        return backwards >= 1 and backwards > sum(t in FORWARD_WORDS for t in tokens)
 
     def _has_meaningful_data(self, raw: List[List[Optional[str]]]) -> bool:
         """
@@ -503,8 +745,12 @@ class PdfplumberTableExtractor:
                 padded_row.append("")
             padded.append(padded_row)
 
+        # B-6-12: a pipe inside a cell would shift every later column when re-parsed
+        def line(row: List[str]) -> str:
+            return " | ".join(str(cell).replace("|", "\\|") for cell in row)
+
         # Header row
-        header = " | ".join(str(cell) for cell in padded[0])
+        header = line(padded[0])
 
         # Separator
         separator = " | ".join(["---"] * num_cols)
@@ -512,8 +758,7 @@ class PdfplumberTableExtractor:
         # Data rows
         body_rows = []
         for row in padded[1:]:
-            body_row = " | ".join(str(cell) for cell in row)
-            body_rows.append(f"| {body_row} |")
+            body_rows.append(f"| {line(row)} |")
 
         if body_rows:
             return f"| {header} |\n| {separator} |\n" + "\n".join(body_rows)
@@ -523,7 +768,7 @@ class PdfplumberTableExtractor:
     # ========== STRUCTURED DATA ==========
 
     def _build_structured_data(
-        self, markdown_table: str, page_num: int, bbox: List[float]
+        self, markdown_table: str, page_num: int, bbox: List[float], source_chunk_id: str = "temp"
     ) -> Optional[Dict[str, Any]]:
         """
         Generate StructuredTable JSON from markdown.
@@ -544,7 +789,7 @@ class PdfplumberTableExtractor:
             structured_table = self.structured_extractor.extract(
                 markdown_table=markdown_table,
                 table_id=table_id,
-                source_chunk_id="temp",  # Set during chunking phase
+                source_chunk_id=source_chunk_id,
                 source_page_physical=page_num,
                 source_bbox=bbox,
             )

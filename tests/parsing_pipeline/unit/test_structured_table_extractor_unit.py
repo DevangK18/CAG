@@ -333,13 +333,13 @@ class TestStructuredTableExtractor:
             source_bbox=[0, 0, 100, 100],
         )
 
-        # Sum excluding totals
+        # "Amount" is a rupee column, so values are normalised to paise
         total = structured.sum_column(1, exclude_totals=True)
-        assert total == 300.0  # 100 + 200
+        assert total == 300.0 * 100  # 100 + 200
 
         # Sum including totals
         total = structured.sum_column(1, exclude_totals=False)
-        assert total == 600.0  # 100 + 200 + 300
+        assert total == 600.0 * 100  # 100 + 200 + 300
 
     def test_get_row_by_entity(self, extractor):
         """Test get_row_by_entity helper method."""
@@ -552,3 +552,201 @@ class TestTableMonetaryUnit:
         cell = t.rows[1].cells[1]
         assert cell.data_type == CellDataType.CURRENCY
         assert cell.normalized_value == pytest.approx(5000 * 100)
+
+
+class TestHeaderRows:
+    """B-6-09: header rows are the rows above the separator, plus multi-level sub-headers."""
+
+    @pytest.fixture
+    def extractor(self):
+        return StructuredTableExtractor()
+
+    def _extract(self, extractor, markdown):
+        return extractor.extract(
+            markdown_table=markdown, table_id="t", source_chunk_id="c",
+            source_page_physical=1, source_bbox=[0, 0, 100, 100],
+        )
+
+    def test_serial_number_row_is_data(self, extractor):
+        markdown = """| Sl. No. | Name of Gram Panchayat | Name of Block | District | Amount |
+| --- | --- | --- | --- | --- |
+| 1. | Nor | Nirmand | Kullu | 0.39 |
+| 2. | Kot | Nirmand | Kullu | 0.61 |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_header_rows == 1
+        assert [r.row_type for r in t.rows] == ["header", "data", "data"]
+
+    def test_short_text_rows_are_data(self, extractor):
+        markdown = """| Scheme | Status | Remarks |
+| --- | --- | --- |
+| PMAY | Delayed | Funds idle |
+| SBM | Done | None |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_header_rows == 1
+
+    def test_multi_level_header_with_empty_spans(self, extractor):
+        # HP_2022 Appendix-11: "2017-18" spans the columns the next row names
+        markdown = """|  | 2017-18 |  |  |  |  |
+| --- | --- | --- | --- | --- | --- |
+|  | Sl. No. |  | Name of Gram Panchayat |  | Amount |
+| 1. |  | Nor |  | Nirmand | 0.39 |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_header_rows == 2
+        assert t.rows[2].row_type == "data"
+
+    def test_multi_level_header_docling_repeated_spans(self, extractor):
+        markdown = """| Year | Budget | Budget | Actual | Actual |
+|---|---|---|---|---|
+| Year | BE | RE | BE | RE |
+| 2021-22 | 10 | 12 | 9 | 11 |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_header_rows == 2
+
+    def test_continuation_fragment_without_header(self, extractor):
+        markdown = """| 27. | Shingla | Rampur | Shimla | 0.25 |
+| --- | --- | --- | --- | --- |
+| 28. | Dansa | Rampur | Shimla | 0.40 |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_header_rows == 0
+        assert all(r.row_type == "data" for r in t.rows)
+
+
+class TestMarkdownParsing:
+    """B-6-10: caption lines, separators anywhere, widest row."""
+
+    @pytest.fixture
+    def extractor(self):
+        return StructuredTableExtractor()
+
+    def _extract(self, extractor, markdown, **kwargs):
+        return extractor.extract(
+            markdown_table=markdown, table_id="t", source_chunk_id="c",
+            source_page_physical=1, source_bbox=[0, 0, 100, 100], **kwargs,
+        )
+
+    def test_running_header_is_not_row_or_title(self, extractor):
+        markdown = """Report No. 8 of 2025
+
+| Audit observations | Reply | Remarks |
+|---|---|---|
+| Delay in PFZ advisories | Accepted | Noted |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_cols == 3
+        assert t.rows[0].cells[0].cleaned_text == "Audit observations"
+        assert t.title is None and t.caption is None and t.table_number is None
+        assert all("---" not in c.cleaned_text for r in t.rows for c in r.cells)
+
+    def test_table_caption_line_is_title_with_number(self, extractor):
+        markdown = """Table 3.2: Details of grants (₹ in crore)
+| Grant | Budget |
+| --- | --- |
+| Education | 847.71 |"""
+        t = self._extract(extractor, markdown)
+        assert t.title == "Table 3.2: Details of grants (₹ in crore)"
+        assert t.caption == t.title
+        assert t.table_number == "3.2"
+
+    def test_appendix_heading_is_title_without_number(self, extractor):
+        markdown = """Appendix 5.2 (Refer Paragraph 5.3) Statement showing schools
+| School | SCR |
+| --- | --- |
+| A | 45 |"""
+        t = self._extract(extractor, markdown)
+        assert t.title.startswith("Appendix 5.2")
+        assert t.table_number is None
+
+    def test_source_line_is_not_title(self, extractor):
+        markdown = """(Source: Analysis of data furnished by sampled schools)
+| School | SCR |
+| --- | --- |
+| A | 45 |"""
+        assert self._extract(extractor, markdown).title is None
+
+    def test_bound_caption_argument_wins(self, extractor):
+        markdown = """| A | B |
+| --- | --- |
+| x | 1 |"""
+        t = self._extract(extractor, markdown, caption="Statement No. 5 Loans outstanding")
+        assert t.table_number == "5"
+        assert t.title == "Statement No. 5 Loans outstanding"
+
+    def test_separator_not_on_second_line(self, extractor):
+        markdown = """| Item | Value |
+| Sub | Unit |
+| --- | --- |
+| A | 1 |"""
+        raw, separator_rows = extractor._parse_markdown_rows(markdown)
+        assert separator_rows == 2
+        assert ["---", "---"] not in raw
+        assert len(raw) == 3
+
+    def test_num_cols_is_widest_row(self, extractor):
+        markdown = """| A | B |
+| --- | --- | --- |
+| x | 1 | 2 |"""
+        t = self._extract(extractor, markdown)
+        assert t.num_cols == 3
+        assert len(t.columns) == 3
+        assert all(len(r.cells) == 3 for r in t.rows)
+
+    def test_escaped_pipe_stays_in_cell(self, extractor):
+        raw = extractor._parse_markdown_table("| A | B |\n| --- | --- |\n| x \\| y | 1 |")
+        assert raw[1] == ["x | y", "1"]
+
+
+class TestCaptionHelpers:
+    @pytest.mark.parametrize(
+        "text,number",
+        [
+            ("Table 3.2: Details of grants", "3.2"),
+            ("**Table 2.10** Savings", "2.10"),
+            ("Statement No. 5", "5"),
+            ("Chart IV: Trend", "IV"),
+            ("TABLE-1.3.2 (contd.)", "1.3.2"),
+        ],
+    )
+    def test_caption_parsed(self, text, number):
+        from src.parsing_pipeline.modules.structured_table_extractor import parse_table_caption
+
+        assert parse_table_caption(text)[1] == number
+
+    @pytest.mark.parametrize(
+        "text", ["Report No. 8 of 2025", "Table indicates the following", "(₹ in crore)", ""]
+    )
+    def test_not_a_caption(self, text):
+        from src.parsing_pipeline.modules.structured_table_extractor import parse_table_caption
+
+        assert parse_table_caption(text) is None
+
+    @pytest.mark.parametrize(
+        "line,expected",
+        [
+            ("| --- | --- |", True),
+            ("|---|:---:|", True),
+            ("| - | - |", False),  # nil values, not a separator
+            ("| A | --- |", False),
+            ("no pipes ---", False),
+        ],
+    )
+    def test_separator(self, line, expected):
+        from src.parsing_pipeline.modules.structured_table_extractor import is_markdown_separator
+
+        assert is_markdown_separator(line) is expected
+
+
+class TestTotalRows:
+    """B-6-12: totals found when column 1 is a serial number or empty."""
+
+    @pytest.fixture
+    def extractor(self):
+        return StructuredTableExtractor()
+
+    def test_total_after_serial_number(self, extractor):
+        assert extractor._classify_row_type(["23", "Total", "42.67"]) == "total"
+
+    def test_total_after_empty_cell(self, extractor):
+        assert extractor._classify_row_type(["", "Total", "42.67"]) == "total"
+
+    def test_long_text_after_serial_is_data(self, extractor):
+        row = ["4", "Total Sanitation Campaign works in twelve districts", "5"]
+        assert extractor._classify_row_type(row) == "data"

@@ -12,14 +12,136 @@ Part of Phase 1 - P0-3: Multi-Page Table Stitching
 
 import logging
 import re
-from typing import List, Optional, Set, Dict, Any, Tuple
-from collections import Counter
+from typing import Callable, List, Optional, Set, Dict, Any, Tuple
 
 from src.core.table_contracts import StructuredTable, TableRow, TableColumn
 from src.parsing_pipeline.config import get_config, ChunkingConfig
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 
 logger = logging.getLogger(__name__)
+
+
+# A numeric token on a page line: 1,234 / 12.50 / (23.45) / 2019
+_NUMERIC_TOKEN_RE = re.compile(r"^[(\-₹`]*\d[\d,]*(?:\.\d+)?\)?%?$")
+
+
+def heading_section_keys(content: List[Any], order_key: Callable[[Any], Any]) -> Dict[str, Optional[str]]:
+    """
+    B-6-01: section key per table block ID: the last heading before it in reading order.
+
+    Block IDs that are missing or shared ("temp" in Phase 6 output written before
+    block IDs existed) are left out, so those tables' sections are unknown.
+    """
+    keys: Dict[str, Optional[str]] = {}
+    seen: Set[str] = set()
+    heading: Optional[str] = None
+    for item in sorted(content, key=order_key):
+        if item.content_type == "header":
+            heading = f"{item.source_page_physical}:{(item.content or '').strip()[:60]}"
+        elif item.content_type == "table_markdown" and item.structured_data:
+            block_id = item.structured_data.get("source_chunk_id")
+            if not block_id or block_id == "temp":
+                continue
+            if block_id in seen:
+                keys.pop(block_id, None)
+                continue
+            seen.add(block_id)
+            keys[block_id] = heading
+    return keys
+
+
+class GapPageProbe:
+    """
+    B-6-02: does a page with no table fragment still hold a table?
+
+    True when pdfplumber finds a ruled table there, or when at least 3 text rows
+    carry 3 or more numbers (a third of their words or more), not counting words
+    inside extracted figures (chart labels). Pages are checked lazily, once each.
+    """
+
+    def __init__(
+        self,
+        pdf_path: Optional[str],
+        extracted_table_pages: Optional[Set[int]] = None,
+        figure_boxes: Optional[Dict[int, List[List[float]]]] = None,
+    ):
+        self.pdf_path = pdf_path
+        self.extracted_table_pages = extracted_table_pages or set()
+        self.figure_boxes = figure_boxes or {}
+        self._cache: Dict[int, bool] = {}
+        self._plumber = None
+        self._fitz = None
+
+    def __call__(self, page: int) -> bool:
+        if page not in self._cache:
+            self._cache[page] = self._check(page)
+        return self._cache[page]
+
+    def _check(self, page: int) -> bool:
+        if page in self.extracted_table_pages:
+            return False  # extracted (as a table or a table image), not lost
+        if not self.pdf_path:
+            return False
+        try:
+            return self._has_numeric_rows(page) or self._has_ruled_table(page)
+        except Exception as e:
+            logger.debug(f"M2-DLQ: could not inspect page {page}: {e}")
+            return False
+
+    def _has_numeric_rows(self, page: int) -> bool:
+        import fitz
+
+        if self._fitz is None:
+            self._fitz = fitz.open(self.pdf_path)
+        if page >= self._fitz.page_count:
+            return False
+        rows: Dict[int, List[str]] = {}
+        for word in self._fitz[page].get_text("words"):
+            if self._in_figure(page, word[:4]):
+                continue
+            rows.setdefault(round((word[1] + word[3]) / 6), []).append(word[4])
+        numeric_rows = 0
+        for words in rows.values():
+            numbers = sum(1 for w in words if _NUMERIC_TOKEN_RE.match(w))
+            if numbers >= 3 and numbers * 3 >= len(words):
+                numeric_rows += 1
+        return numeric_rows >= 3
+
+    def _has_ruled_table(self, page: int) -> bool:
+        import pdfplumber
+
+        if self._plumber is None:
+            self._plumber = pdfplumber.open(self.pdf_path)
+        if page >= len(self._plumber.pages):
+            return False
+        pl_page = self._plumber.pages[page]
+        try:
+            tables = pl_page.find_tables(
+                table_settings={"vertical_strategy": "lines", "horizontal_strategy": "lines"}
+            )
+            # Chart gridlines are ruled too: a "table" inside a figure is not one
+            return any(
+                len(t.rows) >= 2 and len(t.rows[0].cells) >= 2 and not self._in_figure(page, t.bbox)
+                for t in tables
+            )
+        finally:
+            pl_page.close()
+
+    def _in_figure(self, page: int, bbox) -> bool:
+        """True if the centre of bbox lies inside an extracted figure on the page."""
+        cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+        return any(
+            b[0] <= cx <= b[2] and b[1] <= cy <= b[3] for b in self.figure_boxes.get(page, [])
+        )
+
+    def close(self):
+        for doc in (self._plumber, self._fitz):
+            if doc is not None:
+                try:
+                    doc.close()
+                except Exception:
+                    pass
+        self._plumber = self._fitz = None
 
 
 # REMEDIATION §5.1: UnionFind for transitive table grouping
@@ -112,8 +234,10 @@ class MultiPageTableHandler:
         self,
         tables: List[StructuredTable],
         trace_emitter=None,
-        section_page_ranges: Optional[Dict[str, Tuple[int, int]]] = None,
         contiguous_pairs: Optional[Set[Tuple[str, str]]] = None,
+        section_keys: Optional[Dict[str, Optional[str]]] = None,
+        gap_page_probe: Optional[Callable[[int], bool]] = None,
+        lost_table_pages: Optional[Set[int]] = None,
     ) -> List[StructuredTable]:
         """
         Detect table continuations and merge fragments using graph-based transitive closure.
@@ -125,18 +249,25 @@ class MultiPageTableHandler:
         Args:
             tables: List of StructuredTable objects, ordered by page number
             trace_emitter: Optional TraceEmitter for instrumentation
-            section_page_ranges: M1 fix - Optional mapping of source_chunk_id to (start_page, end_page)
-                                 for accurate missing page detection at section boundaries
             contiguous_pairs: (prev_table_id, next_table_id) pairs with no heading or body
                               text between them in reading order. When given, only these
                               pairs can merge; a new annexure heading always starts a new table.
+            section_keys: B-6-01: section of each table, keyed by its source_chunk_id
+                          (the Phase 6 block ID). Tables in different sections never
+                          merge; a missing or None key means unknown and blocks nothing.
+            gap_page_probe: B-6-02: page -> True if the page looks like it holds a table.
+                            A page between two tables is flagged as lost only if this
+                            says so; without a probe nothing is flagged.
+            lost_table_pages: pages where layout found a table that no extracted item
+                              accounts for; flagged when they fall between two tables
+                              whatever the tables look like.
 
         Returns:
             List of merged tables (fewer items than input if merges occurred)
         """
         emitter = trace_emitter or self._trace_emitter
-        self._section_page_ranges = section_page_ranges or {}
         self._contiguous_pairs = contiguous_pairs
+        self._section_keys = section_keys or {}
         # merged table_id -> fragment table_ids, for callers replacing fragments
         self.merge_groups: Dict[str, List[str]] = {}
 
@@ -149,7 +280,6 @@ class MultiPageTableHandler:
         n = len(sorted_tables)
 
         # REMEDIATION §5.1 Phase 1: Build merge graph using Union-Find
-        # Check ALL pairs within MAX_PAGE_GAP, not just sequential neighbors
         uf = UnionFind(n)
         merge_decisions = []  # For debugging
 
@@ -193,13 +323,8 @@ class MultiPageTableHandler:
                 fragments = [sorted_tables[i] for i in indices]
                 merged_table = self._merge_fragments(fragments)
 
-                # P0-03 + M1 fix: Detect missing pages using section page range if available
-                expected_span = None
-                source_chunk_id = merged_table.source_chunk_id
-                if source_chunk_id and source_chunk_id in self._section_page_ranges:
-                    expected_span = self._section_page_ranges[source_chunk_id]
-
-                missing_pages = self._detect_missing_pages(merged_table, expected_span)
+                # P0-03: pages inside the merged run with no fragment were lost upstream
+                missing_pages = self._detect_missing_pages(merged_table)
                 if missing_pages:
                     self.stats["missing_pages_detected"] += len(missing_pages)
                     self.stats["dlq_entries"] += 1
@@ -210,14 +335,14 @@ class MultiPageTableHandler:
                         "multi_page_table_page_lost",
                         {
                             "table_id": merged_table.table_id,
-                            "missing_pages": list(missing_pages),
+                            "missing_pages": sorted(missing_pages),
                             "expected_range": f"{merged_table.source_pages[0]}-{merged_table.source_pages[-1]}",
                             "actual_pages": merged_table.source_pages,
                             "fragment_count": len(fragments),
                         },
                     )
                     logger.warning(
-                        f"[{merged_table.table_id}] Missing pages detected: {missing_pages} "
+                        f"[{merged_table.table_id}] Missing pages detected: {sorted(missing_pages)} "
                         f"in range {merged_table.source_pages[0]}-{merged_table.source_pages[-1]}"
                     )
 
@@ -230,7 +355,7 @@ class MultiPageTableHandler:
 
         # M2-FIX: After all merges, detect gaps between consecutive tables
         # This catches boundary pages that have no fragments at all
-        sequence_gaps = self._detect_table_sequence_gaps(merged)
+        sequence_gaps = self._detect_table_sequence_gaps(merged, gap_page_probe, lost_table_pages)
         if sequence_gaps:
             self.dlq_entry_list.extend(sequence_gaps)
             self.stats["missing_pages_detected"] += len(sequence_gaps)
@@ -250,18 +375,22 @@ class MultiPageTableHandler:
 
         return merged
 
-    def _detect_missing_pages(
-        self, merged_table: StructuredTable, expected_span: Optional[Tuple[int, int]] = None
-    ) -> Set[int]:
-        """
-        D3: Detect missing pages using true expected span (not just extracted min/max).
+    def _section_of(self, table: StructuredTable) -> Optional[str]:
+        """B-6-01: the table's section key, or None when unknown."""
+        keys = getattr(self, "_section_keys", None) or {}
+        return keys.get(table.source_chunk_id) if table.source_chunk_id else None
 
-        After merging, checks for gaps in source_pages. If pages are missing,
-        they should either be recovered via tier-3 or logged to DLQ.
+    def _same_section(self, prev: StructuredTable, curr: StructuredTable) -> bool:
+        """False only when both sections are known and differ."""
+        a, b = self._section_of(prev), self._section_of(curr)
+        return a is None or b is None or a == b
+
+    def _detect_missing_pages(self, merged_table: StructuredTable) -> Set[int]:
+        """
+        Pages inside a merged table's page range that contributed no fragment.
 
         Args:
             merged_table: StructuredTable after merging
-            expected_span: (start_page, end_page) from TOC/layout, or None to use extracted range
 
         Returns:
             Set of missing page numbers (empty if none missing)
@@ -270,31 +399,28 @@ class MultiPageTableHandler:
             return set()
 
         pages = sorted(merged_table.source_pages)
-
-        # D3: Use expected_span if provided, else fall back to extracted range
-        if expected_span:
-            start, end = expected_span
-        else:
-            # Fallback: use extracted range (can miss boundary pages)
-            start, end = pages[0], pages[-1]
-
-        expected = set(range(start, end + 1))
-        actual = set(pages)
-        missing = expected - actual
-
-        return missing
+        expected = set(range(pages[0], pages[-1] + 1))
+        return expected - set(pages)
 
     def _detect_table_sequence_gaps(
-        self, merged_tables: List[StructuredTable]
+        self,
+        merged_tables: List[StructuredTable],
+        gap_page_probe: Optional[Callable[[int], bool]] = None,
+        lost_table_pages: Optional[Set[int]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        M2-FIX: Detect gaps between consecutive tables that indicate missing pages.
+        M2-FIX: Detect pages lost between two tables that look like one table run.
 
-        After all merges, scans for page gaps between tables in the same section.
-        Flags pages that likely had tables but failed extraction.
+        B-6-02: a page between two tables is flagged only when the two tables would
+        have merged by the column and marker rules (ignoring contiguity and the page
+        gap), they are in the same section as far as known, and the page itself looks
+        like it holds a table. Separate tables a few pages apart are the normal case.
+        A page where layout found a table that was never extracted is always flagged.
 
         Args:
             merged_tables: List of merged/standalone tables, sorted by page
+            gap_page_probe: page -> True if the page looks like it holds a table
+            lost_table_pages: pages with a layout table that nothing was extracted for
 
         Returns:
             List of DLQ entries for pages in gaps
@@ -313,29 +439,62 @@ class MultiPageTableHandler:
             prev_end = max(prev_table.source_pages) if prev_table.source_pages else prev_table.source_page_physical
             curr_start = curr_table.source_page_physical
 
-            # Check for gap > 1 page between consecutive tables
             gap_size = curr_start - prev_end - 1
-            if gap_size > 0 and gap_size <= 5:  # Only flag small gaps (likely same table run)
-                # Check if tables are in the same section (same source_chunk_id)
-                same_section = prev_table.source_chunk_id == curr_table.source_chunk_id
+            if gap_size <= 0 or gap_size > self.MAX_PAGE_GAP:
+                continue
+            same_section = self._same_section(prev_table, curr_table)
+            if not same_section:
+                continue
+            continues = self._would_continue(prev_table, curr_table)
 
-                for missing_page in range(prev_end + 1, curr_start):
-                    dlq_entries.append({
-                        "page": missing_page,
-                        "reason": "no_fragment_extracted",
-                        "context": {
-                            "prev_table_page": prev_end,
-                            "next_table_page": curr_start,
-                            "same_section": same_section,
-                            "section_id": prev_table.source_chunk_id if same_section else None,
-                        },
-                    })
-                    logger.warning(
-                        f"M2-DLQ: Page {missing_page} has no table fragment "
-                        f"(gap between p{prev_end} and p{curr_start})"
+            for missing_page in range(prev_end + 1, curr_start):
+                lost = missing_page in (lost_table_pages or ())
+                if not lost and not (
+                    continues and gap_page_probe is not None and gap_page_probe(missing_page)
+                ):
+                    logger.debug(
+                        f"M2-DLQ: page {missing_page} between p{prev_end} and p{curr_start} "
+                        f"holds no table; not flagged"
                     )
+                    continue
+                section = self._section_of(prev_table)
+                dlq_entries.append({
+                    "page": missing_page,
+                    "reason": "layout_table_not_extracted" if lost else "no_fragment_extracted",
+                    "context": {
+                        "prev_table_page": prev_end,
+                        "next_table_page": curr_start,
+                        "prev_table_id": prev_table.table_id,
+                        "next_table_id": curr_table.table_id,
+                        "same_section": same_section,
+                        "section_id": section,
+                    },
+                })
+                logger.warning(
+                    f"M2-DLQ: Page {missing_page} has no table fragment "
+                    f"(gap between p{prev_end} and p{curr_start})"
+                )
 
         return dlq_entries
+
+    def _would_continue(self, prev: StructuredTable, curr: StructuredTable) -> bool:
+        """
+        _should_merge's column and marker rules, as if the two tables were adjacent.
+
+        The contiguity rule (any column count within 3 on facing pages) is left out:
+        it is safe only for tables known to have nothing between them. A table of the
+        same width is taken as a continuation: Docling gives every fragment a header
+        row, so a continuation's first data row rarely matches the real header.
+        """
+        if curr.num_cols == prev.num_cols:
+            return self._same_section(prev, curr)
+        adjacent = curr.model_copy(update={"source_page_physical": prev.source_page_physical + 1})
+        saved = getattr(self, "_contiguous_pairs", None)
+        self._contiguous_pairs = None
+        try:
+            return self._should_merge(prev, adjacent)
+        finally:
+            self._contiguous_pairs = saved
 
     def _should_merge(
         self, prev: StructuredTable, curr: StructuredTable
@@ -354,6 +513,10 @@ class MultiPageTableHandler:
         # Increased from max gap of 2 to fix UK long-chain failure mode (11-page tables)
         page_gap = curr.source_page_physical - prev.source_page_physical
         if page_gap < 1 or page_gap > self.MAX_PAGE_GAP:
+            return False
+
+        # B-6-01: tables in different sections are different tables
+        if not self._same_section(prev, curr):
             return False
 
         # M1-FIX: RULE 1a: For CONSECUTIVE pages (gap=1), be very lenient
@@ -516,15 +679,21 @@ class MultiPageTableHandler:
         if not prev_header_texts or not curr_header_texts:
             return False
 
-        # Calculate match percentage
+        # Calculate match percentage over the columns where either row has text: an
+        # empty cell is a substring of everything and matched any header
+        filled = [
+            i for i in range(max(len(prev_header_texts), len(curr_header_texts)))
+            if (i < len(prev_header_texts) and prev_header_texts[i])
+            or (i < len(curr_header_texts) and curr_header_texts[i])
+        ]
         matches = sum(
             1
-            for p, c in zip(prev_header_texts, curr_header_texts)
-            if self._headers_match(p, c)
+            for i in filled
+            if i < len(prev_header_texts) and i < len(curr_header_texts)
+            and prev_header_texts[i] and curr_header_texts[i]
+            and self._headers_match(prev_header_texts[i], curr_header_texts[i])
         )
-
-        max_len = max(len(prev_header_texts), len(curr_header_texts))
-        match_rate = matches / max_len if max_len > 0 else 0.0
+        match_rate = matches / len(filled) if filled else 0.0
 
         return match_rate >= 0.8
 
@@ -594,6 +763,53 @@ class MultiPageTableHandler:
 
         return False
 
+    @staticmethod
+    def _row_key(row: TableRow) -> List[str]:
+        return [" ".join(cell.cleaned_text.split()).lower() for cell in row.cells]
+
+    @staticmethod
+    def _is_column_number_row(texts: List[str]) -> bool:
+        """A row numbering the columns: "1 | 2 | 3" or "(1) | (2) | (3)"."""
+        numbers = [t.strip("()") for t in texts if t]
+        return len(numbers) >= 3 and numbers == [str(i) for i in range(1, len(numbers) + 1)]
+
+    def _repeatable_rows(self, base: StructuredTable) -> List[List[str]]:
+        """Rows a continuation page reprints: the header rows and a column-number row."""
+        k = base.num_header_rows
+        rows = [self._row_key(r) for r in base.rows[:k]]
+        if k < len(base.rows):
+            following = self._row_key(base.rows[k])
+            if self._is_column_number_row(following):
+                rows.append(following)
+        return [r for r in rows if any(r)]
+
+    def _count_repeated_rows(self, repeatable: List[List[str]], fragment: StructuredTable) -> int:
+        """Number of leading fragment rows that reprint the base's header rows."""
+        count = 0
+        limit = len(repeatable) + 1
+        for row in fragment.rows[:limit]:
+            key = self._row_key(row)
+            if any(self._rows_match(key, header) for header in repeatable) or (
+                row.row_type == "header" and self._is_column_number_row(key)
+            ):
+                count += 1
+            else:
+                break
+        return count
+
+    @staticmethod
+    def _rows_match(a: List[str], b: List[str]) -> bool:
+        """Same text in at least 80% of the columns where either row has text."""
+        filled = [i for i in range(max(len(a), len(b)))
+                  if (i < len(a) and a[i]) or (i < len(b) and b[i])]
+        if not filled:
+            return False
+        same = sum(1 for i in filled if i < len(a) and i < len(b) and a[i] == b[i])
+        if same / len(filled) >= 0.8:
+            return True
+        # Column positions can shift by a spanning cell: compare the texts in order
+        return [t for t in a if t] == [t for t in b if t]
+
     # ==================== MERGING LOGIC ====================
 
     def _merge_fragments(self, fragments: List[StructuredTable]) -> StructuredTable:
@@ -615,26 +831,35 @@ class MultiPageTableHandler:
         base = fragments[0]
 
         # Collect all rows (skipping repeated headers in subsequent fragments),
-        # tagging each with its page so split pieces can cite the right page
+        # tagging each with its page so split pieces can cite the right page.
+        # Only the base's leading header rows stay headers.
         all_rows = [
-            row.model_copy(update={"source_page_physical": row.source_page_physical
-                                   if row.source_page_physical is not None
-                                   else base.source_page_physical})
-            for row in base.rows
+            row.model_copy(update={
+                "source_page_physical": row.source_page_physical
+                if row.source_page_physical is not None
+                else base.source_page_physical,
+                "row_type": "data" if row.row_type == "header" and idx >= base.num_header_rows
+                else row.row_type,
+            })
+            for idx, row in enumerate(base.rows)
         ]
         all_pages = [base.source_page_physical]
         all_footnotes = list(base.footnotes)
+        repeatable = self._repeatable_rows(base)
 
         # Merge subsequent fragments
         for fragment in fragments[1:]:
-            # Determine if this fragment has repeated headers
-            skip_rows = 0
-            if self._has_repeated_header(base, fragment):
-                skip_rows = fragment.num_header_rows
+            # B-7-04: a continuation page repeats the header (and column-number) rows;
+            # drop them whether or not they were classified as headers
+            skip_rows = self._count_repeated_rows(repeatable, fragment)
 
-            # Append non-header rows from this fragment
+            # Rows inside the merged table are body rows: an unmatched "header" row of a
+            # continuation fragment is kept as data, not hidden or repeated as a header
             all_rows.extend(
-                row.model_copy(update={"source_page_physical": fragment.source_page_physical})
+                row.model_copy(update={
+                    "source_page_physical": fragment.source_page_physical,
+                    "row_type": "data" if row.row_type == "header" else row.row_type,
+                })
                 for row in fragment.rows[skip_rows:]
             )
 
@@ -675,6 +900,8 @@ class MultiPageTableHandler:
             num_cols=base.num_cols,
             num_header_rows=base.num_header_rows,
             title=base.title,
+            caption=base.caption,
+            table_number=base.table_number,
             monetary_unit=base.monetary_unit,
             time_periods_covered=sorted(list(all_time_periods)),
             entities_covered=sorted(list(all_entities)),
@@ -702,40 +929,23 @@ class MultiPageTableHandler:
             return ""
 
         markdown_lines = []
-        num_cols = len(columns) if columns else (len(rows[0].cells) if rows else 0)
+        # Fragments merged under the base's columns may be a little wider
+        num_cols = max([len(columns or [])] + [len(r.cells) for r in rows])
 
-        # Add header row(s)
+        def line(row: TableRow) -> str:
+            # A pipe inside a cell would shift every later column when re-parsed
+            cells_text = [cell.cleaned_text.replace("|", "\\|") for cell in row.cells]
+            cells_text += [""] * (num_cols - len(cells_text))
+            return f"| {' | '.join(cells_text)} |"
+
+        separator = f"| {' | '.join(['---'] * num_cols)} |"
+
+        # Rows in order; the separator follows row 0, as in pdfplumber's output. Rows
+        # are never dropped: a "header" row inside the table is printed where it is.
         for i, row in enumerate(rows):
-            if row.row_type != "header":
-                break  # Stop at first non-header row
-
-            # Build row string
-            cells_text = [cell.cleaned_text for cell in row.cells]
-            # Pad to column count
-            while len(cells_text) < num_cols:
-                cells_text.append("")
-
-            row_str = " | ".join(cells_text)
-            markdown_lines.append(f"| {row_str} |")
-
-            # Add separator after first header row
+            markdown_lines.append(line(row))
             if i == 0:
-                separator = " | ".join(["---"] * num_cols)
-                markdown_lines.append(f"| {separator} |")
-
-        # Add data rows
-        for row in rows:
-            if row.row_type == "header":
-                continue  # Already added
-
-            cells_text = [cell.cleaned_text for cell in row.cells]
-            # Pad to column count
-            while len(cells_text) < num_cols:
-                cells_text.append("")
-
-            row_str = " | ".join(cells_text)
-            markdown_lines.append(f"| {row_str} |")
-
+                markdown_lines.append(separator)
         return "\n".join(markdown_lines)
 
     # ==================== UTILITY METHODS ====================

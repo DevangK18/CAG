@@ -17,6 +17,10 @@ from docling.datamodel.base_models import InputFormat
 
 from src.core.data_contracts import DocumentTask
 from src.parsing_pipeline.modules.captions import parse_caption
+from src.parsing_pipeline.modules.structured_table_extractor import (
+    is_markdown_separator,
+    split_markdown_cells,
+)
 from src.parsing_pipeline.config import get_config, LayoutAnalysisConfig
 
 logger = logging.getLogger(__name__)
@@ -448,17 +452,10 @@ class LayoutAnalysisService:
         non_empty_count = 0
 
         for line in markdown_table.strip().split("\n"):
-            # Skip separator lines (|---|---| or | --- | :---: |): never content
-            if SEPARATOR_RE.match(line):
+            # Separator lines (|---|---| or | --- | :---: |) are never content
+            if is_markdown_separator(line):
                 continue
-
-            # Extract cell contents between pipes
-            cells = [cell.strip() for cell in line.split("|")]
-            # Filter empty cells (first/last are often empty due to leading/trailing |)
-            cells = [c for c in cells if c]
-
-            # Count non-empty cells
-            non_empty_count += sum(1 for cell in cells if cell and cell.strip())
+            non_empty_count += sum(1 for cell in split_markdown_cells(line) if cell.strip())
 
         return non_empty_count
 
