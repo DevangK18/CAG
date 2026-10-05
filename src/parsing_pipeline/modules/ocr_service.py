@@ -1,6 +1,7 @@
 import logging
 import os
 import signal
+import json
 import subprocess
 import time
 from pathlib import Path
@@ -72,6 +73,7 @@ class OCRService:
             else getattr(config, "timeout_per_page", DEFAULT_TIMEOUT_PER_PAGE)
         )
         self.optimize = getattr(config, "optimize", None)
+        self.rotate_pages = getattr(config, "rotate_pages", False)
         self._trace_emitter = trace_emitter or get_noop_emitter()
 
     def output_path_for(self, report_id: str) -> Path:
@@ -137,7 +139,7 @@ class OCRService:
 
         # Reuse a finished output from an earlier run (ocred/ is synced from GCS on the VM)
         if output_path.exists():
-            problem = self.output_problem(output_path, page_count)
+            problem = self.output_problem(output_path, page_count, reuse=True)
             if problem is None:
                 logger.info(f"[{task.report_id}] Reusing complete OCR output: {output_path}")
                 emitter.emit_decision(
@@ -166,9 +168,17 @@ class OCRService:
 
         # Construct and execute OCR command
         try:
-            command = self._construct_ocr_command(str(input_path), str(output_path))
+            ocr_input = input_path
+            if self.rotate_pages:
+                ocr_input = self._upright_copy(input_path, output_path, task.report_id) or input_path
+            command = self._construct_ocr_command(str(ocr_input), str(output_path))
             start_time = time.perf_counter()
-            result = self._execute_ocr_command(command, timeout=timeout)
+            try:
+                result = self._execute_ocr_command(command, timeout=timeout)
+            finally:
+                # The upright copy is only OCR input; it must not be kept or uploaded
+                if ocr_input != input_path:
+                    Path(ocr_input).unlink(missing_ok=True)
             duration = time.perf_counter() - start_time
 
             # Trace: Subprocess result
@@ -233,7 +243,75 @@ class OCRService:
         except Exception as e:
             return self._fail(task, f"OCR processing failed with exception: {e}")
 
+    # Tesseract orientation detection, used only for sideways pages: at 150 dpi it
+    # finds them reliably, while its 180-degree readings are noise on normal scans
+    OSD_DPI = 150
+    OSD_MIN_CONFIDENCE = 1.5
+
+    def _upright_copy(self, input_path: Path, output_path: Path, report_id: str) -> Optional[Path]:
+        """
+        A copy of the scan with sideways pages turned upright (via /Rotate), or None
+        when no page needs it. ocrmypdf's own --rotate-pages needs a confidence these
+        scans rarely reach, so pages scanned sideways were OCR'd as garbage.
+        """
+        turned = {}
+        try:
+            with fitz.open(str(input_path)) as doc:
+                for i, page in enumerate(doc):
+                    rotate = self._osd_rotation(page)
+                    if rotate:
+                        turned[i] = rotate
+                if not turned:
+                    return None
+                for i, rotate in turned.items():
+                    doc[i].set_rotation((doc[i].rotation + rotate) % 360)
+                upright = Path(str(output_path) + ".upright.pdf")
+                doc.save(str(upright))
+        except Exception as e:
+            logger.warning(f"[{report_id}] Page orientation check failed: {e}")
+            return None
+        logger.info(f"[{report_id}] Turned {len(turned)} sideways pages upright before OCR: {sorted(turned)}")
+        return upright
+
+    def _osd_rotation(self, page) -> int:
+        """Clockwise degrees (90 or 270) that make a sideways page upright, else 0."""
+        import re
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".png") as image:
+            page.get_pixmap(dpi=self.OSD_DPI).save(image.name)
+            try:
+                result = subprocess.run(
+                    ["tesseract", image.name, "-", "--psm", "0"],
+                    capture_output=True, text=True, timeout=60,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return 0
+        orientation = re.search(r"Orientation in degrees: (\d+)", result.stdout)
+        rotate = re.search(r"Rotate: (\d+)", result.stdout)
+        confidence = re.search(r"Orientation confidence: ([\d.]+)", result.stdout)
+        if not (orientation and rotate and confidence):
+            return 0
+        if int(orientation.group(1)) not in (90, 270) or float(confidence.group(1)) < self.OSD_MIN_CONFIDENCE:
+            return 0
+        return int(rotate.group(1))
+
+    @staticmethod
+    def settings_stamp_path(output_path) -> Path:
+        return Path(str(output_path) + ".settings.json")
+
+    @staticmethod
+    def current_settings() -> dict:
+        """OCR settings an output must have been made with to be reused."""
+        from src.parsing_pipeline.config import get_config
+
+        return {"rotate_pages": bool(getattr(get_config().ocr, "rotate_pages", False))}
+
     def _succeed(self, task: DocumentTask, output_path: Path, message: str) -> DocumentTask:
+        try:
+            self.settings_stamp_path(output_path).write_text(json.dumps(self.current_settings()))
+        except OSError as e:
+            logger.warning(f"[{task.report_id}] Could not write OCR settings stamp: {e}")
         task.ocred_pdf_path = str(output_path)
         task.processing_status = "ocr_complete"
         task.error_log.append(message)
@@ -260,7 +338,7 @@ class OCRService:
         return stderr.strip()[-STDERR_TAIL_CHARS:]
 
     @classmethod
-    def output_problem(cls, output_path, expected_pages: int) -> Optional[str]:
+    def output_problem(cls, output_path, expected_pages: int, reuse: bool = False) -> Optional[str]:
         """
         Why an OCR'd PDF can't be used, or None if it is complete.
 
@@ -270,6 +348,15 @@ class OCRService:
         output_file = Path(output_path)
         if not output_file.exists():
             return "output file does not exist"
+        # An earlier output made with other settings (e.g. before pages were turned
+        # upright) is redone, not reused
+        if reuse:
+            try:
+                stamp = json.loads(cls.settings_stamp_path(output_file).read_text())
+            except (OSError, ValueError):
+                stamp = None
+            if stamp != cls.current_settings():
+                return "made with different OCR settings"
         try:
             # Minimum size check (PDF header + content should be at least ~1KB)
             size = output_file.stat().st_size
@@ -299,7 +386,7 @@ class OCRService:
             expected = cls._page_count(input_pdf_path)
         except Exception:
             return False
-        return cls.output_problem(output_path, expected) is None
+        return cls.output_problem(output_path, expected, reuse=True) is None
 
     def _construct_ocr_command(self, input_path: str, output_path: str) -> List[str]:
         """
@@ -329,6 +416,7 @@ class OCRService:
 
         if self.optimize is not None:
             command.extend(["--optimize", str(self.optimize)])
+
 
         # Add input and output paths
         command.extend([input_path, output_path])

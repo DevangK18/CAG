@@ -77,6 +77,12 @@ class OCRConfig:
     optimize: Optional[int] = None
     """ocrmypdf --optimize level (None = ocrmypdf default)."""
 
+    rotate_pages: bool = True
+    """
+    Turn pages scanned sideways upright before OCR (tesseract orientation detection);
+    they otherwise come out as garbage text, e.g. CG appendix pages.
+    """
+
     force_ocr: bool = True
     """
     Force OCR even if text layer exists (ensures clean OCR).

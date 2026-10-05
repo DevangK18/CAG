@@ -298,8 +298,66 @@ class TextExtractor:
         """
         if self._get_page_rotation(page):
             clip_rect = fitz.Rect(clip_rect) * page.derotation_matrix
+        else:
+            # Landscape annexures typeset sideways on a /Rotate 0 page
+            sideways = self._extract_sideways_text(page, clip_rect)
+            if sideways is not None:
+                return sideways
         text = page.get_text("text", clip=clip_rect, sort=sort)
         return self._apply_span_fixes(page, clip_rect, text)
+
+    def _extract_sideways_text(self, page, clip_rect: fitz.Rect) -> Optional[str]:
+        """
+        Text in reading order when most of the clip is drawn vertically, else None.
+
+        Sorting top-to-bottom reversed the word order of lines that read
+        bottom-to-top ("2022 March ended year the for"). Words are grouped into
+        lines by their x position and read along the line's direction.
+        """
+        try:
+            textpage = page.get_textpage(clip=clip_rect, flags=fitz.TEXTFLAGS_TEXT)
+            layout = textpage.extractDICT()
+        except Exception:
+            return None
+        if not isinstance(layout, dict):
+            return None
+        counts = {"up": 0, "down": 0, "other": 0}
+        for block in layout.get("blocks", []):
+            for line in block.get("lines", []):
+                dx, dy = line["dir"]
+                n = sum(len(span["text"].strip()) for span in line["spans"])
+                if abs(dx) < 0.2 and dy < -0.8:
+                    counts["up"] += n
+                elif abs(dx) < 0.2 and dy > 0.8:
+                    counts["down"] += n
+                else:
+                    counts["other"] += n
+        total = sum(counts.values())
+        direction = max(("up", "down"), key=counts.get)
+        if not total or counts[direction] <= 0.5 * total:
+            return None
+
+        words = textpage.extractWORDS()
+        # Only the rupee repair: superscript tests assume horizontal baselines
+        fixes = word_fixes(textpage.extractRAWDICT(), [w for w in words if "`" in w[4]])
+        words = [(*w[:4], fixes.get(w[4], w[4]), *w[5:]) for w in words]
+        if direction == "up":
+            # Bottom-to-top lines: the first line is leftmost, words run upwards
+            words.sort(key=lambda w: w[0])
+            line_x, along = (lambda w: w[0]), (lambda w: -w[3])
+        else:
+            # Top-to-bottom lines: the first line is rightmost, words run downwards
+            words.sort(key=lambda w: -w[2])
+            line_x, along = (lambda w: w[2]), (lambda w: w[1])
+        lines: List[list] = []
+        for w in words:
+            if lines and abs(line_x(w) - line_x(lines[-1][0])) <= 3:
+                lines[-1].append(w)
+            else:
+                lines.append([w])
+        return "\n".join(
+            " ".join(w[4] for w in sorted(line, key=along)) for line in lines
+        )
 
     def _apply_span_fixes(self, page, clip_rect: fitz.Rect, text: str) -> str:
         """

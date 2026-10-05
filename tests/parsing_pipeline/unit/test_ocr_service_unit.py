@@ -1,3 +1,4 @@
+import json
 import logging
 import subprocess
 import sys
@@ -106,9 +107,14 @@ def test_success_uses_scaled_timeout(ocr_service, scanned_task):
     assert run.call_args.kwargs["timeout"] == 600
 
 
+def _stamp(path):
+    OCRService.settings_stamp_path(path).write_text(json.dumps(OCRService.current_settings()))
+    return path
+
+
 def test_complete_existing_output_is_reused(ocr_service, scanned_task):
     out = ocr_service.output_path_for(scanned_task.report_id)
-    make_pdf(out, 4, text="Recognised text from the scanned page")
+    _stamp(make_pdf(out, 4, text="Recognised text from the scanned page"))
 
     with patch.object(ocr_service, "_execute_ocr_command") as run:
         result = ocr_service.ocr_document(scanned_task)
@@ -213,9 +219,12 @@ def test_output_problem_reasons(tmp_path, content, expected):
 
 def test_is_complete_output(tmp_path):
     src = make_pdf(tmp_path / "in.pdf", 3)
-    good = make_pdf(tmp_path / "good.pdf", 3, text="Some recognised text")
-    short = make_pdf(tmp_path / "short.pdf", 2, text="Some recognised text")
+    good = _stamp(make_pdf(tmp_path / "good.pdf", 3, text="Some recognised text"))
+    short = _stamp(make_pdf(tmp_path / "short.pdf", 2, text="Some recognised text"))
+    unstamped = make_pdf(tmp_path / "old.pdf", 3, text="Some recognised text")
     assert OCRService.is_complete_output(src, good)
+    # Made before pages were turned upright: redone, not reused
+    assert not OCRService.is_complete_output(src, unstamped)
     assert not OCRService.is_complete_output(src, short)
     assert not OCRService.is_complete_output(tmp_path / "missing.pdf", good)
 
@@ -233,3 +242,30 @@ def test_execute_kills_on_timeout(ocr_service):
         ocr_service._execute_ocr_command(
             [sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.5
         )
+
+
+def test_sideways_pages_turned_upright_before_ocr(ocr_service, tmp_path):
+    src = make_pdf(tmp_path / "in.pdf", 3)
+    out = tmp_path / "out.pdf"
+    rotations = {1: 90}
+    with patch.object(OCRService, "_osd_rotation", side_effect=lambda page: rotations.get(page.number, 0)):
+        upright = ocr_service._upright_copy(src, out, "r")
+    with fitz.open(str(upright)) as doc:
+        assert [p.rotation for p in doc] == [0, 90, 0]
+
+
+def test_no_copy_when_every_page_is_upright(ocr_service, tmp_path):
+    src = make_pdf(tmp_path / "in.pdf", 2)
+    with patch.object(OCRService, "_osd_rotation", return_value=0):
+        assert ocr_service._upright_copy(src, tmp_path / "out.pdf", "r") is None
+
+
+def test_upright_copy_is_removed_after_ocr(ocr_service, scanned_task, tmp_path):
+    upright = tmp_path / "upright.pdf"
+    upright.write_bytes(b"%PDF-1.4")
+    ocr_service.rotate_pages = True
+    with patch.object(ocr_service, "_upright_copy", return_value=upright), \
+            patch.object(ocr_service, "_execute_ocr_command",
+                         return_value=SimpleNamespace(returncode=1, stderr="boom", stdout="")):
+        ocr_service.ocr_document(scanned_task)
+    assert not upright.exists()

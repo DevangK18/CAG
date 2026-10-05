@@ -8,10 +8,12 @@ Tests both the original functionality and P0-05 improvements:
 - Mid-document sampling to skip heavy front-matter
 """
 
+import json
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch, Mock
 
+from src.parsing_pipeline.modules.ocr_service import OCRService
 from src.parsing_pipeline.modules.triage_service import TriageService
 from src.core.data_contracts import DocumentTask
 
@@ -782,6 +784,7 @@ def test_legacy_cache_without_hash_is_a_miss(tmp_path, cache):
 def test_scanned_hit_restores_ocred_path(tmp_path, cache):
     task = _cached_task(tmp_path, "scanned")
     ocred = _pdf_with_pages(tmp_path / "r_ocred.pdf", [("recognised text on the page", False)] * 2)
+    OCRService.settings_stamp_path(ocred).write_text(json.dumps(OCRService.current_settings()))
     task.ocred_pdf_path = str(ocred)
     cache.store_triage(task)
     cache.store_ocr(task)

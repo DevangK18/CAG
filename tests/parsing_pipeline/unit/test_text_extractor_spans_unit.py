@@ -160,3 +160,59 @@ class TestRupeeFont:
         ]
         words = [(0, 0, 30, 10, "`NULL`", 0, 0, 0)]
         assert word_fixes(_rawdict(spans), words) == {}
+
+
+KA_PDF = (
+    PDFS
+    / "KA_2022_06_Performance_Audit_of_Mukhyamanthrigala_Nagarothana_Yojane_PhaseIII_for_City_Corp.pdf"
+)
+
+
+class TestSidewaysText:
+    def test_bottom_to_top_lines_read_in_order(self, page):
+        page.insert_text(
+            (100, 700), "Audit Report on Local Government", fontsize=12, rotate=90
+        )
+        page.insert_text(
+            (116, 700), "for the year ended March 2022", fontsize=12, rotate=90
+        )
+        assert (
+            _read(page, page.rect)
+            == "Audit Report on Local Government\nfor the year ended March 2022"
+        )
+
+    def test_top_to_bottom_lines_read_in_order(self, page):
+        page.insert_text(
+            (116, 100), "Audit Report on Local Government", fontsize=12, rotate=270
+        )
+        page.insert_text(
+            (100, 100), "for the year ended March 2022", fontsize=12, rotate=270
+        )
+        assert (
+            _read(page, page.rect)
+            == "Audit Report on Local Government\nfor the year ended March 2022"
+        )
+
+    def test_mostly_horizontal_clip_unchanged(self, page):
+        _put(
+            page,
+            72,
+            100,
+            "A horizontal paragraph that is long enough to dominate the clip.",
+            11,
+        )
+        page.insert_text((60, 300), "side", fontsize=8, rotate=90)
+        assert _read(page, page.rect) == page.get_text("text", sort=True)
+
+    @pytest.mark.skipif(not KA_PDF.exists(), reason="review corpus PDF not available")
+    def test_real_sideways_annexure(self):
+        doc = fitz.open(KA_PDF)
+        text = " ".join(
+            TextExtractor()
+            ._extract_text_with_rotation_handling(doc[79], doc[79].rect)
+            .split()
+        )
+        assert text.startswith(
+            "Appendices Appendix 2.9 (Reference: Paragraph 2.9.6/Page 17)"
+        )
+        assert "(₹ in lakh)" in text
