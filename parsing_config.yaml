@@ -46,6 +46,9 @@ ocr:
   # ocrmypdf --optimize level; 0 disables optimisation (faster on image-heavy scans)
   optimize: 0
 
+  # Turn pages scanned sideways upright before OCR (tesseract orientation detection)
+  rotate_pages: true
+
   # Force OCR even if text layer exists
   force_ocr: true
 
