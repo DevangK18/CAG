@@ -100,7 +100,8 @@ class TestHierarchyConcentrationFix:
         """
         parent_chunks, child_chunks = chunking_service.chunk_document(sample_task_with_y_positions)
 
-        assert len(parent_chunks) == 3
+        # "3.1.4 Monitoring" holds no content and is dropped by the parent cleanup
+        assert len(parent_chunks) == 2
         assert len(child_chunks) == 3
 
         # Find parent chunk IDs
@@ -187,7 +188,8 @@ class TestHierarchyConcentrationFix:
         # Should not raise exception, should fall back gracefully
         parent_chunks, child_chunks = chunking_service.chunk_document(task)
 
-        assert len(parent_chunks) == 2
+        # The chapter starting on page 10 holds no content and is dropped
+        assert len(parent_chunks) == 1
         assert len(child_chunks) == 1
         assert child_chunks[0].parent_chunk_id == parent_chunks[0].chunk_id
 
@@ -364,7 +366,8 @@ class TestBackwardCompatibility:
 
         parent_chunks, child_chunks = chunking_service.chunk_document(task)
 
-        assert len(parent_chunks) == 3
+        # Chapter 3 holds no content and is dropped
+        assert len(parent_chunks) == 2
         assert len(child_chunks) == 2
 
         # Verify correct assignment

@@ -163,6 +163,13 @@ class ParentChunk(BaseModel):
     )
     toc_entry: str = Field(..., description="Original ToC title")
     toc_level: int = Field(..., description="Depth in ToC (1=Chapter, 2=Section, etc.)")
+    # Set on parents created by Phase 7.5 from headings found in the text
+    parent_chunk_id: Optional[str] = Field(
+        None, description="Enclosing parent chunk (Phase 7.5 sub-sections)"
+    )
+    detected_by: Optional[str] = Field(
+        None, description="How the parent was found: None for contents entries, 'phase_7_5'"
+    )
     content_summary: Optional[str] = Field(
         None, description="Optional LLM-generated summary (Phase 2+)"
     )

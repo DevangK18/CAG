@@ -13,7 +13,8 @@ PHASE 1 FIXES IMPLEMENTED:
 import logging
 import re
 
-from typing import List, Tuple, Optional, Dict, Set
+from difflib import SequenceMatcher
+from typing import Any, List, Tuple, Optional, Dict, Set
 from pathlib import Path
 import hashlib
 
@@ -24,7 +25,6 @@ from src.core.data_contracts import (
     ChildChunk,
 )
 
-logger = logging.getLogger(__name__)
 from src.core.table_contracts import StructuredTable
 from src.parsing_pipeline.config import get_config
 from src.parsing_pipeline.modules.multi_page_table_handler import (
@@ -32,6 +32,9 @@ from src.parsing_pipeline.modules.multi_page_table_handler import (
     MultiPageTableHandler,
     heading_section_keys,
 )
+from src.parsing_pipeline.modules.printed_toc_parser import roman_to_int
+
+logger = logging.getLogger(__name__)
 
 # A line like this between two tables means the second is a new table, not a continuation
 TABLE_TITLE_RE = re.compile(
@@ -126,8 +129,17 @@ class ChunkingService:
                 )
             return ([], [])
 
+        # Cover and front-matter pages before the first contents entry get their own
+        # parent instead of falling back to the first section
+        parent_chunks = self._add_front_matter_parent(task, parent_chunks)
+
         # Create child chunks from extracted content
         child_chunks = self._create_child_chunks(task, parent_chunks)
+
+        # Drop empty and heading-only parents, then take ranges from the children
+        page_map = (task.scaffold or {}).get("page_map", {})
+        parent_chunks = self._cleanup_parents(parent_chunks, child_chunks)
+        self._derive_page_ranges(parent_chunks, child_chunks, page_map)
 
         # Log distribution statistics
         self._log_distribution_stats(parent_chunks, child_chunks)
@@ -526,102 +538,104 @@ class ChunkingService:
         self, task: DocumentTask, toc: List[List], page_map: Dict[int, str]
     ) -> List[ParentChunk]:
         """
-        Create parent chunks from ToC entries.
+        Create one parent per ToC entry.
 
-        PHASE 1 FIX: Page range calculation now looks FORWARD properly
-        and guarantees end_page >= start_page.
-
-        P0-2: Now captures start_y_position from scaffold for accurate child assignment.
-
-        Args:
-            task: DocumentTask
-            toc: ToC in format [[level, title, page], ...]
-            page_map: Physical → logical page mapping
-
-        Returns:
-            List of ParentChunk objects
+        The ToC is first put in reading order, (page, y), because Phase 5.5 appends
+        entries out of page order (B-7-02). Page ranges computed here are only the
+        starting point: once children are assigned they are re-derived from the
+        children's pages (_derive_page_ranges).
         """
         parent_chunks = []
-
-        # Get heading positions from scaffold for Y-coordinate aware chunking
         scaffold = task.scaffold or {}
         heading_positions = scaffold.get("heading_positions", {})
 
-        # Determine max page from extracted content
-        if task.extracted_content:
-            max_page = max(
-                content.source_page_physical for content in task.extracted_content
+        max_page = (
+            max(content.source_page_physical for content in task.extracted_content)
+            if task.extracted_content
+            else 0
+        )
+
+        def y_of(entry) -> float:
+            return heading_positions.get(f"{entry[2]}_{str(entry[1])[:30]}", 0.0) or 0.0
+
+        toc = [
+            entry
+            for _, entry in sorted(
+                enumerate(toc), key=lambda pair: (pair[1][2], y_of(pair[1]), pair[0])
             )
-        else:
-            max_page = 0
+        ]
+        metadata = self._tier_metadata(task)
 
         for i, toc_entry in enumerate(toc):
             level, title, page_physical = toc_entry[:3]
             start_page = page_physical
 
-            # Generate position key for this section
-            position_key = f"{start_page}_{title[:30]}"
-
-            # Look FORWARD for next entry at same or higher level (with Y-position awareness)
-            # to determine end page
-            end_page = max_page  # Default: section goes to end of document
-
+            # End before the next entry of the same or a higher level, in page order
+            end_page = max_page
             for j in range(i + 1, len(toc)):
-                next_level, next_title, next_page = toc[j][:3]
-                if next_level <= level:  # Same or higher level = end of this section
-                    # Check if next section has Y-position on the same page
-                    next_position_key = f"{next_page}_{next_title[:30]}"
-                    next_has_y_position = next_position_key in heading_positions
-
-                    # If Y-positions available and next section on same page, extend to that page
-                    # Y-filtering will disambiguate. Otherwise, end before next section's page.
-                    if next_has_y_position and next_page == start_page:
-                        # Both sections on same page, extend to that page
-                        end_page = start_page
-                    elif next_has_y_position and position_key in heading_positions:
-                        # Y-positions available for both sections, allow overlap
-                        end_page = next_page  # Include the page where next section starts
-                    else:
-                        # No Y-positions, use original logic: end before next section
-                        end_page = max(start_page, next_page - 1)
+                next_level, _, next_page = toc[j][:3]
+                if next_level <= level:
+                    end_page = max(start_page, next_page - 1 if next_page > start_page else start_page)
                     break
 
-            # CRITICAL: Ensure end_page >= start_page to avoid invalid page ranges
-            if end_page < start_page:
-                end_page = start_page
-
-            # Generate unique parent_chunk_id
             chunk_id = self._generate_parent_chunk_id(task.report_id, level, title, i)
-
-            # Build hierarchy dict (already correct in original)
             hierarchy = self._build_hierarchy_for_parent(toc, i)
 
-            # Get logical page labels
-            # Printed page numbers, None where none is printed (A-4-06)
-            start_logical = page_map.get(start_page)
-            end_logical = page_map.get(end_page)
-
-            # Get Y-position from heading_positions dict (position_key already defined above)
-            start_y_position = heading_positions.get(position_key, None)
-
-            parent_chunk = ParentChunk(
-                chunk_id=chunk_id,
-                report_id=task.report_id,
-                hierarchy=hierarchy,
-                page_range_physical=(start_page, end_page),
-                page_range_logical=(start_logical, end_logical),
-                toc_entry=title,
-                toc_level=level,
-                content_summary=None,
-                start_y_position=start_y_position,
-                # Multi-tier metadata (Phase A expansion)
-                government_body_type=task.initial_metadata.get("government_body_type", "union"),
-                state_name=task.initial_metadata.get("state_name"),
+            parent_chunks.append(
+                ParentChunk(
+                    chunk_id=chunk_id,
+                    report_id=task.report_id,
+                    hierarchy=hierarchy,
+                    page_range_physical=(start_page, end_page),
+                    page_range_logical=(page_map.get(start_page), page_map.get(end_page)),
+                    toc_entry=title,
+                    toc_level=level,
+                    content_summary=None,
+                    start_y_position=heading_positions.get(f"{start_page}_{title[:30]}"),
+                    **metadata,
+                )
             )
 
-            parent_chunks.append(parent_chunk)
-
         return parent_chunks
+
+    def _add_front_matter_parent(
+        self, task: DocumentTask, parents: List[ParentChunk]
+    ) -> List[ParentChunk]:
+        if not parents or not task.extracted_content:
+            return parents
+        first_start = min(p.page_range_physical[0] for p in parents)
+        first_page = min(c.source_page_physical for c in task.extracted_content)
+        if first_page >= first_start:
+            return parents
+        page_map = (task.scaffold or {}).get("page_map", {})
+        end = first_start - 1
+        front = ParentChunk(
+            chunk_id=f"{task.report_id}_parent_front_matter",
+            report_id=task.report_id,
+            hierarchy={"level_1": "Front matter"},
+            page_range_physical=(first_page, end),
+            page_range_logical=(page_map.get(first_page), page_map.get(end)),
+            toc_entry="Front matter",
+            toc_level=1,
+            content_summary=None,
+            start_y_position=0.0,
+            **self._tier_metadata(task),
+        )
+        return [front] + parents
+
+    @staticmethod
+    def _tier_metadata(task: DocumentTask) -> Dict[str, Any]:
+        """Tier fields every parent and child carries (B-7-03, C-8-01)."""
+        meta = task.initial_metadata or {}
+        category = meta.get("audit_category") or "compliance"
+        subtype = meta.get("report_subtype")
+        return {
+            "government_body_type": meta.get("government_body_type", "union"),
+            "state_name": meta.get("state_name"),
+            "department": meta.get("department"),
+            "audit_category": category,
+            "report_subtype": subtype if subtype in ("PSE", "Revenue", "PRI_ULB") else None,
+        }
 
     def _create_parent_chunks_fallback(self, task: DocumentTask) -> List[ParentChunk]:
         """
@@ -660,9 +674,7 @@ class ChunkingService:
             toc_entry=report_title,
             toc_level=1,
             content_summary=None,
-            # Multi-tier metadata (Phase A expansion)
-            government_body_type=task.initial_metadata.get("government_body_type", "union"),
-            state_name=task.initial_metadata.get("state_name"),
+            **self._tier_metadata(task),
         )
 
         return [parent_chunk]
@@ -694,57 +706,28 @@ class ChunkingService:
         )
         page_map = task.scaffold.get("page_map", {}) if task.scaffold else {}
 
-        # Pre-build page-to-parents index for efficient lookup
-        page_parent_index = self._build_page_parent_index(parent_chunks)
+        # Assign each item to a parent by walking the content in reading order and
+        # switching parent at each heading that matches a ToC entry (B-7-01 a)
+        assignment = self._assign_by_reading_order(task.extracted_content, parent_chunks)
+        metadata = self._tier_metadata(task)
 
-        # Track fallback assignments for diagnostics
         fallback_count = 0
-
         for i, extracted_content in enumerate(task.extracted_content):
-            # Generate unique child_chunk_id
-            chunk_id = self._generate_child_chunk_id(
-                task.report_id, extracted_content, i
-            )
+            chunk_id = self._generate_child_chunk_id(task.report_id, extracted_content, i)
 
-            # Find the MOST SPECIFIC parent for this page (deepest level match with Y-awareness)
-            # Pass content bbox for Y-aware assignment
-            parent_chunk = self._find_best_parent_for_page(
-                extracted_content.source_page_physical,
-                parent_chunks,
-                page_parent_index,
-                extracted_content.source_bbox,  # Pass bbox for Y-position filtering
-            )
-
-            if parent_chunk:
-                parent_chunk_id = parent_chunk.chunk_id
-                # Inherit the FULL hierarchy from parent (not just immediate parent level)
-                hierarchy = parent_chunk.hierarchy.copy()
-            else:
-                # Fallback: assign to first parent
-                parent_chunk_id = (
-                    parent_chunks[0].chunk_id if parent_chunks else "unknown"
-                )
-                hierarchy = (
-                    parent_chunks[0].hierarchy.copy()
-                    if parent_chunks
-                    else {"level_1": "Document"}
-                )
+            parent_chunk = assignment.get(i)
+            if parent_chunk is None:
+                parent_chunk = parent_chunks[0]
                 fallback_count += 1
-                logger.info(
-                    f"  ⚠️  Fallback assignment: page {extracted_content.source_page_physical}, "
-                    f"type={extracted_content.content_type} → {parent_chunks[0].toc_entry if parent_chunks else 'unknown'}"
-                )
-
-            # Get logical page number
-            logical_page = page_map.get(extracted_content.source_page_physical)
 
             child_chunk = ChildChunk(
                 chunk_id=chunk_id,
-                parent_chunk_id=parent_chunk_id,
+                parent_chunk_id=parent_chunk.chunk_id,
                 content_type=extracted_content.content_type,
                 content=extracted_content.content,
                 source_page_physical=extracted_content.source_page_physical,
-                source_page_logical=logical_page,
+                # The printed page number, or None where none is printed (A-4-06)
+                source_page_logical=page_map.get(extracted_content.source_page_physical),
                 source_bbox=extracted_content.source_bbox,
                 model_used=extracted_content.model_used,
                 layout_label=extracted_content.layout_label,
@@ -753,15 +736,12 @@ class ChunkingService:
                 report_title=report_title,
                 report_no=report_no,
                 source_filename=source_filename,
-                hierarchy=hierarchy,
+                hierarchy=parent_chunk.hierarchy.copy(),
                 structured_data=extracted_content.structured_data,
                 # P1-14b: Propagate extraction provenance from ExtractedContent
                 extraction_method=extracted_content.extraction_method,
                 extraction_confidence=extracted_content.extraction_confidence,
-                # Multi-tier metadata (Phase A expansion) - propagates to Qdrant payloads
-                government_body_type=task.initial_metadata.get("government_body_type", "union"),
-                state_name=task.initial_metadata.get("state_name"),
-                audit_category=task.initial_metadata.get("audit_category", "compliance"),
+                **metadata,
             )
 
             child_chunks.append(child_chunk)
@@ -773,6 +753,165 @@ class ChunkingService:
             )
 
         return child_chunks
+
+    SECTION_NO_RE = re.compile(r"^\s*(\d+(?:\.\d+)+)\b")
+    CHAPTER_NO_RE = re.compile(
+        r"^\s*(?:chapter|ch\.)\s*[-–:.]?\s*([ivxlc]+|\d+)\b", re.IGNORECASE
+    )
+
+    @classmethod
+    def _heading_key(cls, title: str) -> Tuple[Optional[str], str]:
+        """(section or chapter number, normalised words) for matching a heading to an entry."""
+        title = title or ""
+        number = None
+        m = cls.SECTION_NO_RE.match(title)
+        if m:
+            number = m.group(1)
+        else:
+            m = cls.CHAPTER_NO_RE.match(title)
+            if m:
+                token = m.group(1)
+                number = "ch" + (token if token.isdigit() else str(roman_to_int(token)))
+        words = re.sub(r"[^a-z]+", " ", title.lower()).strip()
+        return number, words
+
+    def _anchor_matches(self, heading: str, entry_title: str) -> bool:
+        h_number, h_words = self._heading_key(heading)
+        e_number, e_words = self._heading_key(entry_title)
+        if h_number and e_number:
+            return h_number == e_number
+        if not h_words or not e_words:
+            return False
+        if h_words == e_words or (len(h_words) >= 12 and (h_words.startswith(e_words) or e_words.startswith(h_words))):
+            return True
+        return SequenceMatcher(None, h_words, e_words).ratio() >= 0.8
+
+    def _assign_by_reading_order(
+        self, items: List[ExtractedContent], parents: List[ParentChunk]
+    ) -> Dict[int, ParentChunk]:
+        """
+        item index -> parent. Each parent starts where its heading is found in the text:
+        a header within one page of the entry's page that matches it (same section or
+        chapter number, or the same title). An entry whose heading is not found starts
+        at its ToC page and y (or the top of that page). Items before the first start
+        fall back to the page-range rule. Same-page sections are ordered by position,
+        so a y copied from another page or a missing y no longer decides (B-7-01).
+        """
+        if not parents:
+            return {}
+        order = sorted(range(len(items)), key=lambda k: self._reading_order_key(items[k]))
+
+        # Anchor each parent to the first matching header in reading order
+        anchors: Dict[int, Tuple[int, float]] = {}
+        used_items = set()
+        for p_index, parent in enumerate(parents):
+            start = parent.page_range_physical[0]
+            for k in order:
+                item = items[k]
+                if k in used_items or not (
+                    item.content_type == "header" or item.layout_label in ("Section-header", "Title")
+                ):
+                    continue
+                page = item.source_page_physical
+                if page < start - 1:
+                    continue
+                if page > start + 1:
+                    break
+                if self._anchor_matches(item.content, parent.toc_entry):
+                    anchors[p_index] = self._reading_order_key(item)
+                    used_items.add(k)
+                    break
+
+        starts = []
+        for p_index, parent in enumerate(parents):
+            if p_index in anchors:
+                starts.append((anchors[p_index], p_index))
+            else:
+                y = parent.start_y_position or 0.0
+                starts.append(((parent.page_range_physical[0], y), p_index))
+        starts.sort()
+        self._anchor_stats = {"anchored": len(anchors), "parents": len(parents)}
+
+        page_index = self._build_page_parent_index(parents)
+        assignment: Dict[int, ParentChunk] = {}
+        current = None
+        s = 0
+        for k in order:
+            position = self._reading_order_key(items[k])
+            while s < len(starts) and starts[s][0] <= position:
+                current = parents[starts[s][1]]
+                s += 1
+            if current is None:
+                current = self._find_best_parent_for_page(
+                    items[k].source_page_physical, parents, page_index, items[k].source_bbox
+                )
+                assignment[k] = current
+                current = None
+                continue
+            assignment[k] = current
+        return assignment
+
+    def _derive_page_ranges(
+        self, parents: List[ParentChunk], children: List[ChildChunk], page_map: Dict[int, str]
+    ) -> None:
+        """
+        Page range of each parent = its start page to the last page of its own
+        children and of its sub-sections' children (B-7-02).
+        """
+        last_page: Dict[str, int] = {}
+        for child in children:
+            last_page[child.parent_chunk_id] = max(
+                last_page.get(child.parent_chunk_id, -1), child.source_page_physical
+            )
+        # Walk from the deepest entries up so a parent covers its sub-sections
+        for i in sorted(range(len(parents)), key=lambda i: -parents[i].toc_level):
+            parent = parents[i]
+            start = parent.page_range_physical[0]
+            end = max(start, last_page.get(parent.chunk_id, start))
+            for later in parents[i + 1:]:
+                if later.toc_level <= parent.toc_level:
+                    break
+                end = max(end, later.page_range_physical[1])
+            parent.page_range_physical = (start, end)
+            parent.page_range_logical = (page_map.get(start), page_map.get(end))
+
+    def _cleanup_parents(
+        self, parents: List[ParentChunk], children: List[ChildChunk]
+    ) -> List[ParentChunk]:
+        """
+        Remove parents that hold nothing (C-8-05, P7-03): a leaf entry with no children
+        is dropped, and a leaf whose only children are its heading(s) hands them to the
+        next section in reading order (the heading belongs with the text that follows).
+        """
+        by_parent: Dict[str, List[ChildChunk]] = {}
+        for child in children:
+            by_parent.setdefault(child.parent_chunk_id, []).append(child)
+
+        def is_leaf(i: int) -> bool:
+            return i + 1 >= len(parents) or parents[i + 1].toc_level <= parents[i].toc_level
+
+        keep = []
+        moved = 0
+        for i, parent in enumerate(parents):
+            own = by_parent.get(parent.chunk_id, [])
+            if not is_leaf(i):
+                keep.append(parent)
+                continue
+            if not own:
+                continue
+            if all(c.content_type == "header" for c in own) and i + 1 < len(parents):
+                target = parents[i + 1]
+                for child in own:
+                    child.parent_chunk_id = target.chunk_id
+                    child.hierarchy = target.hierarchy.copy()
+                by_parent.setdefault(target.chunk_id, []).extend(own)
+                moved += len(own)
+                continue
+            keep.append(parent)
+        dropped = len(parents) - len(keep)
+        if dropped:
+            logger.info(f"  Parent cleanup: dropped {dropped} empty or heading-only parents ({moved} headings moved)")
+        return keep
 
     def _build_page_parent_index(
         self, parent_chunks: List[ParentChunk]
@@ -1023,13 +1162,15 @@ class ChunkingService:
         # Track which levels we've found to avoid duplicates
         levels_found = {current_level}
 
+        lowest = current_level
         for i in range(current_index - 1, -1, -1):
             level, title, _ = toc[i][:3]
 
-            # Only add if this is a higher level (smaller number) we haven't seen
-            if level < current_level and level not in levels_found:
+            # Only entries above every level found so far are ancestors
+            if level < lowest and level not in levels_found:
                 hierarchy[f"level_{level}"] = title
                 levels_found.add(level)
+                lowest = level
 
                 # Stop once we reach level 1
                 if level == 1:

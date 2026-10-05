@@ -37,6 +37,8 @@ import hashlib
 
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 
+from src.parsing_pipeline.modules.printed_toc_parser import roman_to_int
+
 logger = logging.getLogger(__name__)
 
 # ── Phase 7.5 trigger thresholds (should_enrich_hierarchy) ──
@@ -235,6 +237,8 @@ class HierarchyEnricher:
         r"^[a-z]\.\s+Errors?\s+",  # "e. Errors in assessment..."
     ]
 
+    NUMBERED_TYPES = frozenset({"numbered", "numbered_3", "numbered_4", "numbered_5"})
+
     # Content types that are likely to contain section headers
     HEADER_CONTENT_TYPES = {
         "header",
@@ -421,7 +425,16 @@ class HierarchyEnricher:
             )
 
             parent_level = self._get_level(parent)
+            parent_number = self._enclosing_number(parent)
             for section in detected:
+                # A numbered section fits only under its own number: "5.5.2" under
+                # "5.5 …" or chapter V, never under "4.1"; its level is relative to
+                # the enclosing parent (B-7.5-01)
+                fit = self._fit_level(section.section_id, parent_number, parent_level)
+                if fit is None:
+                    skipped["does_not_fit_enclosing_parent"] += 1
+                    continue
+                section.level = fit
                 # No invented roots or siblings: a sub-section must be deeper
                 # than the parent it is found in.
                 if section.level <= parent_level:
@@ -849,6 +862,12 @@ class HierarchyEnricher:
                         else:
                             continue
 
+                        # Only numbered sections create parents: roman, lettered and
+                        # bullet points are list items in CAG reports (B-7.5-01)
+                        if pattern_type not in self.NUMBERED_TYPES:
+                            matched = True
+                            break
+
                         # Create unique key
                         section_key = f"{level}:{section_id}:{title[:30]}"
 
@@ -904,6 +923,34 @@ class HierarchyEnricher:
             )
 
         return detected
+
+    @staticmethod
+    def _enclosing_number(parent: Dict) -> Optional[str]:
+        """'5.5' for "5.5 Planning …" (or "Planning … 5.5"), '5' for "Chapter V …"."""
+        title = str(parent.get("toc_entry") or "")
+        m = re.match(r"^\s*(\d+(?:\.\d+)*)\.?\s", title) or re.search(r"\s(\d+(?:\.\d+)+)\s*$", title)
+        if m:
+            return m.group(1)
+        m = re.match(r"^\s*(?:chapter|ch\.)\s*[-–:.]?\s*([ivxlc]+|\d+)\b", title, re.IGNORECASE)
+        if not m:
+            m = re.match(r"^\s*([IVX]{1,5})\s+(?=[A-Z]{2})", title)
+        if m:
+            token = m.group(1)
+            return token if token.isdigit() else str(roman_to_int(token))
+        return None
+
+    @staticmethod
+    def _fit_level(section_id: str, parent_number: Optional[str], parent_level: int) -> Optional[int]:
+        """Level of a numbered section under its enclosing parent, or None if it does not fit."""
+        parts = section_id.split(".") if section_id else []
+        if not parts:
+            return None
+        if parent_number is None:
+            return parent_level + 1
+        prefix = parent_number.split(".")
+        if len(parts) <= len(prefix) or parts[: len(prefix)] != prefix:
+            return None
+        return parent_level + (len(parts) - len(prefix))
 
     @staticmethod
     def _sub_parent_id(section: DetectedSection, enclosing_parent_id: str, report_id: str) -> str:
