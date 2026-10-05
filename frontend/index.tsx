@@ -77,7 +77,7 @@ const EntityPage = lazy(() => import('./components/Entity/EntityPage').then(m =>
 // Non-lazy imports
 import { HomePage } from './components/Home/HomePage';
 import { HomePDFPanel } from './components/Home/HomePDFPanel';
-import { GovernmentTier } from './constants';
+import { GovernmentTier, SHOW_MONETARY_IMPACT } from './constants';
 import { AccessGate } from './components/AccessGate';
 import { initPostHog, trackEvent } from './lib/posthog';
 import './index.css';
@@ -712,10 +712,12 @@ function App() {
             <div className="overview-tab enhanced">
                 {/* Key Metrics */}
                 <div className="impact-grid">
-                    <div className="impact-box">
-                        <label>Monetary Impact</label>
-                        <span className="value">{monetaryImpact}</span>
-                    </div>
+                    {SHOW_MONETARY_IMPACT && (
+                        <div className="impact-box">
+                            <label>Monetary Impact</label>
+                            <span className="value">{monetaryImpact}</span>
+                        </div>
+                    )}
                     <div className="impact-box">
                         <label>Audit Findings</label>
                         <span className="value">{findingsCount}</span>

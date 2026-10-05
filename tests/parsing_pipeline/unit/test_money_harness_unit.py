@@ -28,7 +28,8 @@ def mp():
 
 
 def crores(values):
-    return sorted(round(v.normalized_paise / CRORE, 6) for v in values)
+    """Rupee amounts in crore; dollar amounts have no rupee value."""
+    return sorted(round(v.normalized_paise / CRORE, 6) for v in values if v.currency == "INR")
 
 
 # (text, expected amounts in crore)
@@ -39,7 +40,7 @@ HARNESS = [
     ("₹1.5 lakh crore", [150000]),
     ("₹ 2.25 lakh crore was borrowed", [225000]),
     ("USD 5 million (₹ 41 crore)", [41]),
-    ("a grant of $2 million", [0.2]),
+    ("a grant of $2 million", []),
     ("₹ 3 billion", [300]),
     ("1.73 lakh (six per cent) students", []),
     ("24.53 lakh certified candidates", []),
@@ -222,6 +223,13 @@ class TestTokenizer:
         (v,) = mp.extract_monetary_values("a grant of $2 million")
         assert v.currency == "USD"
         assert v.to_dict()["currency"] == "USD"
+        # Not converted: no paise value and no crore figure
+        assert v.normalized_paise is None and v.to_dict()["normalized_paise"] is None
+        assert v.crore == 0
+
+    def test_usd_only_text_has_no_impact_total(self, mp):
+        classified = mp.extract_with_context("a loss of $2 million was suffered")
+        assert mp.impact_total_paise(classified) == 0
 
 
 class TestNestedAndTotal:

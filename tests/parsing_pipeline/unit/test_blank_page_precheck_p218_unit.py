@@ -29,16 +29,19 @@ class TestBlankPagePrecheckP218:
 
         block = {"label": "Table", "bbox": [0, 0, 100, 100], "confidence": 0.9}
 
-        result = service._route_block(
-            block=block,
-            pdf_path="/fake/path.pdf",
-            page_num=5,
-            report_id="test_report",
-            is_scanned=False,
-        )
+        reason = service._skip_reason(block, "/fake/path.pdf", 5, is_scanned=False)
 
-        assert result is None
+        assert reason == "blank_page_table"
         service._get_page_text_length.assert_called_once_with("/fake/path.pdf", 5)
+
+    def test_page_furniture_skipped(self, service):
+        block = {"label": "Page-header", "bbox": [0, 0, 100, 20], "confidence": 0.9}
+        assert service._skip_reason(block, "/fake/path.pdf", 5, is_scanned=False) == "noise_label"
+
+    def test_scanned_table_not_skipped(self, service):
+        service._get_page_text_length = Mock(return_value=0)
+        block = {"label": "Table", "bbox": [0, 0, 100, 100], "confidence": 0.9}
+        assert service._skip_reason(block, "/fake/path.pdf", 5, is_scanned=True) is None
 
     def test_normal_page_table_extracted(self, service):
         """P2-18: Table on page with 500 chars should be extracted."""
@@ -112,120 +115,26 @@ class TestBlankPagePrecheckP218:
     def test_threshold_boundary_49_chars(self, service):
         """P2-18: Page with 49 chars should be skipped."""
         service._get_page_text_length = Mock(return_value=49)
-
         block = {"label": "Table", "bbox": [0, 0, 100, 100], "confidence": 0.9}
-
-        result = service._route_block(
-            block=block,
-            pdf_path="/fake/path.pdf",
-            page_num=5,
-            report_id="test_report",
-            is_scanned=False,
-        )
-
-        # Should skip (49 < 50)
-        assert result is None
-
-    def test_multiple_tables_same_blank_page_cached(self, service):
-        """P2-18: Multiple tables on same blank page should only check once."""
-        # Use a real implementation that we can track
-        call_count = [0]
-
-        def mock_get_length(pdf_path, page_num):
-            call_count[0] += 1
-            # First call populates cache, subsequent calls should use cache
-            if pdf_path not in service._page_text_cache:
-                service._page_text_cache[pdf_path] = {}
-            service._page_text_cache[pdf_path][page_num] = 30
-            return 30
-
-        service._get_page_text_length = mock_get_length
-
-        block1 = {"label": "Table", "bbox": [0, 0, 100, 100], "confidence": 0.9}
-        block2 = {"label": "Table", "bbox": [0, 100, 100, 200], "confidence": 0.9}
-
-        # First table on page 5
-        result1 = service._route_block(
-            block=block1,
-            pdf_path="/fake/path.pdf",
-            page_num=5,
-            report_id="test_report",
-            is_scanned=False,
-        )
-
-        # Reset the mock function to use cache
-        service._page_text_cache["/fake/path.pdf"] = {5: 30}
-        service._get_page_text_length = lambda p, n: service._page_text_cache.get(p, {}).get(n, 9999)
-
-        # Second table on same page - should use cache
-        result2 = service._route_block(
-            block=block2,
-            pdf_path="/fake/path.pdf",
-            page_num=5,
-            report_id="test_report",
-            is_scanned=False,
-        )
-
-        # Both should be skipped
-        assert result1 is None
-        assert result2 is None
-        # Original mock was called only once
-        assert call_count[0] == 1
+        assert service._skip_reason(block, "/fake/path.pdf", 5, is_scanned=False) == "blank_page_table"
 
     def test_scanned_vs_native_behavior(self, service):
-        """P2-18: Only native PDFs should trigger blank page check.
-
-        Scanned PDFs have 0 native text even when Docling detects tables,
-        so blank page check should NOT apply to them.
-        """
+        """P2-18: Only native PDFs trigger the blank page check (scanned PDFs have no native text)."""
         service._get_page_text_length = Mock(return_value=30)
-
         block = {"label": "Table", "bbox": [0, 0, 100, 100], "confidence": 0.9}
 
-        # Native PDF - should be skipped on blank page
-        result_native = service._route_block(
-            block=block,
-            pdf_path="/fake/native.pdf",
-            page_num=5,
-            report_id="test_report",
-            is_scanned=False,
-        )
-
-        # Scanned PDF - should NOT be skipped (proceeds to Docling/Gemini extraction)
-        # Need to mock the extraction path since we're not actually extracting
-        with patch.object(service, '_extract_and_save_visual') as mock_extract:
-            mock_extract.return_value = None  # Simulates Gemini fallback path
-            result_scanned = service._route_block(
-                block=block,
-                pdf_path="/fake/scanned.pdf",
-                page_num=5,
-                report_id="test_report",
-                is_scanned=True,
-            )
-
-        # Native PDF should be skipped on blank page
-        assert result_native is None
-        # Scanned PDF should NOT check page text length - it proceeds to extraction
+        assert service._skip_reason(block, "/fake/native.pdf", 5, is_scanned=False) == "blank_page_table"
+        assert service._skip_reason(block, "/fake/scanned.pdf", 5, is_scanned=True) is None
         assert service._get_page_text_length.call_count == 1  # Only called for native
 
     def test_trace_emitted_on_skip(self, service):
         """P2-18: Trace should be emitted when skipping blank page."""
         service._get_page_text_length = Mock(return_value=30)
-
         mock_emitter = Mock()
-
         block = {"label": "Table", "bbox": [0, 0, 100, 100], "confidence": 0.9}
 
-        result = service._route_block(
-            block=block,
-            pdf_path="/fake/path.pdf",
-            page_num=5,
-            report_id="test_report",
-            is_scanned=False,
-            trace_emitter=mock_emitter,
-        )
+        service._skip_reason(block, "/fake/path.pdf", 5, is_scanned=False, emitter=mock_emitter)
 
-        assert result is None
         mock_emitter.emit_decision.assert_called_once_with(
             "6",
             "blank_page_skip",

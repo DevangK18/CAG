@@ -441,15 +441,18 @@ class MonetaryProcessor:
             except ValueError:
                 continue
             unit = self._canonical_unit(tok.unit)
-            paise = self.normalize_to_paise(amount, unit)
-            self._validate_monetary_value(paise, text[tok.start:tok.end])
+            usd = self._is_usd(tok.currency)
+            # Dollar amounts are not converted: they carry no paise value
+            paise = None if usd else self.normalize_to_paise(amount, unit)
+            if paise is not None:
+                self._validate_monetary_value(paise, text[tok.start:tok.end])
             values.append(
                 MonetaryValue(
                     raw_text=text[tok.start:tok.end].strip(),
                     amount=amount,
-                    unit=unit or "rupees",
+                    unit=unit or ("dollars" if usd else "rupees"),
                     normalized_paise=paise,
-                    currency="USD" if self._is_usd(tok.currency) else "INR",
+                    currency="USD" if usd else "INR",
                     start=tok.start,
                     end=tok.end,
                 )
@@ -756,10 +759,10 @@ class MonetaryProcessor:
             )
         ]
         if eligible:
-            return pick(max(eligible, key=lambda x: x.value.normalized_paise), "max eligible")
+            return pick(max(eligible, key=lambda x: x.value.normalized_paise or 0), "max eligible")
 
         # Priority 5: max overall
-        pick(max(top, key=lambda x: x.value.normalized_paise), "fallback max")
+        pick(max(top, key=lambda x: x.value.normalized_paise or 0), "fallback max")
 
     def get_primary_amount(
         self, text: str, dedup_tolerance: Optional[float] = None
@@ -796,5 +799,5 @@ class MonetaryProcessor:
                     total += mv.normalized_paise
         if not seen:
             primary = next((cv for cv in classified if cv.is_primary), None)
-            total = primary.value.normalized_paise if primary else 0
+            total = (primary.value.normalized_paise or 0) if primary else 0
         return total
