@@ -4,19 +4,19 @@ VisualPostProcessor: Quality gate and enrichment for extracted table/chart data.
 Phase 10c in the pipeline — runs after Gemini visual extraction (Phase 10b).
 
 Responsibilities:
-1. TOC Detection & Filtering: Removes table-of-contents pages misdetected as tables
-2. Title Enrichment: Infers table/chart titles from surrounding text context
-3. StructuredTable Hydration: Converts Gemini markdown output → full StructuredTable JSON
+1. Contents tables: flags contents lists in the front matter parsed as tables
+2. Table captions: a printed "Table/Statement N.N" caption above a table becomes its
+   caption and title and is put in front of its text
+3. StructuredTable Hydration: Tier-3 crops' Gemini markdown → StructuredTable rows
 4. StructuredChart Hydration: Converts Gemini chart output → full StructuredChart JSON
-5. Confidence Scoring: Assigns quality scores based on extraction notes
-6. Markdown Regeneration: Rebuilds clean markdown from structured data for RAG indexing
+5. Confidence Scoring: postprocess_confidence (Phase 8's extraction_confidence is kept)
 
 Usage:
     processor = VisualPostProcessor()
-    
+
     # Process a single chunk JSON file
     stats = processor.process_file(json_path)
-    
+
     # Process all reports
     stats = processor.process_all(json_files)
 """
@@ -25,10 +25,8 @@ import re
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Tuple
-from collections import Counter
+from typing import List, Dict, Optional, Any
 
-from src.core.table_contracts import StructuredTable
 from src.core.chart_contracts import (
     StructuredChart,
     ChartType,
@@ -37,7 +35,16 @@ from src.core.chart_contracts import (
     DataPoint,
     AxisType,
 )
-from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
+from src.parsing_pipeline.modules.structured_table_extractor import (
+    StructuredTableExtractor,
+)
+from src.batch_pipeline.enrichment.gemini_visual_extractor import (
+    GeminiVisualExtractor,
+    PHASE6_IMAGE_KEYS,
+    build_chart_text,
+    chunk_image_path,
+    has_chart_values,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,21 +54,30 @@ class VisualPostProcessor:
     Post-processes Gemini visual extraction results for quality and consistency.
     """
 
-    # TOC detection patterns — if a table's content matches these, it's likely a TOC
-    TOC_PATTERNS = [
-        r"table\s+of\s+contents",
-        r"list\s+of\s+(tables|figures|charts|abbreviations|annexures)",
-        r"contents\s*$",
-        r"^sl\.?\s*no\.?\s*\|\s*(particulars|subject|chapter|description)",
-        r"page\s*no\.?\s*$",  # Last column is "Page No."
-        r"^(chapter|section)\s+\|\s+(title|heading|description)\s+\|\s+page",
-    ]
+    # Opening of the first chapter: "CHAPTER 1", "Chapter-I", "Chapter I: ..."
+    CHAPTER_ONE_RE = re.compile(r"^\s*chapter\s*[-–:.]?\s*(?:1|i|one)\b(?![.\d])", re.I)
+    # Without a chapter heading, front matter is taken as this share of the pages
+    FRONT_MATTER_SHARE = 0.12
+    FRONT_MATTER_MAX_SHARE = 0.25
+    FRONT_MATTER_MIN_PAGES = 8
 
-    # Patterns that indicate low-value extraction
-    LOW_VALUE_PATTERNS = [
-        r"^[\s\|\-]+$",  # Only pipes and dashes (empty table)
-        r"^```",  # Still wrapped in code fences
-    ]
+    # Printed page reference in a contents row: "137", "vii", "vii-x", "12-15"
+    PAGE_REF_RE = re.compile(
+        r"^(\d{1,4}|[ivxlc]{1,7})(?:\s*[-–]\s*(?:\d{1,4}|[ivxlc]{1,7}))?$", re.I
+    )
+    SECTION_NUMBER_RE = re.compile(
+        r"^\(?(?:\d+(?:\.\d+)*|[ivxlc]{1,6}|[a-z])\)?\.?$", re.I
+    )
+    TOC_MAX_DROP_SHARE = 0.1
+    SEPARATOR_ROW_RE = re.compile(r"^\|?[\s:|-]*-{3,}[\s:|-]*$")
+
+    # A printed table caption: "Table 3.2: Details of grants", "Statement 1.1 ..."
+    TABLE_CAPTION_RE = re.compile(
+        r"^\s*(?:table|statement)\s*(?:no\.?\s*)?[\dIVX]+(?:[.\-]\d+)*[A-Za-z]?\b",
+        re.I,
+    )
+    # A caption more than this far (pt) above a table belongs to something else
+    CAPTION_MAX_GAP = 80
 
     def __init__(self, trace_emitter=None):
         """Initialize post-processor with StructuredTableExtractor.
@@ -182,6 +198,10 @@ class VisualPostProcessor:
 
         modified = False
         file_stats = {"filtered": 0, "hydrated": 0, "titles": 0}
+        report_ctx = self._report_context(data)
+        by_page: Dict[Any, List[Dict]] = {}
+        for chunk in chunks:
+            by_page.setdefault(chunk.get("source_page_physical"), []).append(chunk)
 
         for chunk in chunks:
             content_type = chunk.get("content_type", "")
@@ -191,45 +211,50 @@ class VisualPostProcessor:
             if content_type == "table_markdown":
                 self.stats["tables_processed"] += 1
 
-                # Step 1: TOC filtering
-                if self._is_toc_table(chunk):
-                    # Mark as filtered but don't delete — downstream can decide
-                    chunk["extraction_confidence"] = 0.05
-                    if structured_data:
+                # Step 1: contents tables are flagged, not deleted; Phase 8's
+                # extraction_confidence is left alone
+                is_toc = self._is_toc_table(chunk, report_ctx)
+                if isinstance(structured_data, dict):
+                    if is_toc:
                         structured_data["_filtered_reason"] = "toc_detected"
+                    elif structured_data.pop("_filtered_reason", None):
+                        modified = True
+                if is_toc:
+                    chunk["postprocess_confidence"] = 0.05
                     self.stats["tables_filtered_toc"] += 1
                     file_stats["filtered"] += 1
                     modified = True
                     continue
 
-                # Step 2: Title enrichment
-                if self._needs_title(chunk):
-                    title = self._infer_title(chunk, chunks)
-                    if title:
-                        if structured_data and isinstance(structured_data, dict):
-                            structured_data["title"] = title
-                        self.stats["titles_enriched"] += 1
-                        file_stats["titles"] += 1
-                        modified = True
-
-                # Step 3: Hydrate Gemini markdown → StructuredTable
-                if structured_data and isinstance(structured_data, dict):
+                # Step 2: Tier-3 crops carry Gemini markdown; parse it into rows
+                if isinstance(structured_data, dict):
                     gemini_markdown = structured_data.get("markdown")
                     if gemini_markdown and not structured_data.get("rows"):
                         hydrated = self._hydrate_table(
                             gemini_markdown, chunk, structured_data
                         )
                         if hydrated:
-                            chunk["structured_data"] = hydrated
-                            # Also update the content field with clean markdown
-                            chunk["content"] = gemini_markdown
+                            chunk["structured_data"] = structured_data = hydrated
+                            if gemini_markdown not in (chunk.get("content") or ""):
+                                chunk["content"] = gemini_markdown
                             self.stats["tables_hydrated"] += 1
                             file_stats["hydrated"] += 1
                             modified = True
 
-                # Step 4: Confidence scoring
+                # Step 3: a printed "Table N.N" caption reaches caption, title and text
+                if self._needs_title(chunk):
+                    caption = self._infer_title(chunk, by_page)
+                    if caption:
+                        self._apply_caption(chunk, caption)
+                        self.stats["titles_enriched"] += 1
+                        file_stats["titles"] += 1
+                        modified = True
+
+                # Step 4: 10c's own score, kept apart from Phase 8's
                 confidence = self._score_table_confidence(chunk)
-                chunk["extraction_confidence"] = confidence
+                if chunk.get("postprocess_confidence") != confidence:
+                    chunk["postprocess_confidence"] = confidence
+                    modified = True
 
             # === CHART POST-PROCESSING ===
             elif content_type in ("chart_data_path", "image_caption"):
@@ -239,11 +264,28 @@ class VisualPostProcessor:
                 self.stats["charts_processed"] += 1
 
                 # Hydrate Gemini chart output → StructuredChart
-                if structured_data.get("series") and not structured_data.get("chart_id"):
+                if structured_data.get("series") and not structured_data.get(
+                    "chart_id"
+                ):
                     hydrated = self._hydrate_chart(chunk, structured_data)
                     if hydrated:
                         chunk["structured_data"] = hydrated
+                        structured_data = hydrated
                         self.stats["charts_hydrated"] += 1
+                        modified = True
+
+                # Output hydrated before PR 7 has the values only in structured_data
+                if structured_data.get("series") and not has_chart_values(
+                    chunk.get("content")
+                ):
+                    content = build_chart_text(
+                        chunk.get("content") or "",
+                        None,
+                        structured_data["series"],
+                        structured_data.get("monetary_unit"),
+                    )
+                    if content != chunk.get("content"):
+                        chunk["content"] = content
                         modified = True
 
         # Save if modified
@@ -274,131 +316,167 @@ class VisualPostProcessor:
 
     # ========== TOC DETECTION ==========
 
-    def _is_toc_table(self, chunk: Dict) -> bool:
-        """
-        Detect if a table chunk is actually a table of contents.
+    def _report_context(self, data: Dict) -> Dict[str, int]:
+        """Page count and the first page after the front matter."""
+        chunks = data.get("child_chunks", [])
+        pages = [
+            c.get("source_page_physical")
+            for c in chunks
+            if isinstance(c.get("source_page_physical"), int)
+        ]
+        page_count = max(pages) + 1 if pages else 0
+        cap = max(
+            self.FRONT_MATTER_MIN_PAGES, int(page_count * self.FRONT_MATTER_MAX_SHARE)
+        )
 
-        Checks:
-        1. Content matches TOC patterns
-        2. High ratio of page numbers in last column
-        3. Section/chapter numbering in first column
-
-        Args:
-            chunk: ChildChunk dict
-
-        Returns:
-            True if this is likely a TOC, not a data table
-        """
-        content = chunk.get("content", "").lower()
-        structured = chunk.get("structured_data", {})
-
-        # Pattern matching on raw content
-        for pattern in self.TOC_PATTERNS:
-            if re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
-                return True
-
-        # Check markdown for "Page No." column
-        if isinstance(structured, dict):
-            markdown = structured.get("markdown", content)
+        # First chapter opening: a short heading. Parent titles are not used: parents
+        # built from contents lists or bookmarks start on the contents page itself.
+        starts = [
+            c.get("source_page_physical")
+            for c in chunks
+            if c.get("content_type") in ("header", "paragraph")
+            and len((c.get("content") or "").strip()) <= 80
+            and self.CHAPTER_ONE_RE.match(c.get("content") or "")
+        ]
+        # Pages 0-1 are covers; a match there is a title, not the chapter itself
+        starts = [p for p in starts if isinstance(p, int) and p >= 2]
+        if starts:
+            end = min(starts)
         else:
-            markdown = content
+            end = max(
+                self.FRONT_MATTER_MIN_PAGES, int(page_count * self.FRONT_MATTER_SHARE)
+            )
+        return {"front_matter_end": min(end, cap), "page_count": page_count}
 
-        lines = markdown.split("\n")
-        if not lines:
+    @classmethod
+    def _table_rows(cls, markdown: str) -> List[List[str]]:
+        """Non-empty cells of each markdown row, separator rows dropped."""
+        rows = []
+        for line in (markdown or "").split("\n"):
+            line = line.strip()
+            if "|" not in line or cls.SEPARATOR_ROW_RE.match(line):
+                continue
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            cells = [c for c in cells if c]
+            if cells:
+                rows.append(cells)
+        return rows
+
+    @classmethod
+    def _page_number(cls, cell: str) -> Optional[int]:
+        """First arabic page of a page reference; 0 for roman (front-matter) pages."""
+        match = cls.PAGE_REF_RE.match(cell.strip())
+        if not match:
+            return None
+        start = match.group(1)
+        return int(start) if start.isdigit() else 0
+
+    def _is_toc_table(self, chunk: Dict, report_ctx: Optional[Dict] = None) -> bool:
+        """
+        A table of contents (or list of tables/appendices) parsed as a table.
+
+        All three must hold:
+        1. the table is in the front matter (before the first chapter page);
+        2. the last column holds page references, arabic ones within the page count
+           and non-decreasing (one stray row, or 10%, tolerated);
+        3. the first column holds titles or section numbers, not years or amounts.
+        Counts, percentages and small integers in data tables fail 1 or 2.
+        """
+        ctx = report_ctx or {}
+        page = chunk.get("source_page_physical")
+        if not isinstance(page, int) or page >= ctx.get("front_matter_end", 0):
             return False
 
-        # Heuristic: if header row contains "page" and rows have small numbers at end
-        header = lines[0].lower() if lines else ""
-        if "page" in header and ("no" in header or "#" in header):
-            return True
+        structured = chunk.get("structured_data")
+        markdown = chunk.get("content") or ""
+        if isinstance(structured, dict) and structured.get("markdown"):
+            markdown = structured["markdown"]
+        rows = [r for r in self._table_rows(markdown) if len(r) >= 2]
+        body = rows[1:]  # first row is the header
+        refs = [(r, self._page_number(r[-1])) for r in body]
+        refs = [(r, n) for r, n in refs if n is not None]
+        if len(refs) < 3 or len(refs) < 0.6 * len(body):
+            return False
 
-        # Heuristic: Check if last column is predominantly small integers (page numbers)
-        page_num_count = 0
-        data_rows = [l for l in lines[2:] if l.strip() and "|" in l]  # Skip header + separator
+        arabic = [n for _, n in refs if n]
+        page_count = ctx.get("page_count") or 0
+        if page_count and any(n > page_count for n in arabic):
+            return False
+        # Docling sometimes splices a stray row (e.g. an appendix entry) into a
+        # contents list; a data column of counts goes down far more often
+        drops = sum(1 for a, b in zip(arabic, arabic[1:]) if b < a)
+        if drops > max(1, self.TOC_MAX_DROP_SHARE * (len(arabic) - 1)):
+            return False
 
-        for row in data_rows:
-            cells = [c.strip() for c in row.split("|") if c.strip()]
-            if cells:
-                last_cell = cells[-1].strip()
-                # Page numbers are typically 1-500
-                if re.match(r"^\d{1,3}$", last_cell):
-                    page_num_count += 1
+        def title_like(cell: str) -> bool:
+            return bool(re.search(r"[A-Za-z]{3}", cell)) or bool(
+                self.SECTION_NUMBER_RE.match(cell)
+            )
 
-        if data_rows and page_num_count / len(data_rows) > 0.7:
-            return True
-
-        return False
+        titled = sum(1 for r, _ in refs if title_like(r[0]))
+        return titled >= 0.6 * len(refs)
 
     # ========== TITLE ENRICHMENT ==========
 
     def _needs_title(self, chunk: Dict) -> bool:
-        """Check if a table chunk needs title enrichment."""
+        """Check if a table chunk has neither a caption nor a title."""
         structured = chunk.get("structured_data")
         if isinstance(structured, dict):
+            if structured.get("caption"):
+                return False
             title = structured.get("title")
             return title is None or title == "" or title == "null"
         return True
 
-    def _infer_title(self, target_chunk: Dict, all_chunks: List[Dict]) -> Optional[str]:
+    def _infer_title(
+        self, target_chunk: Dict, by_page: Dict[Any, List[Dict]]
+    ) -> Optional[str]:
         """
-        Infer table/chart title from surrounding text context.
+        The printed "Table/Statement N.N" caption just above a table, or None.
 
-        Strategy:
-        1. Look for "Table X.X:" pattern in adjacent chunks on same page
-        2. Look at preceding header/text chunks
-        3. Fall back to hierarchy section title
-
-        Args:
-            target_chunk: The table/chart chunk needing a title
-            all_chunks: All chunks in the report
-
-        Returns:
-            Inferred title string, or None
+        Walks up from the table, nearest first, within CAPTION_MAX_GAP; stops at
+        another table or figure, whose caption that would be. Unit lines such as
+        "(₹ in crore)" between caption and table are passed over.
         """
-        target_page = target_chunk.get("source_page_physical", -1)
-        target_y = target_chunk.get("source_bbox", [0, 0, 0, 0])[1]
+        target_bbox = GeminiVisualExtractor._chunk_bbox(target_chunk)
+        if not target_bbox:
+            return None
+        above = []
+        for c in by_page.get(target_chunk.get("source_page_physical"), []):
+            if c is target_chunk:
+                continue
+            bbox = GeminiVisualExtractor._chunk_bbox(c)
+            if not bbox or bbox[3] > target_bbox[1] + 5:
+                continue
+            gap = target_bbox[1] - bbox[3]
+            if gap <= self.CAPTION_MAX_GAP:
+                above.append((gap, c))
+        above.sort(key=lambda item: item[0])
 
-        # Find chunks on the same page, sorted by vertical position
-        same_page = [
-            c for c in all_chunks
-            if c.get("source_page_physical") == target_page
-            and c.get("chunk_id") != target_chunk.get("chunk_id")
-        ]
-        same_page.sort(key=lambda c: c.get("source_bbox", [0, 0, 0, 0])[1])
-
-        # Strategy 1: Look for "Table X.X" pattern in chunks ABOVE this table
-        table_ref_pattern = re.compile(
-            r"(Table|Chart|Figure|Graph|Statement)\s+[\d\.]+[\s:.\-]+(.+)",
-            re.IGNORECASE,
-        )
-
-        for c in reversed(same_page):
-            c_y = c.get("source_bbox", [0, 0, 0, 0])[1]
-            if c_y >= target_y:
-                continue  # Skip chunks below the table
-
-            content = c.get("content", "").strip()
-            match = table_ref_pattern.match(content)
-            if match:
-                return match.group(0).strip()
-
-            # Also check if it's a short text chunk just above (likely a caption)
-            if (
-                c.get("content_type") in ("paragraph", "header")
-                and len(content) < 200
-                and target_y - c_y < 50  # Within ~50 PDF units above
+        for _, c in above:
+            if c.get("content_type") in (
+                "table_markdown",
+                "image_caption",
+                "chart_data_path",
             ):
+                break
+            content = (c.get("content") or "").strip()
+            if len(content) <= 300 and self.TABLE_CAPTION_RE.match(content):
                 return content
-
-        # Strategy 2: Use hierarchy section title
-        hierarchy = target_chunk.get("hierarchy", {})
-        if hierarchy:
-            # Use the deepest level
-            deepest = list(hierarchy.values())[-1] if hierarchy else None
-            if deepest:
-                return deepest
-
         return None
+
+    @staticmethod
+    def _apply_caption(chunk: Dict, caption: str) -> None:
+        """Store the caption on the table and put it in front of the searchable text."""
+        structured = chunk.get("structured_data")
+        if isinstance(structured, dict):
+            if not structured.get("caption"):
+                structured["caption"] = caption
+            if structured.get("title") in (None, "", "null"):
+                structured["title"] = caption
+        content = chunk.get("content") or ""
+        if caption not in content:
+            chunk["content"] = f"{caption}\n\n{content}" if content else caption
 
     # ========== TABLE HYDRATION ==========
 
@@ -424,7 +502,7 @@ class VisualPostProcessor:
         """
         try:
             page = chunk.get("source_page_physical", 0)
-            bbox = chunk.get("source_bbox", [0, 0, 100, 100])
+            bbox = GeminiVisualExtractor._chunk_bbox(chunk) or [0, 0, 100, 100]
             table_id = f"table_{page}_{int(bbox[0])}_{int(bbox[1])}"
 
             structured = self.structured_extractor.extract(
@@ -441,13 +519,18 @@ class VisualPostProcessor:
             result = structured.model_dump()
 
             # Overlay Gemini metadata
-            if gemini_data.get("title"):
-                result["title"] = gemini_data["title"]
-            if gemini_data.get("monetary_unit"):
-                result["monetary_unit"] = f"₹ in {gemini_data['monetary_unit']}"
+            if gemini_data.get("title") or gemini_data.get("caption"):
+                result["title"] = gemini_data.get("title") or gemini_data["caption"]
+            unit = str(gemini_data.get("monetary_unit") or "").strip()
+            if unit and unit.lower() not in ("null", "none"):
+                result["monetary_unit"] = unit if "₹" in unit else f"₹ in {unit}"
+            # Phase 6 and 10b fields of the crop stay with the table
+            for key in (*PHASE6_IMAGE_KEYS, "table_number", "gemini_extracted"):
+                if key in gemini_data and result.get(key) is None:
+                    result[key] = gemini_data[key]
             if gemini_data.get("extraction_notes"):
                 result["_extraction_notes"] = gemini_data["extraction_notes"]
-            result["_extraction_method"] = "gemini-2.5-flash"
+            result["_extraction_method"] = chunk.get("extraction_method") or "gemini"
 
             return result
 
@@ -495,17 +578,21 @@ class VisualPostProcessor:
                     parsed_value = self._safe_parse_float(raw_value)
                     if parsed_value is None:
                         continue  # Skip data points with unparseable values
-                    data_points.append(DataPoint(
-                        category=str(dp.get("category") or ""),
-                        value=parsed_value,
-                        series=s.get("name") or f"Series {i+1}",
-                    ))
+                    data_points.append(
+                        DataPoint(
+                            category=str(dp.get("category") or ""),
+                            value=parsed_value,
+                            series=s.get("name") or f"Series {i+1}",
+                        )
+                    )
 
-                series_list.append(ChartSeries(
-                    series_id=f"series_{i}",
-                    series_name=s.get("name") or f"Series {i+1}",
-                    data_points=data_points,
-                ))
+                series_list.append(
+                    ChartSeries(
+                        series_id=f"series_{i}",
+                        series_name=s.get("name") or f"Series {i+1}",
+                        data_points=data_points,
+                    )
+                )
 
             # Detect axis types
             x_type = AxisType.CATEGORICAL
@@ -520,8 +607,12 @@ class VisualPostProcessor:
                 source_chunk_id=chunk.get("chunk_id", ""),
                 source_page_physical=page,
                 source_bbox=bbox,
-                image_path=chunk.get("content", ""),
-                title=gemini_data.get("title") or "Untitled Chart",
+                image_path=gemini_data.get("image_path")
+                or chunk_image_path(chunk)
+                or "",
+                title=gemini_data.get("title")
+                or gemini_data.get("caption")
+                or "Untitled Chart",
                 chart_type=chart_type,
                 description=gemini_data.get("description"),
                 x_axis=ChartAxisConfig(
@@ -537,7 +628,7 @@ class VisualPostProcessor:
                 ),
                 series=series_list,
                 monetary_unit=gemini_data.get("monetary_unit"),
-                extraction_method="gemini-2.5-flash-vision",
+                extraction_method=chunk.get("extraction_method") or "gemini",
                 has_structured_data=len(series_list) > 0,
                 confidence=self._score_chart_confidence(gemini_data),
                 extraction_notes=gemini_data.get("extraction_notes") or [],
@@ -546,15 +637,20 @@ class VisualPostProcessor:
             # Extract time periods and entities from data
             all_categories = chart.get_all_categories()
             chart.time_periods = [
-                c for c in all_categories
-                if re.match(r"\d{4}(-\d{2,4})?|FY\s*\d{4}", c)
+                c for c in all_categories if re.match(r"\d{4}(-\d{2,4})?|FY\s*\d{4}", c)
             ]
 
-            return chart.model_dump()
+            result = chart.model_dump()
+            # Keep the Phase 6 fields (subtype, caption, text layer) next to the chart
+            for key in PHASE6_IMAGE_KEYS:
+                if key in gemini_data and result.get(key) is None:
+                    result[key] = gemini_data[key]
+            return result
 
         except Exception as e:
             logger.warning(f"Chart hydration failed: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -583,15 +679,15 @@ class VisualPostProcessor:
                 return None
 
             # Handle percentages: "55%" -> 55.0
-            if value.endswith('%'):
+            if value.endswith("%"):
                 try:
                     return float(value[:-1])
                 except ValueError:
                     return None
 
-            # Try direct float conversion
+            # Try direct float conversion; Indian grouping commas and ₹ are not part of it
             try:
-                return float(value)
+                return float(value.replace(",", "").replace("₹", "").strip())
             except ValueError:
                 # Value is non-numeric text like "Total", "N/A", etc.
                 return None
@@ -617,7 +713,9 @@ class VisualPostProcessor:
             return 0.3  # Low confidence without structured data
 
         # Penalize for extraction notes/issues
-        notes = structured.get("extraction_notes", structured.get("_extraction_notes", []))
+        notes = structured.get(
+            "extraction_notes", structured.get("_extraction_notes", [])
+        )
         if notes:
             score -= 0.05 * len(notes)
 

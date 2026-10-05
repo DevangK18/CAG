@@ -13,7 +13,7 @@ from src.parsing_pipeline.modules.content_extraction_service import ContentExtra
 MODULE = "src.parsing_pipeline.modules.content_extraction_service"
 
 
-def _content(content_type, content, page, bbox, label, confidence, model="PyMuPDF-clip"):
+def _content(content_type, content, page, bbox, label, confidence, model="PyMuPDF-clip", sd=None):
     return ExtractedContent(
         content_type=content_type,
         content=content,
@@ -22,6 +22,7 @@ def _content(content_type, content, page, bbox, label, confidence, model="PyMuPD
         model_used=model,
         layout_label=label,
         layout_confidence=confidence,
+        structured_data=sd,
     )
 
 
@@ -30,13 +31,16 @@ TABLE = _content(
     "| Header | Value |\n|---|---|\n| Test | Data |",
     0, [100, 200, 500, 400], "Table", 0.85, model="pdfplumber",
 )
+# Phase 6 picture items: the path lives in structured_data, never in content
 PICTURE = _content(
-    "image_caption", "data/extraction_images/charts/test_report_001_p0_picture.png",
-    0, [600, 100, 700, 200], "Picture", 0.92, model="image-crop-for-gemini",
+    "image_caption", "", 0, [600, 100, 700, 200], "Picture", 0.92, model="image-crop-for-gemini",
+    sd={"image_path": "data/extraction_images/charts/test_report_001_p0_picture.png",
+        "visual_subtype": None, "caption": "Picture 1.1: Site of the new building"},
 )
 FIGURE = _content(
-    "image_caption", "data/extraction_images/charts/test_report_001_p1_chart.png",
-    1, [200, 400, 400, 500], "Figure", 0.88, model="image-crop-for-gemini",
+    "image_caption", "", 1, [200, 400, 400, 500], "Figure", 0.88, model="image-crop-for-gemini",
+    sd={"image_path": "data/extraction_images/charts/test_report_001_p1_chart.png",
+        "visual_subtype": None, "caption": "Chart 2.1: Budget and expenditure"},
 )
 HEADER = _content("header", "Executive Summary", 0, [50, 50, 400, 80], "Section-header", 0.89)
 PARAGRAPH = _content(
