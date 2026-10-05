@@ -5,7 +5,7 @@ Reads per-report `normalized_entities` from each *_overview_llm.json,
 batches them through LLM, and produces a global canonical
 entity dictionary loaded into Postgres.
 
-Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+Default: Gemini 3.8 Flash for GCP credit billing.
 Set model parameter to use OpenAI models instead.
 
 Run via:
@@ -552,7 +552,7 @@ def _local_passthrough_conversion(records: List[Dict[str, Any]]) -> List[Dict[st
 
 def canonicalize_via_llm(
     consolidated: List[Dict[str, Any]],
-    model: str = "gemini-3.5-flash-lite",
+    model: str = "gemini-3.8-flash",
     batch_size: int = 40,
 ) -> List[Dict[str, Any]]:
     """
@@ -561,7 +561,7 @@ def canonicalize_via_llm(
     Within a single batch, the LLM merges 'NHAI' and 'National Highways Authority of India'
     even if they ended up in different buckets (because of casing/spelling).
 
-    Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+    Default: Gemini 3.8 Flash for GCP credit billing.
 
     Features:
     - Streaming JSON parsing with truncation detection
@@ -984,13 +984,13 @@ def _apply_pass2_merges(
 
 def pass2_dedup_via_llm(
     canonicals: List[Dict[str, Any]],
-    model: str = "gemini-3.5-flash-lite",
+    model: str = "gemini-3.8-flash",
     batch_size: int = 250,
 ) -> List[Dict[str, Any]]:
     """
     Second-pass LLM deduplication for large corpora.
 
-    Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+    Default: Gemini 3.8 Flash for GCP credit billing.
 
     Sorts entities by (entity_type, primary_tier, canonical_name) to group
     similar entities together, then batches through LLM for conservative
@@ -1130,11 +1130,11 @@ def load_canonical_to_db(canonical_entities: List[Dict[str, Any]]) -> int:
 def canonicalize_all(
     overviews_dir: Path,
     output_path: Optional[Path] = None,
-    model: str = "gemini-3.5-flash-lite",
+    model: str = "gemini-3.8-flash",
     batch_size: int = 40,
     two_pass_threshold: int = 1000,
     pass2_batch_size: int = 250,
-    pass2_model: str = "gemini-3.5-flash-lite",
+    pass2_model: str = "gemini-3.8-flash",
 ) -> List[Dict[str, Any]]:
     """
     End-to-end canonicalization pipeline.

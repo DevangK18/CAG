@@ -209,7 +209,6 @@ MODEL_PRICES_USD_PER_1M: Dict[str, List[Dict[str, Any]]] = {
         {"input": 1.50, "cached": 0.15, "output": 7.50},
     ],
     "gemini-3.5-flash": [{"input": 1.50, "cached": 0.15, "output": 9.00}],
-    "gemini-3.5-flash-lite": [{"input": 0.30, "cached": 0.03, "output": 2.50}],
     "gemini-3.1-pro-preview": [
         {
             "input": 2.00,

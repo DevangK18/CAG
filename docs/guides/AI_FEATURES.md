@@ -19,7 +19,7 @@ The CAG Gateway uses a multi-model strategy optimized for GCP credit billing. Ge
 | Model | Provider | Tasks | Why Chosen |
 |-------|----------|-------|------------|
 | **Gemini 3.5 Flash** | Google | RAG Chat, Query Routing, Agentic Planning (default) | GCP credits, fast, 1M context, good reasoning |
-| **Gemini 3.5 Flash Lite** | Google | Query Enhancement, Groundedness, Reformulation | Ultra-low cost ($0.01/1M), fast routing |
+| **Gemini 3.8 Flash** | Google | Query Enhancement, Groundedness, Reformulation, RAPTOR summaries | Same Flash model as chat and the pipeline |
 | **Gemini 3.6 Flash** | Google | TOC Validation | 1M context, cost-efficient structured extraction |
 | **Claude Sonnet 4** | Anthropic | Overview Extraction, Summaries (Batch API) | Extended Thinking, high-quality analysis |
 | **Claude Opus 4** | Anthropic | Deep Dive & Journalist Summaries | Highest quality for long-form content |
@@ -56,10 +56,10 @@ The CAG Gateway uses a multi-model strategy optimized for GCP credit billing. Ge
 
 | Model | Task | Cost per Query | Monthly (1K queries) |
 |-------|------|----------------|---------------------|
-| Gemini 3.5 Flash Lite | Query Enhancement | ~$0.0001 | ~$0.10 |
+| Gemini 3.8 Flash | Query Enhancement | ~$0.0001 | ~$0.10 |
 | Gemini 3.5 Flash | RAG Chat (default) | ~$0.001-0.005 | ~$1-5 |
-| Gemini 3.5 Flash Lite | Query Routing, Self-RAG | ~$0.00005 | ~$0.05 |
-| Gemini 3.5 Flash Lite | Groundedness Check | ~$0.0005 | ~$0.50 |
+| Gemini 3.8 Flash | Query Routing, Self-RAG | ~$0.00005 | ~$0.05 |
+| Gemini 3.8 Flash | Groundedness Check | ~$0.0005 | ~$0.50 |
 | text-embedding-005 | Query Embedding (Vertex AI) | ~$0.00001 | ~$0.01 |
 | text-embedding-3-large | Query Embedding (OpenAI fallback) | ~$0.0001 | ~$0.10 |
 

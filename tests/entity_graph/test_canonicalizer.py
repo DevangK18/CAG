@@ -246,7 +246,7 @@ class TestCanonicalizeViaLLM:
 
         result = canonicalize_via_llm(consolidated, batch_size=80)
 
-        mock_get_client.assert_called_once_with("gemini-3.5-flash-lite")
+        mock_get_client.assert_called_once_with("gemini-3.8-flash")
         assert mock_client.models.generate_content.call_count == 1
         # Internal fields are stripped before the records are sent
         prompt = mock_client.models.generate_content.call_args.kwargs["contents"][0].text

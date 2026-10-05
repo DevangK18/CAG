@@ -118,7 +118,7 @@ class QueryRouter:
     """
     Routes queries to optimal retrieval strategy.
 
-    Uses a lightweight LLM classifier (Gemini 3.5 Flash-Lite) for intelligent routing,
+    Uses a lightweight LLM classifier (Gemini 3.8 Flash) for intelligent routing,
     with rule-based fallbacks for common patterns.
     """
 

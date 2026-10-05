@@ -32,7 +32,6 @@ PRICING: dict[Tuple[str, str], dict[str, float]] = {
     ("google", "gemini-3.8-flash"): {"prompt": 1.50, "completion": 7.50},
     ("google", "gemini-3.6-flash"): {"prompt": 1.50, "completion": 7.50},
     ("google", "gemini-3.5-flash"): {"prompt": 1.50, "completion": 9.00},
-    ("google", "gemini-3.5-flash-lite"): {"prompt": 0.30, "completion": 2.50},
     ("google", "gemini-3.1-pro-preview"): {"prompt": 2.00, "completion": 12.00},
     # Google Gemini - Legacy models
     ("google", "gemini-2.5-pro"): {"prompt": 1.25, "completion": 10.00},

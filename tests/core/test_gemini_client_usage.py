@@ -298,11 +298,6 @@ class TestDatedPrices:
             assert _price_for(model, 0, date(2026, 12, 31)) == {"input": 0.75, "cached": 0.075, "output": 3.75}
             assert _price_for(model, 0, date(2027, 1, 1)) == {"input": 1.50, "cached": 0.15, "output": 7.50}
 
-    def test_flash_lite_price(self):
-        from datetime import date
-        from src.core.gemini_client import _price_for
-        assert _price_for("gemini-3.5-flash-lite", 0, date(2026, 10, 4)) == {"input": 0.30, "cached": 0.03, "output": 2.50}
-
     def test_cached_tokens_bill_at_cached_rate(self):
         from datetime import date
         from src.core.gemini_client import _cost_usd

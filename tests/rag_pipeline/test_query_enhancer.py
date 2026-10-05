@@ -355,8 +355,8 @@ class TestQueryEnhancementConfig:
         assert config.enable_passage_reordering is True
         assert config.enable_sufficiency_check is True
         assert config.provider == LLMProvider.GEMINI
-        assert config.model == "gemini-3.5-flash-lite"
-        assert config.gemini_model == "gemini-3.5-flash-lite"
+        assert config.model == "gemini-3.8-flash"
+        assert config.gemini_model == "gemini-3.8-flash"
         assert config.max_tokens == 300
         assert config.temperature == 0.0
         assert config.num_expansions == 3
