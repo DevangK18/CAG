@@ -22,7 +22,7 @@ from src.parsing_pipeline.config import get_config, TOCReconciliationConfig
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 from src.parsing_pipeline.extractors.text_repair import repair_font_shift
 from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
-from src.parsing_pipeline.modules.printed_toc_parser import roman_to_int
+from src.parsing_pipeline.modules.printed_toc_parser import fold_part_rows, roman_to_int
 from src.parsing_pipeline.modules.toc_quality import assess_toc_quality, is_garbage_title
 
 logger = logging.getLogger(__name__)
@@ -66,8 +66,29 @@ class TOCReconciliationService:
         r"^APPENDIX\s+[A-Z0-9]+",
     ]
 
-    # P0-02: Quality cap for Phase 5.7 eligibility
-    QUALITY_CAP = 85
+    # Heading test for Docling headers (A-5.5-01)
+    NUMBERED_RE = re.compile(r"^(\d+(?:\.\d+)+)\.?\s+([A-Z(‘'\"\d].*)$")
+    # "Chapter-1", "CHAPTER IV", or a roman chapter banner "II COMPLIANCE AUDIT" (not "Part-II")
+    CHAPTER_NO_RE = re.compile(
+        r"^(?:chapter|ch\.)\s*[-–:.]?\s*([ivxlc]+|\d+)\b|^([IVX]{1,5})\s+(?=[A-Z]{2})"
+    )
+    # Case-sensitive roman banner: "II COMPLIANCE AUDIT" is a chapter, "ii Devolution" a list item
+    CHAPTER_LIKE_RE = re.compile(
+        r"^(?i:chapter|part|annexure|appendix|appendices)\b|^[IVX]{1,5}\s+[A-Z]{3}"
+    )
+    FRONT_BACK = {
+        "preface", "foreword", "overview", "executive summary", "introduction", "glossary",
+        "glossary of abbreviations", "abbreviations", "appendices", "annexures", "conclusion",
+        "conclusions", "recommendations", "recommendation", "acknowledgement", "index",
+    }
+    AMOUNT_RE = re.compile(r"(₹|`|\bRs\.?)\s*\d")
+    ENUMERATOR_RE = re.compile(
+        r"^(\(?[a-z]{1,3}\)|[A-Z]\)|\(?[ivx]{1,5}[.)]|[ivx]{1,4}\s|\(?\d{1,2}[.)]\s|\d{1,2}\s+[A-Z])"
+    )
+    NOT_HEADING_START_RE = re.compile(
+        r"^(recommendation|source|note|case\s+study|statement\s+showing|details\s+of|[\"“‘'])",
+        re.IGNORECASE,
+    )
 
     # P0-04: Maximum expected L1 entries
     # C2 fix: Re-tuned from 15 to 35 based on 37-report corpus distribution
@@ -159,7 +180,16 @@ class TOCReconciliationService:
         # the "medium quality" path
         current_quality = task.scaffold.get("toc_quality")
         if current_quality is None:
-            current_quality = assess_toc_quality(current_toc, total_pages)
+            current_quality = self._score(current_toc, total_pages)
+
+        # Only headers that pass the heading test can become TOC entries (A-5.5-01)
+        docling_headers, rejected = self._admit_headers(docling_headers, current_toc)
+        if rejected:
+            reasons: Dict[str, int] = {}
+            for _, reason in rejected:
+                reasons[reason] = reasons.get(reason, 0) + 1
+            logger.info(f"[{task.report_id}] Heading test rejected {len(rejected)} Docling headers: {reasons}")
+            emitter.emit("5.5", "heading_test", {"rejected": len(rejected), "reasons": reasons})
 
         # P0-02: Handle empty-TOC explicitly (separate branch)
         if not current_toc:
@@ -212,26 +242,32 @@ class TOCReconciliationService:
                 current_toc, docling_headers, task.report_id, emitter
             )
 
-        # Step 4: Update heading_positions with Y-coordinates from Docling
-        heading_positions = task.scaffold.get("heading_positions", {})
-        heading_positions = self._update_heading_positions(
-            heading_positions, docling_headers, reconciled_toc
+        # One entry per chapter, section and appendix number, whatever the source (A-5.5-03)
+        reconciled_toc = self._dedupe_by_number(reconciled_toc, current_toc)
+
+        # Step 4: Place every entry on its page and order same-page entries by
+        # position (A-5.5-04); heading_positions gets a y for every entry
+        reconciled_toc, heading_positions = self._place_entries(
+            task, reconciled_toc, docling_headers, task.scaffold.get("heading_positions", {})
         )
 
+        # Score before normalisation, so junk the normaliser removes still counts
+        # against the supplementing that added it (A-5.5-02)
+        reconciled_score = self._score(reconciled_toc, total_pages)
+        current_score = self._score(current_toc, total_pages)
+
         # Drop junk entries and derive levels from section numbering
-        reconciled_toc = self._normalize_toc(reconciled_toc)
+        reconciled_toc = self._deduplicate_parents(self._normalize_toc(reconciled_toc))
 
-        # P0-02: Deduplicate parents by (normalized_title, page)
-        reconciled_toc = self._deduplicate_parents(reconciled_toc)
-
-        # Supplementing must not make a good TOC worse
+        # Supplementing must not make a good TOC worse: compare like with like
         normalized_current = self._normalize_toc(current_toc)
-        if normalized_current and (
-            assess_toc_quality(reconciled_toc, total_pages)
-            < assess_toc_quality(normalized_current, total_pages) - 5
-        ):
-            logger.info(f"[{task.report_id}] Reconciled TOC scored lower; keeping Phase 4 TOC")
+        if normalized_current and reconciled_score < current_score - 5:
+            logger.info(
+                f"[{task.report_id}] Reconciled TOC scored {reconciled_score} < Phase 4 "
+                f"{current_score}; keeping Phase 4 TOC"
+            )
             reconciled_toc, method = self._deduplicate_parents(normalized_current), "kept_phase4"
+            reconciled_score = current_score
 
         # P0-04: L1 count sanity check
         l1_count = sum(1 for entry in reconciled_toc if entry[0] == 1)
@@ -257,12 +293,10 @@ class TOCReconciliationService:
         task.scaffold["toc"] = reconciled_toc
         task.scaffold["heading_positions"] = heading_positions
         task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+reconciled_{method}"
+        task.scaffold["reconciliation_strategy"] = method
 
-        # Score the reconciled TOC on its own merits (garbage titles, missing chapters,
-        # sections at chapter level); taking max() with the old score hid bad TOCs.
-        # P0-02: Cap at 85 so Phase 5.7 can still fire on edge cases.
-        new_quality = assess_toc_quality(reconciled_toc, total_pages)
-        task.scaffold["toc_quality"] = min(new_quality, self.QUALITY_CAP)
+        # The reconciled TOC's own score, uncapped (A-5.5-02)
+        task.scaffold["toc_quality"] = reconciled_score
 
         # Trace: TOC mutation result
         emitter.emit_io(
@@ -327,7 +361,9 @@ class TOCReconciliationService:
             return []
 
         try:
+            self._body_size = self._body_font_size(doc)
             for page_num, blocks in task.layout.items():
+                tables = [b.get("bbox") for b in blocks if b.get("label") == "Table" and b.get("bbox")]
                 for block in blocks:
                     if block.get("label") != "Section-header":
                         continue
@@ -354,12 +390,16 @@ class TOCReconciliationService:
                     # Infer hierarchy level
                     level = self._infer_level_from_docling(title, bbox)
 
+                    bold, size = self._style_at(doc, page_num, bbox)
                     headers.append({
                         "title": title,
                         "page": page_num,
                         "y_position": bbox[1],  # y0 = top of header
                         "bbox": bbox,
                         "level": level,
+                        "bold": bold,
+                        "size": size,
+                        "in_table": any(self._inside(bbox, t) for t in tables),
                     })
         finally:
             doc.close()
@@ -369,6 +409,55 @@ class TOCReconciliationService:
 
         logger.info(f"[{task.report_id}] Extracted {len(headers)} Docling section headers")
         return headers
+
+    @staticmethod
+    def _inside(bbox: List[float], outer: List[float]) -> bool:
+        """Centre of bbox inside outer (a Docling Table block on the same page)."""
+        cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+        return outer[0] <= cx <= outer[2] and outer[1] <= cy <= outer[3]
+
+    @staticmethod
+    def _body_font_size(doc) -> float:
+        """Most common span size over a sample of pages: the body text size."""
+        sizes: Dict[float, int] = {}
+        try:
+            step = max(1, len(doc) // 25)
+            for page_num in range(0, len(doc), step):
+                for block in doc[page_num].get_text("dict").get("blocks", []):
+                    for line in block.get("lines", []):
+                        for span in line.get("spans", []):
+                            if span.get("text", "").strip():
+                                size = round(span.get("size", 0), 1)
+                                sizes[size] = sizes.get(size, 0) + len(span["text"])
+        except Exception as e:
+            logger.debug(f"Body font size scan failed: {e}")
+        return max(sizes, key=sizes.get) if sizes else 0.0
+
+    @staticmethod
+    def _style_at(doc, page_num: int, bbox: List[float]) -> Tuple[bool, float]:
+        """(bold, largest size) of the text spans inside a header box."""
+        try:
+            page = doc[page_num]
+            rect = fitz.Rect(bbox)
+            if page.rotation:
+                rect = rect * page.derotation_matrix
+            spans = [
+                span
+                for block in page.get_text("dict", clip=rect).get("blocks", [])
+                for line in block.get("lines", [])
+                for span in line.get("spans", [])
+                if span.get("text", "").strip()
+            ]
+        except Exception:
+            return False, 0.0
+        if not spans:
+            return False, 0.0
+        chars = sum(len(sp["text"]) for sp in spans)
+        bold_chars = sum(
+            len(sp["text"]) for sp in spans
+            if sp.get("flags", 0) & 16 or "bold" in sp.get("font", "").lower()
+        )
+        return bold_chars >= 0.6 * chars, max(sp.get("size", 0) for sp in spans)
 
     def _clip_text_from_bbox(self, doc, page_num: int, bbox: List[float]) -> str:
         """
@@ -446,14 +535,9 @@ class TOCReconciliationService:
         if re.match(r'^\d+\.?\s+[A-Z]', title):
             return 1
 
-        # Bbox height as font size proxy (larger = higher level)
-        bbox_height = bbox[3] - bbox[1] if len(bbox) >= 4 else 0
-        if bbox_height > 25:  # Large header
-            return 1
-        elif bbox_height > 18:
-            return 2
-        else:
-            return 2  # Default to level 2 (safe middle ground)
+        # Unnumbered headers sit below chapter level: box height made two-line bold
+        # sentences chapters (A-5.5-05)
+        return 2
 
     def _supplement_high_quality(
         self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
@@ -546,7 +630,8 @@ class TOCReconciliationService:
             elif re.match(r"^chapter\s*[-:]?\s*([ivxlc]+|\d+)\b", title, re.IGNORECASE):
                 level = 1
             result.append([level, title, page])
-        return result
+        # PART-A/B banners next to a chapter would become empty parents
+        return fold_part_rows(result)
 
     def _merge_medium_quality(
         self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
@@ -560,29 +645,25 @@ class TOCReconciliationService:
         """
         emitter = emitter or self._trace_emitter
 
-        # Build Docling lookup
-        docling_lookup = {}
-        for header in docling_headers:
-            key = header["title"].lower().strip()[:30]
-            docling_lookup[key] = header
-
-        # Match existing TOC entries to Docling
-        matched_docling_keys = set()
+        # Match existing TOC entries to Docling headers. Headers are kept as a list:
+        # a title-prefix key dropped repeated real headings (A-5.5-05)
+        matched = set()
         for entry in current_toc:
             entry_key = entry[1].lower().strip()[:30]
-            for dk, dh in docling_lookup.items():
-                similarity = SequenceMatcher(None, entry_key, dk).ratio()
+            for i, header in enumerate(docling_headers):
+                if i in matched:
+                    continue
+                similarity = SequenceMatcher(None, entry_key, header["title"].lower().strip()[:30]).ratio()
                 if similarity >= self.similarity_threshold:
-                    matched_docling_keys.add(dk)
+                    matched.add(i)
                     break
 
         # Add unmatched Docling headers
-        new_entries = []
-        for key, header in docling_lookup.items():
-            if key not in matched_docling_keys:
-                new_entries.append([
-                    header["level"], header["title"], header["page"]
-                ])
+        new_entries = [
+            [self._supplement_level(header, current_toc), header["title"], header["page"]]
+            for i, header in enumerate(docling_headers)
+            if i not in matched
+        ]
 
         merged = current_toc + new_entries
         merged.sort(key=lambda e: (e[2], e[0]))
@@ -608,19 +689,196 @@ class TOCReconciliationService:
             for h in docling_headers
         ]
 
-        if len(docling_toc) >= len(current_toc):
+        if not current_toc:
             logger.info(
                 f"[{report_id}] Replacing low-quality TOC with "
                 f"{len(docling_toc)} Docling headers"
             )
             return docling_toc, "docling_primary"
         else:
-            # Docling found fewer — keep existing but supplement
-            logger.info(
-                f"[{report_id}] Low quality but Docling has fewer entries — "
-                f"falling back to merge strategy"
-            )
+            # A real but short Phase 4 TOC is kept and supplemented, not replaced
+            logger.info(f"[{report_id}] Low quality Phase 4 TOC: merging Docling headers into it")
             return self._merge_medium_quality(current_toc, docling_headers, report_id, emitter)
+
+    # ==================== Heading test, numbering, placement ====================
+
+    def _score(self, toc: List[List], total_pages: int) -> int:
+        result = assess_toc_quality(toc, total_pages)
+        return int(result[0] if isinstance(result, tuple) else result)
+
+    @classmethod
+    def _chapter_number(cls, title: str) -> Optional[int]:
+        """'Chapter-1 …', 'CHAPTER IV', 'I AN OVERVIEW…', 'Part-II' -> number."""
+        title = title.strip()
+        m = cls.CHAPTER_NO_RE.match(title) or re.match(
+            r"^(?:chapter|ch\.)\s*[-–:.]?\s*([ivxlc]+|\d+)\b()", title, re.IGNORECASE
+        )
+        if not m:
+            return None
+        token = m.group(1) or m.group(2)
+        return int(token) if token.isdigit() else roman_to_int(token)
+
+    @classmethod
+    def _section_number(cls, title: str) -> Optional[str]:
+        m = cls.NUMBERED_RE.match(title.strip())
+        return m.group(1) if m else None
+
+    def _admit_headers(
+        self, headers: List[Dict], current_toc: List[List]
+    ) -> Tuple[List[Dict], List[Tuple[Dict, str]]]:
+        """
+        Heading test before any Docling header can join the TOC (A-5.5-01). Docling
+        labels anything bold or large a Section-header: recommendation boxes, finding
+        lead sentences, list items, table row labels.
+
+        - numbered sections ("2.3.1 Title") with at most 20 words, no amount, whose
+          chapter matches the enclosing chapter and whose number does not go backwards;
+        - chapter, part, annexure and appendix headings, and front/back matter titles;
+        - anything else only if it reads like a heading (at most 12 words, no sentence
+          ending, no amount, not an enumerator or a recommendation/source/note line),
+          is not inside a table, occurs once in the report, and is set bold or larger
+          than the body text.
+        """
+        counts: Dict[str, int] = {}
+        for h in headers:
+            key = re.sub(r"[^a-z]", "", h["title"].lower())
+            counts[key] = counts.get(key, 0) + 1
+
+        # Enclosing chapter by page: chapters of the Phase 4 TOC and Docling chapter headers
+        chapter_starts = sorted(
+            [(page, n) for _, title, page in current_toc if (n := self._chapter_number(title))]
+            + [(h["page"], n) for h in headers if (n := self._chapter_number(h["title"]))]
+        )
+        body = getattr(self, "_body_size", 0.0) or 0.0
+
+        admitted, rejected = [], []
+        last_number: Dict[Optional[int], Tuple[int, ...]] = {}
+        for h in headers:
+            title = h["title"].strip()
+            words = len(title.split())
+            chapter = None
+            for page, n in chapter_starts:
+                if page <= h["page"]:
+                    chapter = n
+            numbered = self.NUMBERED_RE.match(title)
+            reason = None
+            if numbered:
+                parts = tuple(int(x) for x in numbered.group(1).split("."))
+                if words > 20:
+                    reason = "long_numbered"
+                elif self.AMOUNT_RE.search(title):
+                    reason = "amount"
+                elif chapter is not None and parts[0] != chapter:
+                    reason = "chapter_mismatch"
+                elif parts < last_number.get(chapter, ()):
+                    reason = "number_backwards"
+                else:
+                    last_number[chapter] = parts
+            elif self.CHAPTER_LIKE_RE.match(title) or title.lower().strip(" .:") in self.FRONT_BACK:
+                reason = None
+            elif words > 12:
+                reason = "long"
+            elif title.endswith((".", ":", ";", ",")):
+                reason = "sentence"
+            elif self.AMOUNT_RE.search(title):
+                reason = "amount"
+            elif self.ENUMERATOR_RE.match(title):
+                reason = "list_item"
+            elif self.NOT_HEADING_START_RE.match(title):
+                reason = "box_or_note"
+            elif h.get("in_table"):
+                reason = "in_table"
+            elif counts.get(re.sub(r"[^a-z]", "", title.lower()), 0) > 1:
+                reason = "repeated"
+            elif not (h.get("bold") or (body and h.get("size", 0) >= body + 1)):
+                reason = "body_style"
+            if reason:
+                rejected.append((h, reason))
+            else:
+                admitted.append(h)
+        return admitted, rejected
+
+    def _dedupe_by_number(self, toc: List[List], current_toc: List[List]) -> List[List]:
+        """
+        One entry per chapter number and per section number (A-5.5-03): "Chapter-3
+        Access to Education" (contents), "Chapter 3 Access to Education" (banner page)
+        and the same title on the first text page become one. The Phase 4 entry wins.
+        """
+        phase4 = {id(e) for e in current_toc}
+        ordered = sorted(toc, key=lambda e: (id(e) not in phase4,))
+        seen_chapters, seen_sections, result = set(), set(), []
+        for entry in ordered:
+            title = str(entry[1])
+            chapter = self._chapter_number(title)
+            section = None if chapter is not None else self._section_number(title)
+            appendix = re.match(r"^(appendix|annexure)\s*[-–:.]?\s*([\w.]+)", title, re.IGNORECASE)
+            if appendix:
+                chapter, section = None, f"{appendix.group(1).lower()}:{appendix.group(2).lower()}"
+            if chapter is not None:
+                if chapter in seen_chapters:
+                    continue
+                seen_chapters.add(chapter)
+            elif section is not None:
+                if section in seen_sections:
+                    continue
+                seen_sections.add(section)
+            result.append(entry)
+        return sorted(result, key=lambda e: (e[2],))
+
+    def _place_entries(
+        self, task: DocumentTask, toc: List[List], headers: List[Dict], heading_positions: Dict
+    ) -> Tuple[List[List], Dict]:
+        """
+        Give every entry a y on its page and order entries by (page, y) (A-5.5-04,
+        B-7-01 b). A Docling header is matched to an entry only on the entry's page
+        (±1), preferring the same section number, and a same-page match is never
+        overwritten. Entries without a header are found on their page by text search.
+        """
+        doc = None
+        pdf = task.ocred_pdf_path or task.local_pdf_path
+        try:
+            doc = fitz.open(pdf) if pdf and Path(pdf).exists() else None
+        except Exception:
+            doc = None
+
+        used = set()
+        placed = []
+        for index, entry in enumerate(toc):
+            level, title, page = entry[0], str(entry[1]), entry[2]
+            number = self._section_number(title) or self._chapter_number(title)
+            best, best_score = None, 0.0
+            for i, h in enumerate(headers):
+                if i in used or abs(h["page"] - page) > 1:
+                    continue
+                h_number = self._section_number(h["title"]) or self._chapter_number(h["title"])
+                if number is not None and h_number == number:
+                    score = 2.0 - 0.1 * abs(h["page"] - page)
+                else:
+                    sim = SequenceMatcher(None, h["title"].lower(), title.lower()).ratio()
+                    score = sim - 0.1 * abs(h["page"] - page) if sim >= 0.8 else 0.0
+                if score > best_score:
+                    best, best_score = i, score
+            y = None
+            if best is not None:
+                used.add(best)
+                y = headers[best]["y_position"]
+                page = headers[best]["page"]
+            elif doc is not None and 0 <= page < len(doc):
+                try:
+                    hits = doc[page].search_for(title[:40])
+                    y = hits[0].y0 if hits else None
+                except Exception:
+                    y = None
+            placed.append(([level, title, page], 0.0 if y is None else y, index, y is not None))
+
+        if doc is not None:
+            doc.close()
+        placed.sort(key=lambda p: (p[0][2], p[1], p[2]))
+        positions = dict(heading_positions)
+        for entry, y, _, known in placed:
+            if known:
+                positions[f"{entry[2]}_{entry[1][:30]}"] = y
+        return [p[0] for p in placed], positions
 
     def _update_heading_positions(
         self, heading_positions: Dict, docling_headers: List[Dict], toc: List[List]
