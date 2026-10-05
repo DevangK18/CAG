@@ -44,7 +44,9 @@ class TestTextExtractor:
 
     def test_ligatures_and_space_before_punctuation(self, text_extractor):
         """Ligatures are expanded and stray spaces before punctuation dropped."""
-        assert text_extractor._normalize_text("eﬀective ﬁnancial") == "effective financial"
+        assert (
+            text_extractor._normalize_text("eﬀective ﬁnancial") == "effective financial"
+        )
         assert text_extractor._normalize_text("audit , period .") == "audit, period."
 
     def test_content_type_classification(self, text_extractor):
@@ -119,7 +121,9 @@ class TestTextExtractor:
         assert result.structured_data is None
 
     @patch.object(TextExtractor, "_extract_text_from_bbox")
-    def test_rotated_page_recorded_in_structured_data(self, mock_extract, text_extractor):
+    def test_rotated_page_recorded_in_structured_data(
+        self, mock_extract, text_extractor
+    ):
         """A non-zero page rotation is kept for the Phase 6 red flag."""
         mock_extract.return_value = ("Text read from a landscape annexure page.", 90)
 
@@ -207,7 +211,9 @@ class TestTextExtractor:
         """A PDF that cannot be opened yields no content rather than an exception."""
         mock_fitz.side_effect = Exception("PDF access error")
 
-        assert text_extractor.extract("test.pdf", 0, [0, 0, 100, 50], label="Text") is None
+        assert (
+            text_extractor.extract("test.pdf", 0, [0, 0, 100, 50], label="Text") is None
+        )
 
     def test_extract_error_recovery(self, text_extractor):
         """Test that extraction failures are handled gracefully."""
@@ -223,3 +229,55 @@ class TestTextExtractor:
             )
 
             assert result is None
+
+
+class TestNormalisationRepairs:
+    """Rupee backtick, line-end hyphens and curly quotes (B-6-06/07/08)."""
+
+    @pytest.fixture
+    def text_extractor(self):
+        return TextExtractor()
+
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("during 2018-\n19 the", "during 2018-19 the"),
+            ("from 2014-15 to 2018-\n 19", "from 2014-15 to 2018-19"),
+            ("COVID-\n19 cases", "COVID-19 cases"),
+            ("Inter-\nState transfers", "Inter-State transfers"),
+            ("imple-\nmentation of", "implementation of"),
+            ("Chapter -\nIV", "Chapter - IV"),
+        ],
+    )
+    def test_line_end_hyphen(self, text_extractor, raw, expected):
+        assert text_extractor._normalize_text(raw) == expected
+
+    def test_curly_quotes(self, text_extractor):
+        raw = "“Audit” of the Government’s ‘scheme’"
+        assert (
+            text_extractor._normalize_text(raw)
+            == "\"Audit\" of the Government's 'scheme'"
+        )
+
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("cost being `  23.89 crore", "cost being ₹ 23.89 crore"),
+            ("of `20 lakh in each case", "of ₹20 lakh in each case"),
+            ("(` in crore)", "(₹ in crore)"),
+            ("[Amount in ` Crore]", "[Amount in ₹ Crore]"),
+            ("Tax Effect (`)", "Tax Effect (₹)"),
+            ("difference of ` one crore", "difference of ₹ one crore"),
+            ("as `NULL` in TMS database", "as `NULL` in TMS database"),
+            ("head `income from other sources'", "head `income from other sources'"),
+        ],
+    )
+    def test_rupee_backtick(self, text_extractor, raw, expected):
+        assert text_extractor._normalize_text(raw) == expected
+
+
+def test_abbreviation_dna_is_not_reversed_text():
+    from src.parsing_pipeline.extractors.text_repair import is_reversed
+
+    assert not is_reversed("| 5. | Muzaffarpur | 52,290 | 81,550 | DNA | DNA | DNA | DNA |")
+    assert is_reversed("tnemtrapeD eht fo eunever dna erutidnepxe")

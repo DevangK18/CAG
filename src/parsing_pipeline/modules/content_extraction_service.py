@@ -968,8 +968,17 @@ class ContentExtractionService:
         merged_elements = self._merge_cross_page_paragraphs(extracted_elements)
 
         # PHASE 2: Apply garbage filtering
+        # Page heights let the filter tell running headers/footers by their band
+        page_heights = None
+        try:
+            import fitz
+
+            with fitz.open(pdf_path) as doc:
+                page_heights = {i: p.rect.height for i, p in enumerate(doc)}
+        except Exception as e:
+            logger.debug(f"Page heights unavailable: {e}")
         valid_content, filtered_content = self.filter_service.filter_extracted_content(
-            merged_elements
+            merged_elements, page_heights=page_heights
         )
 
         # Log filtering stats

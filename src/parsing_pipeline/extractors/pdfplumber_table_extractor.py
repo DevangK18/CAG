@@ -29,6 +29,7 @@ from src.parsing_pipeline.extractors.text_repair import (
     has_cid_shift,
     is_reversed,
     repair_font_shift,
+    repair_rupee_backtick,
 )
 from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
 from src.parsing_pipeline.config import get_config, ContentExtractionConfig
@@ -375,7 +376,7 @@ class PdfplumberTableExtractor:
                     text = " ".join(cell.split())
                     # Strip common artifacts
                     text = text.strip("| \t")
-                    text = repair_font_shift(text)
+                    text = repair_rupee_backtick(repair_font_shift(text))
                     if needs_reversal and text:
                         text = self._reverse_cell_text(text)
                     cleaned_row.append(text)

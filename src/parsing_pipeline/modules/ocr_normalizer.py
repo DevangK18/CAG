@@ -56,11 +56,21 @@ class OcrNormalizer:
         (r"\b(\d)55\s+CFC\b", r"\g<1>5th CFC"),
     ]
 
+    # OCR reads the rupee sign of a table unit line as a symbol or letter:
+    # "(< in crore)", "(Zin crore)", "(@ in lakh)", "(Tin lakh)"
+    RUPEE_UNIT_CORRECTIONS: List[Tuple[str, str]] = [
+        (r"\(\s*[<%=¢@ZT]\s?in\s+(crore|lakh)\s*\)", r"(₹ in \1)"),
+    ]
+
     def __init__(self):
         """Compile regex patterns for efficiency."""
         self._chapter_patterns = [
             (re.compile(pattern), replacement)
             for pattern, replacement in self.CHAPTER_ROMAN_CORRECTIONS
+        ]
+        self._rupee_patterns = [
+            (re.compile(pattern), replacement)
+            for pattern, replacement in self.RUPEE_UNIT_CORRECTIONS
         ]
         self._ordinal_patterns = [
             (re.compile(pattern), replacement)
@@ -84,6 +94,9 @@ class OcrNormalizer:
 
         # Apply chapter Roman numeral corrections
         for pattern, replacement in self._chapter_patterns:
+            result = pattern.sub(replacement, result)
+
+        for pattern, replacement in self._rupee_patterns:
             result = pattern.sub(replacement, result)
 
         # Apply ordinal corrections

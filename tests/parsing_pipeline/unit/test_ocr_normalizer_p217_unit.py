@@ -6,7 +6,10 @@ from Tesseract OCR output.
 """
 
 import pytest
-from src.parsing_pipeline.modules.ocr_normalizer import OcrNormalizer, get_ocr_normalizer
+from src.parsing_pipeline.modules.ocr_normalizer import (
+    OcrNormalizer,
+    get_ocr_normalizer,
+)
 
 
 @pytest.fixture
@@ -70,7 +73,9 @@ class TestChapterRomanNumeralCorrectionsP217:
 
     def test_chapter_with_title(self, normalizer):
         """P2-17: Chapter with additional title text should be corrected."""
-        result = normalizer.normalize_headers("CHAPTER ITI: Financial Audit of Railways")
+        result = normalizer.normalize_headers(
+            "CHAPTER ITI: Financial Audit of Railways"
+        )
 
         assert result == "CHAPTER III: Financial Audit of Railways"
 
@@ -99,7 +104,9 @@ class TestOrdinalCorrectionsP217:
 
     def test_144_cfc_corrected(self, normalizer):
         """P2-17: '144 CFC' should be corrected to '14th CFC'."""
-        result = normalizer.normalize_headers("Recommendations of 144 CFC were implemented")
+        result = normalizer.normalize_headers(
+            "Recommendations of 144 CFC were implemented"
+        )
 
         assert "14th CFC" in result
 
@@ -129,3 +136,20 @@ class TestSingletonPatternP217:
         normalizer2 = get_ocr_normalizer()
 
         assert normalizer1 is normalizer2
+
+
+class TestRupeeUnitCorrections:
+    """OCR misreads of the rupee sign in table unit lines."""
+
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            ("(< in crore)", "(₹ in crore)"),
+            ("(Zin crore)", "(₹ in crore)"),
+            ("(@in lakh)", "(₹ in lakh)"),
+            ("(Tin lakh)", "(₹ in lakh)"),
+            ("(Total in crore)", "(Total in crore)"),
+        ],
+    )
+    def test_unit_line_rupee(self, text, expected):
+        assert OcrNormalizer().normalize_headers(text) == expected
