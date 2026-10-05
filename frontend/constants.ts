@@ -9,6 +9,12 @@
 import { ReportSeries } from './types';
 
 /**
+ * The report-level monetary impact (the headline total of a report's findings)
+ * is hidden until that total is computed correctly.
+ */
+export const SHOW_MONETARY_IMPACT = false;
+
+/**
  * Pre-defined audit series for time series analysis
  * These link related reports across multiple years
  * 

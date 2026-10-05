@@ -176,13 +176,22 @@ jobs:
       - name: Refuse to start while a run is active
         id: guard
         run: |
-          ACTIVE=$(gcloud compute ssh ${{ env.VM_NAME }} \
+          # Only a confirmed active run sets busy (which keeps the VM running). An SSH
+          # failure is reported as such and still lets the stop step run.
+          if ! OUT=$(gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} \
-            --command='if pgrep -f "[r]un_detached.sh" >/dev/null || [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then echo busy; else echo idle; fi' | tail -1)
-          if [ "${ACTIVE}" != "idle" ]; then
+            --command='if pgrep -f "[r]un_detached.sh" >/dev/null || [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then echo busy; else echo idle; fi'); then
+            echo "::error::Could not check for an active run: SSH to ${{ env.VM_NAME }} failed."
+            exit 1
+          fi
+          ACTIVE=$(echo "${OUT}" | tail -1)
+          if [ "${ACTIVE}" = "busy" ]; then
             echo "busy=true" >> $GITHUB_OUTPUT
-            echo "::error::A parsing run is already active on ${{ env.VM_NAME }} (check: ${ACTIVE}). Wait for it to finish."
+            echo "::error::A parsing run is already active on ${{ env.VM_NAME }}. Wait for it to finish."
+            exit 1
+          elif [ "${ACTIVE}" != "idle" ]; then
+            echo "::error::Active-run check returned unexpected output: ${ACTIVE}"
             exit 1
           fi
 

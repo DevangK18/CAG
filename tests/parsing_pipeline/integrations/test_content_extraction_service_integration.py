@@ -244,3 +244,26 @@ def test_progress_reporting(content_service):
         content_service.extract_content(task, progress_callback=progress)
 
     progress.assert_called_once_with(2, 2)
+
+
+def test_skipped_page_furniture_is_not_a_failure(extractors, content_service):
+    """Page headers/footers skipped on purpose leave the status complete, not partial."""
+    _, text, _ = extractors
+    text.extract.return_value = PARAGRAPH
+    task = DocumentTask(
+        report_id="test_report_001",
+        source_url="https://example.com/test.pdf",
+        local_pdf_path="data/raw/synthetic_test.pdf",
+        initial_metadata={},
+        processing_status="layout_complete",
+        layout={
+            1: [
+                {"label": "Page-header", "bbox": [50, 10, 400, 30], "confidence": 0.9},
+                {"label": "Text", "bbox": [100, 300, 500, 350], "confidence": 0.78},
+                {"label": "Page-footer", "bbox": [50, 800, 400, 820], "confidence": 0.9},
+            ]
+        },
+    )
+    result = content_service.extract_content(task)
+    assert result.processing_status == "completed_content_extraction"
+    assert any("2 skipped, 0 failed" in line for line in result.error_log)

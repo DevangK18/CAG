@@ -192,8 +192,15 @@ def _build_executive_summary(metadata: dict, semantic: dict) -> str:
     return "Executive summary not available."
 
 
+# The headline total over a report's findings is not reliable yet (it can count the
+# same money more than once), so the report-level figure is withheld until it is.
+SHOW_MONETARY_IMPACT = False
+
+
 def _format_monetary_impact(semantic: dict) -> Optional[str]:
     """Headline amount as "₹X crore", or None when the report has none."""
+    if not SHOW_MONETARY_IMPACT:
+        return None
     stats = (semantic.get("statistics") or {}).get("findings") or {}
     total = stats.get("total_monetary_crore")
     if total is None:

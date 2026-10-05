@@ -290,6 +290,34 @@ class ContentExtractionService:
             # Don't let DLQ saving fail break the pipeline
             logger.warning(f"Failed to save failed extraction info: {e}")
 
+    def _skip_reason(
+        self, block: Dict, pdf_path: str, page_num: int, is_scanned: bool, emitter=None
+    ) -> Optional[str]:
+        """Why a block is deliberately not extracted (not a failure), or None."""
+        label = block.get("label", "Unknown")
+        if label in self.router and self.router[label] is None:
+            return "noise_label"
+
+        # P2-18: Table blocks on a blank page (native PDFs only). For scanned PDFs
+        # native text is always 0/low but Docling can still detect tables
+        if label == "Table" and not is_scanned:
+            page_text_length = self._get_page_text_length(pdf_path, page_num)
+            if page_text_length < self.BLANK_PAGE_EXTRACTION_THRESHOLD:
+                logger.info(
+                    f"  P2-18: Skipping Table on blank page {page_num} "
+                    f"({page_text_length} chars < {self.BLANK_PAGE_EXTRACTION_THRESHOLD})"
+                )
+                if emitter:
+                    emitter.emit_decision(
+                        "6",
+                        "blank_page_skip",
+                        "skipped",
+                        ["extract", "skipped"],
+                        f"Page {page_num} has {page_text_length} chars < {self.BLANK_PAGE_EXTRACTION_THRESHOLD}",
+                    )
+                return "blank_page_table"
+        return None
+
     def _route_block(
         self, block: Dict, pdf_path: str, page_num: int, report_id: str, is_scanned: bool,
         trace_emitter=None
@@ -316,25 +344,6 @@ class ContentExtractionService:
         bbox = block.get("bbox", [])
         confidence = block.get("confidence")
         emitter = trace_emitter or self._trace_emitter
-
-        # P2-18: Pre-check for blank page (Table blocks only, native PDFs only)
-        # For scanned PDFs, native text is always 0/low but Docling can still detect tables
-        if label == "Table" and not is_scanned:
-            page_text_length = self._get_page_text_length(pdf_path, page_num)
-            if page_text_length < self.BLANK_PAGE_EXTRACTION_THRESHOLD:
-                logger.info(
-                    f"  P2-18: Skipping Table on blank page {page_num} "
-                    f"({page_text_length} chars < {self.BLANK_PAGE_EXTRACTION_THRESHOLD})"
-                )
-                if emitter:
-                    emitter.emit_decision(
-                        "6",
-                        "blank_page_skip",
-                        "skipped",
-                        ["extract", "skipped"],
-                        f"Page {page_num} has {page_text_length} chars < {self.BLANK_PAGE_EXTRACTION_THRESHOLD}",
-                    )
-                return None  # Skip extraction on blank page
 
         # Special routing for Table blocks (3-tier strategy)
         if label == "Table":
@@ -896,6 +905,7 @@ class ContentExtractionService:
 
         processed_blocks = 0
         successful_extractions = 0
+        skipped_blocks: Dict[str, int] = {}
 
         # Iterate through pages in order
         for page_num in sorted(task.layout.keys()):
@@ -903,6 +913,13 @@ class ContentExtractionService:
 
             for block in blocks:
                 processed_blocks += 1
+
+                skip = self._skip_reason(
+                    block, pdf_path, page_num, is_scanned, self._trace_emitter
+                )
+                if skip:
+                    skipped_blocks[skip] = skipped_blocks.get(skip, 0) + 1
+                    continue
 
                 # Route block to appropriate extractor
                 result = self._route_block(
@@ -969,12 +986,11 @@ class ContentExtractionService:
 
         # Calculate processing time and success rate
         processing_time = time.time() - start_time
-        success_rate = (
-            (successful_extractions / processed_blocks * 100)
-            if processed_blocks > 0
-            else 0
-        )
-        failed_count = processed_blocks - successful_extractions
+        # Blocks skipped on purpose (page headers/footers, blank-page tables) are not failures
+        skipped_count = sum(skipped_blocks.values())
+        attempted = processed_blocks - skipped_count
+        success_rate = (successful_extractions / attempted * 100) if attempted > 0 else 0
+        failed_count = attempted - successful_extractions
 
         # Set final status based on extraction failures (not error_log which includes non-fatal warnings)
         # Bug fix: error_log contains garbage filtering messages which are normal cleanup, not failures
@@ -988,7 +1004,8 @@ class ContentExtractionService:
         # Add summary to error log (even on success for metrics)
         summary_msg = (
             f"Content extraction completed: {successful_extractions}/{processed_blocks} blocks "
-            f"({success_rate:.2f}% success) in {processing_time:.1f}s"
+            f"({success_rate:.2f}% success, {skipped_count} skipped, {failed_count} failed) "
+            f"in {processing_time:.1f}s"
         )
         task.error_log.append(summary_msg)
 
@@ -1025,6 +1042,7 @@ class ContentExtractionService:
                     "processed_blocks": processed_blocks,
                     "successful_extractions": successful_extractions,
                     "failed_extractions": failed_count,
+                    "skipped_blocks": skipped_blocks,
                     "filtered_garbage": filtered_count,
                     "valid_content_count": len(valid_content) if valid_content else 0,
                     "success_rate_pct": round(success_rate, 1),
@@ -1034,15 +1052,15 @@ class ContentExtractionService:
             )
 
             # Red flag for high failure rate
-            if failed_count > 0 and processed_blocks > 0:
-                failure_rate = failed_count / processed_blocks
+            if failed_count > 0 and attempted > 0:
+                failure_rate = failed_count / attempted
                 if failure_rate > 0.2:  # More than 20% failures
                     emitter.emit_red_flag(
                         "6",
                         f"High content extraction failure rate ({failure_rate*100:.1f}%)",
                         {
                             "failed_count": failed_count,
-                            "total_blocks": processed_blocks,
+                            "total_blocks": attempted,
                             "failure_rate_pct": round(failure_rate * 100, 1),
                         },
                     )

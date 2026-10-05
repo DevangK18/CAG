@@ -134,16 +134,29 @@ def test_table_disambiguation_labels_first_page():
 # =============================================================================
 
 
+@pytest.fixture
+def show_impact(monkeypatch):
+    monkeypatch.setattr(report_service, "SHOW_MONETARY_IMPACT", True)
+
+
+def test_monetary_impact_hidden_until_headline_total_fixed():
+    semantic = {"statistics": {"findings": {"total_monetary_crore": 1234.5}}}
+    assert report_service._format_monetary_impact(semantic) is None
+
+
+@pytest.mark.usefixtures("show_impact")
 def test_monetary_impact_reads_statistics():
     semantic = {"statistics": {"findings": {"total_monetary_crore": 1234.5}}}
     assert report_service._format_monetary_impact(semantic) == "₹1,234.50 crore"
 
 
+@pytest.mark.usefixtures("show_impact")
 def test_monetary_impact_legacy_key_fallback():
     semantic = {"monetary_statistics": {"total_amount_crore": 12.0}}
     assert report_service._format_monetary_impact(semantic) == "₹12.00 crore"
 
 
+@pytest.mark.usefixtures("show_impact")
 def test_monetary_impact_prefers_current_key():
     semantic = {
         "statistics": {"findings": {"total_monetary_crore": 7.0}},
