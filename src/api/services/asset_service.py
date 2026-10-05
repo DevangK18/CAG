@@ -364,7 +364,7 @@ def extract_charts(report_id: str, use_cache: bool = True) -> List[ChartItem]:
     # ========== PRIMARY: Extract from formal title patterns ==========
     for chunk in child_chunks:
         content_type = chunk.get("content_type", "")
-        if content_type not in ("paragraph", "header"):
+        if content_type not in ("paragraph", "header", "caption"):
             continue
 
         content = chunk.get("content", "").strip()

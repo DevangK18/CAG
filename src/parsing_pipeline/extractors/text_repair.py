@@ -131,20 +131,35 @@ def is_reversed(text: str) -> bool:
     )
 
 
+_MARKER_SPLIT_RE = re.compile(r"(\[\^\d+\])")
+
+
+def _reverse_piece(word: str) -> str:
+    leading = trailing = ""
+    while word and not word[0].isalnum():
+        leading += word[0]
+        word = word[1:]
+    while word and not word[-1].isalnum():
+        trailing = word[-1] + trailing
+        word = word[:-1]
+    return leading + word[::-1] + trailing
+
+
 def reverse_words(text: str) -> str:
     """Reverse each word's characters, keeping line breaks, word order and edge punctuation."""
     lines = []
     for line in text.split("\n"):
         words = []
         for word in line.split():
-            leading = trailing = ""
-            while word and not word[0].isalnum():
-                leading += word[0]
-                word = word[1:]
-            while word and not word[-1].isalnum():
-                trailing = word[-1] + trailing
-                word = word[:-1]
-            words.append(leading + word[::-1] + trailing)
+            # Footnote markers ("[^36]") are not part of the reversed word
+            words.append(
+                "".join(
+                    piece
+                    if _MARKER_SPLIT_RE.fullmatch(piece)
+                    else _reverse_piece(piece)
+                    for piece in _MARKER_SPLIT_RE.split(word)
+                )
+            )
         lines.append(" ".join(words))
     return "\n".join(lines)
 
@@ -408,7 +423,7 @@ def respace_letter_spaced(text: str, vocab: Counter) -> str:
         if run:
             pieces.extend(_segment(run, vocab, total))
         # Attach punctuation to the preceding word; rejoin split numbers ("2 0 2 2", "7. 1")
-        joined = " ".join(pieces)
+        joined = re.sub(r"\s*\[\^\s*(\d+)\s*\]", r"[^\1]", " ".join(pieces))
         joined = re.sub(r"(?<=\d)[ ](?=\d)|(?<=\d\.)[ ](?=\d)", "", joined)
         lines.append(re.sub(r"\s+([,.;:)])", r"\1", re.sub(r"\(\s+", "(", joined)))
     return "\n".join(lines)

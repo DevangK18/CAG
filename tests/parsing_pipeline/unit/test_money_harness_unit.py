@@ -345,3 +345,9 @@ def test_context_classification_uses_own_window(mp):
     assert [c.context for c in classified] == [
         MonetaryContext.FINDING_IMPACT, MonetaryContext.COMPARISON_TARGET,
     ]
+
+
+def test_footnote_marker_between_amount_and_unit(mp):
+    """B-6-19 markers never split an amount from its unit."""
+    values = mp.extract_monetary_values("a loss of ₹ 25[^2] crore and ₹ 1.14 crore[^36] was noticed")
+    assert crores(values) == [1.14, 25.0]

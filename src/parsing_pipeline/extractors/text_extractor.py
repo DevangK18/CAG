@@ -14,6 +14,7 @@ from src.parsing_pipeline.extractors.text_repair import (
     build_vocabulary,
     is_letter_spaced,
     is_reversed,
+    is_rupee_font,
     repair_font_shift,
     repair_rupee_backtick,
     respace_letter_spaced,
@@ -23,6 +24,129 @@ from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 
 
 logger = logging.getLogger(__name__)
+
+# Footnote reference marker written into the text: "₹ 1.14 crore[^36]"
+FOOTNOTE_MARKER_RE = re.compile(r"\[\^(\d+)\]")
+_SUPERSCRIPT_FLAG = 1
+# "10,000 m2", "Cu.m3", "sq.ft2": a raised 2 or 3 after a unit is an exponent
+_EXPONENT_UNIT_RE = re.compile(
+    r"(?:^|[\d\s.])(?:sq\.?)?(?:[kcm]?m|ft)\.?$", re.IGNORECASE
+)
+# "10^15": a raised number after a bare 10 is a power, not a footnote
+_POWER_BASE_RE = re.compile(r"(?:^|[^\d,.])10$")
+
+
+def _line_superscripts(line: dict) -> List[bool]:
+    """Per character of a rawdict line: is it a raised, small digit?"""
+    chars = [(span, c) for span in line["spans"] for c in span["chars"]]
+    sizes = sorted(span["size"] for span, c in chars if not c["c"].isspace())
+    if not sizes:
+        return [False] * len(chars)
+    median = sizes[len(sizes) // 2]
+    baselines = sorted(
+        c["origin"][1] for span, c in chars if span["size"] >= 0.8 * median
+    )
+    baseline = baselines[len(baselines) // 2] if baselines else None
+    flags = []
+    for span, c in chars:
+        raised = span["flags"] & _SUPERSCRIPT_FLAG or (
+            span["size"] < 0.8 * median
+            and baseline is not None
+            and c["origin"][1] < baseline - 0.15 * median
+        )
+        flags.append(bool(raised) and c["c"].isdigit())
+    return flags
+
+
+def _fix_word(
+    chars: List[dict], fonts: List[str], sup: List[bool], first_in_line: bool
+) -> str:
+    """Rebuild one word with footnote markers and the rupee sign."""
+    out = ""
+    i, n = 0, len(chars)
+    while i < n:
+        if not sup[i]:
+            c = chars[i]["c"]
+            out += "₹" if c == "`" and is_rupee_font(fonts[i]) else c
+            i += 1
+            continue
+        j = i
+        while j < n and (sup[j] or (chars[j]["c"] == "," and j + 1 < n and sup[j + 1])):
+            j += 1
+        run = "".join(c["c"] for c in chars[i:j])
+        numbers = re.findall(r"\d+", run)
+        if i == 0 and first_in_line:
+            # The number in front of a footnote's own text stays plain: "36 The ..."
+            out += run + (" " if j < n else "")
+        elif out and _EXPONENT_UNIT_RE.search(out) and set(numbers) <= {"2", "3"}:
+            out += run
+        elif _POWER_BASE_RE.search(out):
+            out += "^" + run
+        elif all(len(num) <= 3 for num in numbers):
+            out += "".join(f"[^{num}]" for num in numbers)
+        else:
+            out += run
+        i = j
+    return out
+
+
+def word_fixes(raw: dict, words: list) -> dict:
+    """
+    {word: repaired word} for the words of a textpage whose superscripts or rupee
+    glyphs need repair. A word whose occurrences would be repaired differently is
+    left alone, since the plain text gives no position to tell them apart.
+    """
+    blocks = {b.get("number"): b for b in raw.get("blocks", []) if b.get("type") == 0}
+    line_words: dict = {}
+    choices: dict = {}
+    for w in words:
+        block = blocks.get(w[5])
+        if block is None or w[6] >= len(block["lines"]):
+            continue
+        key = (w[5], w[6])
+        if key not in line_words:
+            line = block["lines"][key[1]]
+            sup = _line_superscripts(line)
+            items = [
+                (c, span["font"], s)
+                for (span, c), s in zip(
+                    ((span, c) for span in line["spans"] for c in span["chars"]), sup
+                )
+            ]
+            split, current = [], []
+            for item in items:
+                if item[0]["c"].isspace():
+                    if current:
+                        split.append(current)
+                    current = []
+                else:
+                    current.append(item)
+            if current:
+                split.append(current)
+            line_words[key] = split
+        split = line_words[key]
+        if w[7] >= len(split):
+            continue
+        parts = split[w[7]]
+        if "".join(p[0]["c"] for p in parts) != w[4]:
+            continue
+        if not any(p[2] for p in parts) and not any(
+            p[0]["c"] == "`" and is_rupee_font(p[1]) for p in parts
+        ):
+            choices.setdefault(w[4], set()).add(w[4])
+            continue
+        fixed = _fix_word(
+            [p[0] for p in parts],
+            [p[1] for p in parts],
+            [p[2] for p in parts],
+            w[7] == 0,
+        )
+        choices.setdefault(w[4], set()).add(fixed)
+    return {
+        word: fixed.pop()
+        for word, fixed in choices.items()
+        if len(fixed) == 1 and next(iter(fixed)) != word
+    }
 
 
 class TextExtractor:
@@ -174,7 +298,31 @@ class TextExtractor:
         """
         if self._get_page_rotation(page):
             clip_rect = fitz.Rect(clip_rect) * page.derotation_matrix
-        return page.get_text("text", clip=clip_rect, sort=sort)
+        text = page.get_text("text", clip=clip_rect, sort=sort)
+        return self._apply_span_fixes(page, clip_rect, text)
+
+    def _apply_span_fixes(self, page, clip_rect: fitz.Rect, text: str) -> str:
+        """
+        Repair words using what the plain text loses: span flags, sizes and fonts.
+
+        A superscript number after text becomes a footnote marker ("crore36" ->
+        "crore[^36]"); a backtick in a Rupee font becomes "₹". Only the changed words
+        are replaced, so text without either comes out exactly as before.
+        """
+        if not text or not text.strip():
+            return text
+        try:
+            textpage = page.get_textpage(clip=clip_rect, flags=fitz.TEXTFLAGS_TEXT)
+            raw = textpage.extractRAWDICT()
+            words = textpage.extractWORDS()
+        except Exception:
+            return text
+        if not isinstance(raw, dict) or not isinstance(words, list):
+            return text
+        fixes = word_fixes(raw, words)
+        if not fixes:
+            return text
+        return re.sub(r"\S+", lambda m: fixes.get(m.group(0), m.group(0)), text)
 
     def _detect_reversed_content(self, text: str) -> bool:
         """D9-FIX: Detect word-reversed text (see text_repair.is_reversed)."""
@@ -281,13 +429,17 @@ class TextExtractor:
             # Create ExtractedContent object
             # P1-11: Include rotation in structured_data if non-zero
             # C2: Include content_reversed flag if text was reversed
+            # Footnote markers the text refers to, for linking to the footnotes
+            markers = list(dict.fromkeys(FOOTNOTE_MARKER_RE.findall(normalized_text)))
             structured_data = None
-            if rotation != 0 or content_was_reversed:
+            if rotation != 0 or content_was_reversed or markers:
                 structured_data = {}
                 if rotation != 0:
                     structured_data["page_rotation"] = rotation
                 if content_was_reversed:
                     structured_data["content_reversed"] = True
+                if markers:
+                    structured_data["footnote_markers"] = markers
 
             return ExtractedContent(
                 content_type=content_type,

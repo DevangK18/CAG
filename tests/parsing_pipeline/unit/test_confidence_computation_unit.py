@@ -78,7 +78,7 @@ def test_layout_confidence_low(assembly_service, sample_parent_chunks):
 
 
 def test_layout_confidence_missing(assembly_service, sample_parent_chunks):
-    """Test confidence when layout confidence is missing (defaults to 0.5)."""
+    """Without a layout score the factor drops out: TOC and content weigh 0.5 each."""
     child = {
         "content": "This paragraph has no layout confidence metadata.",
         "content_type": "paragraph"
@@ -86,8 +86,8 @@ def test_layout_confidence_missing(assembly_service, sample_parent_chunks):
 
     confidence = assembly_service._compute_chunk_confidence(child, sample_parent_chunks, 80.0)
 
-    # With layout=0.5 (default), toc=0.8, content=1.0: 0.5*0.4 + 0.8*0.3 + 1.0*0.3 = 0.2 + 0.24 + 0.3 = 0.74
-    assert 0.7 <= confidence <= 0.8
+    # toc=0.8, content=1.0: 0.8*0.5 + 1.0*0.5 = 0.9
+    assert confidence == 0.9
 
 
 # ==================== TOC QUALITY TESTS ====================
@@ -115,8 +115,8 @@ def test_toc_quality_low(assembly_service, sample_parent_chunks):
 
     confidence = assembly_service._compute_chunk_confidence(child, sample_parent_chunks, 40.0)
 
-    # With layout=0.5, toc=0.4, content=1.0: 0.5*0.4 + 0.4*0.3 + 1.0*0.3 = 0.2 + 0.12 + 0.3 = 0.62
-    assert confidence < 0.7
+    # toc=0.4, content=1.0: 0.4*0.5 + 1.0*0.5 = 0.7
+    assert confidence == 0.7
 
 
 def test_toc_quality_capped_at_one(assembly_service, sample_parent_chunks):
@@ -129,8 +129,8 @@ def test_toc_quality_capped_at_one(assembly_service, sample_parent_chunks):
     confidence = assembly_service._compute_chunk_confidence(child, sample_parent_chunks, 150.0)
 
     # TOC should be capped at 1.0
-    # With layout=0.5, toc=1.0, content=1.0: 0.5*0.4 + 1.0*0.3 + 1.0*0.3 = 0.2 + 0.3 + 0.3 = 0.8
-    assert confidence == 0.8
+    # toc=1.0, content=1.0 -> 1.0
+    assert confidence == 1.0
 
 
 # ==================== CONTENT QUALITY HEURISTICS TESTS ====================
@@ -146,8 +146,8 @@ def test_content_quality_short_content(assembly_service, sample_parent_chunks):
     confidence = assembly_service._compute_chunk_confidence(child, sample_parent_chunks, 80.0)
 
     # Content score *= 0.5 due to short content
-    # With layout=0.5, toc=0.8, content=0.5: 0.5*0.4 + 0.8*0.3 + 0.5*0.3 = 0.2 + 0.24 + 0.15 = 0.59
-    assert confidence < 0.65
+    # toc=0.8, content=0.5: 0.4 + 0.25 = 0.65
+    assert confidence == 0.65
 
 
 def test_content_quality_table_fragment(assembly_service, sample_parent_chunks):
@@ -160,8 +160,8 @@ def test_content_quality_table_fragment(assembly_service, sample_parent_chunks):
     confidence = assembly_service._compute_chunk_confidence(child, sample_parent_chunks, 80.0)
 
     # 8 numbers, 2 words -> ratio > 2 -> content_score *= 0.7
-    # With layout=0.5, toc=0.8, content=0.7: 0.5*0.4 + 0.8*0.3 + 0.7*0.3 = 0.2 + 0.24 + 0.21 = 0.65
-    assert confidence < 0.7
+    # toc=0.8, content=0.7: 0.4 + 0.35 = 0.75
+    assert confidence == 0.75
 
 
 def test_content_quality_generic_image_caption(assembly_service, sample_parent_chunks):
@@ -203,8 +203,8 @@ def test_content_quality_orphan_assignment(assembly_service, sample_parent_chunk
     confidence = assembly_service._compute_chunk_confidence(child, sample_parent_chunks, 80.0)
 
     # Content score *= 0.6 due to wide parent (>50 pages)
-    # With layout=0.5, toc=0.8, content=0.6: 0.5*0.4 + 0.8*0.3 + 0.6*0.3 = 0.2 + 0.24 + 0.18 = 0.62
-    assert confidence < 0.7
+    # toc=0.8, content=0.6: 0.4 + 0.3 = 0.7
+    assert confidence == 0.7
 
 
 def test_content_quality_good_assignment(assembly_service, sample_parent_chunks):

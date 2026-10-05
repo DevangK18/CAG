@@ -94,6 +94,7 @@ def test_router_initialization(content_service):
     active = {label for label, fn in content_service.router.items() if fn is not None}
     assert active == {
         "Table", "Picture", "Figure", "Text", "Section-header", "Title", "List-item", "Footnote",
+        "Caption",
     }
     assert content_service.router["Page-header"] is None
     assert content_service.router["Page-footer"] is None

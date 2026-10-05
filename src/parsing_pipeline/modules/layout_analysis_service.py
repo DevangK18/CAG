@@ -16,9 +16,32 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMo
 from docling.datamodel.base_models import InputFormat
 
 from src.core.data_contracts import DocumentTask
+from src.parsing_pipeline.modules.captions import parse_caption
 from src.parsing_pipeline.config import get_config, LayoutAnalysisConfig
 
 logger = logging.getLogger(__name__)
+
+# A markdown table separator row: only pipes, dashes, colons and spaces, with a dash
+SEPARATOR_RE = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
+
+
+def normalize_table_markdown(markdown: str) -> str:
+    """
+    Collapse the space padding Docling adds to align columns (B-6-04).
+
+    export_to_markdown pads every cell to its column's widest cell, so one long
+    cell fills the table with hundreds of spaces.
+    """
+    lines = []
+    for line in markdown.split("\n"):
+        if "|" in line:
+            if SEPARATOR_RE.match(line):
+                cells = line.strip().strip("|").split("|")
+                line = "|" + "|".join(" --- " for _ in cells) + "|"
+            else:
+                line = re.sub(r" {2,}", " ", line).rstrip()
+        lines.append(line)
+    return "\n".join(lines)
 
 
 class LayoutAnalysisService:
@@ -27,26 +50,17 @@ class LayoutAnalysisService:
     Updated for Docling v2 compatibility (Provenance & Coordinate systems).
     """
 
-    def __init__(
-        self,
-        confidence_threshold: Optional[float] = None,
-        config: Optional[LayoutAnalysisConfig] = None,
-    ):
+    def __init__(self, config: Optional[LayoutAnalysisConfig] = None):
         """
         Initialize Docling with configuration.
 
         Args:
-            confidence_threshold: Min confidence for layout blocks (overrides config)
             config: LayoutAnalysisConfig instance (default: load from global config)
         """
         # Load from config if not provided
         if config is None:
             config = get_config().layout
 
-        self.confidence_threshold = (
-            confidence_threshold if confidence_threshold is not None
-            else config.confidence_threshold
-        )
         self.table_min_non_empty_cells = config.table_min_non_empty_cells
         self.conversion_timeout = config.conversion_timeout
         self.conversion_timeout_per_page = config.conversion_timeout_per_page
@@ -216,7 +230,7 @@ class LayoutAnalysisService:
                     "docling_config",
                     f"tableformer={self.accelerator_device}",
                     ["cpu", "mps", "cuda"],
-                    f"Confidence threshold: {self.confidence_threshold}",
+                    "Docling labels kept; items carry no layout score",
                 )
 
                 trace_emitter.set_phase_status("5", "success")
@@ -238,112 +252,192 @@ class LayoutAnalysisService:
             return task.local_pdf_path
         return None
 
+    # Docling v2 keeps the element type in item.label (a DocItemLabel); the Python
+    # class is TextItem for captions and footnotes, so the class name is not enough
+    LABEL_MAP = {
+        "page_header": "Page-header",
+        "page_footer": "Page-footer",
+        "section_header": "Section-header",
+        "title": "Title",
+        "text": "Text",
+        "paragraph": "Text",
+        "reference": "Text",
+        "code": "Text",
+        "formula": "Text",
+        "handwritten_text": "Text",
+        "list_item": "List-item",
+        "footnote": "Footnote",
+        "caption": "Caption",
+        "table": "Table",
+        "document_index": "Table",
+        "picture": "Picture",
+        "chart": "Picture",
+    }
+
+    @staticmethod
+    def _label_value(item) -> str:
+        label = getattr(item, "label", None)
+        return getattr(label, "value", None) or str(label or type(item).__name__)
+
+    @staticmethod
+    def _resolve_texts(doc, refs) -> List[tuple]:
+        """(self_ref, text) for caption/footnote references bound to a table or picture."""
+        out = []
+        for ref in refs or []:
+            try:
+                target = ref.resolve(doc)
+            except Exception:
+                continue
+            text = (getattr(target, "text", "") or "").strip()
+            if text:
+                out.append((getattr(target, "self_ref", None), text))
+        return out
+
+    def _box_of(self, doc, self_ref: Optional[str]) -> Optional[List]:
+        """[0-based page, top-left bbox] of an item's first provenance, so Phase 6 can
+        re-read a bound caption or footnote from the PDF."""
+        item = self._items.get(self_ref) if self_ref else None
+        if item is None or not getattr(item, "prov", None):
+            return None
+        prov = item.prov[0]
+        page_item = doc.pages.get(prov.page_no)
+        if not page_item or not hasattr(prov.bbox, "to_top_left_origin"):
+            return None
+        tl = prov.bbox.to_top_left_origin(page_item.size.height)
+        return [prov.page_no - 1, [tl.l, tl.t, tl.r, tl.b]]
+
+    def _nearer_visual(self, ref: Optional[str], owner: str, visual_boxes: List[tuple], doc) -> bool:
+        """True when another table or picture on the caption's page is nearer to it than
+        its owner. Docling sometimes binds the caption printed just above the next table
+        to the table above it."""
+        box = self._box_of(doc, ref)
+        if box is None:
+            return False
+        page, (_, top, _, bottom) = box
+        gaps = {
+            other_ref: max(other[1][1] - bottom, top - other[1][3], 0)
+            for other_ref, other in visual_boxes
+            if other is not None and other[0] == page
+        }
+        if owner not in gaps:
+            return False
+        return any(gap < gaps[owner] for other_ref, gap in gaps.items() if other_ref != owner)
+
     def _convert_docling_doc_to_standard_format(self, doc) -> Dict[int, List[Dict]]:
         """Convert the rich DoclingDocument object into our pipeline's layout format."""
         all_blocks: Dict[int, List[Dict]] = {}
+        # Captions and footnotes Docling bound to a table or picture. A bound "caption"
+        # is only trusted when it reads like one (Docling sometimes binds a running
+        # header, "Report No. 8 of 2025") and no other table or picture is nearer to it
+        bound: Dict[str, str] = {}
+        bindings: Dict[str, tuple] = {}
+        self._items = {getattr(item, "self_ref", None): item for item, _ in doc.iterate_items()}
+        owners = [
+            item
+            for item, _ in doc.iterate_items()
+            if self._label_value(item) in ("table", "document_index", "picture", "chart")
+        ]
+        visual_boxes = [(getattr(item, "self_ref", ""), self._box_of(doc, getattr(item, "self_ref", None)))
+                        for item in owners]
+        for item in owners:
+            owner = getattr(item, "self_ref", "")
+            captions = [
+                (ref, text)
+                for ref, text in self._resolve_texts(doc, getattr(item, "captions", None))
+                if parse_caption(text) and not self._nearer_visual(ref, owner, visual_boxes, doc)
+            ]
+            footnotes = self._resolve_texts(doc, getattr(item, "footnotes", None))
+            bindings[owner] = (captions, footnotes)
+            for ref, _text in captions + footnotes:
+                if ref:
+                    bound[ref] = owner
 
-        # Iterate over all items in the document
         for item, _ in doc.iterate_items():
-            # 1. Validation: Skip items without provenance (geometry)
+            # Skip items without provenance (geometry)
             if not hasattr(item, "prov") or not item.prov:
                 continue
 
-            # 2. Extract Page Number (Docling is 1-based, we want 0-based for PyMuPDF)
-            # We use the first provenance item as the primary location
-            prov = item.prov[0]
-            page_no_1based = prov.page_no
-            page_idx = page_no_1based - 1  # Convert to 0-based index
+            label_value = self._label_value(item)
+            mapped_label = self.LABEL_MAP.get(label_value, "Text")
+            self_ref = getattr(item, "self_ref", None)
 
-            # 3. Coordinate Conversion (Bottom-Left -> Top-Left)
-            # Get the page size to flip the Y-axis if necessary
-            page_item = doc.pages.get(page_no_1based)
-            if not page_item:
-                continue
+            # Every provenance becomes a block: an item continued in another column
+            # or on the next page keeps its second part (B-5-03)
+            for prov_index, prov in enumerate(item.prov):
+                page_no_1based = prov.page_no
+                page_idx = page_no_1based - 1  # 0-based for PyMuPDF
+                page_item = doc.pages.get(page_no_1based)
+                if not page_item:
+                    continue
 
-            page_height = page_item.size.height
+                # Bottom-left -> top-left origin [x0, y0, x1, y1] for PyMuPDF
+                if hasattr(prov.bbox, "to_top_left_origin"):
+                    tl_bbox = prov.bbox.to_top_left_origin(page_item.size.height)
+                    bbox = [tl_bbox.l, tl_bbox.t, tl_bbox.r, tl_bbox.b]
+                else:
+                    b = prov.bbox
+                    bbox = [b.l, b.t, b.r, b.b]
 
-            # Convert bbox to Top-Left origin [x0, y0, x1, y1] for PyMuPDF compatibility
-            # Docling v2 BoundingBox usually has .to_top_left_origin()
-            if hasattr(prov.bbox, "to_top_left_origin"):
-                tl_bbox = prov.bbox.to_top_left_origin(page_height)
-                bbox = [tl_bbox.l, tl_bbox.t, tl_bbox.r, tl_bbox.b]
-            else:
-                # Fallback: assume it's already list-like or simple object
-                # This path is risky if origin is BL, but serves as safety
-                b = prov.bbox
-                bbox = [b.l, b.t, b.r, b.b]
+                # Docling v2 items carry no layout score, so there is no confidence to
+                # filter on; None says so instead of a made-up 1.0 (B-5-02)
+                block = {
+                    "bbox": bbox,
+                    "label": mapped_label,
+                    "confidence": None,
+                    "content_type": label_value,
+                    "docling_label": label_value,
+                    "docling_ref": self_ref,
+                    "prov_index": prov_index,
+                }
+                if self_ref in bound:
+                    block["bound_to"] = bound[self_ref]
 
-            # 4. Filter by Confidence
-            # Some items might not have a score, default to high confidence if missing
-            confidence = getattr(item, "score", 1.0)
-            if confidence is None:
-                confidence = 1.0
+                if prov_index == 0 and self_ref in bindings:
+                    captions, footnotes = bindings[self_ref]
+                    if captions:
+                        block["docling_caption"] = " ".join(t for _, t in captions)
+                        block["docling_caption_boxes"] = [
+                            box for ref, _ in captions for box in [self._box_of(doc, ref)] if box
+                        ]
+                    if footnotes:
+                        block["docling_footnotes"] = [t for _, t in footnotes]
+                        block["docling_footnote_boxes"] = [self._box_of(doc, ref) for ref, _ in footnotes]
 
-            if float(confidence) < self.confidence_threshold:
-                continue
-
-            # 5. Map Label
-            original_label = type(item).__name__.replace("Item", "")
-            mapped_label = self._map_docling_label(original_label)
-
-            block = {
-                "bbox": bbox,
-                "label": mapped_label,
-                "confidence": float(confidence),
-                "content_type": original_label,
-            }
-
-            # V2: Extract Docling TableFormer data (Tier 2 in 3-tier strategy)
-            if original_label == "Table" and hasattr(item, "export_to_markdown"):
-                try:
-                    table_markdown = item.export_to_markdown(doc)
-                    if table_markdown and len(table_markdown.strip()) > 0:
-                        # Quality gate: Reject tables with insufficient non-empty cells
-                        non_empty_cells = self._count_non_empty_cells(table_markdown)
-                        if non_empty_cells >= self.table_min_non_empty_cells:
-                            block["docling_table_markdown"] = table_markdown
-                            block["docling_table_available"] = True
-                        else:
-                            logger.debug(
-                                f"Docling table on page {page_no_1based} rejected: "
-                                f"only {non_empty_cells} non-empty cells (min: {self.table_min_non_empty_cells})"
-                            )
-                            block["docling_table_available"] = False
-                    else:
-                        block["docling_table_available"] = False
-                except Exception as e:
-                    # If export fails, we'll fall back to pdfplumber or Gemini
-                    logger.warning(
-                        f"Docling table export failed on page {page_no_1based}: {e}"
-                    )
-                    block["docling_table_available"] = False
-            else:
                 block["docling_table_available"] = False
+                if mapped_label == "Table" and prov_index == 0 and hasattr(item, "export_to_markdown"):
+                    self._attach_table_markdown(item, doc, block, page_no_1based)
 
-            if page_idx not in all_blocks:
-                all_blocks[page_idx] = []
-            all_blocks[page_idx].append(block)
+                all_blocks.setdefault(page_idx, []).append(block)
 
         return all_blocks
 
+    def _attach_table_markdown(self, item, doc, block: Dict, page_no_1based: int) -> None:
+        """Docling TableFormer markdown for Tier 2, behind the non-empty-cell gate."""
+        try:
+            table_markdown = item.export_to_markdown(doc)
+        except Exception as e:
+            # If export fails, we'll fall back to pdfplumber or Gemini
+            logger.warning(f"Docling table export failed on page {page_no_1based}: {e}")
+            return
+        table_markdown = normalize_table_markdown(table_markdown or "")
+        if not table_markdown.strip():
+            return
+        non_empty_cells = self._count_non_empty_cells(table_markdown)
+        if non_empty_cells >= self.table_min_non_empty_cells:
+            block["docling_table_markdown"] = table_markdown
+            block["docling_table_available"] = True
+        else:
+            logger.debug(
+                f"Docling table on page {page_no_1based} rejected: "
+                f"only {non_empty_cells} non-empty cells (min: {self.table_min_non_empty_cells})"
+            )
+
     def _map_docling_label(self, docling_label: str) -> str:
-        """Map the docling item type name to our router keys."""
-        mapping = {
-            "PageHeader": "Page-header",
-            "PageFooter": "Page-footer",
-            "SectionHeader": "Section-header",
-            "Title": "Title",
-            "Text": "Text",
-            "Table": "Table",
-            "Figure": "Figure",
-            "Picture": "Picture",
-            "ListItem": "List-item",
-            "Footnote": "Footnote",
-            "Caption": "Text",
-            "Code": "Text",
-            "Formula": "Text",
-        }
-        return mapping.get(docling_label, "Text")
+        """Map a DocItemLabel value (or a legacy class name) to our router keys."""
+        legacy = {"SectionHeader": "section_header", "ListItem": "list_item", "PageHeader": "page_header",
+                  "PageFooter": "page_footer", "Figure": "picture"}
+        key = legacy.get(docling_label, docling_label).lower()
+        return self.LABEL_MAP.get(key, "Text")
 
     def _count_non_empty_cells(self, markdown_table: str) -> int:
         """
@@ -354,8 +448,8 @@ class LayoutAnalysisService:
         non_empty_count = 0
 
         for line in markdown_table.strip().split("\n"):
-            # Skip separator lines (e.g., |---|---|)
-            if re.match(r"^\s*\|[\s\-:]+\|\s*$", line):
+            # Skip separator lines (|---|---| or | --- | :---: |): never content
+            if SEPARATOR_RE.match(line):
                 continue
 
             # Extract cell contents between pipes

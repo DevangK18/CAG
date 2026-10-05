@@ -282,7 +282,8 @@ class AssemblyService:
         footnote_index = self._build_footnote_index(assembled_data["child_chunks"])
         assembled_data["footnote_index"] = footnote_index
         if footnote_index:
-            logger.info(f"  Indexed {len(footnote_index)} footnotes")
+            linked = self._link_footnote_refs(assembled_data["child_chunks"], footnote_index)
+            logger.info(f"  Indexed {len(footnote_index)} footnotes, linked {linked} markers")
 
         # Build visual asset registry
         visual_asset_registry = self._build_visual_asset_registry(
@@ -570,10 +571,8 @@ class AssemblyService:
         layout_conf = child.get("metadata", {}).get("extraction", {}).get(
             "layout_confidence", None
         )
-        if layout_conf is None:
-            layout_score = 0.5  # Unknown = neutral
-        else:
-            layout_score = min(1.0, layout_conf)
+        # Docling gives no layout score: the factor drops out instead of counting as 0.5
+        layout_score = None if layout_conf is None else min(1.0, layout_conf)
 
         # Factor 2: TOC quality (normalized to 0-1)
         toc_score = min(1.0, toc_quality_score / 100.0)
@@ -609,11 +608,10 @@ class AssemblyService:
                         content_score *= 0.6
 
         # Weighted composite
-        composite = (
-            layout_score * 0.4
-            + toc_score * 0.3
-            + content_score * 0.3
-        )
+        if layout_score is None:
+            composite = toc_score * 0.5 + content_score * 0.5
+        else:
+            composite = layout_score * 0.4 + toc_score * 0.3 + content_score * 0.3
 
         return round(composite, 3)
 
@@ -697,11 +695,9 @@ class AssemblyService:
                 auto_counter += 1
                 footnote_num = f"auto_{auto_counter}"
 
-            # P2-20: Handle duplicate footnote numbers (overwrite with warning)
+            # Numbering can restart per chapter: a repeated number is keyed by page
             if footnote_num in footnotes:
-                logger.warning(
-                    f"P2-20: Duplicate footnote number '{footnote_num}', overwriting"
-                )
+                footnote_num = f"{footnote_num}@p{chunk.get('source_page_physical')}"
 
             footnotes[footnote_num] = {
                 "chunk_id": chunk.get("chunk_id"),
@@ -712,6 +708,41 @@ class AssemblyService:
             }
 
         return footnotes
+
+    FOOTNOTE_MARKER_RE = re.compile(r"\[\^(\d{1,3})\]")
+
+    def _link_footnote_refs(
+        self, child_chunks: List[Dict], footnote_index: Dict[str, Dict[str, Any]]
+    ) -> int:
+        """
+        Point each "[^N]" marker at its footnote chunk (B-6-19): footnote N on the
+        same page, else the next page (a footnote continued overleaf), else the only
+        footnote N in the report. Unresolved markers keep chunk_id None.
+        """
+        by_number: Dict[str, List[Dict[str, Any]]] = {}
+        for key, entry in footnote_index.items():
+            by_number.setdefault(key.split("@")[0], []).append(entry)
+
+        linked = 0
+        for chunk in child_chunks:
+            if chunk.get("content_type") == "footnote":
+                continue
+            markers = self.FOOTNOTE_MARKER_RE.findall(chunk.get("content") or "")
+            if not markers:
+                continue
+            page = chunk.get("source_page_physical")
+            refs = []
+            for marker in dict.fromkeys(markers):
+                candidates = by_number.get(marker, [])
+                target = next((f for f in candidates if f.get("page_physical") == page), None)
+                if target is None and isinstance(page, int):
+                    target = next((f for f in candidates if f.get("page_physical") == page + 1), None)
+                if target is None and len(candidates) == 1:
+                    target = candidates[0]
+                refs.append({"marker": marker, "chunk_id": target.get("chunk_id") if target else None})
+                linked += target is not None
+            chunk["footnote_refs"] = refs
+        return linked
 
     def _extract_footnote_number(self, content: str) -> Optional[str]:
         """
@@ -774,21 +805,29 @@ class AssemblyService:
             parent = parent_lookup.get(parent_id, {})
             parent_section = parent.get("toc_entry", "")
 
+            structured = chunk.get("structured_data") or {}
+            if not isinstance(structured, dict):
+                structured = {}
+
             if content_type == "table_markdown":
-                # Extract table number and caption from content or context
-                table_num, table_caption = self._extract_table_identity(content, hierarchy)
+                # Caption bound in Phase 6 first, then the content's first line
+                if structured.get("caption"):
+                    table_num = (
+                        f"table_{structured['table_number']}" if structured.get("table_number") else None
+                    )
+                    table_caption = structured["caption"]
+                else:
+                    table_num, table_caption = self._extract_table_identity(content, hierarchy)
 
                 # Count rows/cols from markdown
                 lines = [l for l in content.split('\n') if l.strip().startswith('|')]
                 row_count = max(0, len(lines) - 1)  # Exclude header separator
                 col_count = len(lines[0].split('|')) - 2 if lines else 0  # Exclude edge pipes
 
-                # Check for structured data
-                structured = chunk.get("structured_data")
-
                 tables.append({
                     "table_id": table_num or f"table_p{page}_{len(tables)+1}",
-                    "caption": table_caption or f"Table on page {page + 1}",
+                    "table_number": structured.get("table_number"),
+                    "caption": table_caption or f"Table on page {page_logical or page + 1}",
                     "page_physical": page,
                     "page_logical": page_logical,
                     "bbox": bbox,
@@ -797,7 +836,7 @@ class AssemblyService:
                     "chunk_id": chunk_id,
                     "row_count": row_count,
                     "col_count": col_count,
-                    "has_structured_data": structured is not None,
+                    "has_structured_data": bool(structured),
                 })
 
                 # P1-14c: Track tables by section
@@ -809,19 +848,24 @@ class AssemblyService:
                 extraction_stats[extraction_method] = extraction_stats.get(extraction_method, 0) + 1
 
             elif content_type == "image_caption":
-                # Extract figure number
-                fig_match = re.match(
-                    r'(?:Figure|Fig\.?|Chart|Graph|Diagram|Map)\s*([\d.]+)',
-                    content, re.IGNORECASE
-                )
-                fig_num = f"fig_{fig_match.group(1)}" if fig_match else None
+                caption = structured.get("caption") or content
+                fig_number = structured.get("figure_number")
+                if not fig_number:
+                    fig_match = re.match(
+                        r'(?:Figure|Fig\.?|Chart|Graph|Diagram|Map)\s*([\d.]+)',
+                        caption, re.IGNORECASE
+                    )
+                    fig_number = fig_match.group(1) if fig_match else None
+                fig_num = f"fig_{fig_number}" if fig_number else None
 
-                # Classify visual subtype
-                visual_subtype = self._classify_visual_subtype(content, hierarchy)
+                # Phase 6 classifies the visual; older output is classified here
+                visual_subtype = structured.get("visual_subtype") or self._classify_visual_subtype(
+                    caption, hierarchy
+                )
 
                 figures.append({
                     "figure_id": fig_num or f"fig_p{page}_{len(figures)+1}",
-                    "caption": content[:200],
+                    "caption": caption[:200],
                     "page_physical": page,
                     "page_logical": page_logical,
                     "bbox": bbox,
@@ -869,15 +913,7 @@ class AssemblyService:
         if table_match:
             return f"table_{table_match.group(1)}", table_match.group(2).strip()
 
-        # Check hierarchy for table references
-        for val in hierarchy.values():
-            table_match = re.match(
-                r'(?:Table)\s*([\d.]+)\s*[:\-–]?\s*(.+)',
-                str(val), re.IGNORECASE
-            )
-            if table_match:
-                return f"table_{table_match.group(1)}", table_match.group(2).strip()
-
+        # Section titles are not table captions, so the hierarchy is not searched
         return None, None
 
     def _classify_visual_subtype(self, caption: str, hierarchy: Dict) -> str:

@@ -104,6 +104,7 @@ class ExtractedContent(BaseModel):
         "list",
         "header",
         "footnote",  # P4-1: Footnote capture
+        "caption",  # A table/figure caption that could not be attached to its table or figure
     ] = Field(..., description="The semantic type of the extracted content.")
 
     content: str = Field(..., description="The extracted data itself.")
@@ -140,6 +141,9 @@ class ExtractedContent(BaseModel):
         default=None,
         description="V2: Extraction confidence score 0.0-1.0 from the extractor"
     )
+
+    # Stable Phase 6 block ID, unique within the report ("p012_b003")
+    block_id: Optional[str] = Field(default=None, description="Phase 6 block ID")
 
 
 class ParentChunk(BaseModel):
@@ -205,6 +209,7 @@ class ChildChunk(BaseModel):
         "list",
         "header",
         "footnote",  # P4-1: Footnote capture
+        "caption",
     ] = Field(..., description="Type of content")
     content: str = Field(..., description="The actual extracted content")
 
@@ -251,6 +256,11 @@ class ChildChunk(BaseModel):
     extraction_method: Optional[str] = Field(
         default=None,
         description="V2: Which extraction tier produced this chunk"
+    )
+
+    # Footnotes this chunk refers to: [{"marker": "36", "chunk_id": <footnote chunk>}]
+    footnote_refs: Optional[List[Dict[str, Optional[str]]]] = Field(
+        default=None, description="Footnote markers in the text and the footnote chunks they point to"
     )
 
     # P4-6: Visual subtype classification

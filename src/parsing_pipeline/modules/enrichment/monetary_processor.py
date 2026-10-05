@@ -40,6 +40,8 @@ class MonetaryContext(Enum):
     UNKNOWN = "unknown"  # Could not determine context
 
 
+FOOTNOTE_MARKER_RE = re.compile(r"\[\^\d{1,3}\]")
+
 @dataclass
 class MonetaryValue:
     """Structured representation of monetary amounts.
@@ -428,6 +430,8 @@ class MonetaryProcessor:
         """
         if not text:
             return []
+        # Footnote markers ("₹ 25[^2] crore") are blanked, keeping offsets (B-6-19)
+        text = FOOTNOTE_MARKER_RE.sub(lambda m: " " * len(m.group()), text)
         tokens = [self._token(m) for m in self.TOKEN_PATTERN.finditer(text)]
         tokens = [t for t in tokens if t.currency or t.unit]
         self._share_range_units(text, tokens)
