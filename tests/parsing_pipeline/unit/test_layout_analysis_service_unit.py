@@ -68,7 +68,6 @@ def mock_ocred_task(tmp_path):
 
 def test_init_reads_layout_config(mock_converter_cls):
     config = LayoutAnalysisConfig(
-        confidence_threshold=0.5,
         accelerator_device="cpu",
         table_min_non_empty_cells=4,
         conversion_timeout=60,
@@ -76,20 +75,11 @@ def test_init_reads_layout_config(mock_converter_cls):
     )
     service = LayoutAnalysisService(config=config)
 
-    assert service.confidence_threshold == 0.5
     assert service.accelerator_device == "cpu"
     assert service.table_min_non_empty_cells == 4
     assert service.conversion_timeout == 60
     assert service.conversion_timeout_per_page == 2.0
     mock_converter_cls.assert_called_once()
-
-
-def test_confidence_threshold_argument_overrides_config(mock_converter_cls):
-    service = LayoutAnalysisService(
-        confidence_threshold=0.8,
-        config=LayoutAnalysisConfig(confidence_threshold=0.5, accelerator_device="cpu"),
-    )
-    assert service.confidence_threshold == 0.8
 
 
 def test_converter_failure_raises_runtime_error(mock_converter_cls):
@@ -212,24 +202,19 @@ def test_validate_and_sort_results_reading_order(layout_service):
 
 
 def test_map_docling_label(layout_service):
-    assert layout_service._map_docling_label("PageHeader") == "Page-header"
+    # DocItemLabel values
+    assert layout_service._map_docling_label("page_header") == "Page-header"
+    assert layout_service._map_docling_label("section_header") == "Section-header"
+    assert layout_service._map_docling_label("list_item") == "List-item"
+    assert layout_service._map_docling_label("footnote") == "Footnote"
+    assert layout_service._map_docling_label("caption") == "Caption"
+    assert layout_service._map_docling_label("chart") == "Picture"
+    assert layout_service._map_docling_label("document_index") == "Table"
+    # Legacy class names still map
     assert layout_service._map_docling_label("PageFooter") == "Page-footer"
-    assert layout_service._map_docling_label("SectionHeader") == "Section-header"
     assert layout_service._map_docling_label("ListItem") == "List-item"
-    assert layout_service._map_docling_label("Picture") == "Picture"
-    assert layout_service._map_docling_label("Table") == "Table"
-    assert layout_service._map_docling_label("Caption") == "Text"
     # Unknown item types fall back to Text
     assert layout_service._map_docling_label("UnknownLabel") == "Text"
-
-
-# The separator regex has no inner "|", so a multi-column separator row ("|---|---|")
-# is counted as content and sparse Docling tables pass the quality gate.
-SEPARATOR_BUG = pytest.mark.xfail(
-    strict=True,
-    reason="_count_non_empty_cells counts the cells of a multi-column |---|---| "
-    "separator row as content (fidelity PR)",
-)
 
 
 @pytest.mark.parametrize(
@@ -237,12 +222,22 @@ SEPARATOR_BUG = pytest.mark.xfail(
     [
         ("| A |\n|---|\n| 1 |", 2),
         ("", 0),
-        pytest.param("| A | B |\n|---|---|\n| 1 | 2 |", 4, marks=SEPARATOR_BUG),
-        pytest.param("| A |  |\n|---|---|\n|  |  |", 1, marks=SEPARATOR_BUG),
+        # Separator rows are never content
+        ("| A | B |\n|---|---|\n| 1 | 2 |", 4),
+        ("| A |  |\n| --- | :---: |\n|  |  |", 1),
     ],
 )
 def test_count_non_empty_cells(layout_service, markdown, expected):
     assert layout_service._count_non_empty_cells(markdown) == expected
+
+
+def test_normalize_table_markdown_collapses_padding():
+    from src.parsing_pipeline.modules.layout_analysis_service import normalize_table_markdown
+
+    md = "| Audit observations" + " " * 300 + "| Reply |\n|" + "-" * 320 + "|-------|\n| x" + " " * 318 + "| y |"
+    out = normalize_table_markdown(md)
+    assert "  " not in out
+    assert out.splitlines()[1] == "| --- | --- |"
 
 
 # ── Docling document conversion ─────────────────────────────────────────────
@@ -258,19 +253,32 @@ class _BBox:
         return SimpleNamespace(l=self.l, t=page_height - self.t, r=self.r, b=page_height - self.b)
 
 
-class TextItem:
-    def __init__(self, page_no, bbox, score=None):
-        self.prov = [SimpleNamespace(page_no=page_no, bbox=bbox)]
-        self.score = score
+class _Ref:
+    def __init__(self, target):
+        self.target = target
+
+    def resolve(self, doc):
+        return self.target
 
 
-class SectionHeaderItem(TextItem):
-    pass
+_REFS = iter(range(10_000))
 
 
-class TableItem(TextItem):
+class Item:
+    """Docling-like item: label value, self_ref, provenances."""
+
+    def __init__(self, label, page_no, bbox, text="", provs=None):
+        self.label = SimpleNamespace(value=label)
+        self.self_ref = f"#/items/{next(_REFS)}"
+        self.prov = provs or [SimpleNamespace(page_no=page_no, bbox=bbox)]
+        self.text = text
+        self.captions = []
+        self.footnotes = []
+
+
+class TableItem(Item):
     def __init__(self, page_no, bbox, markdown):
-        super().__init__(page_no, bbox)
+        super().__init__("table", page_no, bbox)
         self._markdown = markdown
 
     def export_to_markdown(self, doc):
@@ -286,7 +294,7 @@ def _docling_doc(items, page_height=800.0):
 
 
 def test_convert_flips_bbox_and_uses_zero_based_pages(layout_service):
-    doc = _docling_doc([TextItem(2, _BBox(50, 700, 300, 650))])
+    doc = _docling_doc([Item("text", 2, _BBox(50, 700, 300, 650))])
 
     result = layout_service._convert_docling_doc_to_standard_format(doc)
 
@@ -294,40 +302,80 @@ def test_convert_flips_bbox_and_uses_zero_based_pages(layout_service):
     block = result[1][0]
     assert block["bbox"] == [50, 100, 300, 150]
     assert block["label"] == "Text"
-    assert block["content_type"] == "Text"
-    assert block["confidence"] == 1.0  # Missing score treated as confident
+    assert block["docling_label"] == "text"
+    assert block["confidence"] is None  # Docling v2 items carry no layout score
     assert block["docling_table_available"] is False
 
 
-def test_convert_maps_item_type_to_label(layout_service):
-    doc = _docling_doc([SectionHeaderItem(1, _BBox(50, 780, 300, 760))])
+@pytest.mark.parametrize(
+    "label,expected",
+    [("section_header", "Section-header"), ("footnote", "Footnote"),
+     ("caption", "Caption"), ("list_item", "List-item"), ("page_footer", "Page-footer")],
+)
+def test_convert_uses_docling_label_not_class(layout_service, label, expected):
+    doc = _docling_doc([Item(label, 1, _BBox(50, 780, 300, 760))])
     block = layout_service._convert_docling_doc_to_standard_format(doc)[0][0]
-    assert block["label"] == "Section-header"
-    assert block["content_type"] == "SectionHeader"
+    assert block["label"] == expected
 
 
-def test_convert_filters_low_confidence(layout_service):
-    layout_service.confidence_threshold = 0.65
-    doc = _docling_doc([
-        TextItem(1, _BBox(50, 700, 300, 650), score=0.4),
-        TextItem(1, _BBox(50, 600, 300, 550), score=0.9),
-    ])
+def test_convert_keeps_every_provenance(layout_service):
+    provs = [SimpleNamespace(page_no=1, bbox=_BBox(50, 100, 300, 50)),
+             SimpleNamespace(page_no=2, bbox=_BBox(50, 780, 300, 700))]
+    item = Item("text", 1, None, provs=provs)
+    result = layout_service._convert_docling_doc_to_standard_format(_docling_doc([item]))
+    assert [b["prov_index"] for b in result[0] + result[1]] == [0, 1]
+    assert result[0][0]["docling_ref"] == result[1][0]["docling_ref"]
 
-    result = layout_service._convert_docling_doc_to_standard_format(doc)
 
-    assert len(result[0]) == 1
-    assert result[0][0]["confidence"] == 0.9
+def test_convert_binds_caption_and_footnote_to_table(layout_service):
+    caption = Item("caption", 1, _BBox(50, 720, 500, 705), text="Table 2.1: Grants released")
+    note = Item("footnote", 1, _BBox(50, 480, 500, 470), text="Source: Finance Accounts")
+    table = TableItem(1, _BBox(50, 700, 500, 500), "| A | B |\n|---|---|\n| 1 | 2 |")
+    table.captions = [_Ref(caption)]
+    table.footnotes = [_Ref(note)]
+    blocks = layout_service._convert_docling_doc_to_standard_format(_docling_doc([caption, table, note]))[0]
+
+    by_label = {b["docling_label"]: b for b in blocks}
+    assert by_label["table"]["docling_caption"] == "Table 2.1: Grants released"
+    assert by_label["table"]["docling_footnotes"] == ["Source: Finance Accounts"]
+    assert by_label["caption"]["bound_to"] == table.self_ref
+    assert by_label["footnote"]["bound_to"] == table.self_ref
+
+
+def test_convert_ignores_running_header_bound_as_caption(layout_service):
+    header = Item("caption", 1, _BBox(50, 790, 500, 780), text="Report No. 8 of 2025")
+    table = TableItem(1, _BBox(50, 700, 500, 500), "| A | B |\n|---|---|\n| 1 | 2 |")
+    table.captions = [_Ref(header)]
+    blocks = layout_service._convert_docling_doc_to_standard_format(_docling_doc([header, table]))[0]
+    by_label = {b["docling_label"]: b for b in blocks}
+    assert "docling_caption" not in by_label["table"]
+    assert "bound_to" not in by_label["caption"]
+
+
+def test_convert_ignores_caption_nearer_to_another_table(layout_service):
+    # "Table 2" is printed just above the second table; Docling bound it to the first
+    cap1 = Item("caption", 1, _BBox(50, 720, 500, 705), text="Table 1: Core grant")
+    first = TableItem(1, _BBox(50, 700, 500, 560), "| A | B |\n|---|---|\n| 1 | 2 |")
+    cap2 = Item("caption", 1, _BBox(50, 545, 500, 530), text="Table 2: Other grants")
+    second = TableItem(1, _BBox(50, 525, 500, 380), "| A | B |\n|---|---|\n| 3 | 4 |")
+    first.captions = [_Ref(cap2)]
+    blocks = layout_service._convert_docling_doc_to_standard_format(
+        _docling_doc([cap1, first, cap2, second])
+    )[0]
+    tables = [b for b in blocks if b["docling_label"] == "table"]
+    assert "docling_caption" not in tables[0]
+    assert all("bound_to" not in b for b in blocks if b["docling_label"] == "caption")
 
 
 def test_convert_skips_items_without_provenance(layout_service):
-    item = TextItem(1, _BBox(0, 10, 10, 0))
+    item = Item("text", 1, _BBox(0, 10, 10, 0))
     item.prov = []
     assert layout_service._convert_docling_doc_to_standard_format(_docling_doc([item])) == {}
 
 
 def test_convert_keeps_docling_table_markdown(layout_service):
     layout_service.table_min_non_empty_cells = 3
-    markdown = "| Year | Amount |\n|---|---|\n| 2022-23 | 120.5 |"
+    markdown = "| Year | Amount |\n| --- | --- |\n| 2022-23 | 120.5 |"
     doc = _docling_doc([TableItem(1, _BBox(50, 700, 500, 500), markdown)])
 
     block = layout_service._convert_docling_doc_to_standard_format(doc)[0][0]
@@ -337,7 +385,6 @@ def test_convert_keeps_docling_table_markdown(layout_service):
     assert block["docling_table_markdown"] == markdown
 
 
-@SEPARATOR_BUG
 def test_convert_rejects_sparse_docling_table(layout_service):
     layout_service.table_min_non_empty_cells = 3
     doc = _docling_doc([TableItem(1, _BBox(50, 700, 500, 500), "| A |  |\n|---|---|\n|  |  |")])

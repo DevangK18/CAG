@@ -127,16 +127,6 @@ class ScaffoldingConfig:
 class LayoutAnalysisConfig:
     """Phase 5: Layout Analysis - AI-powered block detection via Docling."""
 
-    confidence_threshold: float = 0.65
-    """
-    Minimum confidence score to accept a layout block.
-
-    Raising this: Fewer false positives, may miss valid blocks.
-    Lowering this: More blocks detected, increased noise.
-
-    0.65 is a balanced default for CAG reports.
-    """
-
     table_min_non_empty_cells: int = 3
     """
     Minimum non-empty cells to accept a Docling TableFormer extraction.
@@ -196,14 +186,6 @@ class TOCReconciliationConfig:
     Minimum Docling section headers required to enable reconciliation.
 
     If Docling detects fewer headers, reconciliation is skipped.
-    """
-
-    section_header_confidence_threshold: float = 0.60
-    """
-    Minimum confidence for Docling Section-header blocks.
-
-    Lower than general layout confidence (0.65) because section headers
-    are harder to detect with high confidence.
     """
 
     quality_high_threshold: int = 70

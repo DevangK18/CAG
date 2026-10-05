@@ -298,7 +298,9 @@ class RecommendationExtractor:
         for chunk in child_chunks:
             if chunk.get("parent_chunk_id") not in section_ids:
                 continue
-            if chunk.get("content_type") in ("table_markdown", "image_caption", "header"):
+            if chunk.get("content_type") in (
+                "table_markdown", "image_caption", "header", "footnote", "caption",
+            ):
                 continue
 
             content = chunk.get("content", "").strip()
@@ -310,7 +312,10 @@ class RecommendationExtractor:
             has_action = bool(re.search(
                 r'\b(?:should|may\s+consider|must|needs?\s+to|is\s+required|ensure|'
                 r'recommend(?:s|ed)?|review|strengthen|take\s+(?:steps|action|measures)|'
-                r'initiate|improve|complete|institute|expedite|fix)\b',
+                r'initiate|improve|complete|institute|expedite|fix)\b'
+                # "INCOIS may devise …", "MoES may put in place …": now that list
+                # items are separate chunks, each carries its own modal verb
+                r'|\bmay\s+(?!be\b|not\b|have\b)[a-z]+',
                 content, re.IGNORECASE
             ))
             if not has_action:
@@ -433,7 +438,8 @@ class RecommendationExtractor:
         """Verb-pattern extraction as fallback."""
         recs = []
         for chunk in child_chunks:
-            if chunk.get("content_type") in ("table_markdown", "image_caption"):
+            # Footnotes and captions are never recommendations
+            if chunk.get("content_type") in ("table_markdown", "image_caption", "footnote", "caption"):
                 continue
 
             # P1 FIX: Reject verb matches from sections that quote rules, not make recommendations

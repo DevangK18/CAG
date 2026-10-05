@@ -17,18 +17,15 @@ class TestTOCReconciliationInit:
         service = TOCReconciliationService()
         assert service.similarity_threshold == 0.65
         assert service.min_docling_headers == 3
-        assert service.confidence_threshold == 0.60
 
     def test_custom_parameters(self):
         """Service accepts custom configuration."""
         service = TOCReconciliationService(
             similarity_threshold=0.8,
             min_docling_headers=5,
-            confidence_threshold=0.7
         )
         assert service.similarity_threshold == 0.8
         assert service.min_docling_headers == 5
-        assert service.confidence_threshold == 0.7
 
 
 class TestNoLayoutData:
@@ -74,49 +71,49 @@ class TestLevelInference:
     def test_chapter_level_1(self):
         """Chapter headings are level 1."""
         level = self.service._infer_level_from_docling(
-            "Chapter I Introduction", [50, 72, 500, 90], 0.9
+            "Chapter I Introduction", [50, 72, 500, 90]
         )
         assert level == 1
 
     def test_chapter_roman_numerals(self):
         """Chapter with Roman numerals are level 1."""
         level = self.service._infer_level_from_docling(
-            "Chapter IV Audit Findings", [50, 72, 500, 90], 0.9
+            "Chapter IV Audit Findings", [50, 72, 500, 90]
         )
         assert level == 1
 
     def test_annexure_level_1(self):
         """Annexure headings are level 1."""
         level = self.service._infer_level_from_docling(
-            "Annexure A: Details", [50, 72, 500, 90], 0.9
+            "Annexure A: Details", [50, 72, 500, 90]
         )
         assert level == 1
 
     def test_appendix_level_1(self):
         """Appendix headings are level 1."""
         level = self.service._infer_level_from_docling(
-            "Appendix I: Methodology", [50, 72, 500, 90], 0.9
+            "Appendix I: Methodology", [50, 72, 500, 90]
         )
         assert level == 1
 
     def test_executive_summary_level_1(self):
         """Executive Summary is level 1."""
         level = self.service._infer_level_from_docling(
-            "Executive Summary", [50, 72, 500, 90], 0.9
+            "Executive Summary", [50, 72, 500, 90]
         )
         assert level == 1
 
     def test_numbered_section_level_2(self):
         """Numbered sections like 1.1 are level 2."""
         level = self.service._infer_level_from_docling(
-            "1.1 Background", [50, 100, 400, 115], 0.85
+            "1.1 Background", [50, 100, 400, 115]
         )
         assert level == 2
 
     def test_numbered_section_level_3(self):
         """Numbered sections like 1.1.1 are level 3."""
         level = self.service._infer_level_from_docling(
-            "1.1.1 Detailed Analysis", [50, 100, 400, 115], 0.85
+            "1.1.1 Detailed Analysis", [50, 100, 400, 115]
         )
         assert level == 3
 
@@ -124,7 +121,7 @@ class TestLevelInference:
         """Large bounding box implies level 1 heading."""
         # bbox height = 30 (> 25)
         level = self.service._infer_level_from_docling(
-            "Important Section", [50, 60, 500, 90], 0.9
+            "Important Section", [50, 60, 500, 90]
         )
         assert level == 1
 

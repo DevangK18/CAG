@@ -77,11 +77,6 @@ scaffolding:
 # PHASE 5: LAYOUT ANALYSIS (DOCLING)
 # ==============================================================================
 layout:
-  # Minimum confidence to accept layout blocks
-  # Raising this: Fewer false positives, may miss valid blocks
-  # Lowering this: More blocks detected, increased noise
-  confidence_threshold: 0.65
-
   # Minimum non-empty cells to accept Docling TableFormer table
   # Quality gate to reject garbage tables
   table_min_non_empty_cells: 3
@@ -115,10 +110,6 @@ toc_reconciliation:
 
   # Minimum Docling section headers to enable reconciliation
   min_docling_headers: 3
-
-  # Minimum confidence for Docling Section-header blocks
-  # Lower than general layout confidence (section headers are harder to detect)
-  section_header_confidence_threshold: 0.60
 
   # Quality tiers for reconciliation strategy
   # High (>=70): Supplement with Docling
@@ -236,12 +227,10 @@ instrumentation:
 #
 # 1. Faster processing (lower quality):
 #    - triage.text_threshold: 100 (fewer OCR operations)
-#    - layout.confidence_threshold: 0.7 (fewer blocks)
 #    - layout.tableformer_mode: "FAST"
 #
 # 2. Higher accuracy (slower):
 #    - triage.text_threshold: 200 (more aggressive OCR)
-#    - layout.confidence_threshold: 0.60 (more blocks)
 #    - toc_reconciliation.similarity_threshold: 0.70 (stricter matching)
 #
 # 3. GPU acceleration:

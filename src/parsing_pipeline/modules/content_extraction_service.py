@@ -27,9 +27,21 @@ import hashlib
 from src.core.data_contracts import DocumentTask, ExtractedContent
 from src.parsing_pipeline.extractors.pdfplumber_table_extractor import PdfplumberTableExtractor
 from src.parsing_pipeline.extractors.text_extractor import TextExtractor
+from src.parsing_pipeline.modules.captions import (
+    FIGURE_KINDS,
+    TABLE_KINDS,
+    is_source_note,
+    is_table_note,
+    is_unit_line,
+    parse_caption,
+    unit_of,
+)
 from src.parsing_pipeline.modules.chunk_filter_service import ChunkFilterService
+from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
 
 logger = logging.getLogger(__name__)
+
+FOOTNOTE_PREFIX_RE = re.compile(r"^\[Footnote(?: \d+)?\]\s*")
 
 
 class ContentExtractionService:
@@ -88,7 +100,6 @@ class ContentExtractionService:
         self.text_extractor = TextExtractor()
 
         # V2: Cache structured table extractor (used by Docling Tier 2 and pdfplumber)
-        from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
         self.structured_table_extractor = StructuredTableExtractor()
 
         # Build router map: layout label → extraction function
@@ -103,11 +114,13 @@ class ContentExtractionService:
             "Section-header": self.text_extractor.extract,
             "Title": self.text_extractor.extract,
             "List-item": self.text_extractor.extract,
+            "Caption": self.text_extractor.extract,
             "Footnote": self._extract_footnote,
             "Page-header": None,  # Skip noise elements
             "Page-footer": None,  # Skip noise elements
         }
         self.filter_service = ChunkFilterService()
+        self._current_pdf: Optional[str] = None
 
         # Compile continuation patterns
         self._continuation_start = [
@@ -297,6 +310,10 @@ class ContentExtractionService:
         label = block.get("label", "Unknown")
         if label in self.router and self.router[label] is None:
             return "noise_label"
+        # A caption or footnote Docling bound to a table or picture: its text is
+        # attached to that table or picture instead
+        if block.get("bound_to"):
+            return "bound_to_table_or_picture"
 
         # P2-18: Table blocks on a blank page (native PDFs only). For scanned PDFs
         # native text is always 0/low but Docling can still detect tables
@@ -562,12 +579,19 @@ class ContentExtractionService:
                 sup_map = str.maketrans('¹²³⁴⁵⁶⁷⁸⁹⁰', '1234567890')
                 footnote_num = sup_match.group(1).translate(sup_map)
 
+        # A source/note line Docling labelled a footnote is not a footnote
+        if footnote_num is None and is_source_note(content):
+            result.content_type = "paragraph"
+            return result
+
         # Override content_type to "footnote"
         result.content_type = "footnote"
 
-        # Prefix with [Footnote X] for RAG context if number detected
+        # Prefix with [Footnote X] for RAG context if number detected; the number
+        # itself is not repeated in the text
         if footnote_num:
-            result.content = f"[Footnote {footnote_num}] {content}"
+            body = re.sub(r"^(\d{1,3}|[¹²³⁴⁵⁶⁷⁸⁹⁰]+)\s*", "", content, count=1)
+            result.content = f"[Footnote {footnote_num}] {body}"
         else:
             # No number detected, but still tag as footnote
             result.content = f"[Footnote] {content}"
@@ -632,10 +656,8 @@ class ContentExtractionService:
         Returns:
             ExtractedContent with table markdown and structured_data
         """
-        from src.parsing_pipeline.modules.structured_table_extractor import StructuredTableExtractor
-
         # Generate StructuredTable JSON from markdown
-        structured_extractor = StructuredTableExtractor()
+        structured_extractor = self.structured_table_extractor
         table_id = f"table_{page_num}_{int(bbox[0])}_{int(bbox[1])}"
 
         try:
@@ -721,6 +743,181 @@ class ContentExtractionService:
             extraction_method="image-crop-for-gemini",
         )
 
+    def _finish_block(
+        self, result: ExtractedContent, block: Dict, page_num: int, index: int
+    ) -> None:
+        """Block ID, content type from the Docling label, and Docling's bound caption."""
+        result.block_id = f"p{page_num:03d}_b{index:03d}"
+        if block.get("prov_index"):
+            result.block_id += f"_{block['prov_index']}"
+        label = block.get("label")
+        if label == "Caption":
+            result.content_type = "caption"
+        elif label == "List-item" and result.content_type == "paragraph":
+            result.content_type = "list"
+
+        sd = result.structured_data if isinstance(result.structured_data, dict) else None
+        if sd is not None and sd.get("source_chunk_id") in (None, "temp"):
+            sd["source_chunk_id"] = result.block_id
+
+        caption = self._bound_text(block.get("docling_caption_boxes")) or block.get("docling_caption")
+        footnotes = [
+            self._bound_text([box]) or text
+            for box, text in zip(
+                block.get("docling_footnote_boxes") or [None] * len(block.get("docling_footnotes") or []),
+                block.get("docling_footnotes") or [],
+            )
+        ]
+        if caption or footnotes:
+            self._attach(result, caption=caption, footnotes=footnotes)
+
+    def _bound_text(self, boxes: Optional[List]) -> Optional[str]:
+        """Text of bound caption/footnote boxes read through the text extractor."""
+        if not boxes or not self._current_pdf:
+            return None
+        parts = []
+        for box in boxes:
+            if not box:
+                continue
+            page, bbox = box
+            try:
+                extracted = self.text_extractor.extract(
+                    pdf_path=self._current_pdf, page_num=page, bbox=bbox, label="Caption"
+                )
+            except Exception as e:
+                logger.debug(f"Bound text extraction failed on page {page}: {e}")
+                return None
+            if extracted and isinstance(extracted.content, str) and extracted.content.strip():
+                parts.append(extracted.content.strip())
+        return " ".join(parts) or None
+
+    def _attach(
+        self,
+        item: ExtractedContent,
+        caption: Optional[str] = None,
+        unit: Optional[str] = None,
+        footnotes: Optional[List[str]] = None,
+        unit_line: Optional[str] = None,
+    ) -> None:
+        """Fold a caption, unit line or source/note lines into a table or figure."""
+        sd = dict(item.structured_data or {})
+        if caption:
+            parsed = parse_caption(caption) or {}
+            sd["caption"] = " ".join(caption.split())
+            if item.content_type == "table_markdown":
+                sd["table_number"] = parsed.get("number")
+            else:
+                sd["figure_number"] = parsed.get("number")
+        if footnotes:
+            sd["footnotes"] = list(sd.get("footnotes") or []) + [" ".join(f.split()) for f in footnotes]
+
+        if item.content_type == "table_markdown":
+            # Rebuild the table with the caption and unit as leading lines, so the
+            # unit applies to its cells and the caption is in the searchable text
+            markdown = sd.get("markdown_representation") or item.content
+            if unit_line or unit:
+                sd["unit_line"] = " ".join((unit_line or f"({unit})").split())
+            lead = [x for x in (sd.get("caption"), sd.get("unit_line")) if x]
+            body = "\n".join(line for line in markdown.split("\n") if "|" in line)
+            text = "\n".join(lead + [body] + list(sd.get("footnotes") or []))
+            rebuilt = None
+            try:
+                rebuilt = self.structured_table_extractor.extract(
+                    markdown_table=text,
+                    table_id=sd.get("table_id") or f"table_{item.source_page_physical}",
+                    source_chunk_id=sd.get("source_chunk_id") or item.block_id or "",
+                    source_page_physical=item.source_page_physical,
+                    source_bbox=item.source_bbox,
+                )
+            except Exception as e:
+                logger.debug(f"Table rebuild with caption failed: {e}")
+            if rebuilt:
+                keep = {
+                    k: sd[k]
+                    for k in ("caption", "table_number", "footnotes", "unit_line", "table_id",
+                              "source_pages", "is_multi_page")
+                    if k in sd
+                }
+                sd = {**sd, **rebuilt.model_dump(), **keep}
+                if sd.get("caption"):
+                    sd["title"] = sd["caption"]
+            item.content = text
+        else:
+            if unit_line or unit:
+                sd["unit_line"] = " ".join((unit_line or f"({unit})").split())
+            if footnotes:
+                item.content = (item.content.rstrip() + "\n" + "\n".join(footnotes)).strip()
+        item.structured_data = sd
+
+    def _attach_to_tables_and_figures(self, items: List[ExtractedContent]) -> List[ExtractedContent]:
+        """
+        Attach captions, unit lines and source/note lines to the table or figure they
+        belong to (B-7-05, C-8-06, P6-04), on the same page and next to it in reading
+        order: a caption just above (or, failing that, just below), a unit line just
+        above, source/note lines just below. Attached items are dropped as chunks.
+        """
+        used = set()
+        for i, item in enumerate(items):
+            is_table = item.content_type == "table_markdown"
+            is_figure = item.content_type == "image_caption"
+            if not (is_table or is_figure):
+                continue
+            sd = item.structured_data or {}
+            page = item.source_page_physical
+            kinds = TABLE_KINDS if is_table else FIGURE_KINDS
+
+            def neighbour(k):
+                if 0 <= k < len(items) and k not in used:
+                    other = items[k]
+                    if other.source_page_physical == page and other.content_type in (
+                        "paragraph", "header", "caption", "list", "footnote",
+                    ):
+                        return other
+                return None
+
+            # Up to two lines above: caption and/or unit line, in either order
+            caption = unit = unit_line = None
+            for k in (i - 1, i - 2):
+                other = neighbour(k)
+                if other is None:
+                    break
+                text = other.content.strip()
+                parsed = parse_caption(text)
+                if not caption and not sd.get("caption") and parsed and parsed["kind"] in kinds:
+                    caption = text
+                    used.add(k)
+                elif not unit and is_unit_line(text):
+                    unit = unit_of(text)
+                    unit_line = text
+                    used.add(k)
+                else:
+                    break
+            # Caption printed below the table or figure
+            if not caption and not sd.get("caption"):
+                other = neighbour(i + 1)
+                parsed = parse_caption(other.content.strip()) if other else None
+                if parsed and parsed["kind"] in kinds:
+                    caption = other.content.strip()
+                    used.add(i + 1)
+            # Source / note lines below (Docling often labels them footnotes)
+            notes = []
+            for k in range(i + 1, i + 4):
+                other = neighbour(k)
+                note = FOOTNOTE_PREFIX_RE.sub("", other.content.strip()) if other is not None else ""
+                if other is None or not (is_source_note(note) or (is_table and is_table_note(note))):
+                    if other is not None and k == i + 1 and k in used:
+                        continue
+                    break
+                notes.append(note)
+                used.add(k)
+
+            if caption or unit_line or notes:
+                self._attach(item, caption=caption, unit=unit, unit_line=unit_line, footnotes=notes)
+
+        if used:
+            logger.info(f"  Attached {len(used)} caption/unit/source lines to tables and figures")
+        return [item for k, item in enumerate(items) if k not in used]
+
     def _is_continuation_start(self, text: str) -> bool:
         """Check if text starts like a paragraph continuation."""
         if not text or len(text.strip()) < 2:
@@ -790,9 +987,17 @@ class ContentExtractionService:
                 merged.append(content)
                 continue
 
-            # Check if this paragraph should merge with the next
-            if i + 1 < len(sorted_content):
-                next_content = sorted_content[i + 1]
+            # Check if this paragraph should merge with the next. Footnotes at the
+            # foot of the page sit between the two halves in reading order
+            j = i + 1
+            while (
+                j < len(sorted_content)
+                and sorted_content[j].content_type == "footnote"
+                and sorted_content[j].source_page_physical == content.source_page_physical
+            ):
+                j += 1
+            if j < len(sorted_content) and j not in skip_next:
+                next_content = sorted_content[j]
 
                 # Merge conditions:
                 # 1. Next content is on the next page
@@ -813,25 +1018,22 @@ class ContentExtractionService:
                         content.content.rstrip() + " " + next_content.content.lstrip()
                     )
 
-                    # Create new ExtractedContent with merged data
-                    merged_content = ExtractedContent(
-                        content_type="paragraph",
-                        content=merged_text,
-                        source_page_physical=content.source_page_physical,  # Keep original page
-                        source_bbox=content.source_bbox,  # Keep original bbox
-                        model_used=content.model_used,
-                        layout_label=content.layout_label,
-                        layout_confidence=min(
-                            content.layout_confidence or 1.0,
-                            next_content.layout_confidence or 1.0,
-                        ),
-                        # REMEDIATION §3.3: Propagate extraction_method from original content
-                        extraction_method=content.extraction_method,
-                        extraction_confidence=content.extraction_confidence,
-                    )
+                    # Keep the first half's page, bbox, block ID and extraction fields
+                    merged_content = content.model_copy(update={"content": merged_text})
+                    # Footnote markers of both halves (structured_data.footnote_markers)
+                    markers = [
+                        m
+                        for part in (content, next_content)
+                        for m in ((part.structured_data or {}).get("footnote_markers") or [])
+                    ]
+                    if markers:
+                        merged_content.structured_data = {
+                            **(content.structured_data or {}),
+                            "footnote_markers": markers,
+                        }
 
                     merged.append(merged_content)
-                    skip_next.add(i + 1)
+                    skip_next.add(j)
                     merge_count += 1
                     continue
 
@@ -881,6 +1083,7 @@ class ContentExtractionService:
             pdf_path = self._select_pdf_source(task)
             if not pdf_path:
                 raise ValueError("No valid PDF path available")
+            self._current_pdf = pdf_path
         except Exception as e:
             task.processing_status = "failed_content_extraction"
             task.error_log.append(f"PDF preparation failed: {str(e)}")
@@ -911,7 +1114,7 @@ class ContentExtractionService:
         for page_num in sorted(task.layout.keys()):
             blocks = task.layout[page_num]
 
-            for block in blocks:
+            for page_block_index, block in enumerate(blocks):
                 processed_blocks += 1
 
                 skip = self._skip_reason(
@@ -932,6 +1135,7 @@ class ContentExtractionService:
                 )
 
                 if result:
+                    self._finish_block(result, block, page_num, page_block_index)
                     extracted_elements.append(result)
                     successful_extractions += 1
 
@@ -967,6 +1171,9 @@ class ContentExtractionService:
         # Apply cross-page paragraph merging to rejoin split paragraphs
         merged_elements = self._merge_cross_page_paragraphs(extracted_elements)
 
+        # Captions, unit lines and source/note lines join their table or figure
+        merged_elements = self._attach_to_tables_and_figures(merged_elements)
+
         # PHASE 2: Apply garbage filtering
         # Page heights let the filter tell running headers/footers by their band
         page_heights = None
@@ -980,6 +1187,9 @@ class ContentExtractionService:
         valid_content, filtered_content = self.filter_service.filter_extracted_content(
             merged_elements, page_heights=page_heights
         )
+        # Again after the filter: it rejoins split unit lines ("(₹", "in crore)") and
+        # removes running headers that sat between a caption and its table
+        valid_content = self._attach_to_tables_and_figures(valid_content)
 
         # Log filtering stats
         if filtered_content:

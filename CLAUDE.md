@@ -147,6 +147,6 @@ python -m src.module.name
 
 Centralized in `parsing_config.yaml`:
 - Triage: `text_threshold: 150` chars/page
-- Layout: `confidence_threshold: 0.65`, TableFormer ACCURATE mode
+- Layout: Docling labels kept (footnote, caption, list item), TableFormer ACCURATE mode
 - TOC: `similarity_threshold: 0.65`, quality tiers 70/40
 - Monetary: Canonical unit = paise (1e9 paise = ₹1 crore)

@@ -78,7 +78,6 @@ class TOCReconciliationService:
         self,
         similarity_threshold: Optional[float] = None,
         min_docling_headers: Optional[int] = None,
-        confidence_threshold: Optional[float] = None,
         config: Optional[TOCReconciliationConfig] = None,
         trace_emitter=None,
     ):
@@ -86,7 +85,6 @@ class TOCReconciliationService:
         Args:
             similarity_threshold: Min string similarity for title matching (overrides config)
             min_docling_headers: Min Docling headers to consider usable signal (overrides config)
-            confidence_threshold: Min Docling confidence for Section-header block (overrides config)
             config: TOCReconciliationConfig instance (default: load from global config)
             trace_emitter: Optional TraceEmitter for instrumentation
         """
@@ -101,10 +99,6 @@ class TOCReconciliationService:
         self.min_docling_headers = (
             min_docling_headers if min_docling_headers is not None
             else config.min_docling_headers
-        )
-        self.confidence_threshold = (
-            confidence_threshold if confidence_threshold is not None
-            else config.section_header_confidence_threshold
         )
         self.quality_high_threshold = config.quality_high_threshold
         self.quality_medium_threshold = config.quality_medium_threshold
@@ -139,7 +133,6 @@ class TOCReconciliationService:
             {"pages_scanned": len(task.layout)},
             {
                 "docling_headers_total": len(docling_headers),
-                "above_confidence": len([h for h in docling_headers if h.get("confidence", 0) >= self.confidence_threshold]),
             },
         )
 
@@ -339,9 +332,6 @@ class TOCReconciliationService:
                     if block.get("label") != "Section-header":
                         continue
 
-                    if block.get("confidence", 0) < self.confidence_threshold:
-                        continue
-
                     bbox = block.get("bbox")
                     if not bbox or len(bbox) < 4:
                         continue
@@ -362,15 +352,12 @@ class TOCReconciliationService:
                     title = get_ocr_normalizer().normalize_toc_entry(title)
 
                     # Infer hierarchy level
-                    level = self._infer_level_from_docling(
-                        title, bbox, block.get("confidence", 0.8)
-                    )
+                    level = self._infer_level_from_docling(title, bbox)
 
                     headers.append({
                         "title": title,
                         "page": page_num,
                         "y_position": bbox[1],  # y0 = top of header
-                        "confidence": block.get("confidence", 0.8),
                         "bbox": bbox,
                         "level": level,
                     })
@@ -430,9 +417,7 @@ class TOCReconciliationService:
             return ""
         return title
 
-    def _infer_level_from_docling(
-        self, title: str, bbox: List[float], confidence: float
-    ) -> int:
+    def _infer_level_from_docling(self, title: str, bbox: List[float]) -> int:
         """
         Infer hierarchy level from Docling header properties.
 

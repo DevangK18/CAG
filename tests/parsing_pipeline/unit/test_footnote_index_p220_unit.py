@@ -141,7 +141,7 @@ class TestFootnoteIndexTypeP220:
         assert result["auto_2"]["content"] == "A footnote without standard format."
 
     def test_duplicate_footnote_numbers_handled(self, assembly_service):
-        """P2-20: Duplicate footnote numbers should overwrite (later wins)."""
+        """Numbering restarts per chapter: a repeated number is kept, keyed by page."""
         child_chunks = [
             {
                 "content_type": "footnote",
@@ -161,9 +161,28 @@ class TestFootnoteIndexTypeP220:
 
         result = assembly_service._build_footnote_index(child_chunks)
 
-        # Only one "1" key, and it should be the second occurrence
-        assert len(result) == 1
-        assert "1" in result
-        assert result["1"]["content"] == "[Footnote 1] Second occurrence (duplicate)."
-        assert result["1"]["chunk_id"] == "chunk_002"
-        assert result["1"]["page_physical"] == 10
+        assert result["1"]["chunk_id"] == "chunk_001"
+        assert result["1@p10"]["chunk_id"] == "chunk_002"
+
+    def test_markers_link_to_footnote_on_same_page(self, assembly_service):
+        child_chunks = [
+            {"content_type": "footnote", "content": "[Footnote 1] Chapter 1 note.",
+             "chunk_id": "fn_a", "source_page_physical": 5, "hierarchy": {}},
+            {"content_type": "footnote", "content": "[Footnote 1] Chapter 2 note.",
+             "chunk_id": "fn_b", "source_page_physical": 10, "hierarchy": {}},
+            {"content_type": "paragraph", "content": "a loss of ₹ 1.14 crore[^1] was noticed",
+             "chunk_id": "p10", "source_page_physical": 10, "hierarchy": {}},
+            {"content_type": "paragraph", "content": "continued overleaf[^1]",
+             "chunk_id": "p4", "source_page_physical": 4, "hierarchy": {}},
+            {"content_type": "paragraph", "content": "no such note[^9]",
+             "chunk_id": "p6", "source_page_physical": 6, "hierarchy": {}},
+        ]
+        index = assembly_service._build_footnote_index(child_chunks)
+        linked = assembly_service._link_footnote_refs(child_chunks, index)
+
+        by_id = {c["chunk_id"]: c for c in child_chunks}
+        assert by_id["p10"]["footnote_refs"] == [{"marker": "1", "chunk_id": "fn_b"}]
+        assert by_id["p4"]["footnote_refs"] == [{"marker": "1", "chunk_id": "fn_a"}]
+        assert by_id["p6"]["footnote_refs"] == [{"marker": "9", "chunk_id": None}]
+        assert "footnote_refs" not in by_id["fn_a"]
+        assert linked == 2
