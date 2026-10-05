@@ -29,9 +29,6 @@ from src.parsing_pipeline.modules.enrichment.cross_reference_resolver import (
 from src.parsing_pipeline.modules.enrichment.executive_summary_parser import (
     ExecutiveSummaryParser,
 )
-from src.parsing_pipeline.modules.enrichment.contextual_caption_service import (
-    ContextualCaptionService,
-)
 
 __all__ = [
     # New extractors
@@ -50,5 +47,4 @@ __all__ = [
     "AnnexureLinker",
     "CrossReferenceResolver",
     "ExecutiveSummaryParser",
-    "ContextualCaptionService",
 ]

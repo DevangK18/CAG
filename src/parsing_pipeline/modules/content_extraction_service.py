@@ -598,44 +598,113 @@ class ContentExtractionService:
 
         return result
 
-    def _classify_visual_subtype(
-        self, caption: str, hierarchy: Dict, layout_label: str
-    ) -> str:
+    # Caption words that make a "Chart"/"Figure" a diagram rather than a data chart
+    DIAGRAM_WORDS = re.compile(
+        r"organi[sz]ation|organogram|structure|flow|process|framework|hierarchy|set-?up|linkages",
+        re.IGNORECASE,
+    )
+    PHOTO_WORDS = re.compile(r"photo|photograph|picture|site|inspection|view of", re.IGNORECASE)
+    NUMBER_TOKEN = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+    def _classify_visual(self, item: ExtractedContent) -> Optional[str]:
         """
-        P4-6: Classify a visual element's subtype based on caption and context.
+        Visual subtype from the caption and the page itself (B-6-15): chart, map,
+        diagram, photo, non_data, table_as_image, or None when unsure.
 
-        Args:
-            caption: Image caption text
-            hierarchy: Chunk hierarchy dict
-            layout_label: Docling layout label
-
-        Returns:
-            Subtype: "chart", "map", "flowchart", "diagram", "photo", "data_visualization", "unknown"
+        Signals: the caption's kind ("Chart 1.1", "Map 2", "Picture 3.4"), numbers
+        printed inside the picture (vector charts carry their data labels as text),
+        and whether the picture is a single raster image.
         """
-        # Subtype classification keywords
-        VISUAL_SUBTYPE_KEYWORDS = {
-            "chart": ["chart", "graph", "trend", "bar chart", "pie chart", "line graph", "histogram"],
-            "map": ["map", "geographical", "district-wise", "state-wise map", "location"],
-            "flowchart": ["flow chart", "flowchart", "process flow", "workflow", "decision tree"],
-            "diagram": ["diagram", "schematic", "structure", "organization", "org chart"],
-            "photo": ["photograph", "photo", "image of", "construction site", "physical verification"],
-            "table_as_image": ["table", "statement", "annexure"],
-        }
+        sd = item.structured_data or {}
+        if item.layout_label == "Table":
+            return "table_as_image"  # Tier-3 table crop
+        caption = sd.get("caption") or ""
+        parsed = parse_caption(caption) or {}
+        kind = parsed.get("kind")
+        numbers = len(self.NUMBER_TOKEN.findall(sd.get("embedded_text") or ""))
 
-        context = (caption + " " + " ".join(str(v) for v in hierarchy.values())).lower()
-
-        for subtype, keywords in VISUAL_SUBTYPE_KEYWORDS.items():
-            if any(kw in context for kw in keywords):
-                return subtype
-
-        # Fallback: if layout_label is "Figure" it's more likely a chart/diagram
-        # If "Picture" it's more likely a photo
-        if layout_label == "Figure":
-            return "data_visualization"
-        elif layout_label == "Picture":
+        if kind == "map":
+            return "map"
+        if kind in ("picture", "photograph", "photo"):
             return "photo"
+        if kind in ("chart", "graph", "figure", "exhibit", "diagram", "image", "box"):
+            if self.DIAGRAM_WORDS.search(caption) or kind == "diagram":
+                return "diagram"
+            if kind in ("chart", "graph") or numbers >= 6:
+                return "chart"
+            if self.PHOTO_WORDS.search(caption):
+                return "photo"
+            return None
 
-        return "unknown"
+        # No caption: the page decides
+        if numbers >= 6:
+            return "chart"
+        geometry = sd.get("_geometry") or {}
+        if geometry.get("tiny") or (item.source_page_physical == 0 and not caption):
+            return "non_data"
+        if geometry.get("raster_only") and numbers == 0:
+            return "photo"
+        return None
+
+    def _picture_geometry(self, page_num: int, bbox: List[float]) -> Dict[str, bool]:
+        """tiny: under 2% of the page (signatures, emblems, logos); raster_only: one
+        embedded image covers the region and no vector drawing does."""
+        import fitz
+
+        try:
+            with fitz.open(self._current_pdf) as doc:
+                page = doc[page_num]
+                rect = fitz.Rect(bbox)
+                area = max(rect.get_area(), 1.0)
+                tiny = area < 0.02 * page.rect.get_area()
+                covered = 0.0
+                for info in page.get_image_info():
+                    covered = max(covered, (fitz.Rect(info["bbox"]) & rect).get_area() / area)
+                drawings = sum(
+                    1 for d in page.get_drawings() if fitz.Rect(d["rect"]).intersects(rect)
+                )
+        except Exception as e:
+            logger.debug(f"Picture geometry failed on page {page_num}: {e}")
+            return {}
+        return {"tiny": tiny, "raster_only": covered >= 0.8 and drawings < 5}
+
+    def _finish_visuals(self, items: List[ExtractedContent]) -> None:
+        """
+        Final content of picture items, after captions are attached (B-6-14,
+        B-6-15, B-6-18, D-10b-04): never a file path. Content is the caption, the
+        unit line and, for charts, the values printed in the picture; the image
+        path stays in structured_data for Phase 10b.
+        """
+        for item in items:
+            if item.content_type != "image_caption":
+                continue
+            sd = dict(item.structured_data or {})
+            if self._current_pdf and Path(self._current_pdf).exists() and "embedded_text" not in sd:
+                sd["embedded_text"] = self._picture_text(item.source_page_physical, item.source_bbox)
+                sd["_geometry"] = self._picture_geometry(item.source_page_physical, item.source_bbox)
+            item.structured_data = sd
+            subtype = sd.get("visual_subtype") or self._classify_visual(item)
+            sd["visual_subtype"] = subtype
+            sd.pop("_geometry", None)
+
+            parts = [sd.get("caption"), sd.get("unit_line")]
+            if subtype in ("chart", "map", "diagram", None) and sd.get("embedded_text"):
+                parts.append(sd["embedded_text"][:1500])
+            parts += list(sd.get("footnotes") or [])
+            item.content = "\n".join(p for p in parts if p)
+            item.structured_data = sd
+
+    def _picture_text(self, page_num: int, bbox: List[float]) -> str:
+        """Text-layer text inside a picture (data and axis labels of vector charts)."""
+        try:
+            extracted = self.text_extractor.extract(
+                pdf_path=self._current_pdf, page_num=page_num, bbox=bbox, label="Picture"
+            )
+        except Exception as e:
+            logger.debug(f"Picture text extraction failed on page {page_num}: {e}")
+            return ""
+        text = extracted.content if extracted and isinstance(extracted.content, str) else ""
+        return " | ".join(line.strip() for line in text.splitlines() if line.strip())
 
     def _use_docling_table(
         self,
@@ -723,22 +792,19 @@ class ContentExtractionService:
         if not image_path:
             return None
 
-        # Classify visual subtype for downstream processing
-        visual_subtype = self._classify_visual_subtype(
-            caption="",  # No caption yet — Gemini will generate one
-            hierarchy={},
-            layout_label=label,
-        )
-
+        # Content is set once captions are attached (_finish_visuals): never the path
         return ExtractedContent(
-            content_type="image_caption",  # Keep existing content_type for compatibility
-            content=image_path,            # Store image path for Phase 10b
+            content_type="image_caption",
+            content="",
             source_page_physical=page_num,
             source_bbox=bbox,
             model_used="image-crop-for-gemini",
             layout_label=label,
             layout_confidence=kwargs.get("confidence"),
-            structured_data={"visual_subtype": visual_subtype},
+            structured_data={
+                "image_path": image_path,
+                "visual_subtype": "table_as_image" if label == "Table" else None,
+            },
             # P1-14b: Populate extraction_method (will be updated by Phase 10b Gemini)
             extraction_method="image-crop-for-gemini",
         )
@@ -1174,6 +1240,7 @@ class ContentExtractionService:
 
         # Captions, unit lines and source/note lines join their table or figure
         merged_elements = self._attach_to_tables_and_figures(merged_elements)
+        self._finish_visuals(merged_elements)
 
         # PHASE 2: Apply garbage filtering
         # Page heights let the filter tell running headers/footers by their band
@@ -1191,6 +1258,7 @@ class ContentExtractionService:
         # Again after the filter: it rejoins split unit lines ("(₹", "in crore)") and
         # removes running headers that sat between a caption and its table
         valid_content = self._attach_to_tables_and_figures(valid_content)
+        self._finish_visuals(valid_content)
 
         # Log filtering stats
         if filtered_content:

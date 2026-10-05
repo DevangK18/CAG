@@ -1378,34 +1378,35 @@ class PipelineOrchestrator:
         incomplete_total = 0
         sample_incomplete = []
 
+        from src.batch_pipeline.enrichment.gemini_visual_extractor import is_image_path
+
         for chunk_file in chunk_files:
             try:
                 with open(chunk_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-
-                child_chunks = data.get("child_chunks", [])
-                for chunk in child_chunks:
-                    if chunk.get("content_type") == "image_caption":
-                        content = chunk.get("content", "")
-                        # Check if content is still a file path (not hydrated)
-                        if content.startswith("data/extraction_images/") or content.startswith("/"):
-                            incomplete_total += 1
-                            if len(sample_incomplete) < 3:
-                                sample_incomplete.append(chunk.get("chunk_id", "unknown"))
-
+                for chunk in data.get("child_chunks", []):
+                    if chunk.get("content_type") not in ("image_caption", "chart_data_path"):
+                        continue
+                    structured = chunk.get("structured_data") or {}
+                    if structured.get("skipped"):
+                        continue  # photo, non_data, unclassified: not sent on purpose
+                    if structured.get("extraction_error") or is_image_path(chunk.get("content")):
+                        incomplete_total += 1
+                        if len(sample_incomplete) < 3:
+                            sample_incomplete.append(chunk.get("chunk_id", "unknown"))
             except Exception as e:
                 self._log(f"  Warning: Could not validate {chunk_file.name}: {e}")
                 continue
 
         if incomplete_total > 0:
             self._log(
-                f"⚠️  P1-14a: {incomplete_total} image_caption chunks still have file paths (not hydrated)",
+                f"⚠️  P1-14a: {incomplete_total} images failed visual extraction",
                 force=True,
             )
             if emitter:
                 emitter.emit_red_flag(
                     phase="10b",
-                    flag="image_captions_not_hydrated",
+                    flag="image_extraction_failed",
                     details={
                         "count": incomplete_total,
                         "sample": sample_incomplete,
@@ -1413,7 +1414,7 @@ class PipelineOrchestrator:
                 )
             return False
 
-        self._log(f"  ✓ P1-14a: All image_caption chunks hydrated successfully")
+        self._log("  ✓ P1-14a: Every image sent to visual extraction was extracted")
         return True
 
     async def _phase_visual_extraction(self):

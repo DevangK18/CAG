@@ -244,16 +244,6 @@ class AssemblyService:
             ),
         }
 
-        # Replace generic image captions with contextual ones
-        from src.parsing_pipeline.modules.enrichment.contextual_caption_service import ContextualCaptionService
-        caption_service = ContextualCaptionService()
-        total_images, replaced = caption_service.replace_generic_captions(
-            assembled_data["child_chunks"],
-            assembled_data["parent_chunks"],
-        )
-        if replaced > 0:
-            logger.info(f"  Replaced {replaced}/{total_images} generic image captions")
-
         # Annotate chunks with temporal references
         from src.parsing_pipeline.modules.enrichment.temporal_extractor import TemporalExtractor
         temporal_extractor = TemporalExtractor()

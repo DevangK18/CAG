@@ -188,3 +188,45 @@ def test_source_line_labelled_footnote_is_not_a_footnote(service):
     service.text_extractor.extract.return_value = _item("paragraph", "Source: Finance Accounts")
     result = service._extract_footnote("x.pdf", 3, [0, 0, 1, 1])
     assert result.content_type == "paragraph" and result.content == "Source: Finance Accounts"
+# ── Phase 6 pictures (section 7) ────────────────────────────────────────────
+
+
+def _picture(sd, label="Picture", page=5):
+    item = _item("image_caption", "", page=page, sd={"image_path": "data/x.png", **sd})
+    item.layout_label = label
+    return item
+
+
+@pytest.mark.parametrize("sd,expected", [
+    ({"caption": "Chart 1.1: Budget vs expenditure"}, "chart"),
+    ({"caption": "Chart 3.1: Organisational structure of the Department"}, "diagram"),
+    ({"caption": "Map 2.1: Districts covered in audit"}, "map"),
+    ({"caption": "Picture 2.1 (photograph taken on 09.09.2023)"}, "photo"),
+    ({"caption": "Figure 5: Argo float density", "embedded_text": "120 | 340.5 | 2019 | 2020 | 2021 | 2022"}, "chart"),
+    ({"embedded_text": "2018-19 15737.21 | 2019-20 17388.09 | 14161.88 | 15000.2"}, "chart"),
+    ({"_geometry": {"tiny": True}}, "non_data"),
+    ({"_geometry": {"raster_only": True}}, "photo"),
+    ({}, None),
+])
+def test_classify_visual(service, sd, expected):
+    assert service._classify_visual(_picture(sd)) == expected
+
+
+def test_tier3_table_crop_is_table_as_image(service):
+    assert service._classify_visual(_picture({}, label="Table")) == "table_as_image"
+
+
+def test_finish_visuals_content_is_never_a_path(service):
+    chart = _picture({"caption": "Chart 1.1: Budget", "unit_line": "(₹ in crore)",
+                      "embedded_text": "2018-19 | 15737.21 | 2019-20 | 17388.09 | 1 | 2"})
+    photo = _picture({"caption": "Picture 2.1: Dilapidated ceiling", "embedded_text": "12 13 14 15 16 17"})
+    bare = _picture({})
+    service._finish_visuals([chart, photo, bare])
+
+    assert chart.content == "Chart 1.1: Budget\n(₹ in crore)\n2018-19 | 15737.21 | 2019-20 | 17388.09 | 1 | 2"
+    assert chart.structured_data["visual_subtype"] == "chart"
+    assert photo.content == "Picture 2.1: Dilapidated ceiling"  # no stray numbers for photos
+    assert bare.content == ""
+    for item in (chart, photo, bare):
+        assert item.structured_data["image_path"] == "data/x.png"
+        assert "_geometry" not in item.structured_data
