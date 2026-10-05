@@ -53,6 +53,10 @@ class AssemblyService:
         re.compile(r"^Cover$", re.IGNORECASE),
         re.compile(r"^Separator$", re.IGNORECASE),
         re.compile(r"^Title\s+Page$", re.IGNORECASE),
+        # PDF-merger bookmark junk (C-8-09): "Binder1.pdf", "2 TOC", "1 Cover pages"
+        re.compile(r"\.pdf$", re.IGNORECASE),
+        re.compile(r"^Binder\d*$", re.IGNORECASE),
+        re.compile(r"^\d+\.?\s*(TOC|Cover(\s+pages?)?|Front\s+Page|Blank\s+Page|Back\s+Page)\b", re.IGNORECASE),
         # Just a page number
         re.compile(r"^\d+$"),
         # Just dashes
@@ -233,14 +237,16 @@ class AssemblyService:
         )
 
         # Build complete output structure
+        report_metadata = self._build_report_metadata(task, report_year)
         assembled_data = {
-            "report_metadata": self._build_report_metadata(task, report_year),
-            "parent_chunks": self._serialize_parent_chunks(cleaned_parents),
+            "report_metadata": report_metadata,
+            "parent_chunks": self._serialize_parent_chunks(cleaned_parents, report_metadata),
             "child_chunks": self._serialize_child_chunks(
                 child_chunks, task, report_year
             ),
+            # Counts after the cleanup, so they match the file (C-8-05, P7-05)
             "processing_stats": self._build_processing_stats(
-                task, parent_chunks, child_chunks
+                task, cleaned_parents, child_chunks
             ),
         }
 
@@ -299,7 +305,7 @@ class AssemblyService:
                 task.report_id,
                 government_body_type,
                 status="assembled",
-                parent_chunks=len(parent_chunks),
+                parent_chunks=len(cleaned_parents),
                 child_chunks=len(child_chunks),
                 output_path=output_path,
             )
@@ -365,19 +371,22 @@ class AssemblyService:
             "processing_status": task.processing_status,
         }
 
+    TIER_FIELDS = ("government_body_type", "state_name", "department", "audit_category", "report_subtype")
+
     def _serialize_parent_chunks(
-        self, parent_chunks: List[ParentChunk]
+        self, parent_chunks: List[ParentChunk], report_metadata: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Convert parent chunks to JSON-serializable dicts.
-
-        Args:
-            parent_chunks: List of ParentChunk objects
-
-        Returns:
-            List of dictionaries
+        Convert parent chunks to JSON-serializable dicts. The report's tier fields are
+        stamped on every parent, whatever Phase 7 or 7.5 set (C-8-01).
         """
-        return [chunk.dict() for chunk in parent_chunks]
+        out = [chunk.dict() for chunk in parent_chunks]
+        if report_metadata:
+            for parent in out:
+                for key in self.TIER_FIELDS:
+                    if key in report_metadata:
+                        parent[key] = report_metadata[key]
+        return out
 
     def _is_assembly_artifact(self, toc_entry: str) -> bool:
         """
@@ -493,6 +502,8 @@ class AssemblyService:
                 "government_body_type": child.government_body_type,
                 "state_name": child.state_name,
                 "audit_category": child.audit_category,
+                "department": child.department,
+                "report_subtype": child.report_subtype,
                 # Nested metadata (preserved for backward compatibility)
                 "metadata": {
                     "source": {
@@ -513,6 +524,8 @@ class AssemblyService:
                         "government_body_type": child.government_body_type,
                         "state_name": child.state_name,
                         "audit_category": child.audit_category,
+                        "department": child.department,
+                        "report_subtype": child.report_subtype,
                     },
                     "location": {
                         "page_physical": child.source_page_physical,

@@ -166,9 +166,10 @@ class TestMembershipScoping:
         # Content before the first sub-section stays with the original parent
         stay = {c["chunk_id"] for c in out_c if c["parent_chunk_id"] == "p_org"}
         assert stay == {"c01", "c02"}
+        # Level is relative to the enclosing parent: "1.2.1" is one below "… 1.2" (B-7.5-01)
         assert by_title["1.2.1 Structure of the Panchayats"]["hierarchy"] == {
             "level_1": "Organisational setup of PRIs 1.2",
-            "level_3": "1.2.1 Structure of the Panchayats",
+            "level_2": "1.2.1 Structure of the Panchayats",
         }
 
     def test_no_invented_l1_and_no_duplicate_of_existing_parent(self, flat_overlapping):
@@ -337,3 +338,41 @@ class TestTriggerConsistency:
         a = HierarchyEnricher().enrich_hierarchy(parents, children, RID, aggressive=True)
         b = HierarchyEnricher().enrich_hierarchy(parents, children, RID, aggressive=False)
         assert a == b
+
+
+class TestNumberedFit:
+    """Only numbered sections that fit their enclosing parent create parents (B-7.5-01)."""
+
+    @pytest.mark.parametrize("section_id,parent_number,parent_level,expected", [
+        ("5.5.2", "5.5", 2, 3),
+        ("5.5.2.1", "5.5", 2, 4),
+        ("4.1.1", "5.5", 2, None),
+        ("5.5", "5.5", 2, None),
+        ("5.2", "5", 1, 2),
+        ("2.1.1", None, 1, 2),
+    ])
+    def test_fit_level(self, section_id, parent_number, parent_level, expected):
+        assert HierarchyEnricher._fit_level(section_id, parent_number, parent_level) == expected
+
+    @pytest.mark.parametrize("title,number", [
+        ("5.5 Planning and strategy", "5.5"),
+        ("Planning and Strategy of Solid Waste 5.4", "5.4"),
+        ("Chapter V Performance Audit", "5"),
+        ("V PERFORMANCE AUDIT Urban Development", "5"),
+        ("Corporation", None),
+    ])
+    def test_enclosing_number(self, title, number):
+        assert HierarchyEnricher._enclosing_number({"toc_entry": title}) == number
+
+    def test_list_items_never_create_parents(self):
+        org = parent("p_org", "Organisational setup of PRIs 1.2", 1, 10, 12)
+        children = [
+            child("c1", org, 10, 80, "ii Devolution of Funds", "header"),
+            child("c2", org, 10, 120, body(2)),
+            child("c3", org, 11, 80, "(a) Collection of user charges", "header"),
+            child("c4", org, 11, 120, body(4)),
+            child("c5", org, 12, 80, "1.2.1 Structure of the Panchayats", "header"),
+            child("c6", org, 12, 120, body(6)),
+        ]
+        out_p, _ = HierarchyEnricher().enrich_hierarchy([org], children, RID, aggressive=True)
+        assert [p["toc_entry"] for p in out_p if p.get("detected_by")] == ["1.2.1 Structure of the Panchayats"]
