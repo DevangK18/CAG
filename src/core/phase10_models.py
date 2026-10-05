@@ -24,8 +24,8 @@ class Phase10ModelConfig:
     policy: str = "gemini-3.1-pro-preview"
     simple: str = "gemini-3.8-flash"
     # RAPTOR chapter and section summaries
-    chapter_summary: str = "gemini-3.5-flash-lite"
-    section_summary: str = "gemini-3.5-flash-lite"
+    chapter_summary: str = "gemini-3.8-flash"
+    section_summary: str = "gemini-3.8-flash"
     # Phase 10b chart and table extraction
     visual: str = "gemini-3.8-flash"
 

@@ -88,11 +88,11 @@ DATA_DIR=/app/data              # Local data directory
 |-----------|-------|---------------------------|
 | Chat/RAG | gemini-3.8-flash | $0.75 / $3.75 to 2026-12-31, then $1.50 / $7.50 |
 | Overview, 4 summary variants | gemini-3.1-pro-preview | $2.00 / $12.00 (≤200K prompt) |
-| Simple summary, Phase 10b visuals, Phase 9 validation | gemini-3.8-flash | as Chat/RAG |
-| RAPTOR chapter/section summaries | gemini-3.5-flash-lite | $0.30 / $2.50 |
+| Simple summary, RAPTOR chapter/section summaries, Phase 10b visuals, Phase 9 validation | gemini-3.8-flash | as Chat/RAG |
+| Query enhancement, routing, groundedness, canonicalisation | gemini-3.8-flash | as Chat/RAG |
 | Embeddings | text-embedding-005 | $0.00625 |
 
-Phase 10 models are set in `Phase10ModelConfig` (`src/core/config.py`). Every Gemini
+Phase 10 models are set in `Phase10ModelConfig` (`src/core/phase10_models.py`). Every Gemini
 call goes through one adaptive limiter (`src/core/gemini_limiter.py`), configured
 under `gemini:` in `parsing_config.yaml`.
 

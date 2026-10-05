@@ -175,7 +175,7 @@ class QueryReformulator:
     - What was retrieved (to avoid similar terms)
     - Domain knowledge of CAG terminology
 
-    Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+    Default: Gemini 3.8 Flash for GCP credit billing.
     """
 
     def __init__(

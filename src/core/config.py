@@ -179,8 +179,8 @@ class QueryEnhancementConfig:
     # Provider and model (shared single call)
     # Default to Gemini for GCP credit billing
     provider: LLMProvider = LLMProvider.GEMINI
-    model: str = "gemini-3.5-flash-lite"  # Gemini model (cost-effective)
-    gemini_model: str = "gemini-3.5-flash-lite"  # Gemini model
+    model: str = "gemini-3.8-flash"  # Gemini model (cost-effective)
+    gemini_model: str = "gemini-3.8-flash"  # Gemini model
     max_tokens: int = 300
     temperature: float = 0.0
 
@@ -210,7 +210,7 @@ class GroundednessConfig:
     provider: LLMProvider = LLMProvider.GEMINI
     openai_model: str = "gpt-4o-mini"
     claude_model: str = "claude-haiku-4-5-20251001"
-    gemini_model: str = "gemini-3.5-flash-lite"  # Updated from deprecated 2.0-flash
+    gemini_model: str = "gemini-3.8-flash"  # Updated from deprecated 2.0-flash
 
     max_tokens: int = 1500
     min_groundedness_score: float = 0.75  # Fraction of claims that must be grounded
@@ -269,7 +269,7 @@ class EntityGraphConfig:
         )
 
     # Canonicalization model (cross-corpus dedup) - Gemini for GCP billing
-    canonicalization_model: str = "gemini-3.5-flash-lite"
+    canonicalization_model: str = "gemini-3.8-flash"
     canonicalization_batch_size: int = 80  # entities per LLM call
 
     # Auto-index on chunk indexing? If True, indexer.py also writes to entity graph
@@ -285,7 +285,7 @@ class EntityGraphConfig:
     # Only triggers pass 2 if raw record count exceeds this threshold
     two_pass_threshold: int = 1000
     pass2_batch_size: int = 250
-    pass2_model: str = "gemini-3.5-flash-lite"  # Gemini for GCP billing
+    pass2_model: str = "gemini-3.8-flash"  # Gemini for GCP billing
 
     def __post_init__(self):
         self.dsn = os.getenv("ENTITY_GRAPH_DSN", self.dsn)
@@ -394,7 +394,7 @@ class QueryRoutingConfig:
     enabled: bool = True
 
     # Classification model - Gemini for GCP credit billing
-    model: str = "gemini-3.5-flash-lite"
+    model: str = "gemini-3.8-flash"
     max_tokens: int = 200
     temperature: float = 0.0
 
@@ -446,7 +446,7 @@ class CorrectiveRAGConfig:
 
     # Query reformulation - Gemini for GCP credit billing
     max_reformulations: int = 2
-    reformulation_model: str = "gemini-3.5-flash-lite"
+    reformulation_model: str = "gemini-3.8-flash"
 
     # Citation validation
     validate_citations: bool = True

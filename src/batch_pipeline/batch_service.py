@@ -999,7 +999,7 @@ class BatchService:
         - Chapter summaries (L2): ~23 per report average
         - Section summaries (L1): ~50 per report average
 
-        Uses Gemini Flash-Lite (direct calls).
+        Uses Gemini Flash (direct calls).
 
         Args:
             json_files: List of *_chunks.json file paths

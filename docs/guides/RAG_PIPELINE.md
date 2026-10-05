@@ -232,8 +232,8 @@ The RAG pipeline implements four state-of-the-art retrieval techniques for impro
 4. Reduces LLM token usage by 60-80% for overview queries
 
 **Configuration:** `hierarchical` section in config
-- `chapter_model`: `gemini-3.5-flash-lite` (cost-efficient summaries)
-- `section_model`: `gemini-3.5-flash-lite`
+- `chapter_model`: `gemini-3.8-flash`
+- `section_model`: `gemini-3.8-flash`
 - `drill_down_threshold`: 0.85
 
 **Endpoint:** `GET /reports/{report_id}/hierarchical?level=1-2&limit=20`
@@ -255,13 +255,13 @@ The RAG pipeline implements four state-of-the-art retrieval techniques for impro
 | `summary_only` | Overview queries | Route to RAPTOR summaries |
 
 **Implementation:**
-1. LLM classifier analyzes query (gemini-3.5-flash-lite)
+1. LLM classifier analyzes query (gemini-3.8-flash)
 2. Returns route + confidence score
 3. Falls back to `standard_rag` if confidence < 0.7
 4. No additional latency (classifier runs in parallel with embedding)
 
 **Configuration:** `query_routing` section
-- `model`: `gemini-3.5-flash-lite`
+- `model`: `gemini-3.8-flash`
 - `confidence_threshold`: 0.7
 - `enabled`: true
 
@@ -303,7 +303,7 @@ The RAG pipeline implements four state-of-the-art retrieval techniques for impro
 
 2. **QueryReformulator:** Rewrites queries when retrieval quality is low
    - Max reformulations: 2
-   - Model: `gemini-3.5-flash-lite`
+   - Model: `gemini-3.8-flash`
    - Strategies: add specificity, remove ambiguity, synonym expansion
 
 3. **CitationValidator:** Validates citations in generated answers
@@ -434,7 +434,7 @@ graph TB
 
 | Library | Purpose |
 |---------|---------|
-| **Google GenAI** | Default LLM provider: `gemini-3.5-flash` (chat), `gemini-3.5-flash-lite` (routing, enhancement, verification) |
+| **Google GenAI** | Default LLM provider: `gemini-3.5-flash` (chat), `gemini-3.8-flash` (routing, enhancement, verification) |
 | **Google Vertex AI** | Dense embeddings (`text-embedding-005`) when `USE_VERTEX_EMBEDDINGS=true` |
 | **OpenAI** | Alternative embeddings (`text-embedding-3-large`), LLM generation (`gpt-4o`), Table summaries (`gpt-4o-mini`) |
 | **Anthropic** | Alternative LLM generation (`claude-sonnet-5`, `claude-haiku-4-5-20251001`) |

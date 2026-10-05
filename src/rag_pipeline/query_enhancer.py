@@ -7,7 +7,7 @@ Single LLM call that provides:
 3. Filter suggestions (report_id hints, finding_type, temporal scope)
 4. Retrieval parameter recommendations (top_k, context_limit)
 
-Default: Gemini 3.5 Flash-Lite for GCP credit billing.
+Default: Gemini 3.8 Flash for GCP credit billing.
 Cost: ~$0.0001/query (Gemini) - minimal cost for query enhancement
 """
 
