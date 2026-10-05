@@ -27,7 +27,11 @@ from src.core.data_contracts import (
 logger = logging.getLogger(__name__)
 from src.core.table_contracts import StructuredTable
 from src.parsing_pipeline.config import get_config
-from src.parsing_pipeline.modules.multi_page_table_handler import MultiPageTableHandler
+from src.parsing_pipeline.modules.multi_page_table_handler import (
+    GapPageProbe,
+    MultiPageTableHandler,
+    heading_section_keys,
+)
 
 # A line like this between two tables means the second is a new table, not a continuation
 TABLE_TITLE_RE = re.compile(
@@ -152,56 +156,12 @@ class ChunkingService:
 
         return (parent_chunks, child_chunks)
 
-    def _build_section_page_ranges(self, task: DocumentTask) -> Dict[str, Tuple[int, int]]:
-        """
-        M1 fix: Build section page ranges from TOC scaffold.
-
-        Creates a mapping of potential parent chunk IDs to their page ranges,
-        which is used for accurate multi-page table missing page detection.
-
-        Args:
-            task: DocumentTask with scaffold
-
-        Returns:
-            Dict mapping position_key to (start_page, end_page) tuples
-        """
-        if not task.scaffold or "toc" not in task.scaffold:
-            return {}
-
-        toc = task.scaffold["toc"]
-        if not toc:
-            return {}
-
-        # Calculate max page from extracted content
-        max_page = 0
-        if task.extracted_content:
-            pages = [c.source_page_physical for c in task.extracted_content]
-            max_page = max(pages) if pages else 0
-
-        section_ranges = {}
-
-        for i, toc_entry in enumerate(toc):
-            level, title, page_physical = toc_entry[:3]
-            start_page = page_physical
-            position_key = f"{start_page}_{title[:30]}"
-
-            # Calculate end_page (same logic as _create_parent_chunks)
-            end_page = max_page
-
-            for j in range(i + 1, len(toc)):
-                next_level, next_title, next_page = toc[j][:3]
-                if next_level <= level:
-                    end_page = max(start_page, next_page - 1)
-                    break
-
-            if end_page < start_page:
-                end_page = start_page
-
-            section_ranges[position_key] = (start_page, end_page)
-
-        return section_ranges
-
-    def _merge_multi_page_tables(self, task: DocumentTask, trace_emitter=None) -> int:
+    def _merge_multi_page_tables(
+        self,
+        task: DocumentTask,
+        trace_emitter=None,
+        section_keys: Optional[Dict[str, Optional[str]]] = None,
+    ) -> int:
         """
         Merge multi-page tables in extracted content (P0-3).
 
@@ -212,6 +172,9 @@ class ChunkingService:
         Args:
             task: DocumentTask with extracted_content
             trace_emitter: Optional TraceEmitter for DLQ red flags (B4 fix)
+            section_keys: B-6-01: section key per table, keyed by the table's
+                source_chunk_id (Phase 6 block ID); None for a table means unknown.
+                Defaults to the last heading before each table in reading order.
 
         Returns:
             Number of multi-page tables merged
@@ -248,18 +211,45 @@ class ChunkingService:
         # Extract just the StructuredTable objects for merging
         structured_tables = [st for _, st in table_items]
 
-        # M1 fix: Build section page ranges for accurate missing page detection
-        section_page_ranges = self._build_section_page_ranges(task)
+        if section_keys is None:
+            section_keys = heading_section_keys(task.extracted_content, self._reading_order_key)
+
+        # B-6-02: a page between two tables is flagged as lost only if it holds a table
+        # that no extracted item accounts for
+        pdf_path = (
+            task.ocred_pdf_path
+            if task.classification == "scanned" and task.ocred_pdf_path
+            else task.local_pdf_path
+        )
+        layout_table_pages = {
+            int(page)
+            for page, blocks in (task.layout or {}).items()
+            if any(block.get("label") == "Table" for block in blocks)
+        }
+        extracted_table_pages = {
+            item.source_page_physical
+            for item in task.extracted_content
+            if item.layout_label == "Table" or item.content_type == "table_markdown"
+        }
+        figure_boxes: Dict[int, List[List[float]]] = {}
+        for item in task.extracted_content:
+            if item.content_type == "image_caption" and item.source_bbox:
+                figure_boxes.setdefault(item.source_page_physical, []).append(item.source_bbox)
+        probe = GapPageProbe(pdf_path, extracted_table_pages, figure_boxes)
 
         # Run multi-page detection and merging
         # B4 fix: Pass trace_emitter for DLQ red flags on missing pages
-        # M1 fix: Pass section_page_ranges for boundary-aware missing page detection
-        merged_tables = self.multi_page_handler.detect_and_merge(
-            structured_tables,
-            trace_emitter,
-            section_page_ranges=section_page_ranges,
-            contiguous_pairs=self._find_contiguous_table_pairs(task.extracted_content),
-        )
+        try:
+            merged_tables = self.multi_page_handler.detect_and_merge(
+                structured_tables,
+                trace_emitter,
+                contiguous_pairs=self._find_contiguous_table_pairs(task.extracted_content),
+                section_keys=section_keys,
+                gap_page_probe=probe,
+                lost_table_pages=layout_table_pages - extracted_table_pages,
+            )
+        finally:
+            probe.close()
 
         # Get statistics
         stats = self.multi_page_handler.get_statistics()
@@ -295,20 +285,15 @@ class ChunkingService:
             if merged_table is None:
                 new_extracted_content.append(item)
                 continue
+            # A copy of the base item keeps its other fields (block ID, logical page,
+            # provenance); only the table content changes
             new_extracted_content.append(
-                ExtractedContent(
-                    content_type=item.content_type,
-                    content=merged_table.markdown_representation,
-                    source_page_physical=merged_table.source_page_physical,
-                    source_bbox=merged_table.source_bbox,
-                    model_used=item.model_used,
-                    layout_label=item.layout_label,
-                    layout_confidence=item.layout_confidence,
-                    structured_data=merged_table.model_dump(),
-                    # B1 fix: Propagate extraction provenance from original item
-                    extraction_method=item.extraction_method,
-                    extraction_confidence=item.extraction_confidence,
-                )
+                item.model_copy(update={
+                    "content": merged_table.markdown_representation,
+                    "source_page_physical": merged_table.source_page_physical,
+                    "source_bbox": merged_table.source_bbox,
+                    "structured_data": merged_table.model_dump(),
+                })
             )
 
         # Add back non-table items
@@ -383,21 +368,59 @@ class ChunkingService:
         if table is None or not table.rows:
             return self._split_markdown_table(item)
 
-        headers = [r for r in table.rows if r.row_type == "header"]
-        data_rows = [r for r in table.rows if r.row_type != "header"]
+        # B-7-04: only the leading header rows repeat in each piece; a "header" row
+        # further down is body text and must not be repeated
+        k = min(table.num_header_rows, len(table.rows))
+        headers = table.rows[:k]
+        data_rows = table.rows[k:]
         render = self.multi_page_handler._regenerate_markdown
-        budget = self.max_child_chars - len(render(headers, table.columns))
+        header_len = len(render(headers, table.columns))
+        budget = self.max_child_chars - header_len
+        # Slack for keeping a total with its rows and for absorbing a short tail
+        hard_budget = int(self.max_child_chars * 1.1) - header_len
+
+        def row_len(row) -> int:
+            return sum(len(c.cleaned_text) + 3 for c in row.cells) + 2
 
         groups, current, size = [], [], 0
         for row in data_rows:
-            row_len = sum(len(c.cleaned_text) + 3 for c in row.cells) + 2
-            if current and size + row_len > budget:
-                groups.append(current)
-                current, size = [], 0
+            length = row_len(row)
+            if current and size + length > budget:
+                is_total = row.row_type in ("total", "subtotal")
+                if is_total and size + length <= hard_budget:
+                    pass  # a total stays with the rows it totals
+                else:
+                    carry = []
+                    if is_total and len(current) > 1:
+                        # Too big to fit: take the last row along so the total is not alone
+                        carry = [current.pop()]
+                    groups.append(current)
+                    current = carry
+                    size = sum(row_len(r) for r in carry)
             current.append(row)
-            size += row_len
+            size += length
         if current:
             groups.append(current)
+
+        # A short last piece (one row, or a row and its total) joins the previous one
+        limit = int(self.max_child_chars * 1.1)
+        lead = [x for x in (getattr(table, "caption", None), (item.structured_data or {}).get("unit_line")) if x]
+        lead_len = sum(len(x) + 1 for x in lead)
+        if len(groups) > 1 and len(groups[-1]) < 3:
+            if lead_len + len(render(headers + groups[-2] + groups[-1], table.columns)) <= limit:
+                groups[-2].extend(groups.pop())
+
+        # The row estimate can undercount the rendered table: halve any piece that is
+        # still over the limit
+        checked = []
+        while groups:
+            rows = groups.pop(0)
+            if len(rows) > 1 and lead_len + len(render(headers + rows, table.columns)) > limit:
+                half = len(rows) // 2
+                groups[:0] = [rows[:half], rows[half:]]
+                continue
+            checked.append(rows)
+        groups = checked
 
         pieces = []
         for n, rows in enumerate(groups, 1):
@@ -412,7 +435,8 @@ class ChunkingService:
                 "markdown_representation": render(headers + rows, table.columns),
             })
             pieces.append(item.model_copy(update={
-                "content": piece.markdown_representation,
+                # Every piece keeps the caption and unit line in its searchable text
+                "content": "\n".join(lead + [piece.markdown_representation]),
                 "source_page_physical": page,
                 "structured_data": piece.model_dump(),
             }))

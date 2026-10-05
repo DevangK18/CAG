@@ -823,6 +823,7 @@ class ContentExtractionService:
             rebuilt = None
             try:
                 rebuilt = self.structured_table_extractor.extract(
+                    caption=sd.get("caption"),
                     markdown_table=text,
                     table_id=sd.get("table_id") or f"table_{item.source_page_physical}",
                     source_chunk_id=sd.get("source_chunk_id") or item.block_id or "",
@@ -1202,6 +1203,9 @@ class ContentExtractionService:
 
         # PHASE 2 BUG FIX: Use filtered content (not raw extracted_elements)
         task.extracted_content = valid_content
+        # pdfplumber keeps the report's PDF open between tables
+        if hasattr(self.table_extractor, "close"):
+            self.table_extractor.close()
 
         # Calculate processing time and success rate
         processing_time = time.time() - start_time

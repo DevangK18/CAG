@@ -91,6 +91,9 @@ def test_caption_unit_and_source_join_their_table(service):
     assert sd["table_number"] == "2.1"
     assert sd["footnotes"] == ["(Source: Finance Accounts)"]
     assert sd["monetary_unit"] == "₹ in crore"
+    # The unit reaches the cells: 847.71 crore in paise
+    amounts = [c.get("normalized_value") for r in sd["rows"] for c in r["cells"] if c.get("raw_text") == "847.71"]
+    assert amounts == [847.71 * 1e9]
     assert sd["source_chunk_id"] == "p003_b002"
     assert table.content.startswith(
         "Table 2.1: Grants released to ULBs\n(₹ in crore)\n| District"

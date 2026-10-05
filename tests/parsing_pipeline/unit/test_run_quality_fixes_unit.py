@@ -233,6 +233,40 @@ class TestMultiPageTables:
         service._merge_multi_page_tables(task)
         assert sum(c.content_type == "table_markdown" for c in task.extracted_content) == 2
 
+    def test_gap_page_flagged_only_with_a_lost_table(self):
+        # B-6-02: Docling saw a table on p11 that nothing was extracted for
+        service = ChunkingService()
+
+        def content():
+            # body text on p11 stops the two tables merging over the gap
+            return [
+                _table("t1", 10, [("1", "Head A", "5")]),
+                _text("paragraph", "Audit observed that " * 15, 11, y=100),
+                _table("t2", 12, [("2", "Head B", "7")]),
+            ]
+
+        task = _task(content())
+        task.layout = {11: [{"label": "Table", "bbox": [50, 300, 500, 700]}]}
+        service._merge_multi_page_tables(task)
+        assert [e["page"] for e in task.dlq_entries] == [11]
+
+        task = _task(content())
+        task.layout = {11: [{"label": "Text", "bbox": [50, 100, 500, 700]}]}
+        service._merge_multi_page_tables(task)
+        assert not task.dlq_entries
+
+    def test_merged_item_keeps_base_fields(self):
+        service = ChunkingService()
+        first = _table("t1", 10, [("1", "Head A", "5")]).model_copy(
+            update={"extraction_method": "pdfplumber-lines", "extraction_confidence": 0.9}
+        )
+        task = _task([first, _table("t2", 11, [("2", "Head B", "7")])])
+        service._merge_multi_page_tables(task)
+        (merged,) = [c for c in task.extracted_content if c.content_type == "table_markdown"]
+        assert merged.extraction_method == "pdfplumber-lines"
+        assert merged.extraction_confidence == 0.9
+        assert merged.structured_data["is_multi_page"] is True
+
     def test_statistics_reset_between_reports(self):
         service = ChunkingService()
         for _ in range(2):
@@ -254,9 +288,47 @@ class TestOversizedChunks:
 
         pieces = service._split_oversized_content([item.model_copy(update={"content": "x" * 5000})])
         assert len(pieces) > 1
-        assert all(len(p.content) <= 400 for p in pieces)
+        # a short last piece may join the previous one, up to 10% over the limit
+        assert all(len(p.content) <= 440 for p in pieces)
         assert all(p.content.startswith("| Sl. No. | Minor head | Savings |") for p in pieces)
         assert pieces[-1].source_page_physical == 21
+
+    def _split(self, rows, max_chars=400, row_types=None, num_header_rows=1):
+        service = ChunkingService()
+        service.max_child_chars = max_chars
+        item = _table("big", 20, rows)
+        table = StructuredTable(**item.structured_data)
+        for idx, row_type in (row_types or {}).items():
+            table.rows[idx].row_type = row_type
+        table.num_header_rows = num_header_rows
+        item.structured_data = table.model_dump()
+        return service._split_oversized_content([item.model_copy(update={"content": "x" * 5000})])
+
+    def test_misclassified_data_row_not_repeated(self):
+        # B-7-04: a "header" row below the leading header is body text
+        rows = [(str(i), f"Minor head description number {i}", "1,234.56") for i in range(40)]
+        pieces = self._split(rows, row_types={1: "header"})
+        first_data = "| 0 | Minor head description number 0 | 1,234.56 |"
+        assert sum(first_data in p.content for p in pieces) == 1
+
+    def test_short_tail_joins_previous_piece(self):
+        # 6 rows fit in 400 characters; the 7th would be a one-row piece
+        rows = [(str(i), f"Minor head description number {i}", "1,234.56") for i in range(7)]
+        pieces = self._split(rows)
+        assert len(pieces) == 1
+        assert len(pieces[0].content) <= 440
+        # a tail of 3 rows is a real piece
+        rows = [(str(i), f"Minor head description number {i}", "1,234.56") for i in range(9)]
+        assert [len(p.structured_data["rows"]) - 1 for p in self._split(rows)] == [6, 3]
+
+    def test_total_stays_with_its_rows(self):
+        rows = [(str(i), f"Minor head description number {i}", "1,234.56") for i in range(7)]
+        rows.append(("", "Total", "8,641.92"))
+        pieces = self._split(rows, max_chars=300, row_types={8: "total"})
+        for piece in pieces:
+            data = [r for r in piece.structured_data["rows"][1:]]
+            if any(r["row_type"] == "total" for r in data):
+                assert len(data) >= 2  # never a piece holding only the total
 
     def test_long_paragraph_split_at_sentences(self):
         service = ChunkingService()
