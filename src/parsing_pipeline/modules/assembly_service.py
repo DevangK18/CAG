@@ -260,7 +260,7 @@ class AssemblyService:
         # Compute extraction confidence for all chunks
         toc_quality = 75.0  # Default if not available
         if task.scaffold and isinstance(task.scaffold, dict):
-            toc_quality = task.scaffold.get("toc_quality_score", 75.0)
+            toc_quality = task.scaffold.get("toc_quality") or 75.0
 
         for chunk in assembled_data["child_chunks"]:
             chunk["extraction_confidence"] = self._compute_chunk_confidence(

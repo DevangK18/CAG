@@ -597,8 +597,9 @@ class ChunkingService:
             hierarchy = self._build_hierarchy_for_parent(toc, i)
 
             # Get logical page labels
-            start_logical = page_map.get(start_page, str(start_page + 1))
-            end_logical = page_map.get(end_page, str(end_page + 1))
+            # Printed page numbers, None where none is printed (A-4-06)
+            start_logical = page_map.get(start_page)
+            end_logical = page_map.get(end_page)
 
             # Get Y-position from heading_positions dict (position_key already defined above)
             start_y_position = heading_positions.get(position_key, None)
@@ -642,8 +643,8 @@ class ChunkingService:
 
         # Get logical pages if available
         page_map = task.scaffold.get("page_map", {}) if task.scaffold else {}
-        start_logical = page_map.get(start_page, str(start_page + 1))
-        end_logical = page_map.get(end_page, str(end_page + 1))
+        start_logical = page_map.get(start_page)
+        end_logical = page_map.get(end_page)
 
         # Use report title as single parent
         report_title = task.initial_metadata.get("Title", "Document")
@@ -735,10 +736,7 @@ class ChunkingService:
                 )
 
             # Get logical page number
-            logical_page = page_map.get(
-                extracted_content.source_page_physical,
-                str(extracted_content.source_page_physical + 1),
-            )
+            logical_page = page_map.get(extracted_content.source_page_physical)
 
             child_chunk = ChildChunk(
                 chunk_id=chunk_id,

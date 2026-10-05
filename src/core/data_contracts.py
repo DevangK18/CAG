@@ -158,8 +158,8 @@ class ParentChunk(BaseModel):
     page_range_physical: Tuple[int, int] = Field(
         ..., description="Physical page range (0-indexed, inclusive)"
     )
-    page_range_logical: Tuple[str, str] = Field(
-        ..., description="Logical page range as printed in document"
+    page_range_logical: Tuple[Optional[str], Optional[str]] = Field(
+        ..., description="Logical page range as printed in document (None where no number is printed)"
     )
     toc_entry: str = Field(..., description="Original ToC title")
     toc_level: int = Field(..., description="Depth in ToC (1=Chapter, 2=Section, etc.)")
