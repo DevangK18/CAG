@@ -39,6 +39,11 @@ on:
         required: false
         type: string
         default: ''
+      jobs:
+        description: 'Several jobs on one VM, run one after another: JSON list of {"manifest", "reports", "skip_phases"}. Overrides the three inputs above'
+        required: false
+        type: string
+        default: ''
       output_prefix:
         description: 'GCS prefix for results: gs://bucket/<prefix>/processed/<tier>/ etc.'
         required: true
@@ -266,6 +271,11 @@ jobs:
             --command="sudo -n bash /tmp/setup-gpu-vm.sh"
 
       - name: Create and copy run script
+        env:
+          IN_JOBS: ${{ inputs.jobs }}
+          IN_MANIFEST: ${{ inputs.manifest }}
+          IN_REPORTS: ${{ inputs.reports }}
+          IN_SKIP: ${{ inputs.skip_phases }}
         run: |
           cat > /tmp/run_pipeline.sh << 'SCRIPT_EOF'
           #!/bin/bash
@@ -281,23 +291,24 @@ jobs:
           DATA_BUCKET="${DATA_BUCKET}"
           PROJECT_ID="${PROJECT_ID}"
           PROJECT_ID=$(echo "${PROJECT_ID}" | tr -d '[:space:]')
-          MANIFEST="${MANIFEST}"
-          SKIP_ARG="${SKIP_ARG}"
-          REPORTS_ARG="${REPORTS_ARG}"
           OUTPUT_PREFIX="${OUTPUT_PREFIX}"
           CONTAINER_NAME="${CONTAINER_NAME}"
           RUN_ID="${RUN_ID}"
           MAX_HOURS="${MAX_HOURS}"
           GCS_OUT="gs://${DATA_BUCKET}/${OUTPUT_PREFIX}"
+          # One line per job: manifest|skip phases|report IDs
+          JOBS_FILE=/tmp/jobs.txt
+          JOB_COUNT=$(grep -c . "${JOBS_FILE}")
+          RUN_DIR=/var/tmp/cag/runs-gpu/${RUN_ID}
+          DEADLINE=$(( $(date +%s) + $(awk "BEGIN { printf \"%d\", ${MAX_HOURS} * 3600 }") ))
 
           echo "============================================="
           echo "CAG Parsing Pipeline (GPU)"
           echo "============================================="
           echo "PROJECT_ID: ${PROJECT_ID}"
           echo "DATA_BUCKET: ${DATA_BUCKET}"
-          echo "MANIFEST: ${MANIFEST}"
-          echo "SKIP_ARG: ${SKIP_ARG}"
-          echo "REPORTS_ARG: ${REPORTS_ARG}"
+          echo "JOBS (manifest|skip|reports):"
+          nl -ba "${JOBS_FILE}"
           echo "OUTPUT: ${GCS_OUT}/"
           echo ""
 
@@ -357,9 +368,6 @@ jobs:
             exit 12
           fi
 
-          echo "Downloading manifest..."
-          run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
-
           PARSING_IMAGE="${PARSING_IMAGE}"
           echo "Pulling ${PARSING_IMAGE}..."
           docker pull "${PARSING_IMAGE}" || {
@@ -383,90 +391,167 @@ jobs:
           sys.exit(0 if ok else 1)
           " || { echo "ERROR: torch.cuda not available in image; refusing to run on CPU"; exit 11; }
 
-          echo "Starting parsing pipeline..."
-          docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
-          # Keep going on a non-zero exit (3 = partial, 4 = nothing selected) so the
-          # results, logs and run summary are still uploaded; the code is returned at the end
-          set +e
-          timeout --kill-after=2m "${MAX_HOURS}h" docker run --rm --name ${CONTAINER_NAME} --network=host --gpus all --shm-size=8g \
-            -v ${WORK_DIR}/data:/app/data \
-            -v ${WORK_DIR}/logs:/app/logs \
-            -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
-            -e DATA_BUCKET=${DATA_BUCKET} \
-            -e GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
-            -e VERTEX_AI_REGION=us-central1 \
-            -e USE_VERTEX_AI=true \
-            -e USE_VERTEX_EMBEDDINGS=true \
-            -e LLM_PROVIDER=gemini \
-            -e RUN_ID=${RUN_ID} \
-            ${PARSING_IMAGE} \
-            manifest.xlsx ${SKIP_ARG} ${REPORTS_ARG}
-          PIPELINE_RC=$?
-          set -e
-          echo "Pipeline exit code: ${PIPELINE_RC}"
-          if [ ${PIPELINE_RC} -eq 124 ] || [ ${PIPELINE_RC} -eq 137 ]; then
-            # Killing the docker client does not stop the container
-            echo "Pipeline exceeded ${MAX_HOURS}h; stopping the container and uploading what exists"
+          # Run one job: its own manifest, run ID, exit code, run summary and upload
+          run_job() {
+            local N="$1" MANIFEST="$2" SKIP="$3" REPORTS="$4" JOB_RUN_ID="$5"
+            local SKIP_ARG="" REPORTS_ARG="" PIPELINE_RC REMAINING
+            [ -n "${SKIP}" ] && SKIP_ARG="--skip ${SKIP}"
+            [ -n "${REPORTS}" ] && REPORTS_ARG="--reports ${REPORTS}"
+            echo ""
+            echo "============================================="
+            echo "Job ${N}/${JOB_COUNT}: ${MANIFEST} (run ${JOB_RUN_ID})"
+            echo "  Skip: ${SKIP:-none}   Reports: ${REPORTS:-all}"
+            echo "============================================="
+
+            echo "Downloading manifest..."
+            if ! run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx; then
+              echo "ERROR: could not download manifest ${MANIFEST}"
+              return 15
+            fi
+
+            # The time limit covers all jobs together
+            REMAINING=$(( DEADLINE - $(date +%s) ))
+            if [ ${REMAINING} -le 0 ]; then
+              echo "ERROR: no time left for this job (max ${MAX_HOURS}h for the dispatch)"
+              return 124
+            fi
+
+            echo "Starting parsing pipeline..."
             docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
-          fi
+            # Keep going on a non-zero exit (3 = partial, 4 = nothing selected) so the
+            # results, logs and run summary are still uploaded; the code is returned at the end.
+            # Errors are handled explicitly in this function (the caller runs it with set +e)
+            # shellcheck disable=SC2086  # SKIP_ARG / REPORTS_ARG split into words on purpose
+            timeout --kill-after=2m "${REMAINING}s" docker run --rm --name ${CONTAINER_NAME} --network=host --gpus all --shm-size=8g \
+              -v ${WORK_DIR}/data:/app/data \
+              -v ${WORK_DIR}/logs:/app/logs \
+              -v ${WORK_DIR}/manifest.xlsx:/app/manifest.xlsx \
+              -e DATA_BUCKET=${DATA_BUCKET} \
+              -e GOOGLE_CLOUD_PROJECT=${PROJECT_ID} \
+              -e VERTEX_AI_REGION=us-central1 \
+              -e USE_VERTEX_AI=true \
+              -e USE_VERTEX_EMBEDDINGS=true \
+              -e LLM_PROVIDER=gemini \
+              -e RUN_ID=${JOB_RUN_ID} \
+              ${PARSING_IMAGE} \
+              manifest.xlsx ${SKIP_ARG} ${REPORTS_ARG}
+            PIPELINE_RC=$?
+            echo "Pipeline exit code: ${PIPELINE_RC}"
+            if [ ${PIPELINE_RC} -eq 124 ] || [ ${PIPELINE_RC} -eq 137 ]; then
+              # Killing the docker client does not stop the container
+              echo "Pipeline exceeded the time limit; stopping the container and uploading what exists"
+              docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
+            fi
 
-          # Results go under the output prefix only. The legacy processed/manifest.json
-          # is excluded (the per-tier manifests replace it); *.stale and Phase 8
-          # working files stay on the VM. raw/ is not uploaded: it was only read from
-          # the shared cache.
-          echo "Uploading results to ${GCS_OUT}/ ..."
-          run_gsutil -m rsync -r -x '^manifest\.json$|.*\.stale$|.*\.working$' /workspace/data/processed ${GCS_OUT}/processed/
-          run_gsutil -m rsync -r /workspace/data/batch_jobs ${GCS_OUT}/batch_jobs/
-          run_gsutil -m rsync -r /workspace/data/extraction_images ${GCS_OUT}/extraction_images/ 2>/dev/null || true
-          run_gsutil -m rsync -r /workspace/data/entity_graph ${GCS_OUT}/entity_graph/ 2>/dev/null || true
-          run_gsutil -m rsync -r /workspace/data/canonical ${GCS_OUT}/canonical/ 2>/dev/null || true
-          run_gsutil -m rsync -r /workspace/logs/traces ${GCS_OUT}/traces/ 2>/dev/null || true
-          run_gsutil -m cp /workspace/logs/*.log ${GCS_OUT}/logs/ 2>/dev/null || true
-          run_gsutil -m cp /workspace/logs/run_summary_*.json gs://${DATA_BUCKET}/runs-gpu/${RUN_ID}/ 2>/dev/null || true
-          run_gsutil -m rsync -r /workspace/data/dead_letter_queue ${GCS_OUT}/dead_letter_queue/ 2>/dev/null || true
+            # Results go under the output prefix only. The legacy processed/manifest.json
+            # is excluded (the per-tier manifests replace it); *.stale and Phase 8
+            # working files stay on the VM. raw/ is not uploaded: it was only read from
+            # the shared cache.
+            echo "Uploading results to ${GCS_OUT}/ ..."
+            if ! run_gsutil -m rsync -r -x '^manifest\.json$|.*\.stale$|.*\.working$' /workspace/data/processed ${GCS_OUT}/processed/ \
+              || ! run_gsutil -m rsync -r /workspace/data/batch_jobs ${GCS_OUT}/batch_jobs/; then
+              echo "ERROR: uploading results to ${GCS_OUT}/ failed"
+              return 16
+            fi
+            run_gsutil -m rsync -r /workspace/data/extraction_images ${GCS_OUT}/extraction_images/ 2>/dev/null || true
+            run_gsutil -m rsync -r /workspace/data/entity_graph ${GCS_OUT}/entity_graph/ 2>/dev/null || true
+            run_gsutil -m rsync -r /workspace/data/canonical ${GCS_OUT}/canonical/ 2>/dev/null || true
+            run_gsutil -m rsync -r /workspace/logs/traces ${GCS_OUT}/traces/ 2>/dev/null || true
+            run_gsutil -m cp /workspace/logs/*.log ${GCS_OUT}/logs/ 2>/dev/null || true
+            run_gsutil -m cp "/workspace/logs/run_summary_${JOB_RUN_ID}.json" gs://${DATA_BUCKET}/runs-gpu/${RUN_ID}/ 2>/dev/null || true
+            run_gsutil -m rsync -r /workspace/data/dead_letter_queue ${GCS_OUT}/dead_letter_queue/ 2>/dev/null || true
 
-          # A report that failed this run has its previous output quarantined locally
-          # (renamed *.stale); move the GCS original to quarantine/<run_id>/ under the
-          # output prefix so it is not served
-          # Read the list with the parsing image (the gcloud image has no Python)
-          if ! QUARANTINED=$(docker run --rm --entrypoint python3 -v ${WORK_DIR}:/workspace ${PARSING_IMAGE} -c '
+            # A report that failed this run has its previous output quarantined locally
+            # (renamed *.stale); move the GCS original to quarantine/<run_id>/ under the
+            # output prefix so it is not served
+            # Read the list with the parsing image (the gcloud image has no Python)
+            local QUARANTINED
+            if ! QUARANTINED=$(docker run --rm --entrypoint python3 -v ${WORK_DIR}:/workspace ${PARSING_IMAGE} -c "
           import json, pathlib
-          s = pathlib.Path("/workspace/logs/run_summary_${RUN_ID}.json")
-          for f in (json.loads(s.read_text()).get("quarantined_files") or []) if s.exists() else []:
+          s = pathlib.Path('/workspace/logs/run_summary_${JOB_RUN_ID}.json')
+          for f in (json.loads(s.read_text()).get('quarantined_files') or []) if s.exists() else []:
               print(f)
-          '); then
-            echo "ERROR: could not read the run summary; quarantined outputs were not moved in GCS"
-            QUARANTINED=""
-            # Keep the pipeline's own code; only a clean run is turned into a failure
-            if [ ${PIPELINE_RC} -eq 0 ]; then PIPELINE_RC=13; fi
-          fi
-          for f in ${QUARANTINED}; do
-            echo "Quarantining stale output in GCS: ${OUTPUT_PREFIX}/processed/${f} -> ${OUTPUT_PREFIX}/quarantine/${RUN_ID}/processed/${f}"
-            run_gsutil -q mv "${GCS_OUT}/processed/${f}" "${GCS_OUT}/quarantine/${RUN_ID}/processed/${f}" || echo "  (not in GCS)"
-          done
+          "); then
+              echo "ERROR: could not read the run summary; quarantined outputs were not moved in GCS"
+              QUARANTINED=""
+              # Keep the pipeline's own code; only a clean run is turned into a failure
+              if [ ${PIPELINE_RC} -eq 0 ]; then PIPELINE_RC=13; fi
+            fi
+            for f in ${QUARANTINED}; do
+              echo "Quarantining stale output in GCS: ${OUTPUT_PREFIX}/processed/${f} -> ${OUTPUT_PREFIX}/quarantine/${JOB_RUN_ID}/processed/${f}"
+              run_gsutil -q mv "${GCS_OUT}/processed/${f}" "${GCS_OUT}/quarantine/${JOB_RUN_ID}/processed/${f}" || echo "  (not in GCS)"
+            done
+            return ${PIPELINE_RC}
+          }
+
+          # Jobs run one after another on this VM. The dispatch's code is the worst job's:
+          # a hard failure beats 3 (partial), which beats 4 (nothing selected)
+          FINAL_RC=0
+          N=0
+          : > "${RUN_DIR}/jobs.txt"
+          while IFS='|' read -r MANIFEST SKIP REPORTS <&3; do
+            [ -n "${MANIFEST}" ] || continue
+            N=$((N + 1))
+            JOB_RUN_ID="${RUN_ID}"
+            [ "${JOB_COUNT}" -gt 1 ] && JOB_RUN_ID="${RUN_ID}-${N}"
+            set +e
+            run_job "${N}" "${MANIFEST}" "${SKIP}" "${REPORTS}" "${JOB_RUN_ID}"
+            RC=$?
+            set -e
+            echo "${N}|${JOB_RUN_ID}|${RC}|${MANIFEST}" >> "${RUN_DIR}/jobs.txt"
+            echo "Job ${N} (${MANIFEST}) finished with exit code ${RC}"
+            if [ ${RC} -eq 16 ]; then
+              echo "ERROR: stopping: results can no longer be uploaded"
+              FINAL_RC=16
+              break
+            fi
+            if [ ${RC} -ne 0 ]; then
+              case "${FINAL_RC}:${RC}" in
+                0:*) FINAL_RC=${RC} ;;
+                4:3) FINAL_RC=3 ;;
+                3:4|4:4|3:3) ;;
+                [34]:*) FINAL_RC=${RC} ;;
+              esac
+            fi
+          done 3< "${JOBS_FILE}"
 
           echo ""
           echo "============================================="
-          echo "Parsing pipeline (GPU) finished (exit code ${PIPELINE_RC})"
+          echo "Parsing pipeline (GPU) finished: ${N} job(s), exit code ${FINAL_RC}"
+          cat "${RUN_DIR}/jobs.txt"
           echo "============================================="
-          exit ${PIPELINE_RC}
+          exit ${FINAL_RC}
           SCRIPT_EOF
 
-          SKIP_ARG=""
-          if [ -n "${{ inputs.skip_phases }}" ]; then
-            SKIP_ARG="--skip ${{ inputs.skip_phases }}"
-          fi
-
-          REPORTS_ARG=""
-          if [ -n "${{ inputs.reports }}" ]; then
-            REPORTS_ARG="--reports ${{ inputs.reports }}"
-          fi
+          # Jobs: the 'jobs' JSON list, or the single manifest/reports/skip_phases inputs.
+          # Values are checked here because they end up on a command line on the VM.
+          python3 - > /tmp/jobs.txt << 'PY_EOF'
+          import json, os, re, sys
+          raw = os.environ["IN_JOBS"].strip()
+          jobs = json.loads(raw) if raw else [{
+              "manifest": os.environ["IN_MANIFEST"],
+              "reports": os.environ["IN_REPORTS"],
+              "skip_phases": os.environ["IN_SKIP"],
+          }]
+          if not isinstance(jobs, list) or not jobs:
+              sys.exit("jobs must be a non-empty JSON list")
+          for job in jobs:
+              manifest = str(job.get("manifest") or "").strip()
+              reports = " ".join(str(job.get("reports") or "").split())
+              skip = str(job.get("skip_phases") or "").replace(" ", "")
+              if not re.fullmatch(r"[A-Za-z0-9 ._()-]+\.xlsx", manifest):
+                  sys.exit(f"bad manifest name: {manifest!r}")
+              if not re.fullmatch(r"[A-Za-z0-9_. -]*", reports):
+                  sys.exit(f"bad report IDs: {reports!r}")
+              if not re.fullmatch(r"[0-9a-c.,]*", skip):
+                  sys.exit(f"bad skip_phases: {skip!r}")
+              print(f"{manifest}|{skip}|{reports}")
+          PY_EOF
+          echo "Jobs (manifest|skip|reports):"
+          cat /tmp/jobs.txt
 
           sed -i "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${DATA_BUCKET}|${{ env.DATA_BUCKET }}|g" /tmp/run_pipeline.sh
-          sed -i "s|\${MANIFEST}|${{ inputs.manifest }}|g" /tmp/run_pipeline.sh
-          sed -i "s|\${SKIP_ARG}|${SKIP_ARG}|g" /tmp/run_pipeline.sh
-          sed -i "s|\${REPORTS_ARG}|${REPORTS_ARG}|g" /tmp/run_pipeline.sh
           sed -i "s|\${OUTPUT_PREFIX}|${{ env.OUTPUT_PREFIX }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${CONTAINER_NAME}|${{ env.CONTAINER_NAME }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${RUN_ID}|${{ github.run_id }}|g" /tmp/run_pipeline.sh
@@ -530,6 +615,7 @@ jobs:
             FINAL="failed:${RC}"
           fi
           gcs_cp pipeline.log
+          gcs_cp jobs.txt
           set_status "${FINAL}"
 
           if [ "${KEEP_VM}" != "true" ]; then
@@ -543,7 +629,7 @@ jobs:
           sed -i "s|\${MAX_HOURS}|${{ inputs.max_hours || '12' }}|g" /tmp/run_detached.sh
           sed -i "s|\${CONTAINER_NAME}|${{ env.CONTAINER_NAME }}|g" /tmp/run_detached.sh
 
-          gcloud compute scp /tmp/run_pipeline.sh /tmp/run_detached.sh ${{ env.VM_NAME }}:/tmp/ \
+          gcloud compute scp /tmp/run_pipeline.sh /tmp/run_detached.sh /tmp/jobs.txt ${{ env.VM_NAME }}:/tmp/ \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }}
 
@@ -553,9 +639,8 @@ jobs:
           GCS_RUN="gs://${{ env.DATA_BUCKET }}/runs-gpu/${{ github.run_id }}"
           echo "Running GPU parsing pipeline (detached on VM)..."
           echo "  VM: ${{ env.VM_NAME }} (${{ env.ZONE }})"
-          echo "  Manifest: ${{ inputs.manifest }}"
-          echo "  Skip phases: ${{ inputs.skip_phases }}"
-          echo "  Reports: ${{ inputs.reports }}"
+          echo "  Jobs (manifest|skip|reports):"
+          sed 's/^/    /' /tmp/jobs.txt
           echo "  Output: gs://${{ env.DATA_BUCKET }}/${{ env.OUTPUT_PREFIX }}/"
           echo "  Max hours: ${{ inputs.max_hours || '12' }}"
           echo "  Live log: ${GCS_RUN}/pipeline.log"
@@ -589,7 +674,7 @@ jobs:
                 echo "finished=true" >> $GITHUB_OUTPUT
                 exit 0 ;;
               partial)
-                echo "::error::Pipeline finished with failures (some reports, Phase 10 items or requested IDs). See ${GCS_RUN}/run_summary_${{ github.run_id }}.json"
+                echo "::error::Pipeline finished with failures (some reports, Phase 10 items or requested IDs). See the run summaries and jobs.txt in ${GCS_RUN}/"
                 echo "finished=true" >> $GITHUB_OUTPUT
                 exit 1 ;;
               nothing_selected)
@@ -629,9 +714,14 @@ jobs:
           echo "## Parsing Pipeline (GPU) Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**VM:** ${{ env.VM_NAME || 'none started' }} (${{ env.ZONE }})" >> $GITHUB_STEP_SUMMARY
-          echo "**Manifest:** ${{ inputs.manifest }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Skipped Phases:** ${{ inputs.skip_phases || 'None' }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Reports:** ${{ inputs.reports || 'All' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Jobs (manifest | skip | reports):**" >> $GITHUB_STEP_SUMMARY
+          if [ -s /tmp/jobs.txt ]; then
+            sed 's/^/- /; s/|/ | /g' /tmp/jobs.txt >> $GITHUB_STEP_SUMMARY
+          fi
+          if gcloud storage cat "gs://${{ env.DATA_BUCKET }}/runs-gpu/${{ github.run_id }}/jobs.txt" > /tmp/jobs_done.txt 2>/dev/null; then
+            echo "**Job results (job | run ID | exit code | manifest):**" >> $GITHUB_STEP_SUMMARY
+            sed 's/^/- /; s/|/ | /g' /tmp/jobs_done.txt >> $GITHUB_STEP_SUMMARY
+          fi
           echo "**Output:** gs://${{ env.DATA_BUCKET }}/${{ env.OUTPUT_PREFIX }}/" >> $GITHUB_STEP_SUMMARY
           echo "**VM Kept Running:** ${{ inputs.keep_vm_running }}" >> $GITHUB_STEP_SUMMARY
           echo "**Max Hours:** ${{ inputs.max_hours || '12' }}" >> $GITHUB_STEP_SUMMARY
