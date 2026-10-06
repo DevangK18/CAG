@@ -90,6 +90,7 @@ jobs:
     steps:
       - name: Validate inputs
         run: |
+          echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
           PREFIX="${{ inputs.output_prefix }}"
           if ! [[ "${PREFIX}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
             echo "::error::output_prefix must be a single path segment like 'gpu-test' (got '${PREFIX}')"
@@ -117,16 +118,33 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # One image per commit: a second dispatch of the same commit skips the build,
+      # and a build reuses the registry's layer cache, so a code-only change does
+      # not reinstall the dependencies
       - name: Build and Push GPU Parsing Image
         run: |
           # Separate image name so the CPU workflow's cag-parsing:latest is never touched
-          IMAGE="us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing-gpu:latest"
+          REPO="us-central1-docker.pkg.dev/${{ env.PROJECT_ID }}/cag-images/cag-parsing-gpu"
+          IMAGE="${REPO}:${{ github.sha }}"
+          echo "PARSING_IMAGE=${IMAGE}" >> $GITHUB_ENV
+          if gcloud artifacts docker images describe "${IMAGE}" > /dev/null 2>&1; then
+            echo "✅ ${IMAGE} already exists; skipping the build"
+            exit 0
+          fi
           DOCKERFILE=Dockerfile.parsing
           [ -f Dockerfile.parsing-gpu ] && DOCKERFILE=Dockerfile.parsing-gpu
-          echo "Building GPU parsing image: $IMAGE (from $DOCKERFILE)"
-          docker build -f "$DOCKERFILE" -t "$IMAGE" .
-          echo "Pushing to Artifact Registry..."
-          docker push "$IMAGE"
+          # The image is large; make room on the runner
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+          echo "Building GPU parsing image: ${IMAGE} (from ${DOCKERFILE})"
+          docker buildx build -f "${DOCKERFILE}" \
+            -t "${IMAGE}" -t "${REPO}:latest" \
+            --cache-from "type=registry,ref=${REPO}:buildcache" \
+            --cache-to "type=registry,ref=${REPO}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true" \
+            --push .
           echo "✅ GPU parsing image built and pushed"
 
       - name: Setup SSH Key
@@ -342,12 +360,16 @@ jobs:
           echo "Downloading manifest..."
           run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx
 
-          PARSING_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/cag-images/cag-parsing-gpu:latest"
+          PARSING_IMAGE="${PARSING_IMAGE}"
           echo "Pulling ${PARSING_IMAGE}..."
           docker pull "${PARSING_IMAGE}" || {
             echo "ERROR: Failed to pull parsing image ${PARSING_IMAGE}"
             exit 1
           }
+          # Images are tagged by commit; keep only the one this run uses
+          for OLD in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep '/cag-parsing-gpu:' | grep -vxF "${PARSING_IMAGE}"); do
+            docker rmi "${OLD}" || true
+          done
           docker image prune -f
           df -h / | tail -1
 
@@ -449,6 +471,7 @@ jobs:
           sed -i "s|\${CONTAINER_NAME}|${{ env.CONTAINER_NAME }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${RUN_ID}|${{ github.run_id }}|g" /tmp/run_pipeline.sh
           sed -i "s|\${MAX_HOURS}|${{ inputs.max_hours || '12' }}|g" /tmp/run_pipeline.sh
+          sed -i "s|\${PARSING_IMAGE}|${{ env.PARSING_IMAGE }}|g" /tmp/run_pipeline.sh
 
           chmod +x /tmp/run_pipeline.sh
 
@@ -542,6 +565,9 @@ jobs:
             --project=${{ env.PROJECT_ID }} \
             --command="setsid nohup bash /tmp/run_detached.sh > /dev/null 2>&1 < /dev/null & echo launched"
           echo "launched=true" >> $GITHUB_OUTPUT
+          START_MIN=$(( ($(date +%s) - ${{ env.JOB_START }}) / 60 ))
+          echo "Pipeline launched ${START_MIN} min after the job started"
+          echo "start_min=${START_MIN}" >> $GITHUB_OUTPUT
 
           # Poll status; stop polling ~20 min before GitHub's 6h cap
           DEADLINE=$(( $(date +%s) + 300 * 60 ))
@@ -609,4 +635,6 @@ jobs:
           echo "**Output:** gs://${{ env.DATA_BUCKET }}/${{ env.OUTPUT_PREFIX }}/" >> $GITHUB_STEP_SUMMARY
           echo "**VM Kept Running:** ${{ inputs.keep_vm_running }}" >> $GITHUB_STEP_SUMMARY
           echo "**Max Hours:** ${{ inputs.max_hours || '12' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ${{ env.PARSING_IMAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job start to pipeline launch:** ${{ steps.pipeline.outputs.start_min || '-' }} min" >> $GITHUB_STEP_SUMMARY
           echo "**Log / Status:** gs://${{ env.DATA_BUCKET }}/runs-gpu/${{ github.run_id }}/" >> $GITHUB_STEP_SUMMARY

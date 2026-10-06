@@ -1,0 +1,22 @@
+[
+  {
+    "name": "gpu-keep-latest-and-cache",
+    "action": {"type": "Keep"},
+    "condition": {"tagState": "tagged", "tagPrefixes": ["latest", "buildcache"], "packageNamePrefixes": ["cag-parsing-gpu"]}
+  },
+  {
+    "name": "gpu-keep-recent-10",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {"packageNamePrefixes": ["cag-parsing-gpu"], "keepCount": 10}
+  },
+  {
+    "name": "gpu-delete-older",
+    "action": {"type": "Delete"},
+    "condition": {"tagState": "any", "packageNamePrefixes": ["cag-parsing-gpu"], "olderThan": "3d"}
+  },
+  {
+    "name": "cpu-delete-untagged",
+    "action": {"type": "Delete"},
+    "condition": {"tagState": "untagged", "packageNamePrefixes": ["cag-parsing"], "olderThan": "7d"}
+  }
+]
