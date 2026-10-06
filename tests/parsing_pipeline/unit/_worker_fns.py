@@ -16,3 +16,25 @@ def fail_on_b(task, emitter):
 def prior_flag_count(task, emitter):
     """How many red flags the worker's emitter already holds for this report."""
     return len(emitter.get_red_flags(task.report_id))
+
+
+def crash_first_time(task, emitter):
+    """Die like a native crash the first time a report is seen, succeed the second."""
+    import os
+    import signal
+    from pathlib import Path
+
+    marker = Path(task.marker_dir) / task.report_id
+    if not marker.exists():
+        marker.write_text("crashed")
+        os.kill(os.getpid(), signal.SIGSEGV)
+    task.processing_status = "layout_complete"
+    task.layout = {0: []}
+    return task
+
+
+def crash_always(task, emitter):
+    import os
+    import signal
+
+    os.kill(os.getpid(), signal.SIGSEGV)

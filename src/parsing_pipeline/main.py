@@ -203,6 +203,11 @@ class PipelineOrchestrator:
             logging.getLogger(__name__).warning("--trace runs sequentially; ignoring --workers %d", self.workers)
             self.workers = 1
         self._pool = None
+        # Docling runs in its own process, one report at a time: a native crash there
+        # (pdfium has segfaulted mid-run) costs one report, not the whole run
+        self.isolate_docling = True
+        self._docling_fn = report_workers.layout_report
+        self._docling_pool = None
         # Wall time per phase, and time spent on each report in each phase
         self.phase_seconds: Dict[str, float] = {}
         self.report_seconds: Dict[str, Dict[str, float]] = {}
@@ -613,26 +618,69 @@ class PipelineOrchestrator:
         finally:
             self.phase_seconds[phase] = round(self.phase_seconds.get(phase, 0.0) + time.monotonic() - started, 1)
 
+    def _layout_in_docling_process(self, task):
+        """
+        Phase 5 for one report in the Docling process. If the process dies (a native
+        crash), it is started again and the report tried once more; a second crash
+        fails this report only.
+        """
+        from concurrent.futures.process import BrokenProcessPool
+
+        emitter = self.state.trace_emitter
+        for attempt in (1, 2):
+            if self._docling_pool is None:
+                self._docling_pool = self._new_process_pool(1)
+            try:
+                outcome = self._docling_pool.submit(
+                    report_workers.run_in_worker,
+                    self._docling_fn,
+                    task,
+                    (),
+                    emitter.get_red_flags(task.report_id),
+                ).result()
+            except BrokenProcessPool:
+                self._docling_pool.shutdown(wait=False, cancel_futures=True)
+                self._docling_pool = None
+                self._log(f"             ⚠ Docling process crashed (attempt {attempt})", force=True)
+                continue
+            emitter.add_red_flags(task.report_id, outcome.red_flags)
+            if outcome.error is not None:
+                raise report_workers.WorkerError(outcome.error)
+            return outcome.value
+
+        task.processing_status = "failed_layout"
+        task.error_log.append("Docling process crashed twice on this report (native crash)")
+        emitter.emit_red_flag("5", "Docling process crashed", {"report_id": task.report_id})
+        return task
+
+    def _close_docling_process(self) -> None:
+        if self._docling_pool is not None:
+            self._docling_pool.shutdown(wait=True, cancel_futures=True)
+            self._docling_pool = None
+
+    def _new_process_pool(self, workers: int):
+        """Spawned worker processes (the parent may hold CUDA) that log like the parent."""
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        root = logging.getLogger()
+        log_file = next((h.baseFilename for h in root.handlers if isinstance(h, logging.FileHandler)), None)
+        return ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=report_workers.init_worker,
+            initargs=(log_file, root.level <= logging.DEBUG),
+        )
+
     def _get_pool(self):
         """Worker processes, started once per run with spawn (the parent holds Docling and CUDA)."""
         if self._pool is None:
-            import multiprocessing
-            from concurrent.futures import ProcessPoolExecutor
-
-            root = logging.getLogger()
-            log_file = next(
-                (h.baseFilename for h in root.handlers if isinstance(h, logging.FileHandler)), None
-            )
-            self._pool = ProcessPoolExecutor(
-                max_workers=self.workers,
-                mp_context=multiprocessing.get_context("spawn"),
-                initializer=report_workers.init_worker,
-                initargs=(log_file, root.level <= logging.DEBUG),
-            )
+            self._pool = self._new_process_pool(self.workers)
             self._log(f"Started {self.workers} worker processes")
         return self._pool
 
     def _close_pool(self) -> None:
+        self._close_docling_process()
         if self._pool is not None:
             self._pool.shutdown(wait=True, cancel_futures=True)
             self._pool = None
@@ -725,8 +773,10 @@ class PipelineOrchestrator:
     def _phase_layout(self):
         """Phase 5: Layout Analysis."""
         self._phase_header("5", "LAYOUT ANALYSIS")
-        service = LayoutAnalysisService()
         emitter = self.state.trace_emitter
+        # A traced run keeps Docling here, with the run's own emitter
+        isolated = self.isolate_docling and not self.trace
+        service = None if isolated else LayoutAnalysisService()
 
         for i, task in enumerate(self.state.scaffold_complete, 1):
             # Switch to this report's trace context (Fix 1: per-report isolation)
@@ -736,7 +786,10 @@ class PipelineOrchestrator:
                 f"  [{i:2d}/{len(self.state.scaffold_complete)}] Layout analysis {task.report_id}"
             )
             started = time.monotonic()
-            result = service.analyze_layout(task, trace_emitter=emitter)
+            if isolated:
+                result = self._layout_in_docling_process(task)
+            else:
+                result = service.analyze_layout(task, trace_emitter=emitter)
             self._report_timer("5", task.report_id)(time.monotonic() - started)
 
             if result.processing_status == "layout_complete":
@@ -751,6 +804,7 @@ class PipelineOrchestrator:
                     f"             ✗ FAILED: {result.error_log[-1] if result.error_log else 'Unknown'}"
                 )
 
+        self._close_docling_process()
         self._phase_result(
             "5",
             "Layout Analysis",
