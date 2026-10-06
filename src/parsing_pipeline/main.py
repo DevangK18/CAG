@@ -71,6 +71,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import asyncio
 import sys
 import json
+import time
 import logging
 import logging.handlers
 from pathlib import Path
@@ -144,16 +145,22 @@ class _ReportResult:
     a worker process, which re-raises the report's error here.
     """
 
-    def __init__(self, call=None, future=None, emitter=None, report_id=None):
+    def __init__(self, call=None, future=None, emitter=None, report_id=None, on_time=None):
         self._call = call
         self._future = future
         self._emitter = emitter
         self._report_id = report_id
+        self._on_time = on_time or (lambda seconds: None)
 
     def get(self, **in_process_kwargs):
         if self._future is None:
-            return self._call(**in_process_kwargs)
+            started = time.monotonic()
+            try:
+                return self._call(**in_process_kwargs)
+            finally:
+                self._on_time(time.monotonic() - started)
         outcome = self._future.result()
+        self._on_time(outcome.seconds)
         self._emitter.add_red_flags(self._report_id, outcome.red_flags)
         if outcome.error is not None:
             raise report_workers.WorkerError(outcome.error)
@@ -196,6 +203,9 @@ class PipelineOrchestrator:
             logging.getLogger(__name__).warning("--trace runs sequentially; ignoring --workers %d", self.workers)
             self.workers = 1
         self._pool = None
+        # Wall time per phase, and time spent on each report in each phase
+        self.phase_seconds: Dict[str, float] = {}
+        self.report_seconds: Dict[str, Dict[str, float]] = {}
 
         # Setup trace emitter if enabled
         if trace:
@@ -227,7 +237,8 @@ class PipelineOrchestrator:
 
         # Phases 1-3 with smart caching
         try:
-            await self._phases_1_to_3()
+            with self._timed("1-3"):
+                await self._phases_1_to_3()
         except BaseException:
             self._close_pool()
             raise
@@ -247,17 +258,18 @@ class PipelineOrchestrator:
 
         # Phase 10a: Overview & Summary (optional)
         if "10a" not in self.skip:
-            with self._gemini_budget("phase10a"):
+            with self._gemini_budget("phase10a"), self._timed("10a"):
                 self._phase_overview_summary()
 
         # Phase 10b: Visual Extraction (optional)
         if "10b" not in self.skip:
-            with self._gemini_budget("phase10b"):
+            with self._gemini_budget("phase10b"), self._timed("10b"):
                 await self._phase_visual_extraction()
 
         # Phase 10c: Visual Post-processing (optional)
         if "10c" not in self.skip:
-            self._phase_visual_postprocess()
+            with self._timed("10c"):
+                self._phase_visual_postprocess()
 
         self._record_failures_in_manifest()
 
@@ -465,7 +477,9 @@ class PipelineOrchestrator:
 
             with emitter.phase_timer("2"):
                 # Service now emits detailed classification decisions internally
+                started = time.monotonic()
                 result = triage_service.triage_document(task, trace_emitter=emitter)
+                self._report_timer("2", task.report_id)(time.monotonic() - started)
 
                 if result.classification == "native_text":
                     triaged_native.append(result)
@@ -490,7 +504,7 @@ class PipelineOrchestrator:
         ocred_successful = []
         if triaged_scanned:
             for i, (task, pending) in enumerate(
-                self._per_report(report_workers.ocr_report, triaged_scanned), 1
+                self._per_report("3", report_workers.ocr_report, triaged_scanned), 1
             ):
                 self._log(f"  [{i}/{len(triaged_scanned)}] OCR {task.report_id}")
 
@@ -540,7 +554,7 @@ class PipelineOrchestrator:
     # PER-REPORT WORK (here or in worker processes)
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _per_report(self, fn, tasks, args_for=None, parallel: bool = True):
+    def _per_report(self, phase: str, fn, tasks, args_for=None, parallel: bool = True):
         """
         (task, _ReportResult) for every task, in order, for fn(task, emitter, *args).
 
@@ -554,7 +568,13 @@ class PipelineOrchestrator:
         args_for = args_for or (lambda task: ())
         if self.workers <= 1 or not parallel or len(tasks) < 2:
             return [
-                (task, _ReportResult(call=lambda t=task, **kw: fn(t, emitter, *args_for(t), **kw)))
+                (
+                    task,
+                    _ReportResult(
+                        call=lambda t=task, **kw: fn(t, emitter, *args_for(t), **kw),
+                        on_time=self._report_timer(phase, task.report_id),
+                    ),
+                )
                 for task in tasks
             ]
         pool = self._get_pool()
@@ -571,10 +591,27 @@ class PipelineOrchestrator:
                     ),
                     emitter=emitter,
                     report_id=task.report_id,
+                    on_time=self._report_timer(phase, task.report_id),
                 ),
             )
             for task in tasks
         ]
+
+    def _report_timer(self, phase: str, report_id: str):
+        def record(seconds: float) -> None:
+            phases = self.report_seconds.setdefault(report_id, {})
+            phases[phase] = round(phases.get(phase, 0.0) + seconds, 1)
+
+        return record
+
+    @contextmanager
+    def _timed(self, phase: str):
+        """Add the block's wall time to the phase's total."""
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self.phase_seconds[phase] = round(self.phase_seconds.get(phase, 0.0) + time.monotonic() - started, 1)
 
     def _get_pool(self):
         """Worker processes, started once per run with spawn (the parent holds Docling and CUDA)."""
@@ -607,29 +644,37 @@ class PipelineOrchestrator:
     def _run_phases_4_to_9(self):
         """Run phases 4-9 sequentially."""
         # Phase 4: Scaffolding
-        self._phase_scaffolding()
+        with self._timed("4"):
+            self._phase_scaffolding()
 
         # Phase 5: Layout Analysis
-        self._phase_layout()
+        with self._timed("5"):
+            self._phase_layout()
 
         # Phase 5.5: TOC Reconciliation (optional)
         if "5.5" not in self.skip:
-            self._phase_toc_reconciliation()
+            with self._timed("5.5"):
+                self._phase_toc_reconciliation()
 
         # Phase 6: Content Extraction
-        self._phase_content_extraction()
+        with self._timed("6"):
+            self._phase_content_extraction()
 
         # Phase 7: Chunking
-        self._phase_chunking()
+        with self._timed("7"):
+            self._phase_chunking()
 
         # Phase 7.5: Hierarchy Enrichment
-        self._phase_hierarchy_enrichment()
+        with self._timed("7.5"):
+            self._phase_hierarchy_enrichment()
 
         # Phase 8: Assembly
-        self._phase_assembly()
+        with self._timed("8"):
+            self._phase_assembly()
 
         # Phase 9: Semantic Enrichment
-        self._phase_semantic_enrichment()
+        with self._timed("9"):
+            self._phase_semantic_enrichment()
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 4: SCAFFOLDING
@@ -641,7 +686,7 @@ class PipelineOrchestrator:
         emitter = self.state.trace_emitter
 
         for i, (task, pending) in enumerate(
-            self._per_report(report_workers.scaffold_report, self.state.successful_triaged), 1
+            self._per_report("4", report_workers.scaffold_report, self.state.successful_triaged), 1
         ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
@@ -690,7 +735,9 @@ class PipelineOrchestrator:
             self._log(
                 f"  [{i:2d}/{len(self.state.scaffold_complete)}] Layout analysis {task.report_id}"
             )
+            started = time.monotonic()
             result = service.analyze_layout(task, trace_emitter=emitter)
+            self._report_timer("5", task.report_id)(time.monotonic() - started)
 
             if result.processing_status == "layout_complete":
                 self.state.layout_complete.append(result)
@@ -734,7 +781,9 @@ class PipelineOrchestrator:
             prev_quality = task.scaffold.get("toc_quality", 0) if task.scaffold else 0
 
             with emitter.phase_timer("5.5"):
+                started = time.monotonic()
                 result = service.reconcile(task, trace_emitter=emitter)
+                self._report_timer("5.5", task.report_id)(time.monotonic() - started)
                 new_toc_count = (
                     len(result.scaffold.get("toc", [])) if result.scaffold else 0
                 )
@@ -786,7 +835,7 @@ class PipelineOrchestrator:
         )
 
         for i, (task, pending) in enumerate(
-            self._per_report(report_workers.extract_report, self.state.layout_complete), 1
+            self._per_report("6", report_workers.extract_report, self.state.layout_complete), 1
         ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
@@ -897,7 +946,7 @@ class PipelineOrchestrator:
         )
 
         for i, (task, pending) in enumerate(
-            self._per_report(report_workers.chunk_report, self.state.content_complete), 1
+            self._per_report("7", report_workers.chunk_report, self.state.content_complete), 1
         ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
@@ -998,6 +1047,7 @@ class PipelineOrchestrator:
         pending_by_id = {
             task.report_id: pending
             for task, pending in self._per_report(
+                "7.5",
                 report_workers.enrich_hierarchy_report,
                 to_enrich,
                 args_for=lambda t: (aggressive_for_reason(decisions[t.report_id][1]),),
@@ -1123,6 +1173,7 @@ class PipelineOrchestrator:
 
         for i, (task, pending) in enumerate(
             self._per_report(
+                "8",
                 report_workers.assemble_report,
                 self.state.chunking_complete,
                 args_for=lambda t: (self.run_id,),
@@ -1210,6 +1261,7 @@ class PipelineOrchestrator:
         # on, Phase 9 runs one report at a time here
         phases_completed = self._phases_completed()
         results = self._per_report(
+            "9",
             report_workers.enrich_report,
             self.state.assembly_complete,
             args_for=lambda t: (self.run_id, phases_completed, self._pdf_for_checks(t)),
@@ -1826,6 +1878,12 @@ class PipelineOrchestrator:
             else:
                 print("\n⚠️  Pipeline completed with partial success")
 
+        timing = self._timing_summary()
+        print(f"\nTime (workers: {timing['workers']}): {timing['total_seconds'] / 60:.1f} min in total"
+              + (f", {timing['minutes_per_report']:.1f} min per report" if timing["minutes_per_report"] else ""))
+        for phase, seconds in timing["phase_seconds"].items():
+            print(f"  Phase {phase:<5} {seconds / 60:6.1f} min")
+
     def _report_statuses(self) -> List[dict]:
         """Per-report outcome: completed, failed (with phase) or incomplete (last phase reached)."""
         failed = {
@@ -1968,12 +2026,27 @@ class PipelineOrchestrator:
             "quality": self.quality_summaries,
             "gemini_usage": log_usage_summary(),
             "gemini_limiter": self._limiter_stats(),
+            "timing": self._timing_summary(),
         }
         path = Path("logs") / f"run_summary_{self.run_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
         self._log(f"Run summary: {path} (exit code {self.exit_code})", force=True)
         return path
+
+    def _timing_summary(self) -> dict:
+        """Where the run's time went: wall time per phase, and per report per phase."""
+        total = (datetime.now() - self.started_at).total_seconds()
+        reports = len(self.state.tasks or [])
+        return {
+            "workers": self.workers,
+            "total_seconds": round(total, 1),
+            "minutes_per_report": round(total / 60 / reports, 2) if reports else None,
+            "phase_seconds": self.phase_seconds,
+            # Time spent on each report in each phase (in a worker, or here); Phase 10
+            # runs over all reports together and has totals only
+            "report_seconds": self.report_seconds,
+        }
 
     def _log(self, msg: str, force: bool = False):
         """Print message unless quiet mode suppresses it."""
