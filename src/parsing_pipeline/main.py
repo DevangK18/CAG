@@ -84,36 +84,23 @@ from src.parsing_pipeline.modules.manifest_ingestion_service import (
     ManifestIngestionService,
 )
 from src.parsing_pipeline.modules.triage_service import TriageCache, TriageService
-from src.parsing_pipeline.modules.ocr_service import OCRService
-from src.parsing_pipeline.modules.scaffolding_service import ScaffoldingService
 from src.parsing_pipeline.modules.layout_analysis_service import LayoutAnalysisService
-from src.parsing_pipeline.modules.content_extraction_service import (
-    ContentExtractionService,
-)
-from src.parsing_pipeline.modules.chunking_service import ChunkingService
-from src.parsing_pipeline.modules.assembly_service import (
-    AssemblyService,
-    propagate_semantic_enrichment_to_chunks,
-)
-from src.parsing_pipeline.modules.validation_service import run_quality_checks
-from src.parsing_pipeline.quality import summarize as summarize_quality
-from src.parsing_pipeline.modules.semantic_enrichment_service import (
-    SemanticEnrichmentService,
-)
+from src.parsing_pipeline.modules.assembly_service import AssemblyService
 from src.parsing_pipeline.modules.hierarchy_enricher import (
-    HierarchyEnricher,
     aggressive_for_reason,
     should_enrich_hierarchy,
 )
 from src.parsing_pipeline.modules.toc_reconciliation_service import (
     TOCReconciliationService,
 )
+from src.parsing_pipeline import report_workers  # noqa: E402
+from src.parsing_pipeline.log_setup import configure_logging  # noqa: E402
 
 # Import pipeline state management
 from src.parsing_pipeline.pipeline_state import PipelineState
 
 # Import data contracts for Pydantic conversion
-from src.core.data_contracts import ParentChunk, ChildChunk, DocumentTask
+from src.core.data_contracts import DocumentTask
 
 # Import instrumentation
 from src.parsing_pipeline.instrumentation import ReportMetadata
@@ -150,6 +137,29 @@ def clear_progress(message: str = ""):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+class _ReportResult:
+    """
+    One report's result for a phase. With --workers 1 the work runs when get() is
+    called, inside the phase's own timer and error handling; otherwise it comes from
+    a worker process, which re-raises the report's error here.
+    """
+
+    def __init__(self, call=None, future=None, emitter=None, report_id=None):
+        self._call = call
+        self._future = future
+        self._emitter = emitter
+        self._report_id = report_id
+
+    def get(self, **in_process_kwargs):
+        if self._future is None:
+            return self._call(**in_process_kwargs)
+        outcome = self._future.result()
+        self._emitter.add_red_flags(self._report_id, outcome.red_flags)
+        if outcome.error is not None:
+            raise report_workers.WorkerError(outcome.error)
+        return outcome.value
+
+
 class PipelineOrchestrator:
     """Orchestrates the 10-phase parsing pipeline with smart caching and progress tracking."""
 
@@ -161,6 +171,7 @@ class PipelineOrchestrator:
         report_filter: list = None,
         trace: bool = False,
         run_id: Optional[str] = None,
+        workers: int = 1,
     ):
         self.manifest_path = manifest_path
         self.run_id = run_id or resolve_run_id()
@@ -177,6 +188,14 @@ class PipelineOrchestrator:
         self.report_filter = report_filter
         self.trace = trace
         self.state = PipelineState()
+        # Reports processed at once within a phase (OCR, Phases 4 and 6-9). Docling
+        # stays one report at a time on the GPU. Trace events need the run's own
+        # emitter, so a traced run stays sequential.
+        self.workers = max(1, int(workers or 1))
+        if trace and self.workers > 1:
+            logging.getLogger(__name__).warning("--trace runs sequentially; ignoring --workers %d", self.workers)
+            self.workers = 1
+        self._pool = None
 
         # Setup trace emitter if enabled
         if trace:
@@ -207,7 +226,11 @@ class PipelineOrchestrator:
         self._print_header()
 
         # Phases 1-3 with smart caching
-        await self._phases_1_to_3()
+        try:
+            await self._phases_1_to_3()
+        except BaseException:
+            self._close_pool()
+            raise
 
         if not self.state.successful_triaged:
             self._log(
@@ -217,7 +240,10 @@ class PipelineOrchestrator:
             self._write_run_summary()
             return self.exit_code
 
-        self._run_phases_4_to_9()
+        try:
+            self._run_phases_4_to_9()
+        finally:
+            self._close_pool()
 
         # Phase 10a: Overview & Summary (optional)
         if "10a" not in self.skip:
@@ -463,13 +489,14 @@ class PipelineOrchestrator:
         # Phase 3: OCR (if needed)
         ocred_successful = []
         if triaged_scanned:
-            ocr_service = OCRService(trace_emitter=emitter)
-            for i, task in enumerate(triaged_scanned, 1):
+            for i, (task, pending) in enumerate(
+                self._per_report(report_workers.ocr_report, triaged_scanned), 1
+            ):
                 self._log(f"  [{i}/{len(triaged_scanned)}] OCR {task.report_id}")
 
                 with emitter.phase_timer("3"):
                     # Service now emits detailed OCR events internally
-                    result = ocr_service.ocr_document(task, trace_emitter=emitter)
+                    result = pending.get()
 
                     if result.processing_status == "ocr_complete":
                         ocred_successful.append(result)
@@ -510,6 +537,70 @@ class PipelineOrchestrator:
         self.state.successful_triaged.extend(triaged_native + ocred_successful)
 
     # ═══════════════════════════════════════════════════════════════════════
+    # PER-REPORT WORK (here or in worker processes)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _per_report(self, fn, tasks, args_for=None, parallel: bool = True):
+        """
+        (task, _ReportResult) for every task, in order, for fn(task, emitter, *args).
+
+        The same report_workers function runs either way. With --workers > 1 every
+        report is handed to the worker pool at once and the phase loop collects the
+        results in order; with one worker (or parallel=False) each runs when the
+        loop asks for it, exactly as before.
+        """
+        tasks = list(tasks)
+        emitter = self.state.trace_emitter
+        args_for = args_for or (lambda task: ())
+        if self.workers <= 1 or not parallel or len(tasks) < 2:
+            return [
+                (task, _ReportResult(call=lambda t=task, **kw: fn(t, emitter, *args_for(t), **kw)))
+                for task in tasks
+            ]
+        pool = self._get_pool()
+        return [
+            (
+                task,
+                _ReportResult(
+                    future=pool.submit(
+                        report_workers.run_in_worker,
+                        fn,
+                        task,
+                        args_for(task),
+                        emitter.get_red_flags(task.report_id),
+                    ),
+                    emitter=emitter,
+                    report_id=task.report_id,
+                ),
+            )
+            for task in tasks
+        ]
+
+    def _get_pool(self):
+        """Worker processes, started once per run with spawn (the parent holds Docling and CUDA)."""
+        if self._pool is None:
+            import multiprocessing
+            from concurrent.futures import ProcessPoolExecutor
+
+            root = logging.getLogger()
+            log_file = next(
+                (h.baseFilename for h in root.handlers if isinstance(h, logging.FileHandler)), None
+            )
+            self._pool = ProcessPoolExecutor(
+                max_workers=self.workers,
+                mp_context=multiprocessing.get_context("spawn"),
+                initializer=report_workers.init_worker,
+                initargs=(log_file, root.level <= logging.DEBUG),
+            )
+            self._log(f"Started {self.workers} worker processes")
+        return self._pool
+
+    def _close_pool(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=True, cancel_futures=True)
+            self._pool = None
+
+    # ═══════════════════════════════════════════════════════════════════════
     # PHASES 4-9
     # ═══════════════════════════════════════════════════════════════════════
 
@@ -547,10 +638,11 @@ class PipelineOrchestrator:
     def _phase_scaffolding(self):
         """Phase 4: Document Scaffolding."""
         self._phase_header("4", "DOCUMENT SCAFFOLDING")
-        service = ScaffoldingService()
         emitter = self.state.trace_emitter
 
-        for i, task in enumerate(self.state.successful_triaged, 1):
+        for i, (task, pending) in enumerate(
+            self._per_report(report_workers.scaffold_report, self.state.successful_triaged), 1
+        ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
 
@@ -560,7 +652,7 @@ class PipelineOrchestrator:
 
             # Note: start_report() and Phase 1-3 events are now emitted in _phases_1_to_3
             # This was moved in Fix 2 to capture Phase 1-3 events in real-time
-            result = service.build_scaffold(task, trace_emitter=emitter)
+            result = pending.get()
 
             if result.processing_status in ("scaffold_complete", "scaffold_partial"):
                 self.state.scaffold_complete.append(result)
@@ -687,14 +779,15 @@ class PipelineOrchestrator:
     def _phase_content_extraction(self):
         """Phase 6: Content Extraction with progress bar."""
         self._phase_header("6", "CONTENT EXTRACTION (AI-POWERED)")
-        service = ContentExtractionService()
         emitter = self.state.trace_emitter
 
         self._log(
             f"Extracting content from {len(self.state.layout_complete)} documents using AI vision models..."
         )
 
-        for i, task in enumerate(self.state.layout_complete, 1):
+        for i, (task, pending) in enumerate(
+            self._per_report(report_workers.extract_report, self.state.layout_complete), 1
+        ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
 
@@ -710,12 +803,9 @@ class PipelineOrchestrator:
             layout_block_count = sum(len(b) for b in (task.layout or {}).values())
 
             with emitter.phase_timer("6"):
-                # Extract with progress callback and trace emitter for per-table instrumentation
-                result = service.extract_content(
-                    task,
-                    progress_callback=on_progress if not self.quiet else None,
-                    trace_emitter=emitter,
-                )
+                # Extract with progress callback (in this process only) and the trace
+                # emitter for per-table instrumentation
+                result = pending.get(progress_callback=on_progress if not self.quiet else None)
 
                 # Clear progress bar if shown
                 if not self.quiet:
@@ -801,13 +891,14 @@ class PipelineOrchestrator:
         """Phase 7: Document Chunking."""
         self._phase_header("7", "DOCUMENT CHUNKING")
         emitter = self.state.trace_emitter
-        service = ChunkingService(trace_emitter=emitter)
 
         self._log(
             f"Creating semantic chunks for {len(self.state.content_complete)} documents..."
         )
 
-        for i, task in enumerate(self.state.content_complete, 1):
+        for i, (task, pending) in enumerate(
+            self._per_report(report_workers.chunk_report, self.state.content_complete), 1
+        ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
 
@@ -818,12 +909,9 @@ class PipelineOrchestrator:
 
             with emitter.phase_timer("7"):
                 try:
-                    parent_chunks, child_chunks = service.chunk_document(task, trace_emitter=emitter)
-
-                    # Update task with chunks
-                    task.parent_chunks = parent_chunks
-                    task.child_chunks = child_chunks
-                    task.processing_status = "chunking_complete"
+                    # The task comes back with its chunks (a copy when a worker made them)
+                    task = pending.get()
+                    parent_chunks, child_chunks = task.parent_chunks, task.child_chunks
 
                     self.state.chunking_complete.append(task)
                     parent_count = len(parent_chunks) if parent_chunks else 0
@@ -896,9 +984,25 @@ class PipelineOrchestrator:
         """Phase 7.5: Intelligent Hierarchy Enrichment."""
         self._phase_header("7.5", "INTELLIGENT HIERARCHY ENRICHMENT")
         emitter = self.state.trace_emitter
-        enricher = HierarchyEnricher(trace_emitter=emitter)
         enriched_count = 0
         skipped_count = 0
+
+        # Which reports need enrichment is decided here; the enrichment itself is
+        # per-report work
+        decisions = {
+            task.report_id: should_enrich_hierarchy(task.parent_chunks, task.child_chunks)
+            for task in self.state.chunking_complete
+            if task.parent_chunks and task.child_chunks
+        }
+        to_enrich = [t for t in self.state.chunking_complete if decisions.get(t.report_id, (False,))[0]]
+        pending_by_id = {
+            task.report_id: pending
+            for task, pending in self._per_report(
+                report_workers.enrich_hierarchy_report,
+                to_enrich,
+                args_for=lambda t: (aggressive_for_reason(decisions[t.report_id][1]),),
+            )
+        }
 
         self._log(
             f"Checking hierarchy quality for {len(self.state.chunking_complete)} documents..."
@@ -910,9 +1014,7 @@ class PipelineOrchestrator:
 
             with emitter.phase_timer("7.5"):
                 if task.parent_chunks and task.child_chunks:
-                    should_enrich, reason = should_enrich_hierarchy(
-                        task.parent_chunks, task.child_chunks
-                    )
+                    should_enrich, reason = decisions[task.report_id]
 
                     prev_parents = len(task.parent_chunks)
                     prev_children = len(task.child_chunks)
@@ -932,18 +1034,14 @@ class PipelineOrchestrator:
                             )
 
                         try:
-                            enriched_parents, enriched_children = enricher.enrich_hierarchy(
-                                parent_chunks=task.parent_chunks,
-                                child_chunks=task.child_chunks,
-                                report_id=task.report_id,
-                                # Flat or lopsided trees need sub-sections detected even
-                                # when the report already has many parents
-                                aggressive=aggressive_for_reason(reason),
-                                trace_emitter=emitter,
-                            )
+                            # Flat or lopsided trees need sub-sections detected even when
+                            # the report already has many parents (aggressive_for_reason)
+                            enriched_parents, enriched_children, outcome = pending_by_id[
+                                task.report_id
+                            ].get()
                             task.parent_chunks = enriched_parents
                             task.child_chunks = enriched_children
-                            outcome = enricher.last_outcome or {}
+                            outcome = outcome or {}
                             if outcome.get("status") == "rejected":
                                 # Safety valve kept the Phase 7 hierarchy unchanged
                                 self._log(
@@ -1023,7 +1121,14 @@ class PipelineOrchestrator:
             f"Assembling final JSON outputs for {len(self.state.chunking_complete)} documents..."
         )
 
-        for i, task in enumerate(self.state.chunking_complete, 1):
+        for i, (task, pending) in enumerate(
+            self._per_report(
+                report_workers.assemble_report,
+                self.state.chunking_complete,
+                args_for=lambda t: (self.run_id,),
+            ),
+            1,
+        ):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
 
@@ -1033,22 +1138,18 @@ class PipelineOrchestrator:
 
             with emitter.phase_timer("8"):
                 try:
-                    # Convert chunks to Pydantic models
-                    parent_chunks = [
-                        ParentChunk(**pc) if isinstance(pc, dict) else pc
-                        for pc in (task.parent_chunks or [])
-                    ]
-                    child_chunks = [
-                        ChildChunk(**cc) if isinstance(cc, dict) else cc
-                        for cc in (task.child_chunks or [])
-                    ]
+                    parent_chunks = task.parent_chunks or []
+                    child_chunks = task.child_chunks or []
 
-                    # Assemble document
-                    output_path = assembly_service.assemble_document(
-                        task=task,
-                        parent_chunks=parent_chunks,
-                        child_chunks=child_chunks,
-                        trace_emitter=emitter,
+                    # Assemble document; the tier manifest is updated here, one report
+                    # at a time, never by a worker
+                    output_path, assembled_parents, assembled_children = pending.get()
+                    assembly_service.mark_assembled(
+                        task.report_id,
+                        task.initial_metadata.get("government_body_type", "union"),
+                        output_path,
+                        parent_chunks=assembled_parents,
+                        child_chunks=assembled_children,
                     )
 
                     task.assembled_output_path = output_path
@@ -1098,7 +1199,6 @@ class PipelineOrchestrator:
     def _phase_semantic_enrichment(self):
         """Phase 9: Semantic Enrichment."""
         self._phase_header("9", "SEMANTIC ENRICHMENT")
-        service = SemanticEnrichmentService()
         manifest_service = AssemblyService(output_dir="data/processed", run_id=self.run_id)
         emitter = self.state.trace_emitter
 
@@ -1106,7 +1206,16 @@ class PipelineOrchestrator:
             "Extracting findings, recommendations, and entities for cross-report analytics..."
         )
 
-        for i, task in enumerate(self.state.assembly_complete, 1):
+        # Gemini calls stay in this process (one shared limiter): with LLM validation
+        # on, Phase 9 runs one report at a time here
+        phases_completed = self._phases_completed()
+        results = self._per_report(
+            report_workers.enrich_report,
+            self.state.assembly_complete,
+            args_for=lambda t: (self.run_id, phases_completed, self._pdf_for_checks(t)),
+            parallel=not llm_validation_enabled(),
+        )
+        for i, (task, pending) in enumerate(results, 1):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
 
@@ -1114,67 +1223,21 @@ class PipelineOrchestrator:
                 f"  [{i:2d}/{len(self.state.assembly_complete)}] Enriching {task.report_id}"
             )
             try:
-                # Load assembled JSON
-                with open(task.assembled_output_path, "r", encoding="utf-8") as f:
-                    assembled_data = json.load(f)
-
-                # Run enrichment
-                enrichment = service.enrich_document(
-                    report_id=assembled_data["report_metadata"]["report_id"],
-                    report_metadata=assembled_data["report_metadata"],
-                    parent_chunks=assembled_data["parent_chunks"],
-                    child_chunks=assembled_data["child_chunks"],
-                    task=task,  # report type (ATIR, state_*) comes from the manifest metadata
-                    trace_emitter=emitter,
-                )
-
-                # Add enrichment to data
-                assembled_data["semantic_enrichment"] = enrichment.model_dump()
-
-                # Propagate semantic enrichment to child chunks for Qdrant indexing
-                # This ensures finding_type, severity, is_recommendation, etc. are
-                # available at chunk level for filtered retrieval
-                findings_count, recs_count, entities_count = propagate_semantic_enrichment_to_chunks(
-                    assembled_data["child_chunks"],
-                    assembled_data["semantic_enrichment"],
-                )
-
-                # Red flags from phases 1-9 travel with the output (tracing or not)
-                assembled_data.setdefault("processing_stats", {})["red_flags"] = (
-                    emitter.get_red_flags(task.report_id)
-                )
-
-                metadata = assembled_data["report_metadata"]
-                metadata["processing_status"] = "enriched"
-                metadata["phases_completed"] = self._phases_completed()
-                metadata["pipeline_run_id"] = self.run_id
-                assembled_data["processing_stats"]["processing_status"] = "enriched"
-
-                # Preflight checks on the final output; never raises
-                quality = run_quality_checks(assembled_data, self._pdf_for_checks(task))
-                assembled_data["processing_stats"]["quality"] = quality
-                self.quality_summaries[task.report_id] = summarize_quality(quality)
-
-                # Write the working file, then rename it to the final *_chunks.json:
-                # a run stopped mid-write never leaves a partial final file
-                working_path = Path(task.assembled_output_path)
-                final_path = AssemblyService.final_output_path(working_path)
-                with open(working_path, "w", encoding="utf-8") as f:
-                    json.dump(assembled_data, f, indent=2, ensure_ascii=False)
-                os.replace(working_path, final_path)
-                task.assembled_output_path = str(final_path)
+                done = pending.get()
+                task.assembled_output_path = done["final_path"]
                 task.processing_status = "enriched"
+                self.quality_summaries[task.report_id] = done["quality_summary"]
                 manifest_service.mark_completed(
                     task.report_id,
-                    metadata.get("government_body_type", "union"),
-                    final_path,
-                    parent_chunks=len(assembled_data["parent_chunks"]),
-                    child_chunks=len(assembled_data["child_chunks"]),
-                    quality_status=self.quality_summaries[task.report_id].get("status"),
+                    done["tier"],
+                    done["final_path"],
+                    parent_chunks=done["parent_chunks"],
+                    child_chunks=done["child_chunks"],
+                    quality_status=done["quality_summary"].get("status"),
                 )
 
                 # Store enrichment stats for summary
-                stats = enrichment.statistics
+                stats = done["statistics"]
                 task.enrichment_stats = stats
 
                 self._log(
@@ -1307,10 +1370,29 @@ class PipelineOrchestrator:
                     service = BatchService(trace_emitter=emitter)
                     logger.info("Phase 10a: BatchService initialized, submitting batches...")
 
-                    # Gemini calls run to completion here
-                    overview_batch_id = service.submit_overview_batch(json_files)
-                    summary_batch_id = service.submit_summary_batch(json_files)
-                    hierarchical_batch_id = service.submit_hierarchical_batch(json_files)
+                    # Gemini calls run to completion here. The three batches are
+                    # independent; with --workers > 1 they go to the shared limiter
+                    # together instead of one after another
+                    if self.workers > 1:
+                        from concurrent.futures import ThreadPoolExecutor
+
+                        # One timestamp for all three (as BatchService's own submit-all does),
+                        # set before the threads start so none of them makes its own
+                        job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        service._current_job_timestamp = job_timestamp
+                        with ThreadPoolExecutor(max_workers=3) as batches:
+                            overview = batches.submit(service.submit_overview_batch, json_files, job_timestamp)
+                            summary = batches.submit(service.submit_summary_batch, json_files, job_timestamp)
+                            hierarchical = batches.submit(
+                                service.submit_hierarchical_batch, json_files, job_timestamp=job_timestamp
+                            )
+                            overview_batch_id = overview.result()
+                            summary_batch_id = summary.result()
+                            hierarchical_batch_id = hierarchical.result()
+                    else:
+                        overview_batch_id = service.submit_overview_batch(json_files)
+                        summary_batch_id = service.submit_summary_batch(json_files)
+                        hierarchical_batch_id = service.submit_hierarchical_batch(json_files)
 
                     # Create job tracker
                     report_ids = [f.stem.replace("_chunks", "") for f in json_files]
@@ -1954,6 +2036,16 @@ class PipelineOrchestrator:
 SKIPPABLE_PHASES = ("5.5", "10a", "10b", "10c")
 
 
+def llm_validation_enabled() -> bool:
+    """Phase 9 LLM validation calls Gemini (off by default in the pattern config)."""
+    from src.parsing_pipeline.modules.enrichment.pattern_loader import get_pattern_loader
+
+    try:
+        return bool(get_pattern_loader().get_llm_validation_config().get("enabled", False))
+    except Exception:
+        return False
+
+
 def parse_skip_phases(values) -> list:
     """Accept "--skip 10a 10b" and "--skip 10a,10b" (the workflow passes commas)."""
     phases = [p.strip() for v in values or [] for p in v.split(",") if p.strip()]
@@ -1992,42 +2084,8 @@ def setup_logging(debug: bool = False, run_id: Optional[str] = None):
     run_id = run_id or resolve_run_id()
     log_filename = logs_dir / f"parsing_pipeline_{datetime.now().strftime('%Y%m%d')}_{run_id}.log"
 
-    # Configure root logger
+    configure_logging(str(log_filename), debug)
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
-
-    # Remove existing handlers to avoid duplicates
-    root_logger.handlers.clear()
-
-    # Console handler (stdout)
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter(
-        '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    console_handler.setFormatter(console_formatter)
-    root_logger.addHandler(console_handler)
-
-    # Plain file handler: size-based rotation split long runs across files
-    file_handler = logging.FileHandler(log_filename, encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    file_handler.setFormatter(file_formatter)
-    root_logger.addHandler(file_handler)
-
-    # Suppress noisy third-party loggers unless debug mode
-    if not debug:
-        logging.getLogger('docling').setLevel(logging.WARNING)
-        logging.getLogger('urllib3').setLevel(logging.WARNING)
-        logging.getLogger('pdfminer').setLevel(logging.WARNING)
-        logging.getLogger('PIL').setLevel(logging.WARNING)
-        logging.getLogger('httpx').setLevel(logging.WARNING)
-        logging.getLogger('asyncio').setLevel(logging.WARNING)
-
     root_logger.info(f"Logging configured: console (INFO) + file ({log_filename}, DEBUG)")
 
 
@@ -2085,6 +2143,13 @@ Examples:
              "(default: $RUN_ID, $GITHUB_RUN_ID or a timestamp)",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Reports processed at once within a phase (OCR, Phases 4 and 6-9); "
+             "Docling stays one report at a time. Default 1 (sequential)",
+    )
+    parser.add_argument(
         "--trace",
         action="store_true",
         help="Enable trace instrumentation. Emits detailed per-report markdown traces "
@@ -2123,6 +2188,7 @@ Examples:
         report_filter=args.reports,
         trace=args.trace,
         run_id=args.run_id,
+        workers=args.workers,
     )
     return await orchestrator.run()
 

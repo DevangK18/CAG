@@ -213,7 +213,9 @@ class EntityExtractor:
                     if cleaned:
                         entities.append(cleaned)
 
-        return list(set(entities))[:10]  # Max 10 entities per finding
+        # Max 10 entities per finding, the first ones found: a set's order changes
+        # from one process to the next, which changed the list between runs
+        return list(dict.fromkeys(entities))[:10]
 
     def _clean_entity(self, raw: str) -> Optional[str]:
         """

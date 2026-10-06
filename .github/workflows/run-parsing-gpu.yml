@@ -40,7 +40,7 @@ on:
         type: string
         default: ''
       jobs:
-        description: 'Several jobs on one VM, run one after another: JSON list of {"manifest", "reports", "skip_phases"}. Overrides the three inputs above'
+        description: 'Several jobs on one VM, run one after another: JSON list of {"manifest", "reports", "skip_phases", "workers"}. Overrides manifest, reports and skip_phases'
         required: false
         type: string
         default: ''
@@ -54,6 +54,11 @@ on:
         required: true
         type: string
         default: 'cag-parsing-gpu-vm cag-parsing-gpu-vm-2 cag-parsing-gpu-vm-t4'
+      workers:
+        description: 'Reports processed at once within a phase (--workers); a job may set its own'
+        required: false
+        type: string
+        default: '1'
       start_rounds:
         description: 'Rounds over the VM list before giving up (2 min between rounds)'
         required: false
@@ -276,6 +281,7 @@ jobs:
           IN_MANIFEST: ${{ inputs.manifest }}
           IN_REPORTS: ${{ inputs.reports }}
           IN_SKIP: ${{ inputs.skip_phases }}
+          IN_WORKERS: ${{ inputs.workers }}
         run: |
           cat > /tmp/run_pipeline.sh << 'SCRIPT_EOF'
           #!/bin/bash
@@ -296,7 +302,7 @@ jobs:
           RUN_ID="${RUN_ID}"
           MAX_HOURS="${MAX_HOURS}"
           GCS_OUT="gs://${DATA_BUCKET}/${OUTPUT_PREFIX}"
-          # One line per job: manifest|skip phases|report IDs
+          # One line per job: manifest|skip phases|report IDs|workers
           JOBS_FILE=/tmp/jobs.txt
           JOB_COUNT=$(grep -c . "${JOBS_FILE}")
           RUN_DIR=/var/tmp/cag/runs-gpu/${RUN_ID}
@@ -307,7 +313,7 @@ jobs:
           echo "============================================="
           echo "PROJECT_ID: ${PROJECT_ID}"
           echo "DATA_BUCKET: ${DATA_BUCKET}"
-          echo "JOBS (manifest|skip|reports):"
+          echo "JOBS (manifest|skip|reports|workers):"
           nl -ba "${JOBS_FILE}"
           echo "OUTPUT: ${GCS_OUT}/"
           echo ""
@@ -393,14 +399,14 @@ jobs:
 
           # Run one job: its own manifest, run ID, exit code, run summary and upload
           run_job() {
-            local N="$1" MANIFEST="$2" SKIP="$3" REPORTS="$4" JOB_RUN_ID="$5"
+            local N="$1" MANIFEST="$2" SKIP="$3" REPORTS="$4" JOB_RUN_ID="$5" WORKERS="${6:-1}"
             local SKIP_ARG="" REPORTS_ARG="" PIPELINE_RC REMAINING
             [ -n "${SKIP}" ] && SKIP_ARG="--skip ${SKIP}"
             [ -n "${REPORTS}" ] && REPORTS_ARG="--reports ${REPORTS}"
             echo ""
             echo "============================================="
             echo "Job ${N}/${JOB_COUNT}: ${MANIFEST} (run ${JOB_RUN_ID})"
-            echo "  Skip: ${SKIP:-none}   Reports: ${REPORTS:-all}"
+            echo "  Skip: ${SKIP:-none}   Reports: ${REPORTS:-all}   Workers: ${WORKERS}"
             echo "============================================="
 
             echo "Downloading manifest..."
@@ -434,7 +440,7 @@ jobs:
               -e LLM_PROVIDER=gemini \
               -e RUN_ID=${JOB_RUN_ID} \
               ${PARSING_IMAGE} \
-              manifest.xlsx ${SKIP_ARG} ${REPORTS_ARG}
+              manifest.xlsx --workers "${WORKERS}" ${SKIP_ARG} ${REPORTS_ARG}
             PIPELINE_RC=$?
             echo "Pipeline exit code: ${PIPELINE_RC}"
             if [ ${PIPELINE_RC} -eq 124 ] || [ ${PIPELINE_RC} -eq 137 ]; then
@@ -489,13 +495,13 @@ jobs:
           FINAL_RC=0
           N=0
           : > "${RUN_DIR}/jobs.txt"
-          while IFS='|' read -r MANIFEST SKIP REPORTS <&3; do
+          while IFS='|' read -r MANIFEST SKIP REPORTS WORKERS <&3; do
             [ -n "${MANIFEST}" ] || continue
             N=$((N + 1))
             JOB_RUN_ID="${RUN_ID}"
             [ "${JOB_COUNT}" -gt 1 ] && JOB_RUN_ID="${RUN_ID}-${N}"
             set +e
-            run_job "${N}" "${MANIFEST}" "${SKIP}" "${REPORTS}" "${JOB_RUN_ID}"
+            run_job "${N}" "${MANIFEST}" "${SKIP}" "${REPORTS}" "${JOB_RUN_ID}" "${WORKERS}"
             RC=$?
             set -e
             echo "${N}|${JOB_RUN_ID}|${RC}|${MANIFEST}" >> "${RUN_DIR}/jobs.txt"
@@ -539,15 +545,18 @@ jobs:
               manifest = str(job.get("manifest") or "").strip()
               reports = " ".join(str(job.get("reports") or "").split())
               skip = str(job.get("skip_phases") or "").replace(" ", "")
+              workers = str(job.get("workers") or os.environ.get("IN_WORKERS") or "1").strip()
               if not re.fullmatch(r"[A-Za-z0-9 ._()-]+\.xlsx", manifest):
                   sys.exit(f"bad manifest name: {manifest!r}")
               if not re.fullmatch(r"[A-Za-z0-9_. -]*", reports):
                   sys.exit(f"bad report IDs: {reports!r}")
               if not re.fullmatch(r"[0-9a-c.,]*", skip):
                   sys.exit(f"bad skip_phases: {skip!r}")
-              print(f"{manifest}|{skip}|{reports}")
+              if not re.fullmatch(r"[1-9]|1[0-6]", workers):
+                  sys.exit(f"workers must be 1 to 16: {workers!r}")
+              print(f"{manifest}|{skip}|{reports}|{workers}")
           PY_EOF
-          echo "Jobs (manifest|skip|reports):"
+          echo "Jobs (manifest|skip|reports|workers):"
           cat /tmp/jobs.txt
 
           sed -i "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" /tmp/run_pipeline.sh
@@ -639,7 +648,7 @@ jobs:
           GCS_RUN="gs://${{ env.DATA_BUCKET }}/runs-gpu/${{ github.run_id }}"
           echo "Running GPU parsing pipeline (detached on VM)..."
           echo "  VM: ${{ env.VM_NAME }} (${{ env.ZONE }})"
-          echo "  Jobs (manifest|skip|reports):"
+          echo "  Jobs (manifest|skip|reports|workers):"
           sed 's/^/    /' /tmp/jobs.txt
           echo "  Output: gs://${{ env.DATA_BUCKET }}/${{ env.OUTPUT_PREFIX }}/"
           echo "  Max hours: ${{ inputs.max_hours || '12' }}"
@@ -714,7 +723,7 @@ jobs:
           echo "## Parsing Pipeline (GPU) Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**VM:** ${{ env.VM_NAME || 'none started' }} (${{ env.ZONE }})" >> $GITHUB_STEP_SUMMARY
-          echo "**Jobs (manifest | skip | reports):**" >> $GITHUB_STEP_SUMMARY
+          echo "**Jobs (manifest | skip | reports | workers):**" >> $GITHUB_STEP_SUMMARY
           if [ -s /tmp/jobs.txt ]; then
             sed 's/^/- /; s/|/ | /g' /tmp/jobs.txt >> $GITHUB_STEP_SUMMARY
           fi

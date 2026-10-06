@@ -318,6 +318,11 @@ class TraceEmitter:
             )
         )
 
+    def add_red_flags(self, report_id: str, flags: List[Dict[str, Any]]) -> None:
+        """Record red flags raised for a report elsewhere (a worker process's emitter)."""
+        if flags:
+            self._red_flags_by_report.setdefault(report_id, []).extend(flags)
+
     def get_red_flags(self, report_id: Optional[str] = None) -> Any:
         """Red flags for one report, or a dict of all of them (key "_run" = unattributed)."""
         if report_id is None:

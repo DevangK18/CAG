@@ -299,6 +299,7 @@ class AssemblyService:
         output_path = tier_dir / f"{task.report_id}_chunks.json{WORKING_SUFFIX}"
         assembled_data["report_metadata"]["processing_status"] = "assembled"
         self._write_json(assembled_data, output_path)
+        self.last_counts = (len(cleaned_parents), len(child_chunks))
 
         if not skip_manifest:
             self._update_manifest(
@@ -1007,6 +1008,10 @@ class AssemblyService:
             entry["output_path"] = str(self.final_output_path(output_path).relative_to(self.output_dir))
         self._save_manifest(tier)
         return entry
+
+    def mark_assembled(self, report_id: str, tier: str, output_path, **fields: Any) -> Dict[str, Any]:
+        """Phase 8 wrote the working file (recorded here when assembly skipped the manifest)."""
+        return self._update_manifest(report_id, tier, "assembled", output_path=Path(output_path), **fields)
 
     def mark_completed(self, report_id: str, tier: str, output_path, **fields: Any) -> Dict[str, Any]:
         """Phase 9 wrote the final output: the report is complete."""
