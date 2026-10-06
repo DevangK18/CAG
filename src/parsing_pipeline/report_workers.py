@@ -8,8 +8,8 @@ is no second implementation of a phase.
 
 Every call builds its services afresh, so nothing carries over from one report
 to the next, whichever process runs it. Worker processes are started with
-"spawn": the parent holds Docling and CUDA, which do not survive a fork. This
-module imports the services lazily so a worker does not load Docling.
+"spawn" (CUDA does not survive a fork); they import the pipeline's modules again
+but load Docling's models only in the Docling process (layout_report).
 """
 
 import logging
@@ -37,6 +37,21 @@ def scaffold_report(task, emitter):
     from src.parsing_pipeline.modules.scaffolding_service import ScaffoldingService
 
     return ScaffoldingService().build_scaffold(task, trace_emitter=emitter)
+
+
+_layout_service = None
+
+
+def layout_report(task, emitter):
+    """Phase 5, in the Docling process: the models load once per process."""
+    global _layout_service
+    if _layout_service is None:
+        from src.parsing_pipeline.modules.layout_analysis_service import (
+            LayoutAnalysisService,
+        )
+
+        _layout_service = LayoutAnalysisService()
+    return _layout_service.analyze_layout(task, trace_emitter=emitter)
 
 
 def extract_report(task, emitter, progress_callback=None):

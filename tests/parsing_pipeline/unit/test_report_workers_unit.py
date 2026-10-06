@@ -128,3 +128,28 @@ def test_report_and_phase_times_reach_the_run_summary(tmp_path, monkeypatch):
     assert timing["workers"] == 2
     assert set(timing["report_seconds"]) == {"A", "B"}
     assert "6" in timing["report_seconds"]["A"] and timing["phase_seconds"]["6"] >= 0
+
+
+def _layout_tasks(tmp_path, *ids):
+    return [SimpleNamespace(report_id=i, marker_dir=str(tmp_path), processing_status="scaffold_complete",
+                            error_log=[], layout=None) for i in ids]
+
+
+def test_docling_crash_is_retried_in_a_new_process(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    orch._docling_fn = _worker_fns.crash_first_time
+    orch.state.scaffold_complete = _layout_tasks(tmp_path, "A", "B")
+    orch._phase_layout()
+    assert [t.report_id for t in orch.state.layout_complete] == ["A", "B"]
+    assert orch._docling_pool is None  # closed after the phase
+
+
+def test_docling_crashing_twice_fails_only_that_report(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch)
+    orch._docling_fn = _worker_fns.crash_always
+    orch.state.scaffold_complete = _layout_tasks(tmp_path, "A")
+    orch._phase_layout()
+    assert orch.state.layout_complete == []
+    (task, error), = orch.state.failed["layout_analysis"]
+    assert task.report_id == "A" and "crashed twice" in error
+    assert [f["flag"] for f in orch.state.trace_emitter.get_red_flags("A")] == ["Docling process crashed"]
