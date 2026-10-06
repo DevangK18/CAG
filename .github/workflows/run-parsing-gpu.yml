@@ -11,11 +11,13 @@
 #   torch.cuda inside the image is unavailable (never silently falls back to CPU)
 # - Results go to gs://<bucket>/<output_prefix>/..., never to production paths;
 #   the legacy processed/manifest.json is never uploaded
-# - Refuses to start while another run is active on the VM
+# - Refuses to start while a run is active on any VM in the list
 # - Same detached design as the CPU workflow: the VM enforces max_hours,
 #   streams its log + status to gs://<bucket>/runs-gpu/<run_id>/ and powers
 #   itself off; this job polls until done or GitHub's 6h cap nears
-# - VM name/zone are inputs so more GPU VMs (e.g. one per tier) can be added
+# - Tries an ordered list of interchangeable GPU VMs (stand-bys in other zones and
+#   a T4 back-up) and runs on the first that starts: GPUs often stock out in one zone.
+#   The project's GPU quota is one, so exactly one of them runs at a time
 
 name: Run Parsing Pipeline (GPU)
 
@@ -42,16 +44,16 @@ on:
         required: true
         type: string
         default: 'gpu-test'
-      vm_name:
-        description: 'GPU VM to run on'
+      vms:
+        description: 'GPU VMs to try, in order (name or name:zone; the zone is looked up when omitted)'
         required: true
         type: string
-        default: 'cag-parsing-gpu-vm'
-      zone:
-        description: 'Zone of the GPU VM'
-        required: true
+        default: 'cag-parsing-gpu-vm cag-parsing-gpu-vm-2 cag-parsing-gpu-vm-t4'
+      start_rounds:
+        description: 'Rounds over the VM list before giving up (2 min between rounds)'
+        required: false
         type: string
-        default: 'us-central1-b'
+        default: '20'
       keep_vm_running:
         description: 'Keep VM running after completion (for debugging)'
         required: false
@@ -63,15 +65,14 @@ on:
         type: string
         default: '12'
 
-# One run per VM at a time; queued runs wait instead of cancelling a live run
+# One GPU run at a time (the GPU quota is one); queued runs wait instead of
+# cancelling a live run
 concurrency:
-  group: run-parsing-gpu-${{ inputs.vm_name }}
+  group: run-parsing-gpu
   cancel-in-progress: false
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  ZONE: ${{ inputs.zone }}
-  VM_NAME: ${{ inputs.vm_name }}
   DATA_BUCKET: cag-data-443e4a28
   OUTPUT_PREFIX: ${{ inputs.output_prefix }}
   CONTAINER_NAME: cag-parsing-gpu-run
@@ -133,25 +134,90 @@ jobs:
           # Add the SSH key to project metadata BEFORE starting the VM so it syncs at boot
           gcloud compute config-ssh --project=${{ env.PROJECT_ID }} --quiet
 
-      - name: Start GPU VM
+      # A run continues on its VM after this job stops polling, so every VM in the
+      # list is checked, not only the one this run will use
+      - name: Refuse to start while a run is active
+        id: guard
         run: |
-          # GPUs stock out: retry instead of masking the error with '|| true'
-          for i in 1 2 3 4 5 6; do
-            STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
-              --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }} --format="value(status)")
-            echo "VM status: ${STATUS}"
-            if [ "${STATUS}" = "RUNNING" ]; then
-              exit 0
+          : > /tmp/vms.txt
+          for ENTRY in ${{ inputs.vms }}; do
+            NAME="${ENTRY%%:*}"
+            ZONE_IN=""; [ "${ENTRY}" != "${NAME}" ] && ZONE_IN="${ENTRY#*:}"
+            if [ -z "${ZONE_IN}" ]; then
+              ZONE_IN=$(gcloud compute instances list --project=${{ env.PROJECT_ID }} \
+                --filter="name=${NAME}" --format="value(zone.basename())" | head -1)
             fi
-            if [ "${STATUS}" = "TERMINATED" ]; then
-              echo "Starting VM ${{ env.VM_NAME }} (attempt $i)..."
-              gcloud compute instances start ${{ env.VM_NAME }} \
-                --zone=${{ env.ZONE }} --project=${{ env.PROJECT_ID }} && exit 0
+            if [ -z "${ZONE_IN}" ]; then
+              echo "::warning::VM ${NAME} not found; skipping it"
+              continue
             fi
-            echo "Not started yet; retrying in 60s (GPU stockout or VM still stopping)"
-            sleep 60
+            echo "${NAME} ${ZONE_IN}" >> /tmp/vms.txt
           done
-          echo "::error::Could not start ${{ env.VM_NAME }} in ${{ env.ZONE }} (likely GPU stockout). Retry later."
+          if [ ! -s /tmp/vms.txt ]; then
+            echo "::error::None of the VMs in '${{ inputs.vms }}' exist"
+            exit 1
+          fi
+          cat /tmp/vms.txt
+
+          # Only a confirmed active run sets busy (which keeps that VM running). An SSH
+          # failure is reported as such.
+          while read -r NAME VZONE; do
+            # A failed lookup must not stop the step (bash -e); the VM is then skipped
+            STATUS=$(gcloud compute instances describe ${NAME} --zone=${VZONE} \
+              --project=${{ env.PROJECT_ID }} --format="value(status)" || echo UNKNOWN)
+            echo "${NAME} (${VZONE}): ${STATUS}"
+            [ "${STATUS}" = "RUNNING" ] || continue
+            if ! OUT=$(gcloud compute ssh ${NAME} --zone=${VZONE} --project=${{ env.PROJECT_ID }} \
+              --command='if pgrep -f "[r]un_detached.sh" >/dev/null || [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then echo busy; else echo idle; fi' < /dev/null); then
+              echo "::error::Could not check for an active run: SSH to ${NAME} failed."
+              exit 1
+            fi
+            ACTIVE=$(echo "${OUT}" | tail -1)
+            if [ "${ACTIVE}" = "busy" ]; then
+              echo "busy=true" >> $GITHUB_OUTPUT
+              echo "::error::A parsing run is already active on ${NAME}. Wait for it to finish."
+              exit 1
+            elif [ "${ACTIVE}" != "idle" ]; then
+              echo "::error::Active-run check on ${NAME} returned unexpected output: ${ACTIVE}"
+              exit 1
+            fi
+            # Already running and idle: use it (the GPU quota leaves no room for another)
+            echo "${NAME} ${VZONE}" > /tmp/running_idle.txt
+          done < /tmp/vms.txt
+
+      - name: Start a GPU VM
+        id: start
+        run: |
+          use() {
+            echo "VM_NAME=$1" >> $GITHUB_ENV
+            echo "ZONE=$2" >> $GITHUB_ENV
+            echo "vm=$1 ($2)" >> $GITHUB_OUTPUT
+            echo "Using $1 in $2"
+            exit 0
+          }
+          if [ -s /tmp/running_idle.txt ]; then
+            read -r NAME VZONE < /tmp/running_idle.txt
+            use "${NAME}" "${VZONE}"
+          fi
+          # GPUs stock out per zone: try each VM in order, then go round again
+          ROUNDS=${{ inputs.start_rounds || '20' }}
+          for ROUND in $(seq 1 ${ROUNDS}); do
+            while read -r NAME VZONE; do
+              STATUS=$(gcloud compute instances describe ${NAME} --zone=${VZONE} \
+                --project=${{ env.PROJECT_ID }} --format="value(status)" || echo UNKNOWN)
+              if [ "${STATUS}" = "TERMINATED" ]; then
+                echo "Round ${ROUND}: starting ${NAME} in ${VZONE}..."
+                if gcloud compute instances start ${NAME} --zone=${VZONE} \
+                  --project=${{ env.PROJECT_ID }} < /dev/null; then
+                  use "${NAME}" "${VZONE}"
+                fi
+              else
+                echo "Round ${ROUND}: ${NAME} is ${STATUS}; skipping"
+              fi
+            done < /tmp/vms.txt
+            [ ${ROUND} -lt ${ROUNDS} ] && { echo "No VM started; next round in 2 min"; sleep 120; }
+          done
+          echo "::error::No GPU VM could be started after ${ROUNDS} rounds (likely GPU stockout everywhere). Retry later."
           exit 1
 
       - name: Wait for VM SSH
@@ -170,30 +236,6 @@ jobs:
           done
           echo "Failed to connect to VM"
           exit 1
-
-      # A second run would wipe the data directory and overwrite the scripts of the
-      # active one; the VM must not be stopped by this job either
-      - name: Refuse to start while a run is active
-        id: guard
-        run: |
-          # Only a confirmed active run sets busy (which keeps the VM running). An SSH
-          # failure is reported as such and still lets the stop step run.
-          if ! OUT=$(gcloud compute ssh ${{ env.VM_NAME }} \
-            --zone=${{ env.ZONE }} \
-            --project=${{ env.PROJECT_ID }} \
-            --command='if pgrep -f "[r]un_detached.sh" >/dev/null || [ -n "$(docker ps -q --filter name=cag-parsing)" ]; then echo busy; else echo idle; fi'); then
-            echo "::error::Could not check for an active run: SSH to ${{ env.VM_NAME }} failed."
-            exit 1
-          fi
-          ACTIVE=$(echo "${OUT}" | tail -1)
-          if [ "${ACTIVE}" = "busy" ]; then
-            echo "busy=true" >> $GITHUB_OUTPUT
-            echo "::error::A parsing run is already active on ${{ env.VM_NAME }}. Wait for it to finish."
-            exit 1
-          elif [ "${ACTIVE}" != "idle" ]; then
-            echo "::error::Active-run check returned unexpected output: ${ACTIVE}"
-            exit 1
-          fi
 
       - name: Prepare GPU host
         run: |
@@ -549,7 +591,8 @@ jobs:
       - name: Stop GPU VM
         if: ${{ always() && !inputs.keep_vm_running && steps.guard.outputs.busy != 'true' && steps.pipeline.outputs.finished != 'false' }}
         run: |
-          echo "Stopping GPU VM to save costs..."
+          [ -n "${{ env.VM_NAME }}" ] || { echo "No VM was started"; exit 0; }
+          echo "Stopping GPU VM ${{ env.VM_NAME }} to save costs..."
           gcloud compute instances stop ${{ env.VM_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} || true
@@ -559,7 +602,7 @@ jobs:
         run: |
           echo "## Parsing Pipeline (GPU) Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**VM:** ${{ env.VM_NAME }} (${{ env.ZONE }})" >> $GITHUB_STEP_SUMMARY
+          echo "**VM:** ${{ env.VM_NAME || 'none started' }} (${{ env.ZONE }})" >> $GITHUB_STEP_SUMMARY
           echo "**Manifest:** ${{ inputs.manifest }}" >> $GITHUB_STEP_SUMMARY
           echo "**Skipped Phases:** ${{ inputs.skip_phases || 'None' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Reports:** ${{ inputs.reports || 'All' }}" >> $GITHUB_STEP_SUMMARY
