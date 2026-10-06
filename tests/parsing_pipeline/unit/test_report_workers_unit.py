@@ -33,7 +33,7 @@ def test_one_worker_runs_in_process_when_asked(tmp_path, monkeypatch):
         assert emitter is orch.state.trace_emitter
         return task.report_id + suffix
 
-    results = orch._per_report(fn, _tasks("A", "B"), args_for=lambda t: ("!",))
+    results = orch._per_report("6", fn, _tasks("A", "B"), args_for=lambda t: ("!",))
     assert calls == []  # nothing runs until the phase loop asks
     assert [r.get() for _, r in results] == ["A!", "B!"]
     assert calls == ["A", "B"]
@@ -41,7 +41,7 @@ def test_one_worker_runs_in_process_when_asked(tmp_path, monkeypatch):
 
 def test_in_process_errors_propagate_unchanged(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch)
-    (_, ok), (_, bad) = orch._per_report(_worker_fns.fail_on_b, _tasks("A", "B"))
+    (_, ok), (_, bad) = orch._per_report("6", _worker_fns.fail_on_b, _tasks("A", "B"))
     assert ok.get() == "A"
     with pytest.raises(ValueError, match="boom on B"):
         bad.get()
@@ -55,13 +55,13 @@ def test_workers_keep_order_return_errors_and_red_flags(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch, workers=2)
     try:
         tasks = _tasks("A", "B", "C")
-        results = orch._per_report(_worker_fns.tag_report, tasks, args_for=lambda t: ("-x",))
+        results = orch._per_report("6", _worker_fns.tag_report, tasks, args_for=lambda t: ("-x",))
         assert [t.report_id for t, _ in results] == ["A", "B", "C"]
         assert [r.get() for _, r in results] == ["A-x", "B-x", "C-x"]
         # The worker's red flag is recorded for its report in the run's emitter
         assert [f["flag"] for f in orch.state.trace_emitter.get_red_flags("B")] == ["test flag"]
 
-        (_, ok), (_, bad) = orch._per_report(_worker_fns.fail_on_b, _tasks("A", "B"))
+        (_, ok), (_, bad) = orch._per_report("6", _worker_fns.fail_on_b, _tasks("A", "B"))
         assert ok.get() == "A"
         with pytest.raises(report_workers.WorkerError, match="boom on B"):
             bad.get()
@@ -73,7 +73,7 @@ def test_worker_sees_the_reports_earlier_red_flags(tmp_path, monkeypatch):
     orch = _orch(tmp_path, monkeypatch, workers=2)
     try:
         orch.state.trace_emitter.emit_red_flag("4", "earlier", {"report_id": "A"})
-        results = orch._per_report(_worker_fns.prior_flag_count, _tasks("A", "B"))
+        results = orch._per_report("6", _worker_fns.prior_flag_count, _tasks("A", "B"))
         assert [r.get() for _, r in results] == [1, 0]
         # Seeded flags are not sent back as new ones
         assert len(orch.state.trace_emitter.get_red_flags("A")) == 1
@@ -114,3 +114,17 @@ def test_entities_keep_the_first_ten_in_text_order():
              "Coal", "Power", "Textiles", "Steel", "Mines", "Tourism"]
     text = ". ".join(f"The Ministry of {n} replied" for n in names)
     assert EntityExtractor().extract_entities_from_text(text) == [f"Ministry of {n}" for n in names[:10]]
+
+
+def test_report_and_phase_times_reach_the_run_summary(tmp_path, monkeypatch):
+    orch = _orch(tmp_path, monkeypatch, workers=2)
+    try:
+        with orch._timed("6"):
+            results = orch._per_report("6", _worker_fns.tag_report, _tasks("A", "B"), args_for=lambda t: ("",))
+            [r.get() for _, r in results]
+    finally:
+        orch._close_pool()
+    timing = orch._timing_summary()
+    assert timing["workers"] == 2
+    assert set(timing["report_seconds"]) == {"A", "B"}
+    assert "6" in timing["report_seconds"]["A"] and timing["phase_seconds"]["6"] >= 0
