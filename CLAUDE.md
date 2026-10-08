@@ -88,13 +88,28 @@ DATA_DIR=/app/data              # Local data directory
 |-----------|-------|---------------------------|
 | Chat/RAG | gemini-3.8-flash | $0.75 / $3.75 to 2026-12-31, then $1.50 / $7.50 |
 | Overview, 4 summary variants | gemini-3.1-pro-preview | $2.00 / $12.00 (≤200K prompt) |
-| Simple summary, RAPTOR chapter/section summaries, Phase 10b visuals, Phase 9 validation | gemini-3.8-flash | as Chat/RAG |
+| Simple summary, chapter/section summaries, Phase 10b visuals, Phase 9 findings and recommendations | gemini-3.8-flash | as Chat/RAG |
 | Query enhancement, routing, groundedness, canonicalisation | gemini-3.8-flash | as Chat/RAG |
 | Embeddings | text-embedding-005 | $0.00625 |
 
-Phase 10 models are set in `Phase10ModelConfig` (`src/core/phase10_models.py`). Every Gemini
-call goes through one adaptive limiter (`src/core/gemini_limiter.py`), configured
-under `gemini:` in `parsing_config.yaml`.
+Phase 10 models and Flash thinking levels are set in `src/core/phase10_models.py`. Every
+Gemini call goes through one limiter (`src/core/gemini_limiter.py`), configured under
+`gemini:` in `parsing_config.yaml`: a token budget per model (capacity x utilisation over a
+60 s window, counted like Google's throughput metric), an in-flight ceiling per model, and a
+429 retried alone. Utilisation steps down only while 429s stay high.
+
+**Phase 9 findings and recommendations:** one Flash call per section
+(`modules/enrichment/llm_finding_extractor.py`); the model returns chunk numbers, an anchor,
+the type and the printed impact amount, and code checks each item against the text
+(`llm_items.py`). Regex extractors are the cross-check and the fallback for a failed section.
+Calls run in the main process; worker processes do the rest of Phase 9.
+
+**Phase 10a order** (`batch_pipeline/phase10a_runner.py`): overviews at once; summaries
+bottom-up over every parent with real text (`summary_tree.py`); the five variants once a
+report's chapter summaries and overview are done. Phase 10b runs alongside 10a.
+
+**Promoting a run:** `promote-run.yml` (manual, dry run by default) copies a test prefix into
+the production paths; replaced files go to `quarantine/promote-<run id>/`.
 
 ## GCP Deployment
 
@@ -124,7 +139,7 @@ under `gemini:` in `parsing_config.yaml`.
 
 - **TOC Extraction:** Phase 4 bucketing → Phase 5.5 reconciliation
 - **Table Extraction:** pdfplumber → Docling TableFormer → Gemini fallback (0.911 TEDS)
-- **Semantic Enrichment:** Finding classification, severity tiers, 87+ regex patterns
+- **Semantic Enrichment:** Gemini findings and recommendations checked against the text, severity tiers, links to tables, appendices and paragraphs
 - **RAG:** Hybrid dense+BM25 search, Cohere reranking, parent-child chunking
 - **API:** 48 endpoints, SSE streaming, hierarchical summaries
 
