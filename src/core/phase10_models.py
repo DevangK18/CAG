@@ -36,13 +36,15 @@ class Phase10ModelConfig:
                 setattr(self, role, override)
 
 
-# Gemini thinking level per role; None leaves the model's default. Set from the
-# PR 9 thinking comparison (a lower level is kept only where quality held).
+# Gemini thinking level per role; None leaves the model's default. "low" where the
+# PR 9 comparison showed no loss: chart values agreed with the earlier output as
+# often (0.62 vs 0.57 at the default) and every number in the summaries was in the
+# report either way, at about a quarter of the cost.
 # Override with PHASE10_THINKING_<ROLE>; "default" restores the model's default.
 THINKING_LEVELS = {
-    "chapter_summary": None,
-    "section_summary": None,
-    "visual": None,
+    "chapter_summary": "low",
+    "section_summary": "low",
+    "visual": "low",
 }
 
 

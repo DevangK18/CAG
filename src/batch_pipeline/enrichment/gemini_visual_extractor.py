@@ -450,6 +450,18 @@ class GeminiVisualExtractor:
     # Concurrency, 429 back-off and the phase deadline come from the shared limiter
     # (src/core/gemini_limiter.py) inside generate_with_retry.
 
+    def _config(self, max_output_tokens: int):
+        """Request config: temperature at the Gemini 3 default, thinking level per role."""
+        from google.genai import types
+
+        from src.core.phase10_models import thinking_level
+
+        level = thinking_level("visual")
+        return types.GenerateContentConfig(
+            max_output_tokens=max_output_tokens,
+            thinking_config=types.ThinkingConfig(thinking_level=level) if level else None,
+        )
+
     async def _generate(self, tag: str = "phase10b.visual", **kwargs):
         """generate_content with backoff on transient errors (see gemini_client.generate_with_retry)."""
         from src.core.gemini_client import generate_with_retry
@@ -529,10 +541,7 @@ class GeminiVisualExtractor:
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                     types.Part.from_text(text=prompt),
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=8192,
-                ),
+                config=self._config(8192),
             )
 
         except Exception as e:
@@ -570,10 +579,7 @@ class GeminiVisualExtractor:
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                     types.Part.from_text(text=prompt),
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=8192,
-                ),
+                config=self._config(8192),
             )
 
         except Exception as e:
@@ -602,10 +608,8 @@ class GeminiVisualExtractor:
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                     types.Part.from_text(text=prompt),
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=1024,
-                ),
+                # Thinking counts against the limit: 1,024 left too little room
+                config=self._config(4096),
             )
 
         except Exception as e:
