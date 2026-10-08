@@ -29,6 +29,7 @@ returned batch_id is "gemini_sync_<timestamp>" (no polling or result download ne
 """
 
 import os
+import copy
 import json
 import time
 import hashlib
@@ -169,15 +170,32 @@ class BatchService:
             "policy": 16000,
         }
 
-        # Threads for concurrent calls; the shared limiter decides how many are in flight
+        # Threads for concurrent calls: enough for every model's ceiling; the limiter
+        # decides how many are in flight
         from src.core.gemini_limiter import get_limiter
 
-        self.max_workers = get_limiter().group_caps.get("phase10a", 8)
+        limiter = get_limiter()
+        self.max_workers = sum(limiter.ceiling(m) for m in set(self.models.values()) | {self.model_config.chapter_summary})
+        # Chunk files read before Phase 10b starts writing them (see preload)
+        self._chunks_cache: dict = {}
         # Requests still failing after their own retries get one more pass after this pause
         self.retry_pause_s = 60
 
         # Current job timestamp (set when creating job tracker)
         self._current_job_timestamp = None
+
+    def preload(self, json_files) -> None:
+        """Read the chunk files now: prompts are built from them as they were before Phase 10b."""
+        for json_path in json_files:
+            self._read_chunks(json_path)
+
+    def _read_chunks(self, json_path) -> dict:
+        key = str(Path(json_path).resolve())
+        if key not in self._chunks_cache:
+            with open(json_path) as f:
+                self._chunks_cache[key] = json.load(f)
+        # Copy: callers may change what they read
+        return copy.deepcopy(self._chunks_cache[key])
 
     def _get_mapping_path(self, job_timestamp: str = None) -> Path:
         """Get the ID mapping file path for a specific job."""
@@ -368,8 +386,7 @@ class BatchService:
         id_mapping = {}
 
         for json_path in json_files:
-            with open(json_path) as f:
-                data = json.load(f)
+            data = self._read_chunks(json_path)
 
             report_id = data["report_metadata"]["report_id"]
             prompt = build_overview_prompt(data)
@@ -470,8 +487,7 @@ class BatchService:
         grounding_sources = {}
 
         for json_path in json_files:
-            with open(json_path) as f:
-                data = json.load(f)
+            data = self._read_chunks(json_path)
 
             report_id = data["report_metadata"]["report_id"]
             summary_input = build_summary_input(data)
@@ -757,8 +773,7 @@ class BatchService:
         # Extract report IDs
         report_ids = []
         for json_path in json_files:
-            with open(json_path) as f:
-                data = json.load(f)
+            data = self._read_chunks(json_path)
             report_ids.append(data["report_metadata"]["report_id"])
 
         print(f"📦 Submitting Phase 10a batches for {len(report_ids)} reports...")
@@ -1039,8 +1054,7 @@ class BatchService:
         section_count = 0
 
         for json_path in json_files:
-            with open(json_path) as f:
-                data = json.load(f)
+            data = self._read_chunks(json_path)
 
             report_id = data["report_metadata"]["report_id"]
             tier = data["report_metadata"].get("government_body_type", "union")

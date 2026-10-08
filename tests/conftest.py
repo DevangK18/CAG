@@ -47,9 +47,9 @@ def _anonymous_google_credentials(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _fresh_gemini_limiter():
-    """The Gemini limiter is process-wide: start each test with a new one and no cool-down."""
-    from src.core.gemini_limiter import configure_limiter, reset_limiter
+    """The Gemini limiter is process-wide: start each test with a new one and no retry waits."""
+    from src.core.gemini_limiter import LimiterSettings, configure_limiter, reset_limiter
 
-    configure_limiter(cooldown_s=0)
+    configure_limiter(LimiterSettings(retry_first_wait_s=(0.0, 0.0), retry_max_wait_s=0.0))
     yield
     reset_limiter()

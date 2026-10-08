@@ -15,12 +15,13 @@ Design Philosophy:
 - Allow granular tuning without code changes
 """
 
+import json
 import logging
 import os
 import yaml
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -325,21 +326,52 @@ class SemanticEnrichmentConfig:
 
 @dataclass
 class GeminiConfig:
-    """Shared limiter for every Gemini call in the run (src/core/gemini_limiter.py)."""
+    """Limiter for every Gemini call in the run (src/core/gemini_limiter.py)."""
 
-    max_concurrency: int = 16
-    """Requests in flight across the run; halves on a 429 and grows back on success."""
+    models: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    """
+    Per model: capacity_tpm (tokens per minute at 100% utilisation), ceiling
+    (calls in flight), output_weight and cached_weight (how the budget counts
+    output and cached tokens). Each model has its own budget and state.
+    """
 
-    phase9_concurrency: int = 4
-    phase10a_concurrency: int = 8
-    phase10b_concurrency: int = 8
-    """Requests in flight per phase, so one phase cannot take every slot."""
+    default_model: Dict[str, Any] = field(default_factory=dict)
+    """Limits for a model not listed under `models`."""
 
+    window_seconds: float = 60.0
+    """Rolling window the budget is enforced over."""
+
+    start_utilisation: float = 1.0
+    max_utilisation: float = 1.0
+    min_utilisation: float = 0.30
+    utilisation_step: float = 0.10
+    """Budget = capacity x utilisation; utilisation moves in steps between the floor and the cap."""
+
+    step_down_rate: float = 0.10
+    step_down_min_throttles: int = 5
+    """Step down when 429s are at least this share of attempts in the window, and at least this many."""
+
+    step_up_rate: float = 0.02
+    """Step up after a window with 429s under this share of attempts."""
+
+    hold_seconds: float = 60.0
+    """After any step, hold this long before the next change."""
+
+    image_tokens: int = 1100
+    default_output_tokens: int = 1500
+    """Estimates used until a tag has real counts."""
+
+    retry_first_wait_seconds: List[float] = field(default_factory=lambda: [1.0, 3.0])
+    retry_max_wait_seconds: float = 30.0
+    retry_window_seconds: float = 300.0
+    """A failed call retries alone: a random first wait, doubling, capped, within the window."""
+
+    phase9_deadline_minutes: int = 60
     phase10a_deadline_minutes: int = 180
     phase10b_deadline_minutes: int = 180
     """
-    Time budget per phase. Requests after it fail fast and count as Phase 10
-    losses instead of running into the workflow's max_hours. 0 = no budget.
+    Time budget per phase. Requests after it fail fast and count as losses
+    instead of running into the workflow's max_hours. 0 = no budget.
     """
 
 
@@ -457,6 +489,11 @@ class ParsingPipelineConfig:
                     current_value = getattr(phase_obj, field_name)
                     if isinstance(current_value, bool):
                         new_value = env_value.lower() in ('true', '1', 'yes')
+                    elif isinstance(current_value, (list, dict)):
+                        # Lists and dicts are given as JSON, e.g. '[1, 3]'
+                        new_value = json.loads(env_value)
+                        if not isinstance(new_value, type(current_value)):
+                            raise ValueError(f"{env_key} must be a JSON {type(current_value).__name__}")
                     elif isinstance(current_value, int):
                         new_value = int(env_value)
                     elif isinstance(current_value, float):

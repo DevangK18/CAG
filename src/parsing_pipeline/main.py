@@ -79,6 +79,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from src.core.gemini_client import log_usage_summary, reset_usage
+from src.core.gemini_limiter import get_limiter  # noqa: E402
 
 # Import services from modules
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
@@ -261,15 +262,14 @@ class PipelineOrchestrator:
         finally:
             self._close_pool()
 
-        # Phase 10a: Overview & Summary (optional)
-        if "10a" not in self.skip:
-            with self._gemini_budget("phase10a"), self._timed("10a"):
-                self._phase_overview_summary()
-
-        # Phase 10b: Visual Extraction (optional)
-        if "10b" not in self.skip:
-            with self._gemini_budget("phase10b"), self._timed("10b"):
-                await self._phase_visual_extraction()
+        # Phases 10a and 10b run side by side: 10a is mostly Pro and 10b is Flash,
+        # so each model's budget stays busy
+        self._phase10_started = get_limiter().snapshot()
+        self._phase10a_inputs_read = asyncio.Event()
+        if "10a" in self.skip:
+            self._phase10a_inputs_read.set()
+        with self._timed("10"):
+            await asyncio.gather(self._run_phase10a(), self._run_phase10b())
 
         # Phase 10c: Visual Post-processing (optional)
         if "10c" not in self.skip:
@@ -1375,19 +1375,32 @@ class PipelineOrchestrator:
         )
 
     def _configure_gemini(self) -> None:
-        """One limiter for every Gemini call in this run (Phase 9 validation, 10a, 10b)."""
+        """One limiter for every Gemini call in this run, with a budget per model."""
         from src.core.gemini_limiter import configure_limiter
-        from src.parsing_pipeline.config import get_config
 
-        cfg = get_config().gemini
-        configure_limiter(
-            max_concurrency=cfg.max_concurrency,
-            group_caps={
-                "phase9": cfg.phase9_concurrency,
-                "phase10a": cfg.phase10a_concurrency,
-                "phase10b": cfg.phase10b_concurrency,
-            },
-        )
+        configure_limiter()
+
+    async def _run_phase10a(self) -> None:
+        """Phase 10a in a thread. Its inputs are read before 10b starts writing chunk files."""
+        if "10a" in self.skip:
+            return
+        try:
+            prepared = self._prepare_phase10a()
+        finally:
+            self._phase10a_inputs_read.set()
+
+        def run():
+            with self._gemini_budget("phase10a"), self._timed("10a"):
+                self._phase_overview_summary(prepared)
+
+        await asyncio.to_thread(run)
+
+    async def _run_phase10b(self) -> None:
+        if "10b" in self.skip:
+            return
+        await self._phase10a_inputs_read.wait()
+        with self._gemini_budget("phase10b"), self._timed("10b"):
+            await self._phase_visual_extraction()
 
     @contextmanager
     def _gemini_budget(self, group: str):
@@ -1403,14 +1416,9 @@ class PipelineOrchestrator:
         finally:
             limiter.set_deadline(group, None)
 
-    @staticmethod
-    def _limiter_stats() -> dict:
-        """429s seen, the lowest concurrency reached and time spent waiting for a slot."""
-        from src.core.gemini_limiter import get_limiter
-
-        stats = dict(get_limiter().stats)
-        stats["wait_s"] = round(stats["wait_s"], 1)
-        return stats
+    def _limiter_stats(self) -> dict:
+        """Per model: capacity, utilisation, tokens per minute, budget share, 429s, steps, waits."""
+        return get_limiter().summary(since=getattr(self, "_phase10_started", None))
 
     def _phases_completed(self) -> List[str]:
         """Phases that ran for a report reaching the end of Phase 9."""
@@ -1431,119 +1439,102 @@ class PipelineOrchestrator:
     # PHASE 10a: OVERVIEW & SUMMARY GENERATION
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _phase_overview_summary(self):
+    def _prepare_phase10a(self):
+        """Chunk files for Phase 10a, read into memory so Phase 10b can write them meanwhile."""
+        self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
+        logger = logging.getLogger(__name__)
+        logger.info(f"Phase 10a: enrichment_complete has {len(self.state.enrichment_complete)} reports")
+        if not self.state.enrichment_complete:
+            self._log("No reports completed enrichment. Skipping Phase 10a.")
+            return None
+        try:
+            from src.batch_pipeline.batch_service import BatchService
+        except ImportError:
+            self._log("⚠️  batch_pipeline module not found. Phase 10a skipped.", force=True)
+            return None
+
+        json_files = []
+        for task in self.state.enrichment_complete:
+            if task.assembled_output_path:
+                path = Path(task.assembled_output_path)
+                if path.exists():
+                    json_files.append(path)
+                else:
+                    logger.warning(f"Phase 10a: File not found: {path}")
+            else:
+                logger.warning(f"Phase 10a: No assembled_output_path for {task.report_id}")
+        logger.info(f"Phase 10a: Found {len(json_files)} valid JSON files")
+        if not json_files:
+            self._log("No JSON files found for Phase 10a processing.")
+            return None
+        try:
+            service = BatchService(trace_emitter=self.state.trace_emitter)
+            service.preload(json_files)
+        except Exception as e:
+            self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
+            return None
+        return service, json_files
+
+    def _phase_overview_summary(self, prepared):
         """
         Phase 10a: Overview & Summary Generation.
 
         Gemini on Vertex AI: direct concurrent calls, completes within this run.
         """
-        self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
+        if prepared is None:
+            return
+        service, json_files = prepared
+        try:
+            self._log(f"Submitting {len(json_files)} reports for Phase 10a processing...")
+            self._log("  (Overview extraction + 5 summary variants + RAPTOR chapter/section summaries)")
 
-        # Add explicit logging for debugging
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Phase 10a: enrichment_complete has {len(self.state.enrichment_complete)} reports")
+            # Gemini calls run to completion here. The three batches are independent
+            # and go to the limiter together instead of one after another. One
+            # timestamp for all three, set before the threads start
+            from concurrent.futures import ThreadPoolExecutor
 
-        if self.state.enrichment_complete:
-            try:
-                # Import batch service (will fail gracefully if not installed)
-                from src.batch_pipeline.batch_service import BatchService
-
-                # Get JSON files for successfully enriched reports
-                json_files = []
-                for task in self.state.enrichment_complete:
-                    if task.assembled_output_path:
-                        path = Path(task.assembled_output_path)
-                        if path.exists():
-                            json_files.append(path)
-                        else:
-                            logger.warning(f"Phase 10a: File not found: {path}")
-                    else:
-                        logger.warning(f"Phase 10a: No assembled_output_path for {task.report_id}")
-
-                logger.info(f"Phase 10a: Found {len(json_files)} valid JSON files")
-
-                if json_files:
-                    self._log(
-                        f"Submitting {len(json_files)} reports for Phase 10a processing..."
-                    )
-                    self._log(
-                        "  (Overview extraction + 5 summary variants + RAPTOR chapter/section summaries)"
-                    )
-
-                    emitter = self.state.trace_emitter
-                    logger.info("Phase 10a: Initializing BatchService...")
-                    service = BatchService(trace_emitter=emitter)
-                    logger.info("Phase 10a: BatchService initialized, submitting batches...")
-
-                    # Gemini calls run to completion here. The three batches are
-                    # independent; with --workers > 1 they go to the shared limiter
-                    # together instead of one after another
-                    if self.workers > 1:
-                        from concurrent.futures import ThreadPoolExecutor
-
-                        # One timestamp for all three (as BatchService's own submit-all does),
-                        # set before the threads start so none of them makes its own
-                        job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        service._current_job_timestamp = job_timestamp
-                        with ThreadPoolExecutor(max_workers=3) as batches:
-                            overview = batches.submit(service.submit_overview_batch, json_files, job_timestamp)
-                            summary = batches.submit(service.submit_summary_batch, json_files, job_timestamp)
-                            hierarchical = batches.submit(
-                                service.submit_hierarchical_batch, json_files, job_timestamp=job_timestamp
-                            )
-                            overview_batch_id = overview.result()
-                            summary_batch_id = summary.result()
-                            hierarchical_batch_id = hierarchical.result()
-                    else:
-                        overview_batch_id = service.submit_overview_batch(json_files)
-                        summary_batch_id = service.submit_summary_batch(json_files)
-                        hierarchical_batch_id = service.submit_hierarchical_batch(json_files)
-
-                    # Create job tracker
-                    report_ids = [f.stem.replace("_chunks", "") for f in json_files]
-                    phase10_tracker_path = service.create_job_tracker(
-                        overview_batch_id=overview_batch_id,
-                        summary_batch_id=summary_batch_id,
-                        report_ids=report_ids,
-                        hierarchical_batch_id=hierarchical_batch_id,
-                    )
-
-                    # Outputs are already on disk; build final overview files now
-                    from src.batch_pipeline.process_results import build_final_overviews
-
-                    merged, merge_failed = build_final_overviews(service, report_ids)
-
-                    with open(phase10_tracker_path) as f:
-                        tracker = json.load(f)
-                    tracker["status"] = "completed"
-                    tracker["completed_at"] = datetime.now().isoformat()
-                    with open(phase10_tracker_path, "w") as f:
-                        json.dump(tracker, f, indent=2)
-
-                    self.state.phase10a_completed = merged > 0
-                    self._record_phase10a_losses(service, report_ids, merge_failed)
-                    self._log(
-                        f"\n✅ Phase 10a complete: {merged} overview(s) created, "
-                        f"{merge_failed} failed",
-                        force=True,
-                    )
-                    self._log(f"   Job Tracker: {phase10_tracker_path}")
-                else:
-                    self._log("No JSON files found for Phase 10a processing.")
-
-            except ImportError:
-                self._log(
-                    "⚠️  batch_pipeline module not found. Phase 10a skipped.", force=True
+            job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            service._current_job_timestamp = job_timestamp
+            with ThreadPoolExecutor(max_workers=3) as batches:
+                overview = batches.submit(service.submit_overview_batch, json_files, job_timestamp)
+                summary = batches.submit(service.submit_summary_batch, json_files, job_timestamp)
+                hierarchical = batches.submit(
+                    service.submit_hierarchical_batch, json_files, job_timestamp=job_timestamp
                 )
-                self._log("   To enable Overview & Summary generation:")
-                self._log("   1. Copy batch_pipeline/ to services/batch_pipeline/")
-                self._log("   2. Ensure google-genai package is installed")
-            except Exception as e:
-                self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
-                self._log("   Pipeline completed through Phase 9.")
-        else:
-            self._log("No reports completed enrichment. Skipping Phase 10a.")
+                overview_batch_id = overview.result()
+                summary_batch_id = summary.result()
+                hierarchical_batch_id = hierarchical.result()
+
+            report_ids = [f.stem.replace("_chunks", "") for f in json_files]
+            phase10_tracker_path = service.create_job_tracker(
+                overview_batch_id=overview_batch_id,
+                summary_batch_id=summary_batch_id,
+                report_ids=report_ids,
+                hierarchical_batch_id=hierarchical_batch_id,
+            )
+
+            # Outputs are already on disk; build final overview files now
+            from src.batch_pipeline.process_results import build_final_overviews
+
+            merged, merge_failed = build_final_overviews(service, report_ids)
+
+            with open(phase10_tracker_path) as f:
+                tracker = json.load(f)
+            tracker["status"] = "completed"
+            tracker["completed_at"] = datetime.now().isoformat()
+            with open(phase10_tracker_path, "w") as f:
+                json.dump(tracker, f, indent=2)
+
+            self.state.phase10a_completed = merged > 0
+            self._record_phase10a_losses(service, report_ids, merge_failed)
+            self._log(
+                f"\n✅ Phase 10a complete: {merged} overview(s) created, {merge_failed} failed",
+                force=True,
+            )
+            self._log(f"   Job Tracker: {phase10_tracker_path}")
+        except Exception as e:
+            self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
+            self._log("   Pipeline completed through Phase 9.")
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 10b: VISUAL EXTRACTION
