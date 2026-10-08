@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "p9-v1"
+PROMPT_VERSION = "p9-v4"
 
 # Chunks numbered in the prompt; the model may cite only these
 ITEM_CONTENT_TYPES = ("paragraph", "list")
@@ -87,6 +87,10 @@ class ExtractedItem(BaseModel):
         default=None,
         description="The impact amount exactly as printed, e.g. '₹3.15 crore'",
     )
+    restatement: bool = Field(
+        default=False,
+        description="True when the item summarises a finding stated in full elsewhere in the report",
+    )
     rec_number: Optional[str] = Field(
         default=None, description="Recommendations only: the printed number"
     )
@@ -109,7 +113,7 @@ INSTRUCTIONS = """You read a report of the Comptroller and Auditor General of In
 The text is part of the report. Each paragraph or list item is numbered like [C12]. Lines starting with # are headings (they carry the chapter and paragraph numbers); lines in square brackets without a number mark tables and are not items.
 
 FINDING: an audit observation, grounded in audit evidence, that states something wrong with what the auditee did or achieved: a deficiency, irregularity, non-compliance, loss, shortfall, delay, idle or wasted resource, weak control, or an adverse outcome.
-- Include paragraphs that state a deficiency without a cue such as "Audit observed", case-study paragraphs that say what went wrong, and adverse statements in the executive summary, overview or conclusion.
+- Include paragraphs that state a deficiency without a cue such as "Audit observed", case-study paragraphs that say what went wrong, and adverse statements in the executive summary, overview, conclusion, or the summary or highlights box at the start of a chapter.
 - Exclude background (scheme descriptions, organisation, budget, legal framework), audit objectives, criteria, scope, methodology and sampling, neutral statistics and trends, management replies ("The Ministry stated (June 2024) that ..."), positive observations, and recommendations.
 - Audit's answer to a reply ("The reply is not acceptable because ...") belongs to the finding it answers: do not list it separately.
 - One item per audit paragraph: the paragraph as numbered in the report (e.g. 3.2.1), or each distinct observation paragraph within it. A finding that continues over several numbered chunks is one item listing all of them.
@@ -123,7 +127,8 @@ For each item give:
 - chunks: the chunk numbers it covers, in order, starting with the chunk where it begins;
 - anchor: the first 8 to 15 words of the item, copied exactly from that chunk;
 - finding_type (findings): the closest type, or "other";
-- impact_chunk and impact_text (findings): the chunk number and the exact printed text of the single amount that quantifies the finding's impact (the loss, irregular payment, idle investment, short levy, unspent amount), e.g. "₹3.15 crore"; null when the finding has no rupee impact. Quantities that are not money are never amounts;
+- impact_chunk and impact_text (findings): the chunk number and the exact printed text of the single amount that quantifies the finding's impact (the loss, irregular payment, idle investment, short levy, funds left unspent or surrendered), e.g. "₹3.15 crore"; null when the finding has no rupee impact. A sanctioned, granted, released or budgeted amount, or the value of an asset, is the impact only when the finding says that money was lost, wasted, left unused (for example released too late in the year to be spent) or spent irregularly. Quantities that are not money are never amounts;
+- restatement (findings): true when the item summarises a finding the report states in full elsewhere (executive summary, overview, conclusion, chapter highlights), false for the full statement itself;
 - rec_number and addressee (recommendations): the printed number if any, and who is asked to act.
 
 Several items may start in the same chunk. List every finding and recommendation in the text, in reading order. Return an empty list when there are none."""
@@ -134,7 +139,8 @@ TYPE_GUIDANCE = {
         "Institutions and Urban Local Bodies). Its findings are the deficiencies reported for the "
         "inspected units or themes: accounts not maintained or reconciled, utilisation certificates "
         "pending, funds unspent or diverted, irregular or excess payments, assets idle, records missing. "
-        "Its recommendations are often phrased as suggestions to the department."
+        "Its recommendations are often phrased as suggestions, to the department or to the primary "
+        "auditor (the State Audit Department); each numbered suggestion is a recommendation."
     ),
     "state_finances": (
         "This is a State Finances Audit Report. Besides compliance observations, its findings include "
@@ -455,6 +461,7 @@ class CheckedItem:
     rec_number: Optional[str]
     addressee: Optional[str]
     call_id: str
+    restatement: bool = False
     item_id: str = ""
 
 
@@ -528,6 +535,7 @@ def check_items(
                     rec_number=raw.get("rec_number"),
                     addressee=raw.get("addressee"),
                     call_id=call.get("call_id", ""),
+                    restatement=bool(raw.get("restatement")),
                 )
             )
 

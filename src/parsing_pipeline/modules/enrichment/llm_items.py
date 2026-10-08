@@ -92,7 +92,8 @@ def mark_restatements(
         f.location = (
             chunk_location(chunk, parent_types) if chunk else (f.location or "chapter")
         )
-        f.is_restatement = f.location != "chapter"
+        # A chapter's highlights box restates the chapter too: the model flags it
+        f.is_restatement = f.location != "chapter" or f.is_restatement
         f.is_executive_summary = (
             f.is_executive_summary or f.location == "executive_summary"
         )
@@ -217,6 +218,7 @@ def build_from_llm(
                     source_chunk_id=item.chunk_ids[0],
                     source_chunk_ids=item.chunk_ids,
                     extraction_method="llm",
+                    is_restatement=item.restatement,
                 )
             )
         else:

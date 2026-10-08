@@ -229,3 +229,14 @@ def test_anchor_tolerates_footnote_markers_and_runs_on_from_a_lead_in_chunk():
         "Audit noticed that: • In seven out of 85",
     )
     assert (index, offset) == (1, 0)
+
+
+def test_model_flagged_restatement_in_a_chapter_is_not_a_new_finding():
+    items = [{"kind": "finding", "chunks": [2], "anchor": "Audit observed that the Society released",
+              "impact_chunk": 2, "impact_text": "₹3.15 crore", "restatement": True}]
+    svc = SemanticEnrichmentService()
+    findings, _, _ = svc._extract_findings_and_recommendations(
+        RID, [], CHILDREN, [], "union", record(items), get_noop_emitter())
+    (f,) = findings
+    assert f.location == "chapter" and f.is_restatement
+    assert svc._calculate_statistics({}, findings, [], [])["findings"]["impact_sum_crore"] == 0
