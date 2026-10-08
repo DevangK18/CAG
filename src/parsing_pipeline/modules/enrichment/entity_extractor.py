@@ -30,14 +30,17 @@ class EntityExtractor:
     - Substring deduplication
     """
 
+    # A capital letter, Latin accents included ("Āyushman Bhārat")
+    _UP = "A-ZÀ-ÖØ-Þ\u0100-\u017f"
+
     # P3-1: Entity patterns - NO IGNORECASE, capitalization matters
     ENTITY_PATTERNS = {
         "schemes": [
-            # Require capital letter start, cap at 60 chars
-            r"(?:[Uu]nder\s+)?(?:the\s+)?([A-Z][\w\s]{2,55}(?:Scheme|Programme|Program|Mission|Yojana|Abhiyan))",
-            r"(?:[Uu]nder\s+)?(?:the\s+)?([A-Z][\w\s]{2,55}(?:Scheme|Programme|Program|Mission|Yojana))",
-            # Explicit acronym-in-parens pattern: "Pradhan Mantri Gram Sadak Yojana (PMGSY)"
-            r"(?:[Uu]nder\s+)?(?:the\s+)?([A-Z][\w\s]{5,55})\s*\([A-Z]{2,8}\)",
+            # A run of capitalised words (joined by of/for/and/the/in/to) ending in
+            # Scheme/Yojana/...: "Pradhan Mantri Awas Yojana", not "There are seven ... Scheme"
+            r"(?<![\w'’])((?!(?:The|This|These|That|Under|In|As|It|An|All|Audit|Its|Such|Each)\b)"
+            rf"[{_UP}][\w'’&-]*(?:\s+(?:(?:of|for|and|the|in|to|&)\s+)?[{_UP}][\w'’&-]*){{0,6}}"
+            r"\s+(?:Scheme|Programme|Program|Mission|Yojana|Abhiyan|Abhiyaan))\b",
         ],
         "ministries": [
             # Match Ministry/Department of <Capitalized Words>
@@ -80,15 +83,60 @@ class EntityExtractor:
         ],
     }
 
+    # "Gross Enrolment Ratio (GER)": an acronym and what it stands for, kept apart
+    # from schemes (most such definitions are not schemes)
+    ACRONYM_PATTERN = re.compile(
+        r"(?<![\w'’])((?!(?:The|This|These|In|Under|As|An|Audit|Its)\b)[A-Z][\w'’&-]*"
+        r"(?:\s+(?:(?:of|for|and|the|in|to|with|on|&)\s+)?[A-Z][\w'’&-]*){0,8})"
+        r"\s*\(\s*([A-Z][A-Za-z&]{1,9})\s*\)"
+    )
+    _CONNECTORS = {"of", "for", "and", "the", "in", "to", "with", "on", "&"}
+    _GOI_SUFFIX = re.compile(
+        r"\s*,?\s*\(?(?:GoI|GOI|Government\s+of\s+India|Govt\.?\s+of\s+India)\)?$"
+    )
+
     # P3-1: Verb stems and prepositions that indicate captured sentence fragments
     ENTITY_REJECT_VERBS = {
-        "was", "were", "is", "are", "has", "had", "have", "been",
-        "said", "noted", "observed", "stated", "found", "reported",
-        "recommended", "suggested", "directed", "instructed",
-        "mentioned", "indicated", "revealed", "submitted",
-        "failed", "did", "does", "could", "should", "would",
-        "the", "that", "this", "which", "where", "when",
-        "under", "over", "during", "after", "before", "from",  # Prepositions
+        "was",
+        "were",
+        "is",
+        "are",
+        "has",
+        "had",
+        "have",
+        "been",
+        "said",
+        "noted",
+        "observed",
+        "stated",
+        "found",
+        "reported",
+        "recommended",
+        "suggested",
+        "directed",
+        "instructed",
+        "mentioned",
+        "indicated",
+        "revealed",
+        "submitted",
+        "failed",
+        "did",
+        "does",
+        "could",
+        "should",
+        "would",
+        "the",
+        "that",
+        "this",
+        "which",
+        "where",
+        "when",
+        "under",
+        "over",
+        "during",
+        "after",
+        "before",
+        "from",  # Prepositions
     }
 
     # Scheme rejection patterns (filter out false positives)
@@ -110,13 +158,18 @@ class EntityExtractor:
 
     # P1-10: Job title patterns to reject
     JOB_TITLE_PATTERNS = [
-        re.compile(r"^(?:Block|District|State)\s+(?:Education|Development|Programme)\s+Officer", re.I),
+        re.compile(
+            r"^(?:Block|District|State)\s+(?:Education|Development|Programme)\s+Officer",
+            re.I,
+        ),
         re.compile(r"^(?:Chartered\s+)?Accountant$", re.I),
         re.compile(r"^Block\s+Resource\s+(?:Person|Coordinator)", re.I),
         re.compile(r"^Executive\s+Engineer$", re.I),
         re.compile(r"^District\s+Collector$", re.I),
         re.compile(r"^Chief\s+(?:Engineer|Executive)\s+Officer$", re.I),
-        re.compile(r"^(?:Assistant|Deputy|Joint)\s+(?:Commissioner|Director|Secretary)$", re.I),
+        re.compile(
+            r"^(?:Assistant|Deputy|Joint)\s+(?:Commissioner|Director|Secretary)$", re.I
+        ),
     ]
 
     # P1-10: Document section patterns to reject
@@ -141,6 +194,24 @@ class EntityExtractor:
             re.compile(p, re.IGNORECASE) for p in self.SCHEME_REJECT_PATTERNS
         ]
 
+        # alias (lowercase) -> canonical name, per entity type, from enrichment_patterns.yaml
+        self._aliases: Dict[str, Dict[str, str]] = {}
+        try:
+            from src.parsing_pipeline.modules.enrichment.pattern_loader import (
+                get_pattern_loader,
+            )
+
+            for entity_type, mapping in (
+                get_pattern_loader().get_entity_aliases() or {}
+            ).items():
+                lookup = self._aliases.setdefault(entity_type, {})
+                for canonical, aliases in (mapping or {}).items():
+                    lookup[canonical.lower()] = canonical
+                    for alias in aliases or []:
+                        lookup[str(alias).lower()] = canonical
+        except Exception:
+            self._aliases = {}
+
     def extract_entities(self, child_chunks: List[Dict]) -> Dict[str, List[str]]:
         """
         Extract named entities from all child chunks.
@@ -149,7 +220,8 @@ class EntityExtractor:
             child_chunks: List of child chunk dicts
 
         Returns:
-            Dict mapping entity type to sorted list of unique entities
+            Dict mapping entity type to sorted list of unique entities, plus
+            "acronyms": ["Gross Enrolment Ratio (GER)", ...]
         """
         entities: Dict[str, Set[str]] = {
             entity_type: set() for entity_type in self.ENTITY_PATTERNS.keys()
@@ -168,20 +240,64 @@ class EntityExtractor:
                         # Apply scheme rejection filter
                         if entity_type == "schemes":
                             if any(
-                                rej.search(match) for rej in self._scheme_reject_patterns
+                                rej.search(match)
+                                for rej in self._scheme_reject_patterns
                             ):
                                 continue
 
-                        cleaned = self._clean_entity(match)
+                        # Aliases first: "FCI" is too short to pass the cleaner on its own
+                        cleaned = self._clean_entity(
+                            self._canonical(entity_type, " ".join(match.split()))
+                        )
                         if cleaned:
                             entities[entity_type].add(cleaned)
 
         # Deduplicate by substring (keep longer form)
         for entity_type in entities:
-            entities[entity_type] = self._deduplicate_by_substring(entities[entity_type])
+            entities[entity_type] = self._deduplicate_by_substring(
+                entities[entity_type]
+            )
 
         # Convert sets to sorted lists
-        return {k: sorted(list(v)) for k, v in entities.items()}
+        result = {k: sorted(list(v)) for k, v in entities.items()}
+        result["acronyms"] = sorted(
+            f"{expansion} ({acronym})"
+            for acronym, expansion in self.extract_acronyms(child_chunks).items()
+        )
+        return result
+
+    def extract_acronyms(self, child_chunks: List[Dict]) -> Dict[str, str]:
+        """{"GER": "Gross Enrolment Ratio"}: acronyms the report defines, the first definition kept."""
+        found: Dict[str, str] = {}
+        for chunk in child_chunks:
+            for m in self.ACRONYM_PATTERN.finditer(chunk.get("content", "") or ""):
+                acronym = m.group(2)
+                if acronym in found:
+                    continue
+                expansion = self._expansion_for(m.group(1).split(), acronym)
+                if expansion:
+                    found[acronym] = expansion
+        return found
+
+    def _expansion_for(self, words: List[str], acronym: str) -> Optional[str]:
+        """The shortest tail of words whose initials spell the acronym's capitals."""
+        letters = [c for c in acronym if c.isupper()]
+        for start in range(len(words) - 1, -1, -1):
+            tail = words[start:]
+            if tail[0].lower() in self._CONNECTORS:
+                continue
+            initials = [w[0].upper() for w in tail if w.lower() not in self._CONNECTORS]
+            if initials == letters:
+                return " ".join(tail)
+            if len(initials) > len(letters):
+                break
+        return None
+
+    def _canonical(self, entity_type: str, entity: str) -> str:
+        """Alias -> canonical name; "Ministry of Education, GoI" -> "Ministry of Education"."""
+        if entity_type == "ministries":
+            entity = self._GOI_SUFFIX.sub("", entity).strip() or entity
+        return self._aliases.get(entity_type, {}).get(entity.lower(), entity)
 
     def extract_entities_from_text(self, text: str) -> List[str]:
         """
@@ -209,7 +325,9 @@ class EntityExtractor:
                         ):
                             continue
 
-                    cleaned = self._clean_entity(match)
+                    cleaned = self._clean_entity(
+                        self._canonical(entity_type, " ".join(match.split()))
+                    )
                     if cleaned:
                         entities.append(cleaned)
 
@@ -261,12 +379,12 @@ class EntityExtractor:
             return None
 
         # Reject if contains sentence-ending punctuation mid-string
-        if re.search(r'[.!?]\s+[A-Z]', cleaned):
+        if re.search(r"[.!?]\s+[A-Z]", cleaned):
             return None
 
         # P1-10: Detect stuttered/doubled text pattern (tokenizer artifact)
         # "DirectDirect BenefitBenefit TransferTransfer" → reject
-        if re.search(r'\b(\w{3,})\1\b', cleaned, re.IGNORECASE):
+        if re.search(r"\b(\w{3,})\1\b", cleaned, re.IGNORECASE):
             return None
 
         # P1-10: Reject standalone state names (but allow "Maharashtra Employment Scheme")
@@ -298,9 +416,10 @@ class EntityExtractor:
             Deduplicated set
         """
         deduped = set()
-        sorted_ents = sorted(entities, key=len, reverse=True)
+        sorted_ents = sorted(entities, key=lambda e: (-len(e), e))
         for ent in sorted_ents:
-            ent_lower = ent.lower()
-            if not any(ent_lower in existing.lower() for existing in deduped):
+            # Whole words only: "RD" is not part of "RDD"
+            inside = re.compile(r"(?<!\w)" + re.escape(ent.lower()) + r"(?!\w)")
+            if not any(inside.search(existing.lower()) for existing in deduped):
                 deduped.add(ent)
         return deduped

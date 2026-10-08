@@ -252,3 +252,17 @@ def test_image_chunks_without_text_are_not_indexed(content, empty):
 
     assert _empty_image_chunk({"content_type": "image_caption", "content": content}) is empty
     assert _empty_image_chunk({"content_type": "paragraph", "content": ""}) is False
+
+
+def test_empty_audit_period_filled_from_overview(tmp_path):
+    data = report()
+    data["semantic_enrichment"] = {"temporal_coverage": {"audit_period": None},
+                                   "findings": [{"finding_id": "f1", "audit_period": None}]}
+    chunk_file = tmp_path / "R_chunks.json"
+    chunk_file.write_text(json.dumps(data))
+    overview = tmp_path / "R_overview.json"
+    overview.write_text(json.dumps({"audit_scope": {"period": {"start": "2018-19", "end": "2022-23"}}}))
+    write_content_summaries(chunk_file, tmp_path / "missing.json", overview)
+    enrichment = json.loads(chunk_file.read_text())["semantic_enrichment"]
+    period = enrichment["temporal_coverage"]["audit_period"]
+    assert period and period.get("start_year") == 2018 and enrichment["findings"][0]["audit_period"] == period

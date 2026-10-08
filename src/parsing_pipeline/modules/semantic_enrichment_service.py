@@ -155,8 +155,9 @@ class SemanticEnrichmentService:
 
         # 1. Classify sections (with error handling - P1-A)
         try:
+            # Children give the classifier its text cues (finding cues in a body section)
             section_classifications = self._section_classifier.classify_sections(
-                parent_chunks
+                parent_chunks, child_chunks
             )
             logger.info(f"  Classified {len(section_classifications)} sections")
         except Exception as e:
@@ -200,7 +201,7 @@ class SemanticEnrichmentService:
 
         # 5. Create evidence links for findings (with error handling - P1-A)
         try:
-            evidence_links_map = self._link_evidence_to_findings(findings, child_chunks)
+            evidence_links_map = self._link_evidence_to_findings(findings, child_chunks, parent_chunks)
             logger.info(f"  Created evidence links for {len(evidence_links_map)} findings")
         except Exception as e:
             logger.warning(f"  Evidence linking failed: {e}")
@@ -673,36 +674,16 @@ class SemanticEnrichmentService:
         self,
         findings: List[Finding],
         child_chunks: List[Dict],
+        parent_chunks: Optional[List[Dict]] = None,
     ) -> Dict[str, List]:
-        """
-        Link findings to their supporting evidence.
-
-        Args:
-            findings: List of Finding objects
-            child_chunks: List of child chunk dicts
-
-        Returns:
-            Dict mapping finding_id to list of evidence links
-        """
-        # Convert findings to dicts for evidence linker
-        finding_dicts = [f.model_dump() for f in findings]
-
-        # Extract tables from child_chunks
-        tables = [
-            chunk for chunk in child_chunks if chunk.get("content_type") == "table"
-        ]
-
-        # Create evidence links
+        """Link findings to the tables, appendices and paragraphs their text cites."""
+        # The linker finds the table chunks (table_markdown) in child_chunks itself
         evidence_links_map = self._evidence_linker.link_all_findings(
-            finding_dicts, tables, child_chunks
+            [f.model_dump() for f in findings], [], child_chunks, parent_chunks
         )
-
-        # Update findings with their evidence links
         for finding in findings:
             if finding.finding_id in evidence_links_map:
-                links = evidence_links_map[finding.finding_id]
-                finding.evidence_links = [link.to_dict() for link in links]
-
+                finding.evidence_links = [link.to_dict() for link in evidence_links_map[finding.finding_id]]
         return evidence_links_map
 
     def _calculate_statistics(

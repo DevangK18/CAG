@@ -1495,8 +1495,9 @@ class PipelineOrchestrator:
         for task in self.state.enrichment_complete:
             path = Path(task.assembled_output_path or "")
             hierarchical = Path("data/batch_jobs/hierarchical") / f"{task.report_id}_hierarchical.json"
+            overview = path.parent / f"{task.report_id}_overview.json"
             try:
-                filled += write_content_summaries(path, hierarchical)
+                filled += write_content_summaries(path, hierarchical, overview)
             except Exception as e:  # the summaries stay in the hierarchical file
                 self._log(f"⚠️  Could not write summaries into {path.name}: {e}", force=True)
         self._log(f"   Summaries written to {filled} parent chunks")

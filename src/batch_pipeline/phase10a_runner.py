@@ -389,27 +389,44 @@ class Phase10aRun:
         return path
 
 
-def write_content_summaries(chunk_file: Path, hierarchical_file: Path) -> int:
+def write_content_summaries(chunk_file: Path, hierarchical_file: Path, overview_file: Optional[Path] = None) -> int:
     """
     Copy chapter and section summaries into their parent chunks' content_summary,
-    where the indexer reads them. Returns the number of parents filled.
+    where the indexer reads them, and fill an empty audit_period from the report's
+    overview (Phase 9 runs before the overview exists). Returns the number of
+    parents filled.
     """
-    if not hierarchical_file.exists() or not chunk_file.exists():
+    if not chunk_file.exists():
         return 0
-    summaries = json.loads(hierarchical_file.read_text())
-    by_parent = {
-        e["parent_chunk_id"]: e["summary"]
-        for e in (summaries.get("chapter_summaries") or [])
-        + (summaries.get("section_summaries") or [])
-        if e.get("summary")
-    }
     data = json.loads(chunk_file.read_text())
+    changed = False
     filled = 0
-    for parent in data.get("parent_chunks") or []:
-        summary = by_parent.get(parent.get("chunk_id"))
-        if summary:
-            parent["content_summary"] = summary
-            filled += 1
-    if filled:
+    if hierarchical_file.exists():
+        summaries = json.loads(hierarchical_file.read_text())
+        by_parent = {
+            e["parent_chunk_id"]: e["summary"]
+            for e in (summaries.get("chapter_summaries") or []) + (summaries.get("section_summaries") or [])
+            if e.get("summary")
+        }
+        for parent in data.get("parent_chunks") or []:
+            summary = by_parent.get(parent.get("chunk_id"))
+            if summary:
+                parent["content_summary"] = summary
+                filled += 1
+        changed = filled > 0
+    if overview_file is not None and overview_file.exists():
+        from src.parsing_pipeline.modules.enrichment.temporal_extractor import fill_audit_period_from_overview
+
+        enrichment = data.get("semantic_enrichment") or {}
+        coverage = enrichment.get("temporal_coverage")
+        try:
+            overview = json.loads(overview_file.read_text())
+        except ValueError:
+            overview = None
+        if coverage is not None and fill_audit_period_from_overview(coverage, overview):
+            for finding in enrichment.get("findings") or []:
+                finding["audit_period"] = finding.get("audit_period") or coverage["audit_period"]
+            changed = True
+    if changed:
         write_json_atomic(chunk_file, data)
     return filled

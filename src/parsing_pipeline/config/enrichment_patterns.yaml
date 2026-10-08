@@ -272,7 +272,7 @@ section_patterns:
 # ENTITY ALIASES
 # ═══════════════════════════════════════════════════════════════════════
 # Maps common abbreviations/variants to canonical entity names.
-# Used for entity normalization (P2-A future enhancement).
+# Loaded by EntityExtractor: an alias found in the text is stored under its canonical name.
 
 entity_aliases:
   ministries:
@@ -299,9 +299,10 @@ entity_aliases:
       - "Agriculture Ministry"
 
   organizations:
-    "National Highway Authority of India":
+    "National Highways Authority of India":
       - "NHAI"
       - "National Highways Authority"
+      - "National Highway Authority of India"
     "Food Corporation of India":
       - "FCI"
     "Central Board of Direct Taxes":

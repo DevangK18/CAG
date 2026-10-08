@@ -328,6 +328,7 @@ class SeverityEnum(str, Enum):
 class SectionTypeEnum(str, Enum):
     """Semantic classification of document sections."""
 
+    FRONT_MATTER = "front_matter"
     EXECUTIVE_SUMMARY = "executive_summary"
     INTRODUCTION = "introduction"
     AUDIT_OBJECTIVES = "audit_objectives"
@@ -562,10 +563,13 @@ class SectionClassification(BaseModel):
     section_title: str = Field(..., description="Section title from TOC")
     section_type: str = Field(..., description="SectionType enum value")
     confidence: float = Field(..., description="Classification confidence 0.0-1.0")
-    # P1-C: Flag for low-confidence extractions needing LLM validation
+    # P1-C: Flag for low-confidence extractions
     is_low_confidence: bool = Field(
         default=False,
-        description="True if confidence below threshold, candidate for LLM validation"
+        description="True if the section's role signals disagree (confidence below threshold)"
+    )
+    topic: Optional[str] = Field(
+        default=None, description="Topical tag (financial_management, monitoring_evaluation, ...)"
     )
 
 

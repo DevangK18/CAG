@@ -8,8 +8,14 @@ Part of Phase 1 Enhancement (P1-3: Evidence Cross-Reference Linking)
 """
 
 import re
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass
+from typing import Dict, List, Optional
+
+from src.parsing_pipeline.modules.enrichment.cross_reference_resolver import (
+    ReferenceIndex,
+    find_references,
+    parents_from_children,
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -55,55 +61,23 @@ class ReferenceMatch:
 # REFERENCE EXTRACTION PATTERNS
 # ═══════════════════════════════════════════════════════════════════════
 
-# Table references
-TABLE_REFERENCE_PATTERNS = [
-    # "Table 3.2", "Table 3.2.1"
-    (r"Table\s+(\d+(?:\.\d+)*)", "table", 0.95),
-    # "as shown in Table 3.2"
-    (r"(?:as\s+(?:shown|given|detailed|indicated)\s+in\s+)?Table\s+(\d+(?:\.\d+)*)", "table", 0.9),
-    # "vide Table 3.2", "refer Table 3.2"
-    (r"(?:vide|see|refer|refer\s+to)\s+Table\s+(\d+(?:\.\d+)*)", "table", 0.9),
-    # "(Table 3.2)"
-    (r"\(Table\s+(\d+(?:\.\d+)*)\)", "table", 0.85),
-]
-
-# Annexure references
-ANNEXURE_REFERENCE_PATTERNS = [
-    # "Annexure A", "Annexure-B", "Annexure III" (Roman numerals first to match longer sequences)
-    (r"Annexure[\s-]?([IVX]+\b)", "annexure", 0.95),  # Roman numerals (with word boundary)
-    (r"Annexure[\s-]?([A-Z](?![a-z]))", "annexure", 0.95),  # Single letter (not followed by lowercase)
-    (r"Annexure[\s-]?(\d+)", "annexure", 0.95),  # Numbers
-    # "Appendix A", "Annex B"
-    (r"(?:Appendix|Annex)[\s-]?([IVX]+\b)", "annexure", 0.9),
-    (r"(?:Appendix|Annex)[\s-]?([A-Z](?![a-z]))", "annexure", 0.9),
-    (r"(?:Appendix|Annex)[\s-]?(\d+)", "annexure", 0.9),
-    # "as per Annexure A"
-    (r"(?:as\s+per|vide|see|refer\s+to)\s+Annexure[\s-]?([IVX]+\b|[A-Z](?![a-z])|\d+)", "annexure", 0.9),
-    # "(Annexure A)"
-    (r"\(Annexure[\s-]?([IVX]+\b|[A-Z](?![a-z])|\d+)\)", "annexure", 0.85),
-]
-
-# Paragraph references
-PARAGRAPH_REFERENCE_PATTERNS = [
-    # "Para 3.2.1", "Paragraph 4.5"
-    (r"Para(?:graph)?\.?\s+(\d+(?:\.\d+)*)", "paragraph", 0.95),
-    # "as mentioned in Para 3.2"
-    (r"(?:as\s+(?:mentioned|discussed|stated)\s+(?:in|at)\s+)?Para(?:graph)?\.?\s+(\d+(?:\.\d+)*)", "paragraph", 0.9),
-    # "vide Para 3.2"
-    (r"(?:vide|see|refer\s+to)\s+Para(?:graph)?\.?\s+(\d+(?:\.\d+)*)", "paragraph", 0.9),
-    # "(Para 3.2)"
-    (r"\(Para(?:graph)?\.?\s+(\d+(?:\.\d+)*)\)", "paragraph", 0.85),
-]
-
-# Page references
+# Tables, paragraphs and annexures/appendices use the shared reference patterns
+# (enrichment/cross_reference_resolver.py); pages are only extracted, never
+# linked: "page 12" in a finding is nearly always a page of another document.
 PAGE_REFERENCE_PATTERNS = [
     # "page 25", "pages 25-30"
-    (r"pages?\s+(\d+(?:\s*-\s*\d+)?)", "page", 0.9),
+    (r"\bpages?\s+(\d+(?:\s*-\s*\d+)?)", "page", 0.9),
     # "(p. 42)", "(pg. 42)"
     (r"\(p(?:g)?\.?\s*(\d+)\)", "page", 0.85),
-    # "at page 25"
-    (r"at\s+page\s+(\d+)", "page", 0.9),
 ]
+
+_KIND_TO_TYPE = {
+    "table": "table",
+    "appendix": "annexure",
+    "para": "paragraph",
+    "section": "paragraph",
+}
+_CONFIDENCE = {"exact": 0.95, "prefix": 0.85, "ancestor": 0.75}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -114,22 +88,13 @@ PAGE_REFERENCE_PATTERNS = [
 class EvidenceLinker:
     """
     Links findings to supporting evidence by extracting and resolving references.
+
+    Resolution goes through the report's ReferenceIndex: a table by its number
+    (from its caption), an appendix by its exact ID, a paragraph by its section
+    number or the nearest numbered section above it.
     """
 
     def __init__(self):
-        """Initialize with compiled reference patterns."""
-        self._table_patterns = [
-            (re.compile(p, re.IGNORECASE), ref_type, conf)
-            for p, ref_type, conf in TABLE_REFERENCE_PATTERNS
-        ]
-        self._annexure_patterns = [
-            (re.compile(p, re.IGNORECASE), ref_type, conf)
-            for p, ref_type, conf in ANNEXURE_REFERENCE_PATTERNS
-        ]
-        self._paragraph_patterns = [
-            (re.compile(p, re.IGNORECASE), ref_type, conf)
-            for p, ref_type, conf in PARAGRAPH_REFERENCE_PATTERNS
-        ]
         self._page_patterns = [
             (re.compile(p, re.IGNORECASE), ref_type, conf)
             for p, ref_type, conf in PAGE_REFERENCE_PATTERNS
@@ -137,67 +102,42 @@ class EvidenceLinker:
 
     def extract_references(self, text: str) -> List[ReferenceMatch]:
         """
-        Extract all references from text.
-
-        Args:
-            text: Text to extract references from
-
-        Returns:
-            List of ReferenceMatch objects
+        Extract all references from text: one per (type, identifier), lists expanded,
+        another document's paragraphs ("Para 4.4.1 of SSIF") left out.
         """
         references = []
-
-        # Extract table references
-        references.extend(self._extract_references_by_patterns(text, self._table_patterns))
-
-        # Extract annexure references
-        references.extend(
-            self._extract_references_by_patterns(text, self._annexure_patterns)
-        )
-
-        # Extract paragraph references
-        references.extend(
-            self._extract_references_by_patterns(text, self._paragraph_patterns)
-        )
-
-        # Extract page references
-        references.extend(self._extract_references_by_patterns(text, self._page_patterns))
-
-        # Sort by position in text
-        references.sort(key=lambda r: r.position)
-
-        return references
-
-    def _extract_references_by_patterns(
-        self, text: str, patterns: List[Tuple[re.Pattern, str, float]]
-    ) -> List[ReferenceMatch]:
-        """Extract references using a set of patterns."""
-        references = []
-        seen_positions = set()  # Avoid duplicate matches at same position
-
-        for pattern, ref_type, confidence in patterns:
-            for match in pattern.finditer(text):
-                position = match.start()
-
-                # Skip if we already have a reference at this position
-                if position in seen_positions:
+        seen = set()
+        for ref in find_references(
+            text or "", ("table", "appendix", "para", "section")
+        ):
+            ref_type = _KIND_TO_TYPE[ref.kind]
+            if (ref_type, ref.target) in seen:
+                continue
+            seen.add((ref_type, ref.target))
+            references.append(
+                ReferenceMatch(
+                    reference_type=ref_type,
+                    identifier=ref.target,
+                    matched_text=ref.text,
+                    position=ref.start,
+                    confidence=0.95,
+                )
+            )
+        for pattern, ref_type, confidence in self._page_patterns:
+            for match in pattern.finditer(text or ""):
+                if (ref_type, match.group(1)) in seen:
                     continue
-
-                seen_positions.add(position)
-
-                identifier = match.group(1).strip()
-                matched_text = match.group(0)
-
+                seen.add((ref_type, match.group(1)))
                 references.append(
                     ReferenceMatch(
-                        reference_type=ref_type,
-                        identifier=identifier,
-                        matched_text=matched_text,
-                        position=position,
-                        confidence=confidence,
+                        ref_type,
+                        match.group(1).strip(),
+                        match.group(0),
+                        match.start(),
+                        confidence,
                     )
                 )
-
+        references.sort(key=lambda r: r.position)
         return references
 
     def link_finding_to_evidence(
@@ -205,17 +145,21 @@ class EvidenceLinker:
         finding: Dict,
         tables: List[Dict],
         chunks: List[Dict],
+        index: Optional[ReferenceIndex] = None,
+        parent_chunks: Optional[List[Dict]] = None,
     ) -> List[EvidenceLink]:
         """
         Create evidence links for a finding.
 
         Args:
             finding: Finding dict with 'finding_id', 'text', etc.
-            tables: List of table dicts (from structured_data or extracted_content)
+            tables: Table chunks (table_markdown); also found in chunks when this is empty
             chunks: List of child chunk dicts
+            index: The report's ReferenceIndex (built from parent_chunks and chunks if absent)
+            parent_chunks: Parent chunks; rebuilt from the children's hierarchy if absent
 
         Returns:
-            List of EvidenceLink objects
+            List of EvidenceLink objects, one per resolved (type, target)
         """
         finding_id = finding.get("finding_id", "")
         finding_text = finding.get("text", "")
@@ -223,74 +167,38 @@ class EvidenceLinker:
         if not finding_text:
             return []
 
-        # Extract all references from finding text
-        references = self.extract_references(finding_text)
+        if index is None:
+            index = self._build_index(tables, chunks, parent_chunks)
 
-        # Create links
+        own = set(finding.get("source_chunk_ids") or [finding.get("source_chunk_id")])
+        own_parents = {index.parent_of.get(c) for c in own if c}
+
         links = []
-
-        for ref in references:
-            if ref.reference_type == "table":
-                linked_table = self._find_table_by_number(ref.identifier, tables)
-                if linked_table:
-                    table_id = linked_table.get("table_id") or linked_table.get(
-                        "chunk_id", ""
-                    )
-                    links.append(
-                        EvidenceLink(
-                            link_id=f"link_{finding_id}_{table_id}",
-                            finding_id=finding_id,
-                            evidence_type="table",
-                            evidence_id=table_id,
-                            reference_text=ref.matched_text,
-                            confidence=ref.confidence,
-                        )
-                    )
-
-            elif ref.reference_type == "annexure":
-                linked_annexure = self._find_annexure(ref.identifier, chunks)
-                if linked_annexure:
-                    annexure_id = linked_annexure.get("chunk_id", "")
-                    links.append(
-                        EvidenceLink(
-                            link_id=f"link_{finding_id}_{annexure_id}",
-                            finding_id=finding_id,
-                            evidence_type="annexure",
-                            evidence_id=annexure_id,
-                            reference_text=ref.matched_text,
-                            confidence=ref.confidence,
-                        )
-                    )
-
-            elif ref.reference_type == "paragraph":
-                linked_para = self._find_chunk_by_para(ref.identifier, chunks)
-                if linked_para:
-                    para_id = linked_para.get("chunk_id", "")
-                    links.append(
-                        EvidenceLink(
-                            link_id=f"link_{finding_id}_{para_id}",
-                            finding_id=finding_id,
-                            evidence_type="paragraph",
-                            evidence_id=para_id,
-                            reference_text=ref.matched_text,
-                            confidence=ref.confidence,
-                        )
-                    )
-
-            elif ref.reference_type == "page":
-                # Page references are stored directly as page numbers
-                page_num = self._parse_page_number(ref.identifier)
-                if page_num:
-                    links.append(
-                        EvidenceLink(
-                            link_id=f"link_{finding_id}_page_{page_num}",
-                            finding_id=finding_id,
-                            evidence_type="page",
-                            evidence_id=str(page_num),
-                            reference_text=ref.matched_text,
-                            confidence=ref.confidence,
-                        )
-                    )
+        seen_targets = set()
+        for ref in find_references(
+            finding_text, ("table", "appendix", "para", "section")
+        ):
+            target, how = index.resolve(ref)
+            if not target:
+                continue
+            target_id = target["chunk_id"]
+            # The finding's own chunk or own section is not evidence for it
+            if target_id in own or (target_id in own_parents and how == "exact"):
+                continue
+            evidence_type = _KIND_TO_TYPE[ref.kind]
+            if (evidence_type, target_id) in seen_targets:
+                continue
+            seen_targets.add((evidence_type, target_id))
+            links.append(
+                EvidenceLink(
+                    link_id=f"link_{finding_id}_{target_id}",
+                    finding_id=finding_id,
+                    evidence_type=evidence_type,
+                    evidence_id=target_id,
+                    reference_text=ref.text,
+                    confidence=_CONFIDENCE.get(how, 0.75),
+                )
+            )
 
         return links
 
@@ -299,23 +207,26 @@ class EvidenceLinker:
         findings: List[Dict],
         tables: List[Dict],
         chunks: List[Dict],
+        parent_chunks: Optional[List[Dict]] = None,
     ) -> Dict[str, List[EvidenceLink]]:
         """
         Create evidence links for all findings.
 
         Args:
             findings: List of finding dicts
-            tables: List of table dicts
+            tables: Table chunks (table_markdown); also found in chunks when this is empty
             chunks: List of child chunk dicts
+            parent_chunks: Parent chunks; rebuilt from the children's hierarchy if absent
 
         Returns:
             Dict mapping finding_id to list of EvidenceLink objects
         """
+        index = self._build_index(tables, chunks, parent_chunks)
         all_links = {}
 
         for finding in findings:
             finding_id = finding.get("finding_id", "")
-            links = self.link_finding_to_evidence(finding, tables, chunks)
+            links = self.link_finding_to_evidence(finding, tables, chunks, index=index)
             if links:
                 all_links[finding_id] = links
 
@@ -325,141 +236,20 @@ class EvidenceLinker:
     # RESOLUTION HELPERS
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _find_table_by_number(
-        self, table_number: str, tables: List[Dict]
-    ) -> Optional[Dict]:
-        """
-        Find a table by its number (e.g., "3.2").
-
-        Args:
-            table_number: Table number string (e.g., "3.2", "4")
-            tables: List of table dicts or ExtractedContent dicts
-
-        Returns:
-            Matching table dict or None
-        """
-        table_number_normalized = table_number.strip()
-
-        for table in tables:
-            # Check if this is an ExtractedContent with structured_data
-            if table.get("content_type") == "table":
-                # Check title for table number
-                title = table.get("title", "")
-                if title:
-                    # Match "Table 3.2" or similar in title
-                    match = re.search(
-                        r"Table\s+(\d+(?:\.\d+)*)", title, re.IGNORECASE
-                    )
-                    if match and match.group(1) == table_number_normalized:
-                        return table
-
-                # Check structured_data if present
-                structured = table.get("structured_data")
-                if structured and isinstance(structured, dict):
-                    struct_title = structured.get("title", "")
-                    if struct_title:
-                        match = re.search(
-                            r"Table\s+(\d+(?:\.\d+)*)", struct_title, re.IGNORECASE
-                        )
-                        if match and match.group(1) == table_number_normalized:
-                            return table
-
-        return None
-
-    def _find_annexure(self, annexure_id: str, chunks: List[Dict]) -> Optional[Dict]:
-        """
-        Find an annexure chunk by its identifier.
-
-        Args:
-            annexure_id: Annexure identifier (e.g., "A", "III", "1")
-            chunks: List of child chunk dicts
-
-        Returns:
-            Matching chunk dict or None
-        """
-        annexure_id_normalized = annexure_id.strip().upper()
-
-        for chunk in chunks:
-            # Check metadata for section type
-            metadata = chunk.get("metadata", {})
-            hierarchy = metadata.get("hierarchy", {})
-
-            # Look for "annexure" in hierarchy
-            for level, value in hierarchy.items():
-                if isinstance(value, str) and "annexure" in value.lower():
-                    # Try to extract annexure ID from value
-                    match = re.search(
-                        r"Annexure[\s-]?([A-Z]|\d+|[IVX]+)", value, re.IGNORECASE
-                    )
-                    if match and match.group(1).upper() == annexure_id_normalized:
-                        return chunk
-
-            # Also check content for annexure heading
-            content = chunk.get("content", "")
-            if "annexure" in content.lower()[:100]:  # Check first 100 chars
-                match = re.search(
-                    r"Annexure[\s-]?([A-Z]|\d+|[IVX]+)", content, re.IGNORECASE
-                )
-                if match and match.group(1).upper() == annexure_id_normalized:
-                    return chunk
-
-        return None
-
-    def _find_chunk_by_para(
-        self, para_number: str, chunks: List[Dict]
-    ) -> Optional[Dict]:
-        """
-        Find a chunk by paragraph number.
-
-        Args:
-            para_number: Paragraph number (e.g., "3.2.1", "4.5")
-            chunks: List of child chunk dicts
-
-        Returns:
-            Matching chunk dict or None
-        """
-        para_number_normalized = para_number.strip()
-
-        for chunk in chunks:
-            # Check chunk metadata
-            metadata = chunk.get("metadata", {})
-            chunk_para = metadata.get("paragraph_number")
-
-            if chunk_para == para_number_normalized:
-                return chunk
-
-            # Check hierarchy for matching structure
-            hierarchy = metadata.get("hierarchy", {})
-            # Build a para-like number from hierarchy levels
-            levels = [
-                hierarchy.get(f"level_{i}")
-                for i in range(1, 10)
-                if hierarchy.get(f"level_{i}")
-            ]
-
-            # Try to match hierarchical structure to para number
-            # E.g., "3.2.1" might match hierarchy level_1=3, level_2=2, level_3=1
-            if self._hierarchy_matches_para(levels, para_number_normalized):
-                return chunk
-
-        return None
-
-    def _hierarchy_matches_para(self, levels: List[str], para_number: str) -> bool:
-        """Check if hierarchy levels match a paragraph number."""
-        # Extract numeric parts from levels
-        numeric_levels = []
-        for level in levels:
-            # Try to extract leading number from level
-            match = re.match(r"^(\d+)", str(level))
-            if match:
-                numeric_levels.append(match.group(1))
-
-        # Build dotted number
-        if numeric_levels:
-            hierarchy_num = ".".join(numeric_levels)
-            return hierarchy_num == para_number
-
-        return False
+    @staticmethod
+    def _build_index(
+        tables: List[Dict], chunks: List[Dict], parent_chunks: Optional[List[Dict]]
+    ) -> ReferenceIndex:
+        known = {c.get("chunk_id") for c in chunks}
+        children = list(chunks) + [
+            t for t in tables or [] if t.get("chunk_id") not in known
+        ]
+        parents = (
+            parent_chunks
+            if parent_chunks is not None
+            else parents_from_children(children)
+        )
+        return ReferenceIndex(parents, children)
 
     def _parse_page_number(self, page_ref: str) -> Optional[int]:
         """Parse page number from reference string."""
@@ -516,6 +306,8 @@ def calculate_link_coverage(
         "findings_with_links": findings_with_links,
         "coverage_percentage": (findings_with_links / total_findings) * 100,
         "total_links": total_links,
-        "avg_links_per_finding": total_links / total_findings if total_findings > 0 else 0.0,
+        "avg_links_per_finding": total_links / total_findings
+        if total_findings > 0
+        else 0.0,
         "links_by_type": links_by_type,
     }
