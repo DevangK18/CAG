@@ -241,3 +241,14 @@ def test_indexer_reads_parent_summaries(has_summaries):
     assert count == (2 if has_summaries else 0)
     if has_summaries:
         assert {p["payload"]["content_type"] for p in upserted} == {"chapter_summary", "section_summary"}
+
+
+@pytest.mark.parametrize("content,empty", [
+    ("", True), ("   ", True), ("data/extraction_images/charts/x.png", True), ("x.PNG", True),
+    ("Chart: enrolment 2019-24", False), ("OVERVIEW", False),
+])
+def test_image_chunks_without_text_are_not_indexed(content, empty):
+    from src.rag_pipeline.indexer import _empty_image_chunk
+
+    assert _empty_image_chunk({"content_type": "image_caption", "content": content}) is empty
+    assert _empty_image_chunk({"content_type": "paragraph", "content": ""}) is False

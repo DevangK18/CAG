@@ -57,12 +57,6 @@ RUN poetry install --with parsing --no-interaction --no-ansi --no-root
 # Install additional GCS dependencies
 RUN pip install --no-cache-dir google-cloud-storage
 
-# Copy all source code (including parsing pipeline)
-COPY src/ ./src/
-
-# Copy configuration files
-COPY parsing_config.yaml ./
-
 # Set Python path
 ENV PYTHONPATH=/app
 
@@ -101,6 +95,13 @@ sys.stdout.flush(); \
 converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}); \
 print('✅ Docling models pre-downloaded and cached'); \
 "
+
+# Code last: a code change rebuilds only these layers, not the ~500MB model download above
+# Copy all source code (including parsing pipeline)
+COPY src/ ./src/
+
+# Copy configuration files
+COPY parsing_config.yaml ./
 
 # Default entrypoint runs the parsing pipeline
 ENTRYPOINT ["python", "-m", "src.parsing_pipeline.main"]

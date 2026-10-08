@@ -38,6 +38,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _empty_image_chunk(chunk: Dict[str, Any]) -> bool:
+    """An image chunk whose content is empty or only a saved image path."""
+    if chunk.get("content_type") not in ("image_caption", "chart_data_path"):
+        return False
+    content = (chunk.get("content") or "").strip()
+    if not content:
+        return True
+    if any(ch.isspace() for ch in content):
+        return False
+    return content.startswith("data/extraction_images/") or content.lower().endswith(
+        (".png", ".jpg", ".jpeg", ".gif", ".webp")
+    )
+
+
 class Indexer:
     """
     Indexes CAG report chunks into Qdrant.
@@ -191,6 +205,13 @@ class Indexer:
         logger.info(
             f"Processing {report_id}: {len(child_chunks)} children, {len(parent_chunks)} parents"
         )
+
+        # Image chunks left with no text after Phase 10b (or only a file path) carry
+        # nothing to retrieve
+        kept = [c for c in child_chunks if not _empty_image_chunk(c)]
+        if len(kept) < len(child_chunks):
+            logger.info(f"  Skipping {len(child_chunks) - len(kept)} image chunks with no text")
+        child_chunks = kept
 
         # Process chunks
         texts, dense_embeddings, sparse_vectors, payloads = (

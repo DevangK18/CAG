@@ -153,3 +153,23 @@ def test_docling_crashing_twice_fails_only_that_report(tmp_path, monkeypatch):
     (task, error), = orch.state.failed["layout_analysis"]
     assert task.report_id == "A" and "crashed twice" in error
     assert [f["flag"] for f in orch.state.trace_emitter.get_red_flags("A")] == ["Docling process crashed"]
+
+
+def test_hung_docling_conversion_is_killed_and_the_next_report_converts(tmp_path, monkeypatch):
+    import time
+
+    from src.parsing_pipeline.config import get_config
+
+    monkeypatch.setattr(get_config().layout, "conversion_timeout", 2)
+    monkeypatch.setattr(get_config().layout, "conversion_timeout_per_page", 0)
+    orch = _orch(tmp_path, monkeypatch)
+    monkeypatch.setattr(type(orch), "DOCLING_KILL_GRACE_S", 3)
+    orch._docling_fn = _worker_fns.hang_on_a
+    orch.state.scaffold_complete = _layout_tasks(tmp_path, "A", "B")
+    started = time.monotonic()
+    orch._phase_layout()
+    # Killed within the limit plus the grace period (plus process start-up), not after an hour
+    assert time.monotonic() - started < 2 + 3 + 30
+    assert [t.report_id for t in orch.state.layout_complete] == ["B"]
+    (task, error), = orch.state.failed["layout_analysis"]
+    assert task.report_id == "A" and "killed and restarted" in error

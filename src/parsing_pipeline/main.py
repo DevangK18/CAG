@@ -620,18 +620,52 @@ class PipelineOrchestrator:
         finally:
             self.phase_seconds[phase] = round(self.phase_seconds.get(phase, 0.0) + time.monotonic() - started, 1)
 
+    # Past the conversion limit, the Docling process gets this long before it is killed
+    DOCLING_KILL_GRACE_S = 30
+
+    def _docling_time_limit(self, task) -> float:
+        """The conversion limit Phase 5 applies: max(timeout, pages x per-page timeout)."""
+        from src.parsing_pipeline.config import get_config
+
+        cfg = get_config().layout
+        pages = 0
+        pdf = self._pdf_for_checks(task) if getattr(task, "local_pdf_path", None) else None
+        if pdf:
+            try:
+                import fitz
+
+                with fitz.open(pdf) as doc:
+                    pages = doc.page_count
+            except Exception:
+                pages = 0
+        return max(cfg.conversion_timeout, pages * cfg.conversion_timeout_per_page)
+
+    def _kill_docling_process(self) -> None:
+        """Stop the Docling process now (a hung conversion never returns on its own)."""
+        pool, self._docling_pool = self._docling_pool, None
+        if pool is None:
+            return
+        for process in list((getattr(pool, "_processes", None) or {}).values()):
+            process.kill()
+        pool.shutdown(wait=False, cancel_futures=True)
+
     def _layout_in_docling_process(self, task):
         """
         Phase 5 for one report in the Docling process. If the process dies (a native
         crash), it is started again and the report tried once more; a second crash
-        fails this report only.
+        fails this report only. A conversion still running at its time limit (plus a
+        grace period) is killed with its process; that report fails and the next one
+        gets a new process.
         """
+        from concurrent.futures import TimeoutError as FuturesTimeout
         from concurrent.futures.process import BrokenProcessPool
 
         emitter = self.state.trace_emitter
+        limit = self._docling_time_limit(task)
         for attempt in (1, 2):
             if self._docling_pool is None:
                 self._docling_pool = self._new_process_pool(1)
+            started = time.monotonic()
             try:
                 outcome = self._docling_pool.submit(
                     report_workers.run_in_worker,
@@ -639,7 +673,19 @@ class PipelineOrchestrator:
                     task,
                     (),
                     emitter.get_red_flags(task.report_id),
-                ).result()
+                ).result(timeout=limit + self.DOCLING_KILL_GRACE_S)
+            except FuturesTimeout:
+                self._kill_docling_process()
+                elapsed = time.monotonic() - started
+                message = (
+                    f"Docling conversion stopped after {elapsed:.0f}s (limit {limit:.0f}s); "
+                    "its process was killed and restarted"
+                )
+                self._log(f"             ⚠ {message}", force=True)
+                task.processing_status = "failed_layout"
+                task.error_log.append(message)
+                emitter.emit_red_flag("5", "Docling conversion timed out", {"report_id": task.report_id})
+                return task
             except BrokenProcessPool:
                 self._docling_pool.shutdown(wait=False, cancel_futures=True)
                 self._docling_pool = None
@@ -648,7 +694,13 @@ class PipelineOrchestrator:
             emitter.add_red_flags(task.report_id, outcome.red_flags)
             if outcome.error is not None:
                 raise report_workers.WorkerError(outcome.error)
-            return outcome.value
+            value = outcome.value
+            if getattr(value, "processing_status", None) == "failed_layout" and any(
+                "timed out" in str(e) for e in (getattr(value, "error_log", None) or [])[-1:]
+            ):
+                # The timed-out conversion is still running in that process: start afresh
+                self._kill_docling_process()
+            return value
 
         task.processing_status = "failed_layout"
         task.error_log.append("Docling process crashed twice on this report (native crash)")

@@ -333,15 +333,12 @@ jobs:
           echo "🚀 Host GPU: $(nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader)"
 
           WORK_DIR=/var/tmp/cag
-          # Start from the GCS state every run: anything deleted or quarantined in GCS
-          # must not come back from this VM's copy of an earlier run
+          # Each job starts from the GCS state (reset_job_data below): anything deleted
+          # or quarantined in GCS must not come back from this VM's copy of an earlier
+          # run or an earlier job. Only the read-only PDF cache (raw/) is kept.
           echo "Clearing previous run data in ${WORK_DIR}"
           sudo -n rm -rf "${WORK_DIR:?}/data" "${WORK_DIR:?}/logs"
-          mkdir -p ${WORK_DIR}/data/{raw,processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
-          mkdir -p ${WORK_DIR}/data/processed/ocred
-          mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction}
-          mkdir -p ${WORK_DIR}/data/extraction_images/{tables,charts}
-          mkdir -p ${WORK_DIR}/logs/traces/{union,state,local_body}
+          mkdir -p ${WORK_DIR}/data/raw/{union,state,local_body}
 
           # The parsing image is ~32GB unpacked; keep only the current image
           echo "Removing old images..."
@@ -364,15 +361,27 @@ jobs:
           echo "Syncing data from GCS..."
           # Fatal on failure: running from a partial copy would upload a mixed state
           run_gsutil -m rsync -r gs://${DATA_BUCKET}/raw/ /workspace/data/raw/
-          # A new output prefix has no processed/ yet; anything else that fails here is fatal
-          if run_gsutil ls "${GCS_OUT}/processed/" > /tmp/prefix_ls.txt 2>&1; then
-            run_gsutil -m rsync -r ${GCS_OUT}/processed/ /workspace/data/processed/
-          elif grep -q "matched no objects" /tmp/prefix_ls.txt; then
-            echo "No previous output under ${GCS_OUT}/processed/ (new prefix)"
-          else
-            cat /tmp/prefix_ls.txt
-            exit 12
-          fi
+
+          # Wipe everything but raw/ and copy processed/ from the output prefix again, so
+          # every job (not only the first of a dispatch) starts from the GCS state,
+          # earlier jobs' uploads and quarantines included
+          reset_job_data() {
+            sudo -n rm -rf "${WORK_DIR:?}"/data/{processed,batch_jobs,extraction_images,entity_graph,canonical,dead_letter_queue} "${WORK_DIR:?}/logs"
+            mkdir -p ${WORK_DIR}/data/{processed,batch_jobs,extraction_images,entity_graph,canonical}/{union,state,local_body}
+            mkdir -p ${WORK_DIR}/data/processed/ocred
+            mkdir -p ${WORK_DIR}/data/batch_jobs/{jobs,overviews,summaries,hierarchical,visual_extraction}
+            mkdir -p ${WORK_DIR}/data/extraction_images/{tables,charts}
+            mkdir -p ${WORK_DIR}/logs/traces/{union,state,local_body}
+            # A new output prefix has no processed/ yet; anything else that fails here is fatal
+            if run_gsutil ls "${GCS_OUT}/processed/" > /tmp/prefix_ls.txt 2>&1; then
+              run_gsutil -m rsync -r ${GCS_OUT}/processed/ /workspace/data/processed/ || return 12
+            elif grep -q "matched no objects" /tmp/prefix_ls.txt; then
+              echo "No previous output under ${GCS_OUT}/processed/ (new prefix)"
+            else
+              cat /tmp/prefix_ls.txt
+              return 12
+            fi
+          }
 
           PARSING_IMAGE="${PARSING_IMAGE}"
           echo "Pulling ${PARSING_IMAGE}..."
@@ -408,6 +417,12 @@ jobs:
             echo "Job ${N}/${JOB_COUNT}: ${MANIFEST} (run ${JOB_RUN_ID})"
             echo "  Skip: ${SKIP:-none}   Reports: ${REPORTS:-all}   Workers: ${WORKERS}"
             echo "============================================="
+
+            echo "Resetting the data directory from ${GCS_OUT}..."
+            if ! reset_job_data; then
+              echo "ERROR: could not copy ${GCS_OUT}/processed/ for this job"
+              return 12
+            fi
 
             echo "Downloading manifest..."
             if ! run_gsutil cp "gs://${DATA_BUCKET}/manifests/${MANIFEST}" /workspace/manifest.xlsx; then
