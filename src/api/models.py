@@ -118,6 +118,8 @@ class ReportSummary(BaseModel):
     year: int
     findings_count: int
     monetary_impact: Optional[str] = None
+    # What monetary_impact is: "Sum of amounts cited in N findings"
+    monetary_impact_label: Optional[str] = None
     status: str
     filename: str
     report_type: Optional[str] = None
@@ -149,6 +151,8 @@ class ReportDetail(BaseModel):
     key_findings: List[str]
     recommendations: List[str]
     monetary_impact: Optional[str] = None
+    # What monetary_impact is: "Sum of amounts cited in N findings"
+    monetary_impact_label: Optional[str] = None
     findings_count: int
     report_type: Optional[str] = None
     government_body_type: str = "union"

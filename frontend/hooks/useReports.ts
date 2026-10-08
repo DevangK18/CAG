@@ -38,6 +38,7 @@ function transformReport(apiReport: APIReportSummary): AuditReport {
     pages: 0, // Not in summary, will be fetched in detail
     findingsCount: apiReport.findings_count,
     impact: impact,
+    impactLabel: apiReport.monetary_impact_label || undefined,
     status: statusMap[apiReport.status] || 'Under Review',
     summary: '', // Not in summary
     findings: [],

@@ -9,10 +9,14 @@
 import { ReportSeries } from './types';
 
 /**
- * The report-level monetary impact (the headline total of a report's findings)
- * is hidden until that total is computed correctly.
+ * A report's money figure: the sum of the amounts cited in its distinct findings,
+ * always shown with that label (findings overlap and their amounts are of different
+ * kinds, so it is not a "total impact"). Reports processed before it existed show none.
  */
-export const SHOW_MONETARY_IMPACT = false;
+export const SHOW_MONETARY_IMPACT = true;
+
+/** The sum of those sums across reports means nothing, so the directory does not show it. */
+export const SHOW_CORPUS_MONETARY_SUM = false;
 
 /**
  * Pre-defined audit series for time series analysis

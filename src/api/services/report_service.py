@@ -10,7 +10,7 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from ..config import settings
 from ..models import ReportSummary, ReportDetail
@@ -192,23 +192,32 @@ def _build_executive_summary(metadata: dict, semantic: dict) -> str:
     return "Executive summary not available."
 
 
-# The headline total over a report's findings is not reliable yet (it can count the
-# same money more than once), so the report-level figure is withheld until it is.
-SHOW_MONETARY_IMPACT = False
+def _impact_sum(semantic: dict) -> Tuple[Optional[float], Optional[int]]:
+    """(sum of the amounts cited in distinct findings in crore, number of those findings).
+
+    Only output written since PR 9 has it; the older "total" could count the same
+    money more than once, so older files show no figure.
+    """
+    stats = (semantic.get("statistics") or {}).get("findings") or {}
+    total = stats.get("impact_sum_crore")
+    count = stats.get("impact_sum_finding_count")
+    if isinstance(total, (int, float)) and total > 0 and count:
+        return float(total), int(count)
+    return None, None
 
 
 def _format_monetary_impact(semantic: dict) -> Optional[str]:
     """Headline amount as "₹X crore", or None when the report has none."""
-    if not SHOW_MONETARY_IMPACT:
+    total, _ = _impact_sum(semantic)
+    return f"₹{total:,.2f} crore" if total is not None else None
+
+
+def _monetary_impact_label(semantic: dict) -> Optional[str]:
+    """What the headline amount is: "Sum of amounts cited in N findings"."""
+    _, count = _impact_sum(semantic)
+    if count is None:
         return None
-    stats = (semantic.get("statistics") or {}).get("findings") or {}
-    total = stats.get("total_monetary_crore")
-    if total is None:
-        # Legacy key; no current producer writes monetary_statistics.
-        total = (semantic.get("monetary_statistics") or {}).get("total_amount_crore")
-    if isinstance(total, (int, float)) and total > 0:
-        return f"₹{total:,.2f} crore"
-    return None
+    return f"Sum of amounts cited in {count} finding{'s' if count != 1 else ''}"
 
 
 def _load_reports():
@@ -302,6 +311,7 @@ def _load_reports():
                     recommendations.append(text[:500])
 
             monetary_impact = _format_monetary_impact(semantic)
+            monetary_impact_label = _monetary_impact_label(semantic)
 
             # Build filename with subfolder prefix for nested directory structure
             # e.g., if file is in data/processed/union/, PDF will be in data/raw/union/
@@ -344,6 +354,7 @@ def _load_reports():
                 key_findings=key_findings,
                 recommendations=recommendations,
                 monetary_impact=monetary_impact,
+                monetary_impact_label=monetary_impact_label,
                 findings_count=len(findings_raw),
                 report_type=metadata.get("report_type"),
                 government_body_type=metadata.get("government_body_type", "union"),
@@ -391,6 +402,7 @@ def get_all_reports() -> List[ReportSummary]:
             year=r.year,
             findings_count=r.findings_count,
             monetary_impact=r.monetary_impact,
+            monetary_impact_label=r.monetary_impact_label,
             status=r.status,
             filename=r.filename,
             report_type=r.report_type,
@@ -422,6 +434,7 @@ def get_reports_by_sector(sector: str) -> List[ReportSummary]:
             id=r.id, title=r.title, report_no=r.report_no,
             ministry=r.ministry, sector=r.sector, year=r.year,
             findings_count=r.findings_count, monetary_impact=r.monetary_impact,
+            monetary_impact_label=r.monetary_impact_label,
             status=r.status, filename=r.filename, report_type=r.report_type,
             government_body_type=r.government_body_type, state_name=r.state_name,
             department=r.department, audit_category=r.audit_category
@@ -439,6 +452,7 @@ def get_reports_by_year(year: int) -> List[ReportSummary]:
             id=r.id, title=r.title, report_no=r.report_no,
             ministry=r.ministry, sector=r.sector, year=r.year,
             findings_count=r.findings_count, monetary_impact=r.monetary_impact,
+            monetary_impact_label=r.monetary_impact_label,
             status=r.status, filename=r.filename, report_type=r.report_type,
             government_body_type=r.government_body_type, state_name=r.state_name,
             department=r.department, audit_category=r.audit_category
@@ -506,6 +520,7 @@ def _build_indexes():
             year=r.year,
             findings_count=r.findings_count,
             monetary_impact=r.monetary_impact,
+            monetary_impact_label=r.monetary_impact_label,
             status=r.status,
             filename=r.filename,
             report_type=r.report_type,

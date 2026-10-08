@@ -114,6 +114,12 @@ def extract_overview_from_json(json_path: Path) -> dict:
         ],
         "findings_summary": {
             "total_count": findings_stats.get("total_count", 0),
+            # Sum of the amounts cited in distinct findings (not a total impact)
+            "impact_sum_crore": findings_stats.get("impact_sum_crore"),
+            "impact_sum_finding_count": findings_stats.get("impact_sum_finding_count"),
+            "largest_finding_crore": findings_stats.get("largest_finding_crore"),
+            "printed_total_crore": findings_stats.get("printed_total_crore"),
+            # Old name, kept until every reader moves over
             "total_monetary_crore": findings_stats.get("total_monetary_crore", 0),
             "by_severity": findings_stats.get("by_severity", {}),
             "by_type": findings_stats.get("by_type", {}),

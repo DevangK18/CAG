@@ -134,38 +134,24 @@ def test_table_disambiguation_labels_first_page():
 # =============================================================================
 
 
-@pytest.fixture
-def show_impact(monkeypatch):
-    monkeypatch.setattr(report_service, "SHOW_MONETARY_IMPACT", True)
-
-
-def test_monetary_impact_hidden_until_headline_total_fixed():
+def test_old_total_is_not_shown():
+    # Files written before the sum existed: their "total" could count money twice
     semantic = {"statistics": {"findings": {"total_monetary_crore": 1234.5}}}
     assert report_service._format_monetary_impact(semantic) is None
+    assert report_service._monetary_impact_label(semantic) is None
+    assert report_service._format_monetary_impact({"monetary_statistics": {"total_amount_crore": 12.0}}) is None
 
 
-@pytest.mark.usefixtures("show_impact")
-def test_monetary_impact_reads_statistics():
-    semantic = {"statistics": {"findings": {"total_monetary_crore": 1234.5}}}
+def test_sum_shown_with_its_label():
+    semantic = {"statistics": {"findings": {"impact_sum_crore": 1234.5, "impact_sum_finding_count": 12,
+                                            "total_monetary_crore": 1234.5}}}
     assert report_service._format_monetary_impact(semantic) == "₹1,234.50 crore"
+    assert report_service._monetary_impact_label(semantic) == "Sum of amounts cited in 12 findings"
+    one = {"statistics": {"findings": {"impact_sum_crore": 3.0, "impact_sum_finding_count": 1}}}
+    assert report_service._monetary_impact_label(one) == "Sum of amounts cited in 1 finding"
 
 
-@pytest.mark.usefixtures("show_impact")
-def test_monetary_impact_legacy_key_fallback():
-    semantic = {"monetary_statistics": {"total_amount_crore": 12.0}}
-    assert report_service._format_monetary_impact(semantic) == "₹12.00 crore"
-
-
-@pytest.mark.usefixtures("show_impact")
-def test_monetary_impact_prefers_current_key():
-    semantic = {
-        "statistics": {"findings": {"total_monetary_crore": 7.0}},
-        "monetary_statistics": {"total_amount_crore": 99.0},
-    }
-    assert report_service._format_monetary_impact(semantic) == "₹7.00 crore"
-
-
-@pytest.mark.parametrize("semantic", [{}, {"statistics": {"findings": {"total_monetary_crore": 0}}}])
+@pytest.mark.parametrize("semantic", [{}, {"statistics": {"findings": {"impact_sum_crore": 0, "impact_sum_finding_count": 0}}}])
 def test_monetary_impact_none_without_amount(semantic):
     assert report_service._format_monetary_impact(semantic) is None
 

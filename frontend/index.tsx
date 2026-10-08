@@ -703,18 +703,24 @@ function App() {
         if (!selectedReport) return null;
 
         // Use findings summary from overview if available
-        const monetaryImpact = findingsSummary
-            ? `₹${findingsSummary.total_monetary_crore.toLocaleString('en-IN', { maximumFractionDigits: 2 })} crore`
+        // Only overviews written since the sum existed carry impact_sum_crore
+        const impactSum = findingsSummary?.impact_sum_crore;
+        const monetaryImpact = impactSum
+            ? `₹${impactSum.toLocaleString('en-IN', { maximumFractionDigits: 2 })} crore`
             : selectedReport.impact;
+        const impactCount = findingsSummary?.impact_sum_finding_count;
+        const monetaryLabel = impactSum && impactCount
+            ? `Sum of amounts cited in ${impactCount} finding${impactCount === 1 ? '' : 's'}`
+            : selectedReport.impactLabel;
         const findingsCount = findingsSummary?.total_count || selectedReport.findingsCount;
 
         return (
             <div className="overview-tab enhanced">
                 {/* Key Metrics */}
                 <div className="impact-grid">
-                    {SHOW_MONETARY_IMPACT && (
+                    {SHOW_MONETARY_IMPACT && monetaryLabel && monetaryImpact !== 'N/A' && (
                         <div className="impact-box">
-                            <label>Monetary Impact</label>
+                            <label>{monetaryLabel}</label>
                             <span className="value">{monetaryImpact}</span>
                         </div>
                     )}

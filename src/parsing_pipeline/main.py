@@ -1353,7 +1353,8 @@ class PipelineOrchestrator:
                 self._log(
                     f"             ✓ {stats['findings']['total_count']} findings, "
                     f"{stats['recommendations']['total_count']} recommendations, "
-                    f"₹{stats['findings']['total_monetary_crore']:,.2f} crore"
+                    f"₹{stats['findings']['impact_sum_crore']:,.2f} crore cited in "
+                    f"{stats['findings']['impact_sum_finding_count']} findings (sum)"
                 )
                 summary = self.quality_summaries[task.report_id]
                 self._log(
@@ -1906,7 +1907,7 @@ class PipelineOrchestrator:
                 if hasattr(t, "enrichment_stats") and t.enrichment_stats
             )
             total_monetary = sum(
-                t.enrichment_stats["findings"]["total_monetary_crore"]
+                t.enrichment_stats["findings"]["impact_sum_crore"]
                 for t in self.state.enrichment_complete
                 if hasattr(t, "enrichment_stats") and t.enrichment_stats
             )
@@ -1914,7 +1915,7 @@ class PipelineOrchestrator:
             print(f"\n📊 CORPUS ENRICHMENT TOTALS:")
             print(f"   • {total_findings} findings extracted")
             print(f"   • {total_recommendations} recommendations extracted")
-            print(f"   • ₹{total_monetary:,.2f} crore in monetary values identified")
+            print(f"   • ₹{total_monetary:,.2f} crore: sum of the amounts cited in findings")
 
             # Show findings by ministry
             print(f"\n📈 FINDINGS BY MINISTRY:")
@@ -1923,7 +1924,7 @@ class PipelineOrchestrator:
                 if hasattr(task, "enrichment_stats") and task.enrichment_stats:
                     ministry = task.enrichment_stats["report_info"]["ministry"]
                     count = task.enrichment_stats["findings"]["total_count"]
-                    amount = task.enrichment_stats["findings"]["total_monetary_crore"]
+                    amount = task.enrichment_stats["findings"]["impact_sum_crore"]
                     if ministry not in ministry_findings:
                         ministry_findings[ministry] = {"count": 0, "amount": 0}
                     ministry_findings[ministry]["count"] += count

@@ -48,6 +48,8 @@ export interface APIReportSummary {
   year: number;
   findings_count: number;
   monetary_impact: string | null;
+  // What monetary_impact is: "Sum of amounts cited in N findings"
+  monetary_impact_label?: string | null;
   status: string;
   filename: string;
   report_type?: string | null;
@@ -76,6 +78,7 @@ export interface APIReportDetail {
   key_findings: string[];
   recommendations: string[];
   monetary_impact: string | null;
+  monetary_impact_label?: string | null;
   findings_count: number;
   report_type?: string | null;
   government_body_type: string;
@@ -226,7 +229,11 @@ export interface TOCEntry {
 
 export interface FindingSummaryData {
   total_count: number;
+  /** Old name of impact_sum_crore (overviews written before PR 9) */
   total_monetary_crore: number;
+  /** Sum of the amounts cited in impact_sum_finding_count distinct findings */
+  impact_sum_crore?: number | null;
+  impact_sum_finding_count?: number | null;
   by_severity: Record<string, number>;
   by_type: Record<string, { count: number; total_crore: number }>;
 }
