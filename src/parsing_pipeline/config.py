@@ -317,11 +317,20 @@ class SemanticEnrichmentConfig:
 
     finding_confidence_threshold: float = 0.5
     """
-    Minimum confidence score to classify a chunk as an audit finding.
+    Minimum confidence score to classify a chunk as an audit finding (regex extractor).
 
     Based on semantic pattern matching. Raising this reduces false positives.
-    P3: Raised from 0.4 to 0.5 - lower confidence findings go to LLM validation.
     """
+
+    llm_extraction: bool = True
+    """Findings and recommendations from Gemini, one call per section; regex is the cross-check."""
+
+    llm_model: str = "gemini-3.8-flash"
+    llm_thinking_level: str = "low"
+    """Gemini thinking level for the extraction calls ("" = the model's default)."""
+
+    llm_max_chars_per_call: int = 24000
+    """Text per call: whole sections are packed up to this; a longer section is split at chunk boundaries."""
 
 
 @dataclass

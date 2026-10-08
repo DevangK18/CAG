@@ -490,6 +490,24 @@ class Finding(BaseModel):
         description="R5: Context of primary monetary value (finding_impact, budget_allocation, etc.)"
     )
 
+    # Phase 9 extraction (PR 9)
+    extraction_method: str = Field(
+        default="regex", description="'llm', 'regex_fallback' (the section's call failed) or 'regex'"
+    )
+    source_chunk_ids: List[str] = Field(
+        default_factory=list, description="Every chunk the finding covers, first = source_chunk_id"
+    )
+    location: Optional[str] = Field(
+        default=None, description="'chapter', 'executive_summary' or 'conclusion'"
+    )
+    is_restatement: bool = Field(
+        default=False,
+        description="Executive summary or conclusion item: not counted as a new finding",
+    )
+    restates: Optional[str] = Field(
+        default=None, description="finding_id of the chapter finding this item restates"
+    )
+
 
 class Recommendation(BaseModel):
     """Extracted CAG recommendation."""
@@ -528,6 +546,12 @@ class Recommendation(BaseModel):
     paragraph_citations: List[str] = Field(
         default_factory=list,
         description="P4-3: Paragraph references from exec summary (e.g., ['3.1', '3.2'])"
+    )
+    source_chunk_ids: List[str] = Field(
+        default_factory=list, description="Every chunk the recommendation covers, first = source_chunk_id"
+    )
+    location: Optional[str] = Field(
+        default=None, description="'chapter', 'executive_summary' or 'conclusion'"
     )
 
 

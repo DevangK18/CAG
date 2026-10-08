@@ -203,8 +203,6 @@ class PatternLoader:
         return config.get("confidence_thresholds", {
             "section_classification": 0.5,
             "finding_extraction": 0.4,
-            "llm_validation_lower": 0.4,
-            "llm_validation_upper": 0.7,
         })
 
     def get_temporal_config(self) -> Dict[str, Any]:
@@ -218,21 +216,6 @@ class PatternLoader:
         return config.get("temporal", {
             "min_valid_year": 2000,
             "max_valid_year": 2035,
-        })
-
-    def get_llm_validation_config(self) -> Dict[str, Any]:
-        """
-        Get LLM validation configuration.
-
-        Returns:
-            Dict with enabled, model, collect_refinement_data, refinement_data_path
-        """
-        config = self._load_config()
-        return config.get("llm_validation", {
-            "enabled": False,
-            "model": "gemini-3.8-flash",
-            "collect_refinement_data": False,
-            "refinement_data_path": "logs/pattern_refinement/",
         })
 
     def reload(self) -> None:

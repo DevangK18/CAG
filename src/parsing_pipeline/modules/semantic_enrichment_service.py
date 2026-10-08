@@ -72,13 +72,8 @@ from src.parsing_pipeline.modules.enrichment.executive_summary_parser import (
 # Evidence linker (in parent directory)
 from src.parsing_pipeline.modules import evidence_linker
 
-# LLM Validator for hybrid validation (P3)
-from src.parsing_pipeline.modules.enrichment.llm_validator import (
-    LLMValidator,
-    ValidationVerdict,
-    create_finding_validation_request,
-)
-from src.parsing_pipeline.modules.enrichment.pattern_loader import get_pattern_loader
+# Findings and recommendations from Gemini (calls made by the orchestrator)
+from src.parsing_pipeline.modules.enrichment import llm_finding_extractor
 
 
 class SemanticEnrichmentService:
@@ -110,26 +105,8 @@ class SemanticEnrichmentService:
         self._xref_resolver = CrossReferenceResolver()
         self._evidence_linker = evidence_linker.EvidenceLinker()
 
-        # P3: LLM Validator for hybrid validation
-        self._llm_validator: Optional[LLMValidator] = None
-        self._llm_validation_enabled = False
-        try:
-            llm_config = get_pattern_loader().get_llm_validation_config()
-            self._llm_validation_enabled = llm_config.get("enabled", False)
-            if self._llm_validation_enabled:
-                self._llm_validator = LLMValidator()
-                logger.info("LLM validation enabled for low-confidence findings")
-        except Exception as e:
-            logger.debug(f"LLM validation not configured: {e}")
-
         # Current report type (set per document)
         self._current_report_type = "general"
-
-        logger.info(
-            "SemanticEnrichmentService initialized with focused extractors, "
-            "evidence linking, temporal extraction, annexure linking, "
-            f"cross-reference resolution, llm_validation={self._llm_validation_enabled}."
-        )
 
     def enrich_document(
         self,
@@ -139,6 +116,7 @@ class SemanticEnrichmentService:
         child_chunks: List[Dict],
         task: Optional[DocumentTask] = None,
         trace_emitter: Optional["TraceEmitter"] = None,
+        llm_extraction: Optional[Dict[str, Any]] = None,
     ) -> SemanticEnrichment:
         """
         Run all enrichment extractions on a document.
@@ -150,6 +128,9 @@ class SemanticEnrichmentService:
             child_chunks: List of child chunk dicts
             task: Optional DocumentTask for report type detection
             trace_emitter: Optional trace emitter for instrumentation
+            llm_extraction: The Gemini items for this report (llm_finding_extractor.
+                extraction_record). Without it, findings and recommendations come
+                from the regex extractors alone.
 
         Returns:
             SemanticEnrichment object with all extracted data
@@ -184,92 +165,30 @@ class SemanticEnrichmentService:
                 {"error": str(e), "report_id": report_id}
             )
 
-        # 2. Extract findings (report-type aware with tier-specific severity)
+        # 2-3. Findings and recommendations: Gemini items checked against the text,
+        # regex for any section whose call failed, regex everywhere without Gemini
         government_body_type = report_metadata.get("government_body_type", "union")
-        try:
-            self._finding_extractor.set_report_type(self._current_report_type)
-            # P1-13: Pass parent_chunks for source attribution (section from toc_entry)
-            findings = self._finding_extractor.extract_findings(
-                report_id, child_chunks, government_body_type, parent_chunks
-            )
-
-            # Populate entities_mentioned for each finding
-            for finding in findings:
-                try:
-                    finding.entities_mentioned = self._entity_extractor.extract_entities_from_text(
-                        finding.text
-                    )
-                except Exception as entity_err:
-                    logger.warning(f"  Entity extraction for finding failed: {entity_err}")
-                    finding.entities_mentioned = []
-
-            logger.info(f"  Extracted {len(findings)} findings")
-
-            # P3: LLM validation for low-confidence findings
-            if self._llm_validation_enabled and self._llm_validator and findings:
-                findings = self._validate_findings_with_llm(
-                    findings, child_chunks, report_id, trace_emitter
+        findings, recommendations, extraction_stats = self._extract_findings_and_recommendations(
+            report_id,
+            parent_chunks,
+            child_chunks,
+            section_classifications,
+            government_body_type,
+            llm_extraction,
+            trace_emitter,
+        )
+        for finding in findings:
+            try:
+                finding.entities_mentioned = self._entity_extractor.extract_entities_from_text(
+                    finding.text
                 )
-
-        except Exception as e:
-            logger.warning(f"  Finding extraction failed: {e}")
-            findings = []
-            trace_emitter.emit_red_flag(
-                "9", "finding_extractor_failed",
-                {"error": str(e), "report_id": report_id}
-            )
-
-        # 3. Extract recommendations with multi-strategy extractor (with error handling - P1-A)
-        try:
-            raw_recs = self._rec_extractor.extract_all(
-                report_id,
-                parent_chunks,
-                child_chunks,
-                [s.model_dump() for s in section_classifications],
-            )
-
-            # Convert to Recommendation data contracts
-            recommendations = []
-            for i, raw in enumerate(raw_recs):
-                recommendations.append(
-                    Recommendation(
-                        recommendation_id=f"{report_id}_rec_{i+1:03d}",
-                        report_id=report_id,
-                        text=raw.text,
-                        summary=raw.text[:200],
-                        target_entity=raw.target_entity,
-                        action_required=raw.action_required,
-                        chapter=raw.chapter,
-                        section=raw.section,
-                        page=raw.page,
-                        source_chunk_id=raw.source_chunk_id,
-                        status="pending",
-                        extraction_strategy=raw.extraction_strategy,
-                        rec_number=raw.rec_number,
-                        paragraph_citations=raw.paragraph_citations,
-                    )
-                )
-
-            # Print extraction strategy breakdown
-            structural_count = sum(
-                1 for r in raw_recs if r.extraction_strategy == "structural"
-            )
-            numbered_count = sum(
-                1 for r in raw_recs if r.extraction_strategy == "numbered"
-            )
-            verb_count = sum(1 for r in raw_recs if r.extraction_strategy == "verb")
-            logger.info(
-                f"  Extracted {len(recommendations)} recommendations "
-                f"(structural={structural_count}, numbered={numbered_count}, verb={verb_count})"
-            )
-        except Exception as e:
-            logger.warning(f"  Recommendation extraction failed: {e}")
-            recommendations = []
-            raw_recs = []
-            trace_emitter.emit_red_flag(
-                "9", "recommendation_extractor_failed",
-                {"error": str(e), "report_id": report_id}
-            )
+            except Exception as entity_err:
+                logger.warning(f"  Entity extraction for finding failed: {entity_err}")
+                finding.entities_mentioned = []
+        logger.info(
+            f"  Extracted {len(findings)} findings, {len(recommendations)} recommendations "
+            f"({extraction_stats.get('method')})"
+        )
 
         # 4. Link findings to recommendations (with error handling - P1-A)
         try:
@@ -388,6 +307,7 @@ class SemanticEnrichmentService:
         statistics = self._calculate_statistics(
             report_metadata, findings, recommendations, section_classifications
         )
+        statistics["extraction"] = extraction_stats
 
         # Emit Phase 9 trace events
         with trace_emitter.phase_timer("9"):
@@ -611,108 +531,98 @@ class SemanticEnrichmentService:
             executive_summary_index=exec_summary_index,
         )
 
-    def _validate_findings_with_llm(
-        self,
-        findings: List[Finding],
-        child_chunks: List[Dict],
-        report_id: str,
-        trace_emitter: "TraceEmitter",
+    # ── findings and recommendations ────────────────────────────────────────
+
+    def _regex_findings(
+        self, report_id: str, child_chunks: List[Dict], government_body_type: str, parent_chunks: List[Dict]
     ) -> List[Finding]:
-        """
-        P3: Validate low-confidence findings using LLM.
-
-        Filters out findings that the LLM determines are invalid (false positives).
-        Collects data on invalid findings for pattern refinement.
-
-        Args:
-            findings: List of extracted findings
-            child_chunks: Child chunks for text lookup
-            report_id: Report ID for tracking
-            trace_emitter: Trace emitter for instrumentation
-
-        Returns:
-            Filtered list of findings (invalid ones removed)
-        """
-        if not self._llm_validator:
-            return findings
-
-        # Build chunk lookup for text retrieval
-        chunk_lookup = {c.get("chunk_id"): c.get("content", "") for c in child_chunks}
-
-        # Identify findings needing validation
-        to_validate = []
-        for finding in findings:
-            confidence = getattr(finding, "confidence", 0.5)
-            if self._llm_validator.needs_validation(confidence):
-                to_validate.append(finding)
-
-        if not to_validate:
-            logger.info("  No findings need LLM validation")
-            return findings
-
-        logger.info(f"  Validating {len(to_validate)} low-confidence findings via LLM...")
-
-        # Validate each finding
-        validated_findings = []
-        invalid_count = 0
-        valid_count = 0
-
-        for finding in findings:
-            confidence = getattr(finding, "confidence", 0.5)
-
-            if not self._llm_validator.needs_validation(confidence):
-                # High confidence or below threshold - keep as-is
-                validated_findings.append(finding)
-                continue
-
-            # Get chunk text
-            chunk_text = chunk_lookup.get(finding.source_chunk_id, finding.text)
-
-            # Create validation request
-            request = create_finding_validation_request(
-                finding=finding.model_dump(),
-                chunk_text=chunk_text,
-                parent_section=finding.chapter,
-            )
-
-            # Validate with data collection
-            try:
-                result = self._llm_validator.validate_and_collect(
-                    request, report_id=report_id
-                )
-
-                if result.verdict == ValidationVerdict.INVALID:
-                    invalid_count += 1
-                    logger.debug(f"    Invalid finding filtered: {finding.finding_id} - {result.reasoning[:100]}")
-                    # Don't add to validated_findings - this filters it out
-                else:
-                    valid_count += 1
-                    validated_findings.append(finding)
-
-            except Exception as e:
-                logger.warning(f"    LLM validation error for {finding.finding_id}: {e}")
-                # On error, keep the finding (fail-open)
-                validated_findings.append(finding)
-
-        # Emit trace data
-        trace_emitter.emit_io(
-            "9",
-            {"llm_validation_input": len(to_validate)},
-            {
-                "llm_validated": len(to_validate),
-                "llm_valid": valid_count,
-                "llm_invalid": invalid_count,
-                "findings_after_validation": len(validated_findings),
-            },
+        self._finding_extractor.set_report_type(self._current_report_type)
+        return self._finding_extractor.extract_findings(
+            report_id, child_chunks, government_body_type, parent_chunks
         )
 
-        if invalid_count > 0:
-            logger.info(
-                f"  LLM validation: {invalid_count} invalid findings filtered, "
-                f"{valid_count} validated, {len(validated_findings)} total remaining"
+    def _regex_recommendations(
+        self,
+        report_id: str,
+        parent_chunks: List[Dict],
+        child_chunks: List[Dict],
+        section_classifications: List[SectionClassification],
+    ) -> List[Recommendation]:
+        raw_recs = self._rec_extractor.extract_all(
+            report_id,
+            parent_chunks,
+            child_chunks,
+            [s.model_dump() for s in section_classifications],
+        )
+        return [
+            Recommendation(
+                recommendation_id=f"{report_id}_rec_{i + 1:03d}",
+                report_id=report_id,
+                text=raw.text,
+                summary=raw.text[:200],
+                target_entity=raw.target_entity,
+                action_required=raw.action_required,
+                chapter=raw.chapter,
+                section=raw.section,
+                page=raw.page,
+                source_chunk_id=raw.source_chunk_id,
+                status="pending",
+                extraction_strategy=raw.extraction_strategy,
+                rec_number=raw.rec_number,
+                paragraph_citations=raw.paragraph_citations,
+            )
+            for i, raw in enumerate(raw_recs)
+        ]
+
+    def _extract_findings_and_recommendations(
+        self,
+        report_id: str,
+        parent_chunks: List[Dict],
+        child_chunks: List[Dict],
+        section_classifications: List[SectionClassification],
+        government_body_type: str,
+        llm_extraction: Optional[Dict[str, Any]],
+        trace_emitter,
+    ):
+        """(findings, recommendations, extraction statistics)."""
+        try:
+            regex_findings = self._regex_findings(report_id, child_chunks, government_body_type, parent_chunks)
+        except Exception as e:
+            logger.warning(f"  Finding extraction failed: {e}")
+            regex_findings = []
+            trace_emitter.emit_red_flag("9", "finding_extractor_failed", {"error": str(e), "report_id": report_id})
+        try:
+            regex_recs = self._regex_recommendations(report_id, parent_chunks, child_chunks, section_classifications)
+        except Exception as e:
+            logger.warning(f"  Recommendation extraction failed: {e}")
+            regex_recs = []
+            trace_emitter.emit_red_flag(
+                "9", "recommendation_extractor_failed", {"error": str(e), "report_id": report_id}
             )
 
-        return validated_findings
+        if not llm_extraction:
+            self._mark_restatements(regex_findings, child_chunks, section_classifications)
+            return regex_findings, regex_recs, {"method": "regex"}
+
+        from src.parsing_pipeline.modules.enrichment.llm_items import build_from_llm
+
+        return build_from_llm(
+            self,
+            report_id,
+            parent_chunks,
+            child_chunks,
+            section_classifications,
+            government_body_type,
+            llm_extraction,
+            regex_findings,
+            regex_recs,
+            trace_emitter,
+        )
+
+    def _mark_restatements(self, findings, child_chunks, section_classifications) -> None:
+        from src.parsing_pipeline.modules.enrichment.llm_items import mark_restatements
+
+        mark_restatements(findings, child_chunks, section_classifications)
 
     def _link_findings_to_recommendations(
         self,

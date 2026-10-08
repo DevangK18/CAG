@@ -164,6 +164,14 @@ chunking:
 # PHASE 9: SEMANTIC ENRICHMENT (FINDINGS, RECOMMENDATIONS)
 # ==============================================================================
 semantic_enrichment:
+  # Findings and recommendations from Gemini, one call per section (packed up to
+  # llm_max_chars_per_call characters); the regex extractors are the cross-check and
+  # the fallback for a section whose call fails
+  llm_extraction: true
+  llm_model: "gemini-3.8-flash"
+  llm_thinking_level: "low"
+  llm_max_chars_per_call: 24000
+
   # Tier-specific monetary thresholds for finding severity (in crore)
   # Union reports: Larger amounts
   # State reports: Medium amounts

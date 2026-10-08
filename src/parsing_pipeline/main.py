@@ -559,7 +559,7 @@ class PipelineOrchestrator:
     # PER-REPORT WORK (here or in worker processes)
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _per_report(self, phase: str, fn, tasks, args_for=None, parallel: bool = True):
+    def _per_report(self, phase: str, fn, tasks, args_for=None, parallel: bool = True, min_reports: int = 2):
         """
         (task, _ReportResult) for every task, in order, for fn(task, emitter, *args).
 
@@ -571,7 +571,7 @@ class PipelineOrchestrator:
         tasks = list(tasks)
         emitter = self.state.trace_emitter
         args_for = args_for or (lambda task: ())
-        if self.workers <= 1 or not parallel or len(tasks) < 2:
+        if self.workers <= 1 or not parallel or len(tasks) < min_reports:
             return [
                 (
                     task,
@@ -1311,16 +1311,19 @@ class PipelineOrchestrator:
             "Extracting findings, recommendations, and entities for cross-report analytics..."
         )
 
-        # Gemini calls stay in this process (one shared limiter): with LLM validation
-        # on, Phase 9 runs one report at a time here
+        # Gemini calls stay in this process (one limiter); each report goes to a
+        # worker for the rest of Phase 9 as soon as its calls are done
         phases_completed = self._phases_completed()
-        results = self._per_report(
-            "9",
-            report_workers.enrich_report,
-            self.state.assembly_complete,
-            args_for=lambda t: (self.run_id, phases_completed, self._pdf_for_checks(t)),
-            parallel=not llm_validation_enabled(),
-        )
+        with self._gemini_budget("phase9"):
+            results = []
+            for task, record in self._phase9_extractions(self.state.assembly_complete):
+                results += self._per_report(
+                    "9",
+                    report_workers.enrich_report,
+                    [task],
+                    args_for=lambda t, r=record: (self.run_id, phases_completed, self._pdf_for_checks(t), r),
+                    min_reports=1,
+                )
         for i, (task, pending) in enumerate(results, 1):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
@@ -1345,6 +1348,7 @@ class PipelineOrchestrator:
                 # Store enrichment stats for summary
                 stats = done["statistics"]
                 task.enrichment_stats = stats
+                self._record_phase9_extraction(task.report_id, stats.get("extraction") or {})
 
                 self._log(
                     f"             ✓ {stats['findings']['total_count']} findings, "
@@ -1373,6 +1377,60 @@ class PipelineOrchestrator:
             len(self.state.enrichment_complete),
             len(self.state.assembly_complete),
         )
+
+    def _phase9_extractions(self, tasks):
+        """
+        (task, Gemini extraction record or None) per report, in order. Every report's
+        calls are sent at once; a report is yielded when its own calls are done.
+        """
+        from src.parsing_pipeline.config import get_config
+        from src.parsing_pipeline.modules import report_type_profiles
+        from src.parsing_pipeline.modules.enrichment import llm_finding_extractor as lfx
+
+        cfg = get_config().semantic_enrichment
+        if not cfg.llm_extraction:
+            for task in tasks:
+                yield task, None
+            return
+        settings = lfx.settings_from_config(cfg)
+        plans, by_report = [], {}
+        for task in tasks:
+            try:
+                with open(task.assembled_output_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                plan = lfx.plan_calls(
+                    task.report_id,
+                    data["report_metadata"],
+                    data["child_chunks"],
+                    report_type_profiles.detect_report_type(task),
+                    settings["max_chars_per_call"],
+                )
+                plans.append(plan)
+                by_report[task.report_id] = task
+            except Exception as e:
+                # Regex only for this report, counted as a loss
+                self.state.phase9_losses[task.report_id] = {"error": f"extraction plan failed: {e}"}
+        done = lfx.run_plans(plans, settings)
+        for task in tasks:
+            if task.report_id not in by_report:
+                yield task, None
+                continue
+            report_id, record = next(done)
+            yield by_report[report_id], record
+
+    def _record_phase9_extraction(self, report_id: str, extraction: dict) -> None:
+        """Keep the run's extraction settings and counts; sections that fell back to regex are losses."""
+        self.state.phase9_extraction[report_id] = {
+            k: extraction.get(k)
+            for k in ("method", "model", "prompt_version", "thinking_level", "temperature",
+                      "calls", "calls_failed", "seconds", "items", "regex_only_findings",
+                      "regex_only_recommendations")
+        }
+        if extraction.get("calls_failed"):
+            self.state.phase9_losses[report_id] = {
+                "regex_fallback_sections": extraction["calls_failed"],
+                "sections": extraction.get("fallback_sections"),
+            }
 
     def _configure_gemini(self) -> None:
         """One limiter for every Gemini call in this run, with a budget per model."""
@@ -2031,6 +2089,7 @@ class PipelineOrchestrator:
             any(s["status"] != "completed" for s in statuses)
             or self._phase10_shortfalls()
             or self.state.phase10_losses
+            or self.state.phase9_losses
             or self.missing_report_ids
         ):
             return EXIT_PARTIAL
@@ -2062,6 +2121,9 @@ class PipelineOrchestrator:
                 "10b": "skipped" if "10b" in self.skip else ("completed" if self.state.phase10b_completed else "not_run"),
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
+            # Sections whose Gemini call failed and kept the regex result
+            "phase9_losses": self.state.phase9_losses,
+            "phase9_extraction": self.state.phase9_extraction,
             "phase10_losses": self.state.phase10_losses,
             # The workflow moves exactly these objects from GCS processed/ to quarantine/<run_id>/
             "quarantined_files": self.quarantined_files,
@@ -2152,16 +2214,6 @@ class PipelineOrchestrator:
 
 
 SKIPPABLE_PHASES = ("5.5", "10a", "10b", "10c")
-
-
-def llm_validation_enabled() -> bool:
-    """Phase 9 LLM validation calls Gemini (off by default in the pattern config)."""
-    from src.parsing_pipeline.modules.enrichment.pattern_loader import get_pattern_loader
-
-    try:
-        return bool(get_pattern_loader().get_llm_validation_config().get("enabled", False))
-    except Exception:
-        return False
 
 
 def parse_skip_phases(values) -> list:

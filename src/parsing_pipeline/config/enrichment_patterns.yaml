@@ -330,14 +330,3 @@ temporal:
 confidence_thresholds:
   section_classification: 0.5  # Below this, classify as "other"
   finding_extraction: 0.5      # Minimum to accept as finding (raised from 0.4)
-  llm_validation_lower: 0.5    # Send to LLM if confidence >= this (raised from 0.4)
-  llm_validation_upper: 0.7    # Don't send to LLM if confidence >= this
-
-# LLM Validation Configuration
-llm_validation:
-  # Disabled: against the gold labels 26 of the 33 findings it rejected were real,
-  # and its calls cost ~2.5 h per union run (docs/pipeline-review/step2/deep-dives/llm_validation.md)
-  enabled: false
-  model: "gemini-3.8-flash"  # Runs on GCP Agent Platform
-  collect_refinement_data: true  # Log invalid findings for pattern refinement
-  refinement_data_path: "logs/pattern_refinement/"

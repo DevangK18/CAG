@@ -1123,17 +1123,19 @@ def propagate_semantic_enrichment_to_chunks(
     recommendations_by_chunk: Dict[str, List[Dict]] = {}
     section_types_by_chunk: Dict[str, str] = {}
 
-    # Index findings by source_chunk_id
-    for finding in semantic_enrichment.get("findings", []):
-        chunk_id = finding.get("source_chunk_id")
-        if chunk_id:
-            findings_by_chunk.setdefault(chunk_id, []).append(finding)
+    # Index findings and recommendations by every chunk they cover
+    def chunks_of(item: Dict[str, Any]) -> List[str]:
+        return item.get("source_chunk_ids") or [item.get("source_chunk_id")]
 
-    # Index recommendations by source_chunk_id
+    for finding in semantic_enrichment.get("findings", []):
+        for chunk_id in chunks_of(finding):
+            if chunk_id:
+                findings_by_chunk.setdefault(chunk_id, []).append(finding)
+
     for rec in semantic_enrichment.get("recommendations", []):
-        chunk_id = rec.get("source_chunk_id")
-        if chunk_id:
-            recommendations_by_chunk.setdefault(chunk_id, []).append(rec)
+        for chunk_id in chunks_of(rec):
+            if chunk_id:
+                recommendations_by_chunk.setdefault(chunk_id, []).append(rec)
 
     # Index section classifications by parent_chunk_id
     for section in semantic_enrichment.get("section_classifications", []):
