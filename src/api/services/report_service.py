@@ -206,6 +206,14 @@ def _impact_sum(semantic: dict) -> Tuple[Optional[float], Optional[int]]:
     return None, None
 
 
+def _findings_count(semantic: dict, findings: list) -> int:
+    """Distinct findings: restatements (executive summary, conclusion) are not counted again."""
+    distinct = ((semantic.get("statistics") or {}).get("findings") or {}).get("distinct_count")
+    if isinstance(distinct, int):
+        return distinct
+    return len(findings)
+
+
 def _format_monetary_impact(semantic: dict) -> Optional[str]:
     """Headline amount as "₹X crore", or None when the report has none."""
     total, _ = _impact_sum(semantic)
@@ -355,7 +363,7 @@ def _load_reports():
                 recommendations=recommendations,
                 monetary_impact=monetary_impact,
                 monetary_impact_label=monetary_impact_label,
-                findings_count=len(findings_raw),
+                findings_count=_findings_count(semantic, findings_raw),
                 report_type=metadata.get("report_type"),
                 government_body_type=metadata.get("government_body_type", "union"),
                 state_name=metadata.get("state_name"),
