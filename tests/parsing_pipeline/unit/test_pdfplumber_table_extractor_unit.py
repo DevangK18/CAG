@@ -125,6 +125,14 @@ def test_bihar_sideways_appendix_not_reversed(extractor):
 
 
 class TestCellsAndRegions:
+    @pytest.fixture(autouse=True)
+    def _fake_cells(self):
+        # The fake tables below carry rows, not pdfplumber cells
+        with patch.object(
+            PdfplumberTableExtractor, "_extract_cells", staticmethod(lambda t: t.extract())
+        ):
+            yield
+
     def test_pipe_in_cell_escaped_and_round_trips(self, extractor):
         markdown = extractor._to_markdown([["Item", "Value"], ["A | B", "1"]])
         assert "A \\| B" in markdown

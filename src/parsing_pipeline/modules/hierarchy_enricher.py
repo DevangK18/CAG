@@ -796,17 +796,24 @@ class HierarchyEnricher:
             if len(content) < self.min_section_length:
                 continue
 
+            is_header_type = content_type in self.HEADER_CONTENT_TYPES
+
             # For long content, only check first line
             if len(content) > self.max_section_title_length:
                 if (
                     self.detect_in_paragraphs or aggressive
                 ):
-                    content = content.split("\n")[0][: self.max_section_title_length]
+                    first_line = content.split("\n")[0]
+                    # A numbered body paragraph ("1.1.1 The tax and non-tax revenue
+                    # raised …") is one long line; a heading run into its paragraph
+                    # sits on a short first line
+                    if not is_header_type and len(first_line) > self.max_section_title_length:
+                        continue
+                    content = first_line[: self.max_section_title_length]
                 else:
                     continue
 
             # Check if this looks like a section header
-            is_header_type = content_type in self.HEADER_CONTENT_TYPES
             is_header_pattern = any(p.match(content) for p in self._header_indicators)
 
             # In aggressive mode, also check first line of paragraphs

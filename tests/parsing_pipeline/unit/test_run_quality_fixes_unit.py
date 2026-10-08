@@ -288,6 +288,24 @@ class TestMultiPageTables:
         assert merged.extraction_confidence == 0.9
         assert merged.structured_data["is_multi_page"] is True
 
+    def test_merged_table_keeps_caption_unit_line_and_notes(self):
+        # BR p.205: an appendix caption attached in Phase 6 stayed only in
+        # structured_data once the table was merged with its continuation
+        service = ChunkingService()
+        first = _table("t1", 205, [("1", "Head A", "5")])
+        caption = "Appendix-5.12 (Refer: Paragraph-5.5.6.6, Page - 85) Excess expenditure"
+        sd = dict(first.structured_data, caption=caption, unit_line="(₹ in lakh)",
+                  footnotes=["Source: Records of the ULBs"])
+        first = first.model_copy(update={"structured_data": sd})
+        task = _task([first, _table("t2", 206, [("2", "Head B", "7")])])
+        service._merge_multi_page_tables(task)
+        (merged,) = [c for c in task.extracted_content if c.content_type == "table_markdown"]
+        lines = merged.content.split("\n")
+        assert lines[:2] == [caption, "(₹ in lakh)"]
+        assert lines[-1] == "Source: Records of the ULBs"
+        assert "| 2 | Head B | 7 |" in merged.content
+        assert merged.structured_data["unit_line"] == "(₹ in lakh)"
+
     def test_statistics_reset_between_reports(self):
         service = ChunkingService()
         for _ in range(2):
@@ -443,3 +461,22 @@ class TestLateFixes:
             [_text("paragraph", reply, page) for page in range(5)]
         )
         assert len(valid) == 5
+
+
+class TestSidewaysPartTitles:
+    def test_sideways_part_title_starts_a_new_table(self):
+        # BR p.175-176: Appendix-5.2 parts A and B, pages printed sideways; part B's
+        # title sorts after its table
+        service = ChunkingService()
+        part_b = _text("caption", "B. Service level benchmarks for SWM (March 2022)", 176, y=313)
+        part_b.source_bbox = [107, 313, 118, 784]
+        content = [_table("t1", 175, [("1", "Patna", "50")]), _table("t2", 176, [("1", "Patna", "80")]), part_b]
+        assert service._find_contiguous_table_pairs(content) == set()
+
+    def test_upright_part_title_or_running_header_does_not(self):
+        service = ChunkingService()
+        header = _text("caption", "Audit Report (Local Government) for the year ended March 2022", 176, y=521)
+        header.source_bbox = [74, 521, 83, 783]
+        upright = _text("header", "B. Details of works", 176, y=600)
+        content = [_table("t1", 175, [("1", "A", "5")]), _table("t2", 176, [("2", "B", "7")]), header, upright]
+        assert service._find_contiguous_table_pairs(content) == {("t1", "t2")}

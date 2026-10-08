@@ -54,6 +54,14 @@ class PdfplumberTableExtractor:
     CAG-tuned settings loaded from configuration.
     """
 
+    # Largest gap (pt) between two characters of one word; neighbouring columns are
+    # further apart
+    WORD_GAP = 1.0
+    # A page holds hidden text when pdfplumber reads this many times MuPDF's characters
+    HIDDEN_TEXT_RATIO = 1.2
+    # Least share of the region's words or numbers a table must hold to be kept
+    MIN_COVERAGE = 0.5
+
     def __init__(self, config: Optional[ContentExtractionConfig] = None):
         """Initialize the pdfplumber table extractor with configuration."""
         # Load from config if not provided
@@ -269,6 +277,12 @@ class PdfplumberTableExtractor:
         if candidates:
             # Prefer ruling lines unless the whitespace strategy captures clearly more
             best = max(candidates, key=lambda c: (round(c[0] + 0.05 * c[1], 2), c[1]))
+            if best[0] < self.MIN_COVERAGE:
+                # A ruled title box alone, or a diagram's text boxes: Docling reads the region
+                logger.debug(
+                    f"pdfplumber: table covers {best[0]:.0%} of region text on page {page_num}; deferring to Docling"
+                )
+                return None, ""
             # Text on the upright copy is known to read forwards
             check_reversal = state["upright_page"] is None
             return self._clean_raw_table(best[2], rotation, check_reversal), best[3]
@@ -295,7 +309,7 @@ class PdfplumberTableExtractor:
         width = None
         extent = None
         for table in sorted(tables, key=lambda t: t.bbox[1]):
-            raw = self._drop_empty_lines(table.extract())
+            raw = self._drop_empty_lines(self._extract_cells(table))
             if not raw:
                 continue
             raw_width = max(len(row) for row in raw)
@@ -314,6 +328,89 @@ class PdfplumberTableExtractor:
         # Joined pieces can differ in width: pad to a rectangle
         width = max(len(row) for row in best)
         return [list(row) + [None] * (width - len(row)) for row in best]
+
+    @staticmethod
+    def _extract_cells(table) -> List[List[Optional[str]]]:
+        """
+        Cell text of a pdfplumber table, with no word cut between two cells.
+
+        pdfplumber puts each character in the cell holding its midpoint. A column edge
+        found by the whitespace strategy runs the full table height, so it can pass
+        through a word in another row ("Indirect Tax" | "es Receipts", "3,4" | "0,592").
+        Characters closer than WORD_GAP are one word, and the whole word goes to the
+        cell holding its centre.
+        """
+        def mid(char) -> Tuple[float, float]:
+            return (char["x0"] + char["x1"]) / 2, (char["top"] + char["bottom"]) / 2
+
+        def inside(point: Tuple[float, float], bbox) -> bool:
+            return bbox[0] <= point[0] < bbox[2] and bbox[1] <= point[1] < bbox[3]
+
+        extractor = pdfplumber.utils.text.WordExtractor(
+            x_tolerance=PdfplumberTableExtractor.WORD_GAP, y_tolerance=3
+        )
+        chars = table.page.chars
+        result = []
+        for row in table.rows:
+            cells = row.cells
+
+            def cell_at(point: Tuple[float, float]) -> Optional[int]:
+                for i, cell in enumerate(cells):
+                    if cell is not None and inside(point, cell):
+                        return i
+                return None
+
+            row_chars = [c for c in chars if inside(mid(c), row.bbox)]
+            owner = {id(c): cell_at(mid(c)) for c in row_chars}
+            # Word grouping needs upright and sideways characters apart
+            ordered = sorted(row_chars, key=lambda c: bool(c.get("upright", True)))
+            for word, word_chars in extractor.iter_extract_tuples(ordered):
+                owners = {owner[id(c)] for c in word_chars}
+                if len(owners) < 2:
+                    continue
+                centre = ((word["x0"] + word["x1"]) / 2, mid(word_chars[0])[1])
+                target = cell_at(centre)
+                if target is None:
+                    target = Counter(owner[id(c)] for c in word_chars).most_common(1)[0][0]
+                for c in word_chars:
+                    owner[id(c)] = target
+
+            texts: List[Optional[str]] = []
+            for i, cell in enumerate(cells):
+                if cell is None:
+                    texts.append(None)
+                    continue
+                cell_chars = [c for c in row_chars if owner[id(c)] == i]
+                texts.append(PdfplumberTableExtractor._cell_text(cell_chars))
+            result.append(texts)
+        return result
+
+    @staticmethod
+    def _cell_text(chars: List[Dict[str, Any]]) -> str:
+        """
+        Text of one cell, reading a cell set vertically along its own lines.
+
+        pdfplumber groups sideways characters into lines by their top edge, so a cell
+        printed bottom-to-top came out reversed and line-scrambled ("fo sdlohesuoh
+        rebmuN" for "Number of households", BR p.194). The direction comes from the
+        character matrix: b > 0 runs up the page, with lines stacked left to right.
+        """
+        if not chars:
+            return ""
+        sideways = [c for c in chars if not c.get("upright", True)]
+        if 2 * len(sideways) <= len(chars):
+            return pdfplumber.utils.extract_text(chars)
+        upward = sum(1 for c in sideways if (c.get("matrix") or (0, 1))[1] > 0)
+        line_dir, char_dir = ("ltr", "btt") if 2 * upward >= len(sideways) else ("rtl", "ttb")
+        return pdfplumber.utils.extract_text(
+            chars,
+            line_dir=line_dir,
+            char_dir=char_dir,
+            line_dir_rotated=line_dir,
+            char_dir_rotated=char_dir,
+            line_dir_render="ttb",
+            char_dir_render="ltr",
+        )
 
     # ========== DOCUMENT AND PAGE CACHE ==========
 
@@ -353,6 +450,12 @@ class PdfplumberTableExtractor:
         }
         if rotation == 0:
             direction = self._vertical_direction(pdf_path, page_num)
+            visible = None if direction else self._visible_chars(pdf_path, page_num, page)
+            if visible is not None:
+                state["source_page"] = page
+                state["page"] = page = page.filter(
+                    lambda obj: obj.get("object_type") != "char" or id(obj) in visible
+                )
             if direction:
                 upright_pdf = self._upright_copy(page_num, direction)
                 if upright_pdf is not None:
@@ -415,7 +518,7 @@ class PdfplumberTableExtractor:
             except Exception:
                 pass
         try:
-            state["page"].close()
+            state.get("source_page", state["page"]).close()
         except Exception:
             pass
 
@@ -465,6 +568,93 @@ class PdfplumberTableExtractor:
         except Exception as e:
             logger.warning(f"Could not derotate page {page_num}: {e}")
             return None
+
+    def _visible_chars(self, pdf_path: str, page_num: int, page) -> Optional[set]:
+        """
+        IDs of the page's characters that are drawn, when the page also holds hidden text.
+
+        Pages placed from another PDF (InDesign "PlacedPDF", 2025_26) keep the whole
+        source page and clip it: pdfplumber reads the clipped-away text too, so cells
+        interleave two copies ("Areea", "N oo."). A corrected table pasted over a white
+        box hides the old one the same way (2025_35 p.57: "22,775500"). MuPDF drops
+        clipped text; text under a later opaque fill is taken out here. A character is
+        kept when MuPDF has the same character at its origin. None when the page has no
+        hidden text, or the two readings do not line up.
+        """
+        try:
+            if self._fitz_doc is None:
+                self._fitz_doc = fitz.open(pdf_path)
+            fitz_page = self._fitz_doc[page_num]
+            drawn = Counter(
+                (c["c"], round(c["origin"][0]), round(c["origin"][1]))
+                for block in fitz_page.get_text("rawdict")["blocks"]
+                for line in block.get("lines", [])
+                for span in line["spans"]
+                for c in span["chars"]
+            )
+            drawn -= self._covered_chars(fitz_page)
+        except Exception as e:
+            logger.debug(f"Visible-text check failed on page {page_num}: {e}")
+            return None
+        chars = page.chars
+        total = sum(drawn.values())
+        if not total or len(chars) <= total * self.HIDDEN_TEXT_RATIO:
+            return None
+        # MuPDF measures from the crop box's top left; pdfminer's text matrix is in PDF
+        # space (origin bottom left of the media box). pdfplumber's crop box is top-down
+        left, top = float(page.cropbox[0]), float(page.mediabox[3]) - float(page.cropbox[1])
+
+        def key(char, dx=0, dy=0):
+            x, y = char["matrix"][4] - left, top - char["matrix"][5]
+            return (char["text"], round(x) + dx, round(y) + dy)
+
+        # Each drawn character is matched once: exact position first, then 1 pt off
+        visible = set()
+        for offsets in ([(0, 0)], [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]):
+            for char in chars:
+                if id(char) in visible:
+                    continue
+                for dx, dy in offsets:
+                    k = key(char, dx, dy)
+                    if drawn[k] > 0:
+                        drawn[k] -= 1
+                        visible.add(id(char))
+                        break
+        if len(visible) < 0.9 * total:
+            logger.debug(f"Visible-text check: readings differ on page {page_num}; not filtered")
+            return None
+        logger.debug(f"Page {page_num}: {len(chars) - len(visible)} hidden characters dropped")
+        return visible
+
+    @staticmethod
+    def _covered_chars(fitz_page) -> Counter:
+        """
+        Characters painted over by an opaque white rectangle drawn after them.
+
+        Only white boxes count: coloured cell shading painted after the text is
+        usually blended (multiply), and the text shows through it.
+        """
+        fills = [
+            (d["seqno"], d["rect"])
+            for d in fitz_page.get_drawings()
+            if d.get("fill") is not None
+            and min(d["fill"]) >= 0.99
+            and (d.get("fill_opacity") is None or d["fill_opacity"] >= 1)
+            and d.get("items")
+            and all(item[0] in ("re", "qu") for item in d["items"])
+        ]
+        covered: Counter = Counter()
+        if not fills:
+            return covered
+        for span in fitz_page.get_texttrace():
+            later = [rect for seqno, rect in fills if seqno > span["seqno"]]
+            if not later:
+                continue
+            for code, _glyph, origin, bbox in span["chars"]:
+                centre = fitz.Point(origin[0] + 0.5 * (bbox[2] - bbox[0]), origin[1] - 0.3 * span["size"])
+                if any(rect.contains(centre) for rect in later):
+                    covered[(chr(code), round(origin[0]), round(origin[1]))] += 1
+        return covered
 
     @staticmethod
     def _upright_bbox(bbox: List[float], direction: int, width: float, height: float) -> List[float]:

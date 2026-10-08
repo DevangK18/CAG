@@ -30,6 +30,7 @@ from src.parsing_pipeline.extractors.text_extractor import TextExtractor
 from src.parsing_pipeline.modules.captions import (
     FIGURE_KINDS,
     TABLE_KINDS,
+    appendix_caption_above,
     is_source_note,
     is_table_note,
     is_unit_line,
@@ -958,14 +959,44 @@ class ContentExtractionService:
                     unit_line = text
                     used.add(k)
                 else:
+                    # An appendix caption above the table's title and reference line
+                    if is_table and not caption and not sd.get("caption"):
+                        above = []
+                        for j in range(k, k - 3, -1):
+                            block = neighbour(j)
+                            if block is None:
+                                break
+                            above.append(block.content.strip())
+                        found = appendix_caption_above(above)
+                        if found:
+                            count, caption = found
+                            used.update(range(k, k - count, -1))
                     break
-            # Caption printed below the table or figure
+            # Caption printed below the table or figure, unless it heads the next one
             if not caption and not sd.get("caption"):
                 other = neighbour(i + 1)
                 parsed = parse_caption(other.content.strip()) if other else None
-                if parsed and parsed["kind"] in kinds:
+                after = items[i + 2] if i + 2 < len(items) else None
+                heads_next = (
+                    after is not None
+                    and after.source_page_physical == page
+                    and after.content_type == item.content_type
+                )
+                if parsed and parsed["kind"] in kinds and not heads_next:
                     caption = other.content.strip()
                     used.add(i + 1)
+                elif is_table:
+                    # Sideways appendix pages read title, reference line, then caption
+                    below = []
+                    for j in range(i + 1, i + 4):
+                        block = neighbour(j)
+                        if block is None:
+                            break
+                        below.append(block.content.strip())
+                    found = appendix_caption_above(below)
+                    if found:
+                        count, caption = found
+                        used.update(range(i + 1, i + 1 + count))
             # Source / note lines below (Docling often labels them footnotes)
             notes = []
             for k in range(i + 1, i + 4):

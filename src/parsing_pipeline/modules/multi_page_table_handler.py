@@ -16,6 +16,7 @@ from typing import Callable, List, Optional, Set, Dict, Any, Tuple
 
 from src.core.table_contracts import StructuredTable, TableRow, TableColumn
 from src.parsing_pipeline.config import get_config, ChunkingConfig
+from src.parsing_pipeline.modules.captions import is_continued_caption, parse_caption
 from src.parsing_pipeline.instrumentation import get_noop_emitter
 
 logger = logging.getLogger(__name__)
@@ -519,6 +520,12 @@ class MultiPageTableHandler:
         if not self._same_section(prev, curr):
             return False
 
+        # A caption of its own starts a new table. Attached captions no longer sit
+        # between the tables, so "Appendix 1.4" and "Appendix 1.5" on facing pages
+        # would otherwise look contiguous
+        if self._starts_new_table(prev, curr):
+            return False
+
         # M1-FIX: RULE 1a: For CONSECUTIVE pages (gap=1), be very lenient
         # OCR artifacts cause column count variations - if pages are consecutive
         # and column counts are close (within ±3), merge. Only safe when the caller
@@ -558,6 +565,28 @@ class MultiPageTableHandler:
         return False
 
     # ==================== DETECTION METHODS ====================
+
+    @staticmethod
+    def _starts_new_table(prev: StructuredTable, curr: StructuredTable) -> bool:
+        """
+        True when curr carries a caption that is not its predecessor's.
+
+        A continuation repeats the caption, marks it "(contd.)", or has none.
+        """
+        caption = (curr.caption or "").strip()
+        if not caption or is_continued_caption(caption):
+            return False
+        previous = (prev.caption or "").strip()
+        if not previous:
+            return True
+        ours, theirs = parse_caption(caption), parse_caption(previous)
+        if ours and theirs:
+            return ours["label"] != theirs["label"]
+
+        def norm(text: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", text.lower())
+
+        return norm(caption) != norm(previous)
 
     def _has_continuation_marker(self, table: StructuredTable) -> bool:
         """
