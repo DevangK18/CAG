@@ -220,3 +220,12 @@ def test_fallback_sections_are_losses(calls_failed, expected):
     orch._record_phase9_extraction("R", {"method": "llm", "calls": 5, "calls_failed": calls_failed})
     assert ("R" in orch.state.phase9_losses) is expected
     assert orch.state.phase9_extraction["R"]["calls"] == 5
+
+
+def test_anchor_tolerates_footnote_markers_and_runs_on_from_a_lead_in_chunk():
+    assert lfx.find_anchor("INCOIS had many commitments[^8] in the field", "INCOIS had many commitments in the field") == 0
+    index, offset = lfx.locate_anchor(
+        ["Rule 37 requires budgets.", "Audit noticed that:", "• In seven out of 85 schools, no fire NOC."],
+        "Audit noticed that: • In seven out of 85",
+    )
+    assert (index, offset) == (1, 0)

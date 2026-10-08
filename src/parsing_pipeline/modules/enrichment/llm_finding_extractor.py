@@ -385,22 +385,43 @@ def _norm(text: str) -> str:
     return _WS.sub(" ", (text or "").replace(" ", " ")).strip().lower()
 
 
+# Between two anchor words: punctuation, spaces or footnote markers ("commitments[^8] in")
+_GAP = r"(?:[^a-z0-9]|\[\^\d{1,3}\])*"
+
+
 def find_anchor(content: str, anchor: str) -> int:
     """
     Character offset of the anchor in content, or -1.
 
-    Whitespace and case are ignored; failing that, the anchor's words are matched
-    in order with any punctuation between them (the model may drop a quote mark).
+    The anchor's words must appear in order; case, punctuation and footnote
+    markers between them are ignored (the model drops quote marks and markers).
     """
     if not anchor or not content:
         return -1
     words = _WORD.findall(anchor.lower())
     if len(words) < 3:
         return -1
-    # Map positions of the normalised text back to the original
-    pattern = r"[^a-z0-9]*".join(re.escape(w) for w in words[:12])
+    pattern = _GAP.join(re.escape(w) for w in words[:12])
     match = re.search(pattern, content.lower())
     return match.start() if match else -1
+
+
+def locate_anchor(contents: List[str], anchor: str) -> Tuple[int, int]:
+    """
+    (index of the chunk where the anchor starts, offset in it), or (-1, -1).
+
+    The anchor may run on from a lead-in chunk ("Audit noticed that:") into the
+    next one, so it is looked for in the chunks joined in order.
+    """
+    joined, starts = "", []
+    for content in contents:
+        starts.append(len(joined))
+        joined += (content or "") + " "
+    at = find_anchor(joined, anchor)
+    if at < 0:
+        return -1, -1
+    index = max(i for i, s in enumerate(starts) if s <= at)
+    return index, at - starts[index]
 
 
 def _short_chunk_id(chunk_id: str, report_id: str) -> str:
@@ -474,15 +495,11 @@ def check_items(
             if any(cid not in by_id for cid in chunk_ids):
                 stats["bad_chunk_number"] += 1
                 continue
-            # The anchor must be in one of the item's chunks; the item starts there
-            start, first = -1, 0
-            for i, cid in enumerate(chunk_ids):
-                start = find_anchor(
-                    by_id[cid].get("content") or "", raw.get("anchor") or ""
-                )
-                if start >= 0:
-                    first = i
-                    break
+            # The anchor must be in the item's chunks; the item starts there
+            first, start = locate_anchor(
+                [by_id[cid].get("content") or "" for cid in chunk_ids],
+                raw.get("anchor") or "",
+            )
             if start < 0:
                 stats["anchor_not_found"] += 1
                 continue
