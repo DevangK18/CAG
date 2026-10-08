@@ -197,6 +197,22 @@ class BatchService:
         # Copy: callers may change what they read
         return copy.deepcopy(self._chunks_cache[key])
 
+    def run_phase10a(self, json_files: list[Path], job_timestamp: str) -> tuple[str, str, str]:
+        """
+        Overview, bottom-up summaries and summary variants for every report, each
+        request sent as soon as its inputs exist (phase10a_runner). Returns the
+        overview, summary and hierarchical batch IDs, as the three submit_* methods do.
+        """
+        from .phase10a_runner import Phase10aRun
+
+        self._current_job_timestamp = job_timestamp
+        run = Phase10aRun(self, json_files, job_timestamp)
+        run.run(self.max_workers)
+        self.last_run_calls = dict(run.calls)
+        self._trace_emitter.emit_io("10a", {"json_files": len(json_files)}, {"requests": run.calls})
+        batch_id = f"gemini_sync_{job_timestamp}"
+        return batch_id, batch_id, batch_id
+
     def _get_mapping_path(self, job_timestamp: str = None) -> Path:
         """Get the ID mapping file path for a specific job."""
         ts = job_timestamp or self._current_job_timestamp
@@ -249,6 +265,7 @@ class BatchService:
         max_tokens: int,
         custom_id: str,
         tag: str = "phase10a",
+        thinking_level: str = None,
     ) -> dict:
         """Process a single request with Gemini, retrying transient errors."""
         from google.genai import types
@@ -259,9 +276,10 @@ class BatchService:
                 tag=tag,
                 model=model,
                 contents=[types.Part.from_text(text=prompt)],
+                # Temperature left at the default: Google advises against lowering it for Gemini 3
                 config=types.GenerateContentConfig(
-                    temperature=0.1,
                     max_output_tokens=max_tokens,
+                    thinking_config=types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None,
                 ),
             )
             return {

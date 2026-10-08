@@ -60,6 +60,8 @@ class Indexer:
 
         self.embedding_service = EmbeddingService(self.config)
         self.qdrant_service = QdrantService(self.config)
+        # report_id -> parents whose summaries were indexed from content_summary
+        self._summaries_from_chunks: Dict[str, set] = {}
 
     @staticmethod
     def _drop_failed_reports(json_files, input_path: Path):
@@ -210,6 +212,13 @@ class Indexer:
         # Index parents
         parents_indexed = self.qdrant_service.upsert_parents(parent_chunks)
 
+        # Chapter and section summaries, from the parents (files written since PR 9)
+        summaries_indexed = self.index_parent_summaries(
+            report_id,
+            parent_chunks,
+            data.get("report_metadata", {}).get("government_body_type", "union"),
+        )
+
         # Phase 12: Optionally index entity mentions
         if (
             self.config.entity_graph.enabled
@@ -231,8 +240,57 @@ class Indexer:
             "report_id": report_id,
             "children": children_indexed,
             "parents": parents_indexed,
+            "summaries": summaries_indexed,
             "has_enrichment": semantic_enrichment is not None,
         }
+
+    def _summary_points(self, report_id: str, entries: list) -> list:
+        """Qdrant points for chapter (level 2) and section (level 1) summaries."""
+        points = []
+        for entry, level in entries:
+            if not entry.get("summary"):
+                continue
+            chunk_id = f"{report_id}_L{level}_{entry['parent_chunk_id']}"
+            embedding = self.embedding_service.dense_service.embed_single(entry["summary"])
+            points.append({
+                "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_id)),
+                "vector": embedding,
+                "payload": {
+                    "chunk_id": chunk_id,
+                    "content": entry["summary"],
+                    "content_type": "chapter_summary" if level == 2 else "section_summary",
+                    "hierarchy_level": level,
+                    "parent_chunk_id": entry["parent_chunk_id"],
+                    "title": entry.get("title", ""),
+                    "report_id": report_id,
+                    "tier": entry.get("tier", "union"),
+                },
+            })
+        return points
+
+    def index_parent_summaries(self, report_id: str, parent_chunks: list, tier: str) -> int:
+        """
+        Index the chapter and section summaries Phase 10a wrote into the parents'
+        content_summary. Returns how many were indexed (0 for older files, whose
+        summaries are only in *_hierarchical.json).
+        """
+        entries = []
+        for p in parent_chunks:
+            if not p.get("content_summary"):
+                continue
+            depth = len([v for k, v in (p.get("hierarchy") or {}).items() if k.startswith("level_") and v])
+            entry = {
+                "parent_chunk_id": p.get("chunk_id"),
+                "title": p.get("toc_entry", ""),
+                "summary": p["content_summary"],
+                "tier": tier,
+            }
+            entries.append((entry, 2 if depth <= 1 else 1))
+        points = self._summary_points(report_id, entries)
+        if points:
+            self.qdrant_service.upsert_hierarchical_summaries(points)
+            self._summaries_from_chunks[report_id] = {e["parent_chunk_id"] for e, _ in entries}
+        return len(points)
 
     def index_hierarchical_file(self, json_path: Path) -> Dict[str, Any]:
         """
@@ -251,57 +309,17 @@ class Indexer:
             data = json.load(f)
 
         report_id = data.get("report_id", json_path.stem.replace("_hierarchical", ""))
-
-        points = []
-
-        # Index chapter summaries (L2)
-        for chapter in data.get("chapter_summaries", []):
-            if not chapter.get("summary"):
-                continue
-
-            chunk_id = f"{report_id}_L2_{chapter['parent_chunk_id']}"
-            embedding = self.embedding_service.dense_service.embed_single(chapter["summary"])
-
-            points.append({
-                "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_id)),
-                "vector": embedding,
-                "payload": {
-                    "chunk_id": chunk_id,
-                    "content": chapter["summary"],
-                    "content_type": "chapter_summary",
-                    "hierarchy_level": 2,
-                    "parent_chunk_id": chapter["parent_chunk_id"],
-                    "title": chapter.get("title", ""),
-                    "report_id": report_id,
-                    "tier": chapter.get("tier", "union"),
-                },
-            })
-
-        # Index section summaries (L1)
-        for section in data.get("section_summaries", []):
-            if not section.get("summary"):
-                continue
-
-            chunk_id = f"{report_id}_L1_{section['parent_chunk_id']}"
-            embedding = self.embedding_service.dense_service.embed_single(section["summary"])
-
-            points.append({
-                "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_id)),
-                "vector": embedding,
-                "payload": {
-                    "chunk_id": chunk_id,
-                    "content": section["summary"],
-                    "content_type": "section_summary",
-                    "hierarchy_level": 1,
-                    "parent_chunk_id": section["parent_chunk_id"],
-                    "title": section.get("title", ""),
-                    "report_id": report_id,
-                    "tier": section.get("tier", "union"),
-                },
-            })
-
+        # Summaries already indexed from the parents' content_summary are skipped;
+        # the rest (chapters with no parent chunk of their own) are indexed here
+        done = self._summaries_from_chunks.get(report_id, set())
+        entries = [(c, 2) for c in data.get("chapter_summaries", [])] + [
+            (s, 1) for s in data.get("section_summaries", [])
+        ]
+        entries = [(e, level) for e, level in entries if e.get("parent_chunk_id") not in done]
+        points = self._summary_points(report_id, entries)
         if not points:
-            logger.warning(f"No hierarchical summaries to index for {report_id}")
+            if not done:
+                logger.warning(f"No hierarchical summaries to index for {report_id}")
             return {
                 "report_id": report_id,
                 "chapter_summaries": 0,

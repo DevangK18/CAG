@@ -213,10 +213,8 @@ def test_phase10a_orchestration_runs_to_completion(tmp_path, monkeypatch):
         def preload(self, files):
             pass
 
-        def submit_overview_batch(self, files, job_timestamp=None):
-            return "gemini_sync_1"
-
-        submit_summary_batch = submit_hierarchical_batch = submit_overview_batch
+        def run_phase10a(self, files, job_timestamp):
+            return "gemini_sync_1", "gemini_sync_1", "gemini_sync_1"
 
         def create_job_tracker(self, **kwargs):
             path = tmp_path / "tracker.json"

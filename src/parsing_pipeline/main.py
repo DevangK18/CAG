@@ -270,6 +270,8 @@ class PipelineOrchestrator:
             self._phase10a_inputs_read.set()
         with self._timed("10"):
             await asyncio.gather(self._run_phase10a(), self._run_phase10b())
+        if "10a" not in self.skip:
+            self._write_content_summaries()
 
         # Phase 10c: Visual Post-processing (optional)
         if "10c" not in self.skip:
@@ -1433,6 +1435,20 @@ class PipelineOrchestrator:
                 "sections": extraction.get("fallback_sections"),
             }
 
+    def _write_content_summaries(self) -> None:
+        """Chapter and section summaries into their parents' content_summary (after 10b wrote the files)."""
+        from src.batch_pipeline.phase10a_runner import write_content_summaries
+
+        filled = 0
+        for task in self.state.enrichment_complete:
+            path = Path(task.assembled_output_path or "")
+            hierarchical = Path("data/batch_jobs/hierarchical") / f"{task.report_id}_hierarchical.json"
+            try:
+                filled += write_content_summaries(path, hierarchical)
+            except Exception as e:  # the summaries stay in the hierarchical file
+                self._log(f"⚠️  Could not write summaries into {path.name}: {e}", force=True)
+        self._log(f"   Summaries written to {filled} parent chunks")
+
     def _configure_gemini(self) -> None:
         """One limiter for every Gemini call in this run, with a budget per model."""
         from src.core.gemini_limiter import configure_limiter
@@ -1547,22 +1563,13 @@ class PipelineOrchestrator:
             self._log(f"Submitting {len(json_files)} reports for Phase 10a processing...")
             self._log("  (Overview extraction + 5 summary variants + RAPTOR chapter/section summaries)")
 
-            # Gemini calls run to completion here. The three batches are independent
-            # and go to the limiter together instead of one after another. One
-            # timestamp for all three, set before the threads start
-            from concurrent.futures import ThreadPoolExecutor
-
+            # Gemini calls run to completion here, each sent as soon as its inputs
+            # exist: overviews at once, summaries from the leaves up, variants once
+            # a report's chapter summaries and overview are done
             job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            service._current_job_timestamp = job_timestamp
-            with ThreadPoolExecutor(max_workers=3) as batches:
-                overview = batches.submit(service.submit_overview_batch, json_files, job_timestamp)
-                summary = batches.submit(service.submit_summary_batch, json_files, job_timestamp)
-                hierarchical = batches.submit(
-                    service.submit_hierarchical_batch, json_files, job_timestamp=job_timestamp
-                )
-                overview_batch_id = overview.result()
-                summary_batch_id = summary.result()
-                hierarchical_batch_id = hierarchical.result()
+            overview_batch_id, summary_batch_id, hierarchical_batch_id = service.run_phase10a(
+                json_files, job_timestamp
+            )
 
             report_ids = [f.stem.replace("_chunks", "") for f in json_files]
             phase10_tracker_path = service.create_job_tracker(

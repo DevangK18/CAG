@@ -34,3 +34,20 @@ class Phase10ModelConfig:
             override = os.getenv(f"PHASE10_MODEL_{role.upper()}")
             if override:
                 setattr(self, role, override)
+
+
+# Gemini thinking level per role; None leaves the model's default. Set from the
+# PR 9 thinking comparison (a lower level is kept only where quality held).
+# Override with PHASE10_THINKING_<ROLE>; "default" restores the model's default.
+THINKING_LEVELS = {
+    "chapter_summary": None,
+    "section_summary": None,
+    "visual": None,
+}
+
+
+def thinking_level(role: str):
+    override = os.getenv(f"PHASE10_THINKING_{role.upper()}")
+    if override:
+        return None if override.lower() == "default" else override.lower()
+    return THINKING_LEVELS.get(role)
