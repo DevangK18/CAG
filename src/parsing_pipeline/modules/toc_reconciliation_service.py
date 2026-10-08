@@ -23,7 +23,10 @@ from src.parsing_pipeline.instrumentation import get_noop_emitter
 from src.parsing_pipeline.extractors.text_repair import repair_font_shift
 from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 from src.parsing_pipeline.modules.printed_toc_parser import fold_part_rows, roman_to_int
-from src.parsing_pipeline.modules.toc_quality import assess_toc_quality, is_garbage_title
+from src.parsing_pipeline.modules.toc_quality import (
+    assess_toc_quality,
+    is_garbage_title,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +50,13 @@ class TOCReconciliationService:
     # P0-02: Noise patterns to reject from candidate headers
     NOISE_PATTERNS = [
         r"^\([Pp]aragraphs?\s+[\d.]+\)",  # "(Paragraph 3.2)"
-        r"^\([Ss]ource:?\s.*\)$",          # "(Source: Records...)"
-        r"^Report\s+No\.\s+\d+\s+of",      # Running header
-        r"^Page\s+\d+$",                    # Page number
-        r"^[a-z]\.\s+",                     # List item "a. ..."
-        r"^\([ivxlcdm]+\)\s+",              # "(i) ...", "(iv) ..."
-        r"^\d+$",                            # Just a number
-        r"^-+$",                             # Just dashes
+        r"^\([Ss]ource:?\s.*\)$",  # "(Source: Records...)"
+        r"^Report\s+No\.\s+\d+\s+of",  # Running header
+        r"^Page\s+\d+$",  # Page number
+        r"^[a-z]\.\s+",  # List item "a. ..."
+        r"^\([ivxlcdm]+\)\s+",  # "(i) ...", "(iv) ..."
+        r"^\d+$",  # Just a number
+        r"^-+$",  # Just dashes
     ]
 
     # P0-04: Chapter patterns for L1 promotion
@@ -77,9 +80,22 @@ class TOCReconciliationService:
         r"^(?i:chapter|part|annexure|appendix|appendices)\b|^[IVX]{1,5}\s+[A-Z]{3}"
     )
     FRONT_BACK = {
-        "preface", "foreword", "overview", "executive summary", "introduction", "glossary",
-        "glossary of abbreviations", "abbreviations", "appendices", "annexures", "conclusion",
-        "conclusions", "recommendations", "recommendation", "acknowledgement", "index",
+        "preface",
+        "foreword",
+        "overview",
+        "executive summary",
+        "introduction",
+        "glossary",
+        "glossary of abbreviations",
+        "abbreviations",
+        "appendices",
+        "annexures",
+        "conclusion",
+        "conclusions",
+        "recommendations",
+        "recommendation",
+        "acknowledgement",
+        "index",
     }
     AMOUNT_RE = re.compile(r"(₹|`|\bRs\.?)\s*\d")
     ENUMERATOR_RE = re.compile(
@@ -114,11 +130,13 @@ class TOCReconciliationService:
             config = get_config().toc_reconciliation
 
         self.similarity_threshold = (
-            similarity_threshold if similarity_threshold is not None
+            similarity_threshold
+            if similarity_threshold is not None
             else config.similarity_threshold
         )
         self.min_docling_headers = (
-            min_docling_headers if min_docling_headers is not None
+            min_docling_headers
+            if min_docling_headers is not None
             else config.min_docling_headers
         )
         self.quality_high_threshold = config.quality_high_threshold
@@ -167,7 +185,9 @@ class TOCReconciliationService:
         # P0-02: Apply noise rejection filter to Docling headers
         docling_headers = self._filter_noise_headers(docling_headers)
         if not docling_headers:
-            logger.info(f"[{task.report_id}] All Docling headers filtered as noise — skipping")
+            logger.info(
+                f"[{task.report_id}] All Docling headers filtered as noise — skipping"
+            )
             return task
 
         # P0-04: Promote Chapter patterns to L1
@@ -188,8 +208,12 @@ class TOCReconciliationService:
             reasons: Dict[str, int] = {}
             for _, reason in rejected:
                 reasons[reason] = reasons.get(reason, 0) + 1
-            logger.info(f"[{task.report_id}] Heading test rejected {len(rejected)} Docling headers: {reasons}")
-            emitter.emit("5.5", "heading_test", {"rejected": len(rejected), "reasons": reasons})
+            logger.info(
+                f"[{task.report_id}] Heading test rejected {len(rejected)} Docling headers: {reasons}"
+            )
+            emitter.emit(
+                "5.5", "heading_test", {"rejected": len(rejected), "reasons": reasons}
+            )
 
         # P0-02: Handle empty-TOC explicitly (separate branch)
         if not current_toc:
@@ -248,7 +272,10 @@ class TOCReconciliationService:
         # Step 4: Place every entry on its page and order same-page entries by
         # position (A-5.5-04); heading_positions gets a y for every entry
         reconciled_toc, heading_positions = self._place_entries(
-            task, reconciled_toc, docling_headers, task.scaffold.get("heading_positions", {})
+            task,
+            reconciled_toc,
+            docling_headers,
+            task.scaffold.get("heading_positions", {}),
         )
 
         # Score before normalisation, so junk the normaliser removes still counts
@@ -266,7 +293,10 @@ class TOCReconciliationService:
                 f"[{task.report_id}] Reconciled TOC scored {reconciled_score} < Phase 4 "
                 f"{current_score}; keeping Phase 4 TOC"
             )
-            reconciled_toc, method = self._deduplicate_parents(normalized_current), "kept_phase4"
+            reconciled_toc, method = (
+                self._deduplicate_parents(normalized_current),
+                "kept_phase4",
+            )
             reconciled_score = current_score
 
         # P0-04: L1 count sanity check
@@ -292,7 +322,9 @@ class TOCReconciliationService:
         prev_count = len(current_toc)
         task.scaffold["toc"] = reconciled_toc
         task.scaffold["heading_positions"] = heading_positions
-        task.scaffold["toc_method"] = f"{task.scaffold.get('toc_method', 'unknown')}+reconciled_{method}"
+        task.scaffold["toc_method"] = (
+            f"{task.scaffold.get('toc_method', 'unknown')}+reconciled_{method}"
+        )
         task.scaffold["reconciliation_strategy"] = method
 
         # The reconciled TOC's own score, uncapped (A-5.5-02)
@@ -357,13 +389,19 @@ class TOCReconciliationService:
         try:
             doc = fitz.open(pdf_path)
         except Exception as e:
-            logger.warning(f"[{task.report_id}] Failed to open PDF for reconciliation: {e}")
+            logger.warning(
+                f"[{task.report_id}] Failed to open PDF for reconciliation: {e}"
+            )
             return []
 
         try:
             self._body_size = self._body_font_size(doc)
             for page_num, blocks in task.layout.items():
-                tables = [b.get("bbox") for b in blocks if b.get("label") == "Table" and b.get("bbox")]
+                tables = [
+                    b.get("bbox")
+                    for b in blocks
+                    if b.get("label") == "Table" and b.get("bbox")
+                ]
                 for block in blocks:
                     if block.get("label") != "Section-header":
                         continue
@@ -391,23 +429,27 @@ class TOCReconciliationService:
                     level = self._infer_level_from_docling(title, bbox)
 
                     bold, size = self._style_at(doc, page_num, bbox)
-                    headers.append({
-                        "title": title,
-                        "page": page_num,
-                        "y_position": bbox[1],  # y0 = top of header
-                        "bbox": bbox,
-                        "level": level,
-                        "bold": bold,
-                        "size": size,
-                        "in_table": any(self._inside(bbox, t) for t in tables),
-                    })
+                    headers.append(
+                        {
+                            "title": title,
+                            "page": page_num,
+                            "y_position": bbox[1],  # y0 = top of header
+                            "bbox": bbox,
+                            "level": level,
+                            "bold": bold,
+                            "size": size,
+                            "in_table": any(self._inside(bbox, t) for t in tables),
+                        }
+                    )
         finally:
             doc.close()
 
         # Sort by page then Y position
         headers.sort(key=lambda h: (h["page"], h["y_position"]))
 
-        logger.info(f"[{task.report_id}] Extracted {len(headers)} Docling section headers")
+        logger.info(
+            f"[{task.report_id}] Extracted {len(headers)} Docling section headers"
+        )
         return headers
 
     @staticmethod
@@ -454,7 +496,8 @@ class TOCReconciliationService:
             return False, 0.0
         chars = sum(len(sp["text"]) for sp in spans)
         bold_chars = sum(
-            len(sp["text"]) for sp in spans
+            len(sp["text"])
+            for sp in spans
             if sp.get("flags", 0) & 16 or "bold" in sp.get("font", "").lower()
         )
         return bold_chars >= 0.6 * chars, max(sp.get("size", 0) for sp in spans)
@@ -485,7 +528,9 @@ class TOCReconciliationService:
             rect.y1 = min(page.rect.height, rect.y1 + 2)
 
             if page.rotation:
-                rect = rect * page.derotation_matrix  # Docling boxes are in rotated space
+                rect = (
+                    rect * page.derotation_matrix
+                )  # Docling boxes are in rotated space
             text = page.get_text("text", clip=rect)
             return repair_font_shift(text).strip()
 
@@ -496,11 +541,11 @@ class TOCReconciliationService:
     def _clean_header_title(self, title: str) -> str:
         """Clean extracted header text."""
         # Remove page numbers that might be caught
-        title = re.sub(r'\s+\d+\s*$', '', title)
+        title = re.sub(r"\s+\d+\s*$", "", title)
         # Remove excessive whitespace
-        title = re.sub(r'\s+', ' ', title).strip()
+        title = re.sub(r"\s+", " ", title).strip()
         # Remove leading/trailing special chars
-        title = title.strip('.-–—:;,')
+        title = title.strip(".-–—:;,")
         # Skip if too short or looks like noise
         if len(title) < 3 or title.isdigit():
             return ""
@@ -518,21 +563,28 @@ class TOCReconciliationService:
         title_lower = title.lower().strip()
 
         # Pattern-based level detection
-        if re.match(r'^chapter\s+[ivx\d]+', title_lower):
+        if re.match(r"^chapter\s+[ivx\d]+", title_lower):
             return 1
-        if re.match(r'^(annexure|appendix)\s+', title_lower):
+        if re.match(r"^(annexure|appendix)\s+", title_lower):
             return 1
-        if title_lower in ('preface', 'executive summary', 'introduction',
-                          'conclusion', 'recommendations', 'glossary',
-                          'acknowledgement', 'abbreviations'):
+        if title_lower in (
+            "preface",
+            "executive summary",
+            "introduction",
+            "conclusion",
+            "recommendations",
+            "glossary",
+            "acknowledgement",
+            "abbreviations",
+        ):
             return 1
 
         # Numbered sections
-        if re.match(r'^\d+\.\d+\.\d+', title):
+        if re.match(r"^\d+\.\d+\.\d+", title):
             return 3
-        if re.match(r'^\d+\.\d+', title):
+        if re.match(r"^\d+\.\d+", title):
             return 2
-        if re.match(r'^\d+\.?\s+[A-Z]', title):
+        if re.match(r"^\d+\.?\s+[A-Z]", title):
             return 1
 
         # Unnumbered headers sit below chapter level: box height made two-line bold
@@ -540,7 +592,11 @@ class TOCReconciliationService:
         return 2
 
     def _supplement_high_quality(
-        self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
+        self,
+        current_toc: List[List],
+        docling_headers: List[Dict],
+        report_id: str,
+        emitter=None,
     ) -> Tuple[List[List], str]:
         """
         High quality Phase 4 TOC (>=70): Keep existing, add missed headers.
@@ -570,17 +626,25 @@ class TOCReconciliationService:
 
             # Collect sample data for first 5 headers
             if len(match_samples) < 5:
-                match_samples.append({
-                    "docling_title": header["title"][:50],
-                    "best_match": best_match["title"][:50] if best_match["title"] else None,
-                    "similarity": round(best_match["similarity"], 2),
-                    "matched": matched,
-                })
+                match_samples.append(
+                    {
+                        "docling_title": header["title"][:50],
+                        "best_match": best_match["title"][:50]
+                        if best_match["title"]
+                        else None,
+                        "similarity": round(best_match["similarity"], 2),
+                        "matched": matched,
+                    }
+                )
 
             if not matched:
-                new_entries.append([
-                    self._supplement_level(header, current_toc), header["title"], header["page"]
-                ])
+                new_entries.append(
+                    [
+                        self._supplement_level(header, current_toc),
+                        header["title"],
+                        header["page"],
+                    ]
+                )
 
         # Trace: Similarity match samples
         if match_samples:
@@ -589,7 +653,9 @@ class TOCReconciliationService:
         if new_entries:
             merged = current_toc + new_entries
             merged.sort(key=lambda e: (e[2], e[0]))  # Sort by page, then level
-            logger.info(f"[{report_id}] Supplemented: +{len(new_entries)} headers from Docling")
+            logger.info(
+                f"[{report_id}] Supplemented: +{len(new_entries)} headers from Docling"
+            )
             return merged, "supplemented"
 
         return current_toc, "validated"
@@ -601,7 +667,7 @@ class TOCReconciliationService:
         Box height made unnumbered headers ("Milestone payment= 8 per cent") chapters.
         """
         title = header["title"]
-        if re.match(r"^chapter\s+[ivx\d]+", title, re.IGNORECASE):
+        if re.match(r"^chapter\s*[-–—:.]?\s*([ivxlc]+|\d+)\b", title, re.IGNORECASE):
             return 1
         numbered = re.match(r"^(\d+(?:\.\d+)+)", title)
         if numbered:
@@ -620,21 +686,30 @@ class TOCReconciliationService:
             title = repair_font_shift(str(title)).strip()
             if is_garbage_title(title):
                 continue
-            if page <= 10 and re.match(r"^(table\s+of\s+)?contents?$|^index$", title, re.IGNORECASE):
+            if page <= 10 and re.match(
+                r"^(table\s+of\s+)?contents?$|^index$", title, re.IGNORECASE
+            ):
                 continue
             if page <= 1 and any(e[2] <= 1 for e in result):
                 continue  # keep one cover entry
             numbered = re.match(r"^(\d+(?:\.\d+)+)\.?\s", title)
             if numbered:
                 level = min(numbered.group(1).count(".") + 1, 4)
-            elif re.match(r"^chapter\s*[-:]?\s*([ivxlc]+|\d+)\b", title, re.IGNORECASE):
+            # "Chapter-2", "CHAPTER–II" (en dash, KL)
+            elif re.match(
+                r"^chapter\s*[-–—:.]?\s*([ivxlc]+|\d+)\b", title, re.IGNORECASE
+            ):
                 level = 1
             result.append([level, title, page])
         # PART-A/B banners next to a chapter would become empty parents
         return fold_part_rows(result)
 
     def _merge_medium_quality(
-        self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
+        self,
+        current_toc: List[List],
+        docling_headers: List[Dict],
+        report_id: str,
+        emitter=None,
     ) -> Tuple[List[List], str]:
         """
         Medium quality Phase 4 TOC (40-69): Merge both signals.
@@ -653,14 +728,20 @@ class TOCReconciliationService:
             for i, header in enumerate(docling_headers):
                 if i in matched:
                     continue
-                similarity = SequenceMatcher(None, entry_key, header["title"].lower().strip()[:30]).ratio()
+                similarity = SequenceMatcher(
+                    None, entry_key, header["title"].lower().strip()[:30]
+                ).ratio()
                 if similarity >= self.similarity_threshold:
                     matched.add(i)
                     break
 
         # Add unmatched Docling headers
         new_entries = [
-            [self._supplement_level(header, current_toc), header["title"], header["page"]]
+            [
+                self._supplement_level(header, current_toc),
+                header["title"],
+                header["page"],
+            ]
             for i, header in enumerate(docling_headers)
             if i not in matched
         ]
@@ -675,7 +756,11 @@ class TOCReconciliationService:
         return merged, "merged"
 
     def _prefer_docling_low_quality(
-        self, current_toc: List[List], docling_headers: List[Dict], report_id: str, emitter=None
+        self,
+        current_toc: List[List],
+        docling_headers: List[Dict],
+        report_id: str,
+        emitter=None,
     ) -> Tuple[List[List], str]:
         """
         Low quality Phase 4 TOC (<40): Prefer Docling as primary.
@@ -684,10 +769,7 @@ class TOCReconciliationService:
         """
         emitter = emitter or self._trace_emitter
 
-        docling_toc = [
-            [h["level"], h["title"], h["page"]]
-            for h in docling_headers
-        ]
+        docling_toc = [[h["level"], h["title"], h["page"]] for h in docling_headers]
 
         if not current_toc:
             logger.info(
@@ -697,8 +779,12 @@ class TOCReconciliationService:
             return docling_toc, "docling_primary"
         else:
             # A real but short Phase 4 TOC is kept and supplemented, not replaced
-            logger.info(f"[{report_id}] Low quality Phase 4 TOC: merging Docling headers into it")
-            return self._merge_medium_quality(current_toc, docling_headers, report_id, emitter)
+            logger.info(
+                f"[{report_id}] Low quality Phase 4 TOC: merging Docling headers into it"
+            )
+            return self._merge_medium_quality(
+                current_toc, docling_headers, report_id, emitter
+            )
 
     # ==================== Heading test, numbering, placement ====================
 
@@ -746,8 +832,16 @@ class TOCReconciliationService:
 
         # Enclosing chapter by page: chapters of the Phase 4 TOC and Docling chapter headers
         chapter_starts = sorted(
-            [(page, n) for _, title, page in current_toc if (n := self._chapter_number(title))]
-            + [(h["page"], n) for h in headers if (n := self._chapter_number(h["title"]))]
+            [
+                (page, n)
+                for _, title, page in current_toc
+                if (n := self._chapter_number(title))
+            ]
+            + [
+                (h["page"], n)
+                for h in headers
+                if (n := self._chapter_number(h["title"]))
+            ]
         )
         body = getattr(self, "_body_size", 0.0) or 0.0
 
@@ -774,7 +868,10 @@ class TOCReconciliationService:
                     reason = "number_backwards"
                 else:
                     last_number[chapter] = parts
-            elif self.CHAPTER_LIKE_RE.match(title) or title.lower().strip(" .:") in self.FRONT_BACK:
+            elif (
+                self.CHAPTER_LIKE_RE.match(title)
+                or title.lower().strip(" .:") in self.FRONT_BACK
+            ):
                 reason = None
             elif words > 12:
                 reason = "long"
@@ -811,9 +908,14 @@ class TOCReconciliationService:
             title = str(entry[1])
             chapter = self._chapter_number(title)
             section = None if chapter is not None else self._section_number(title)
-            appendix = re.match(r"^(appendix|annexure)\s*[-–:.]?\s*([\w.]+)", title, re.IGNORECASE)
+            appendix = re.match(
+                r"^(appendix|annexure)\s*[-–:.]?\s*([\w.]+)", title, re.IGNORECASE
+            )
             if appendix:
-                chapter, section = None, f"{appendix.group(1).lower()}:{appendix.group(2).lower()}"
+                chapter, section = (
+                    None,
+                    f"{appendix.group(1).lower()}:{appendix.group(2).lower()}",
+                )
             if chapter is not None:
                 if chapter in seen_chapters:
                     continue
@@ -826,7 +928,11 @@ class TOCReconciliationService:
         return sorted(result, key=lambda e: (e[2],))
 
     def _place_entries(
-        self, task: DocumentTask, toc: List[List], headers: List[Dict], heading_positions: Dict
+        self,
+        task: DocumentTask,
+        toc: List[List],
+        headers: List[Dict],
+        heading_positions: Dict,
     ) -> Tuple[List[List], Dict]:
         """
         Give every entry a y on its page and order entries by (page, y) (A-5.5-04,
@@ -850,11 +956,15 @@ class TOCReconciliationService:
             for i, h in enumerate(headers):
                 if i in used or abs(h["page"] - page) > 1:
                     continue
-                h_number = self._section_number(h["title"]) or self._chapter_number(h["title"])
+                h_number = self._section_number(h["title"]) or self._chapter_number(
+                    h["title"]
+                )
                 if number is not None and h_number == number:
                     score = 2.0 - 0.1 * abs(h["page"] - page)
                 else:
-                    sim = SequenceMatcher(None, h["title"].lower(), title.lower()).ratio()
+                    sim = SequenceMatcher(
+                        None, h["title"].lower(), title.lower()
+                    ).ratio()
                     score = sim - 0.1 * abs(h["page"] - page) if sim >= 0.8 else 0.0
                 if score > best_score:
                     best, best_score = i, score
@@ -869,7 +979,9 @@ class TOCReconciliationService:
                     y = hits[0].y0 if hits else None
                 except Exception:
                     y = None
-            placed.append(([level, title, page], 0.0 if y is None else y, index, y is not None))
+            placed.append(
+                ([level, title, page], 0.0 if y is None else y, index, y is not None)
+            )
 
         if doc is not None:
             doc.close()
@@ -894,9 +1006,7 @@ class TOCReconciliationService:
             for toc_entry in toc:
                 toc_title = toc_entry[1]
                 similarity = SequenceMatcher(
-                    None,
-                    header["title"].lower().strip(),
-                    toc_title.lower().strip()
+                    None, header["title"].lower().strip(), toc_title.lower().strip()
                 ).ratio()
 
                 if similarity >= self.similarity_threshold:
@@ -1017,9 +1127,7 @@ class TOCReconciliationService:
 
         return headers
 
-    def _detect_orphan_sections(
-        self, toc: List[List], emitter=None
-    ) -> List[Dict]:
+    def _detect_orphan_sections(self, toc: List[List], emitter=None) -> List[Dict]:
         """
         P0-04: Detect numbered sections that lack a parent chapter at L1.
 
@@ -1045,7 +1153,9 @@ class TOCReconciliationService:
             level, title, page = entry[0], entry[1], entry[2]
             if level == 1:
                 # Extract chapter number from "Chapter 3", "Chapter-III", "3. Introduction"
-                match = re.match(r"(?:Chapter\s*[-:]?\s*)?(\d+|[IVXLC]+)\b", title, re.IGNORECASE)
+                match = re.match(
+                    r"(?:Chapter\s*[-:]?\s*)?(\d+|[IVXLC]+)\b", title, re.IGNORECASE
+                )
                 if match:
                     token = match.group(1)
                     number = int(token) if token.isdigit() else roman_to_int(token)
@@ -1062,11 +1172,13 @@ class TOCReconciliationService:
                 if match:
                     chapter_num = int(match.group(1))
                     if chapter_num not in l1_chapter_numbers:
-                        orphans.append({
-                            "title": title,
-                            "level": level,
-                            "expected_chapter": chapter_num,
-                        })
+                        orphans.append(
+                            {
+                                "title": title,
+                                "level": level,
+                                "expected_chapter": chapter_num,
+                            }
+                        )
 
         # D7: Calculate orphan ratio (data-derived threshold: 0.75 → ~13.5% firing)
         ORPHAN_RATIO_THRESHOLD = 0.75

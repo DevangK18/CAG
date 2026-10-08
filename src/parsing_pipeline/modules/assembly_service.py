@@ -16,6 +16,7 @@ from datetime import datetime
 
 from src.core.data_contracts import DocumentTask, ParentChunk, ChildChunk
 from src.core.processed_manifest import TIERS, load_report_entries, tier_manifest_path
+from src.parsing_pipeline.modules.scaffolding_service import toc_record
 
 # Phase 8 writes {report_id}_chunks.json.working; Phase 9 writes the final
 # {report_id}_chunks.json. A run that stops in between never leaves a final file
@@ -667,6 +668,8 @@ class AssemblyService:
             "phase_10b_complete": False,
             # M2-FIX: Include DLQ entries for missing page visibility
             "dlq_entries": task.dlq_entries if task.dlq_entries else [],
+            # Contents source and score: Phase 4's source and candidates, the final method and score
+            "toc": toc_record(task.scaffold),
         }
 
     def _build_footnote_index(self, child_chunks: List[Dict]) -> Dict[str, Dict[str, Any]]:

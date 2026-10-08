@@ -30,7 +30,10 @@ import fitz  # PyMuPDF
 from src.parsing_pipeline.extractors.text_repair import (
     _is_shifted_line,
     is_reversed,
+    is_shifted_span,
     repair_font_shift,
+    shifted_fonts,
+    unshift,
 )
 from src.parsing_pipeline.modules.printed_toc_parser import (
     CHAPTER_RE,
@@ -92,9 +95,34 @@ BAND = 0.09  # share of the page height treated as header/footer band
 
 def _body_text(page) -> str:
     height = page.rect.height or 1.0
+    textpage = page.get_textpage(flags=fitz.TEXTFLAGS_BLOCKS)
+    layout = textpage.extractRAWDICT()
+    fonts = shifted_fonts(layout)
+    if fonts:
+        # Shifted fonts decoded by font, as the extraction does: per line, short lines
+        # and the digits below U+0020 stayed undecoded and counted against the output
+        blocks = [
+            (
+                *b["bbox"],
+                "\n".join(
+                    "".join(
+                        unshift(c["c"]) if is_shifted_span(span, fonts) else c["c"]
+                        for span in line["spans"]
+                        for c in span["chars"]
+                    )
+                    for line in b["lines"]
+                ),
+                0,
+                0,
+            )
+            for b in layout["blocks"]
+            if b.get("type") == 0
+        ]
+    else:
+        blocks = textpage.extractBLOCKS()
     return "\n".join(
         b[4]
-        for b in page.get_text("blocks")
+        for b in blocks
         if b[6] == 0 and not (b[3] < BAND * height or b[1] > (1 - BAND) * height)
     )
 

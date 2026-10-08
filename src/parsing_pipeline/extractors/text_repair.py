@@ -13,7 +13,7 @@ Text repair for PDF extraction artifacts found in CAG reports.
 import math
 import re
 from collections import Counter
-from typing import List
+from typing import Dict, List
 
 # Reversed forms of frequent English/CAG words; rare or non-existent forwards.
 # Don't add words that are valid both ways (saw/was, ton/not, no/on).
@@ -109,7 +109,9 @@ def is_reversed(text: str) -> bool:
         return False
 
     # Short all-caps abbreviations ("DNA": data not available) are not reversed words
-    tokens = [t.lower() for t in _WORD_RE.findall(text) if not (t.isupper() and len(t) <= 4)]
+    tokens = [
+        t.lower() for t in _WORD_RE.findall(text) if not (t.isupper() and len(t) <= 4)
+    ]
     if not tokens:
         return False
 
@@ -123,12 +125,18 @@ def is_reversed(text: str) -> bool:
 
     # Reversed proper nouns: "gnarabaN" (Nabarang) has a lowercase->uppercase transition
     words = text.split()
-    reversed_caps = re.findall(r"[a-z][A-Z]", text)
+    reversed_caps = len(_CASE_TURN_RE.findall(text))
     return (
         len(words) > 3
-        and len(reversed_caps) / len(words) > 0.3
+        and reversed_caps / len(words) > 0.3
         and forward_hits * 5 < len(tokens)
+        # Reading the words backwards must remove the transitions. Glued words
+        # ("PurushottamDigitally") and doubled ones ("SupremeSupreme") keep them
+        and 2 * len(_CASE_TURN_RE.findall(reverse_words(text))) < reversed_caps
     )
+
+
+_CASE_TURN_RE = re.compile(r"[a-z][A-Z]")
 
 
 _MARKER_SPLIT_RE = re.compile(r"(\[\^\d+\])")
@@ -162,6 +170,19 @@ def reverse_words(text: str) -> str:
             )
         lines.append(" ".join(words))
     return "\n".join(lines)
+
+
+def is_garbled(text: str, vocab: Counter) -> bool:
+    """
+    True if under half of the text's tokens are words of the report: OCR read from an
+    upside-down scan ("A1-.1aJdBq3 V Al!l!Qgl!gA JO") rather than text.
+    """
+    tokens = [t.strip(".,;:()'\"") for t in text.split()]
+    tokens = [t for t in tokens if len(t) >= 3]
+    if len(tokens) < 2:
+        return False
+    words = sum(1 for t in tokens if t.isalpha() and vocab.get(t.lower(), 0) >= 2)
+    return words < 0.5 * len(tokens)
 
 
 # ==================== FONT SHIFT ====================
@@ -274,6 +295,52 @@ def repair_font_shift(text: str) -> str:
             lines[i] = unshift(line)
             changed = True
     return "\n".join(lines) if changed else text
+
+
+# Characters below U+0020 other than tab and line breaks: a font mapped 29 code points
+# low puts its space, digits and punctuation there ("\x15\x13\x15\x16" = "2023")
+CONTROL_CHAR_RE = re.compile(r"[\x01-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def repair_shifted_block(text: str) -> str:
+    """
+    Decode a block set in a shifted font before its whitespace is normalised: the
+    shifted digits and punctuation are control characters, and "\x1c" (the shifted
+    9) counts as whitespace. When the block as a whole reads as shifted text, every
+    line without lowercase letters is decoded, including lines of figures alone.
+    """
+    if not text or not CONTROL_CHAR_RE.search(text):
+        return text
+    lines = text.split("\n")
+    if not _is_shifted_line(" ".join(line for line in lines if line.strip())):
+        return repair_font_shift(text)
+    return "\n".join(
+        line if any(c.islower() for c in line) else unshift(line) for line in lines
+    )
+
+
+def is_shifted_span(span: dict, fonts: set) -> bool:
+    """A span in one of the page's shifted fonts; shifted text has no lowercase."""
+    return span["font"] in fonts and not any(c["c"].islower() for c in span["chars"])
+
+
+def shifted_fonts(layout: dict) -> set:
+    """
+    Fonts of a page (rawdict) whose glyphs are mapped 29 code points low. Decided on all of a
+    font's text on the page: Docling splits such text into single words, and a word
+    or a short line alone does not read as English ("QJLQHHUV" = "Engineers").
+    """
+    by_font: Dict[str, List[str]] = {}
+    for block in layout.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                text = "".join(c["c"] for c in span["chars"])
+                by_font.setdefault(span["font"], []).append(text)
+    return {
+        font
+        for font, texts in by_font.items()
+        if _is_shifted_line(" ".join(texts)[:3000])
+    }
 
 
 def repair_cells(cells: List[str]) -> List[str]:
