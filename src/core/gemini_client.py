@@ -182,6 +182,7 @@ def generate_with_retry(
     max_output = getattr(config, "max_output_tokens", None)
     seq = None
     attempt = 0
+    first_failure = None
     while True:
         try:
             with limiter.attempt(model, group, tag, chars, images, max_output, seq) as outcome:
@@ -210,9 +211,12 @@ def generate_with_retry(
                     latency_s=time.monotonic() - started, success=True)
             return response
         except Exception as e:
+            # The retry window runs from the first failure: time spent waiting for
+            # admission or on a long successful-looking call does not use it up
+            first_failure = first_failure or time.monotonic()
             out_of_retries = (
                 attempt >= (MAX_RETRIES if max_retries is None else max_retries)
-                or time.monotonic() - started >= limiter.settings.retry_window_s
+                or time.monotonic() - first_failure >= limiter.settings.retry_window_s
             )
             if isinstance(e, GeminiDeadlineExceeded) or not is_transient(e) or out_of_retries:
                 _record(model, tag, tokens, retries=attempt,

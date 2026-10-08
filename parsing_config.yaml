@@ -217,7 +217,9 @@ gemini:
       output_weight: 6
     gemini-3.8-flash:
       capacity_tpm: 2000000
-      ceiling: 64
+      # 64 at first; Phase 10 on three reports kept 64 in flight with no 429s at 4% of
+      # the budget, so the ceiling, not the budget, was the limit
+      ceiling: 96
       output_weight: 5
   # Any other model
   default_model:

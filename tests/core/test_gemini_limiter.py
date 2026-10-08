@@ -247,7 +247,7 @@ def test_settings_from_config():
 
     settings = settings_from_config(ParsingPipelineConfig.from_yaml().gemini)
     assert settings.models[PRO].capacity_tpm == 500_000 and settings.models[PRO].ceiling == 24
-    assert settings.models[FLASH].capacity_tpm == 2_000_000 and settings.models[FLASH].ceiling == 64
+    assert settings.models[FLASH].capacity_tpm == 2_000_000 and settings.models[FLASH].ceiling == 96
     assert settings.models[FLASH].output_weight == 5
     assert settings.retry_first_wait_s == (1, 3)
 
@@ -288,3 +288,32 @@ def test_prompt_size_counts_text_and_images():
     contents = [types.Part.from_text(text="abcd"), types.Part.from_bytes(data=b"x", mime_type="image/png"), "ef"]
     config = types.GenerateContentConfig(system_instruction="ghi")
     assert gc._prompt_size(contents, config) == (9, 1)
+
+
+def test_calls_per_minute_are_recorded():
+    clock = Clock()
+    lim = _limiter(clock)
+    for _ in range(3):
+        lim.finish(_submit(lim, chars=4), Usage(prompt=1))
+    clock.advance(61)
+    lim.finish(_submit(lim, chars=4), Usage(prompt=1))
+    assert lim.summary()["models"][FLASH]["calls_per_minute"] == [3, 1]
+
+
+def test_retry_window_starts_at_the_first_failure(monkeypatch):
+    """A call that ran long before failing still gets its retries."""
+    lim = configure_limiter(LimiterSettings(retry_first_wait_s=(0, 0), retry_max_wait_s=0, retry_window_s=100))
+    now = [0.0]
+    monkeypatch.setattr(gc.time, "monotonic", lambda: now[0])
+    ok = SimpleNamespace(text="ok", usage_metadata=None, candidates=[])
+    calls = iter([RuntimeError("503 UNAVAILABLE"), ok])
+
+    def generate(**kw):
+        now[0] += 500  # each attempt takes longer than the retry window
+        result = next(calls)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    assert gc.generate_with_retry(client=client, tag="phase10a.x", model="m", contents="c") is ok

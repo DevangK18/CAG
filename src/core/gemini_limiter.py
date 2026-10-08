@@ -162,6 +162,7 @@ class _ModelState:
             "utilisation_seconds": 0.0,
             "budget_tokens": 0.0,  # sum of budget x time while active
             "by_utilisation": {},  # "0.9" -> {"attempts", "throttled"}
+            "per_minute": {},  # minute since first use -> attempts finished
         }
 
     def budget(self, window_s: float = 60.0) -> float:
@@ -377,6 +378,9 @@ class GeminiLimiter:
                 self._purge(state, now)
                 state.stats["peak_tpm"] = max(state.stats["peak_tpm"], state.completed_sum)
             state.stats["calls"] += 1
+            if state.first_at is not None:
+                minute = int((now - state.first_at) // 60)
+                state.stats["per_minute"][minute] = state.stats["per_minute"].get(minute, 0) + 1
             group = self._groups.setdefault(ticket.group, {"calls": 0, "throttled": 0, "wait_s": 0.0})
             group["calls"] += 1
             if throttled:
@@ -515,6 +519,8 @@ class GeminiLimiter:
                     "wait_ceiling_s": round(st["wait_ceiling_s"], 1),
                     "peak_in_flight": st["peak_in_flight"],
                     "active_minutes": round(active_s / 60.0, 1),
+                    # Attempts finished in each minute of activity, and the busiest minutes
+                    "calls_per_minute": [st["per_minute"].get(m, 0) for m in range(max(st["per_minute"], default=-1) + 1)],
                     "by_utilisation": {
                         level: {**b, "rate": round(b["throttled"] / b["attempts"], 4) if b["attempts"] else 0.0}
                         for level, b in sorted(st["by_utilisation"].items(), reverse=True)
