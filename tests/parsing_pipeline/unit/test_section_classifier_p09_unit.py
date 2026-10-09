@@ -3,7 +3,7 @@ P0-09: Unit tests for SectionClassifier taxonomy expansion.
 
 Tests:
 - Expanded SectionType enum values
-- New section type patterns
+- Topic patterns (the secondary tag next to the section role)
 - Classification accuracy for State/Local Body reports
 """
 
@@ -57,24 +57,38 @@ class TestFinancialManagementPatterns:
 
     def test_financial_management_title(self, classifier):
         """Test 'Financial Management' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Financial Management", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "financial_management"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Financial Management",
+                "hierarchy": {},
+            }
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "financial_management"
+        )
 
     def test_fund_utilization_title(self, classifier):
         """Test 'Fund Utilization' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Fund Utilization", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "financial_management"
+        chunks = [
+            {"chunk_id": "chunk_002", "toc_entry": "Fund Utilization", "hierarchy": {}}
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "financial_management"
+        )
 
     def test_budgetary_control_title(self, classifier):
         """Test 'Budgetary Control' title classification."""
-        chunks = [{"chunk_id": "chunk_003", "toc_entry": "Budgetary Control and Management", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "financial_management"
+        chunks = [
+            {
+                "chunk_id": "chunk_003",
+                "toc_entry": "Budgetary Control and Management",
+                "hierarchy": {},
+            }
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "financial_management"
+        )
 
 
 class TestEmploymentPatterns:
@@ -82,24 +96,36 @@ class TestEmploymentPatterns:
 
     def test_employment_generation_title(self, classifier):
         """Test 'Employment Generation' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Employment Generation", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "employment"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Employment Generation",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "employment"
 
     def test_wages_payment_title(self, classifier):
         """Test 'Wages Payment' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Wages Payment and Distribution", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "employment"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Wages Payment and Distribution",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "employment"
 
     def test_mandays_generation_title(self, classifier):
         """Test 'Man-days Generation' title classification."""
-        chunks = [{"chunk_id": "chunk_003", "toc_entry": "Man-days Generation under MGNREGA", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "employment"
+        chunks = [
+            {
+                "chunk_id": "chunk_003",
+                "toc_entry": "Man-days Generation under MGNREGA",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "employment"
 
 
 class TestExecutionPatterns:
@@ -107,24 +133,36 @@ class TestExecutionPatterns:
 
     def test_execution_of_works_title(self, classifier):
         """Test 'Execution of Works' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Execution of Works", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "execution"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Execution of Works",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "execution"
 
     def test_implementation_of_scheme_title(self, classifier):
         """Test 'Implementation of Scheme' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Implementation of the Scheme", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "execution"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Implementation of the Scheme",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "execution"
 
     def test_contract_management_title(self, classifier):
         """Test 'Contract Management' title classification."""
-        chunks = [{"chunk_id": "chunk_003", "toc_entry": "Contract Management", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "execution"
+        chunks = [
+            {
+                "chunk_id": "chunk_003",
+                "toc_entry": "Contract Management",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "execution"
 
 
 class TestPlanningPatterns:
@@ -132,17 +170,25 @@ class TestPlanningPatterns:
 
     def test_planning_deficiencies_title(self, classifier):
         """Test 'Deficiencies in Planning' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Deficiencies in Planning", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "planning"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Deficiencies in Planning",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "planning"
 
     def test_action_plan_title(self, classifier):
         """Test 'Action Plan' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Annual Action Plan", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "planning"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Annual Action Plan",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "planning"
 
 
 class TestMonitoringEvaluationPatterns:
@@ -150,24 +196,38 @@ class TestMonitoringEvaluationPatterns:
 
     def test_monitoring_evaluation_title(self, classifier):
         """Test 'Monitoring and Evaluation' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Monitoring and Evaluation", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "monitoring_evaluation"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Monitoring and Evaluation",
+                "hierarchy": {},
+            }
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "monitoring_evaluation"
+        )
 
     def test_internal_audit_title(self, classifier):
         """Test 'Internal Audit' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Internal Audit", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "monitoring_evaluation"
+        chunks = [
+            {"chunk_id": "chunk_002", "toc_entry": "Internal Audit", "hierarchy": {}}
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "monitoring_evaluation"
+        )
 
     def test_performance_monitoring_title(self, classifier):
         """Test 'Performance Monitoring' title classification."""
-        chunks = [{"chunk_id": "chunk_003", "toc_entry": "Performance Monitoring and Review", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "monitoring_evaluation"
+        chunks = [
+            {
+                "chunk_id": "chunk_003",
+                "toc_entry": "Performance Monitoring and Review",
+                "hierarchy": {},
+            }
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "monitoring_evaluation"
+        )
 
 
 class TestCapacityBuildingPatterns:
@@ -175,17 +235,21 @@ class TestCapacityBuildingPatterns:
 
     def test_capacity_building_title(self, classifier):
         """Test 'Capacity Building' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Capacity Building", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "capacity_building"
+        chunks = [
+            {"chunk_id": "chunk_001", "toc_entry": "Capacity Building", "hierarchy": {}}
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "capacity_building"
 
     def test_training_development_title(self, classifier):
         """Test 'Training and Development' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Training and Capacity Development", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "capacity_building"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Training and Capacity Development",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "capacity_building"
 
 
 class TestGrievanceRedressalPatterns:
@@ -193,17 +257,29 @@ class TestGrievanceRedressalPatterns:
 
     def test_grievance_redressal_title(self, classifier):
         """Test 'Grievance Redressal' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Grievance Redressal", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "grievance_redressal"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Grievance Redressal",
+                "hierarchy": {},
+            }
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "grievance_redressal"
+        )
 
     def test_complaint_handling_title(self, classifier):
         """Test 'Complaint Handling' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Complaint Handling Mechanism", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "grievance_redressal"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Complaint Handling Mechanism",
+                "hierarchy": {},
+            }
+        ]
+        assert (
+            classifier.classify_topic(chunks[0]["toc_entry"]) == "grievance_redressal"
+        )
 
 
 class TestImpactPatterns:
@@ -211,17 +287,21 @@ class TestImpactPatterns:
 
     def test_impact_assessment_title(self, classifier):
         """Test 'Impact Assessment' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Impact Assessment", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "impact"
+        chunks = [
+            {"chunk_id": "chunk_001", "toc_entry": "Impact Assessment", "hierarchy": {}}
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "impact"
 
     def test_outcome_evaluation_title(self, classifier):
         """Test 'Outcome Evaluation' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Outcome Analysis and Evaluation", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "impact"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Outcome Analysis and Evaluation",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "impact"
 
 
 class TestInfrastructurePatterns:
@@ -229,17 +309,25 @@ class TestInfrastructurePatterns:
 
     def test_infrastructure_development_title(self, classifier):
         """Test 'Infrastructure Development' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Infrastructure Development", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "infrastructure"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Infrastructure Development",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "infrastructure"
 
     def test_solid_waste_management_title(self, classifier):
         """Test 'Solid Waste Management' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Solid Waste Management", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "infrastructure"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Solid Waste Management",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "infrastructure"
 
 
 class TestServiceDeliveryPatterns:
@@ -247,17 +335,21 @@ class TestServiceDeliveryPatterns:
 
     def test_service_delivery_title(self, classifier):
         """Test 'Service Delivery' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Service Delivery", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "service_delivery"
+        chunks = [
+            {"chunk_id": "chunk_001", "toc_entry": "Service Delivery", "hierarchy": {}}
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "service_delivery"
 
     def test_benefit_delivery_title(self, classifier):
         """Test 'Benefit Delivery' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Benefit Delivery and Distribution", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "service_delivery"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Benefit Delivery and Distribution",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "service_delivery"
 
 
 class TestEnvironmentPatterns:
@@ -265,71 +357,130 @@ class TestEnvironmentPatterns:
 
     def test_environmental_management_title(self, classifier):
         """Test 'Environmental Management' title classification."""
-        chunks = [{"chunk_id": "chunk_001", "toc_entry": "Environmental Management", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "environment"
+        chunks = [
+            {
+                "chunk_id": "chunk_001",
+                "toc_entry": "Environmental Management",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "environment"
 
     def test_pollution_control_title(self, classifier):
         """Test 'Pollution Control' title classification."""
-        chunks = [{"chunk_id": "chunk_002", "toc_entry": "Pollution Control and Prevention", "hierarchy": {}}]
-        results = classifier.classify_sections(chunks)
-        assert len(results) == 1
-        assert results[0].section_type == "environment"
+        chunks = [
+            {
+                "chunk_id": "chunk_002",
+                "toc_entry": "Pollution Control and Prevention",
+                "hierarchy": {},
+            }
+        ]
+        assert classifier.classify_topic(chunks[0]["toc_entry"]) == "environment"
 
 
 class TestOtherRatioCalculation:
     """Test calculation of 'other' ratio for classification quality assessment."""
 
     def test_low_other_ratio(self, classifier):
-        """Test that well-structured TOC has low 'other' ratio."""
+        """A report with chapter structure leaves nothing as 'other'."""
         chunks = [
-            {"chunk_id": "c1", "toc_entry": "Executive Summary", "hierarchy": {}},
-            {"chunk_id": "c2", "toc_entry": "Introduction", "hierarchy": {}},
-            {"chunk_id": "c3", "toc_entry": "Audit Findings", "hierarchy": {}},
-            {"chunk_id": "c4", "toc_entry": "Financial Management", "hierarchy": {}},
-            {"chunk_id": "c5", "toc_entry": "Monitoring and Evaluation", "hierarchy": {}},
-            {"chunk_id": "c6", "toc_entry": "Recommendations", "hierarchy": {}},
-            {"chunk_id": "c7", "toc_entry": "Conclusion", "hierarchy": {}},
-            {"chunk_id": "c8", "toc_entry": "Annexure", "hierarchy": {}},
+            {
+                "chunk_id": "c1",
+                "toc_entry": "Executive Summary",
+                "toc_level": 1,
+                "hierarchy": {},
+            },
+            {
+                "chunk_id": "c2",
+                "toc_entry": "Chapter 1 Introduction",
+                "toc_level": 1,
+                "hierarchy": {},
+            },
+            {
+                "chunk_id": "c3",
+                "toc_entry": "Chapter 2 Financial Management",
+                "toc_level": 1,
+                "hierarchy": {},
+            },
+            {
+                "chunk_id": "c4",
+                "toc_entry": "2.1 Monitoring and Evaluation",
+                "toc_level": 2,
+                "hierarchy": {
+                    "level_1": "Chapter 2 Financial Management",
+                    "level_2": "2.1 Monitoring and Evaluation",
+                },
+            },
+            {
+                "chunk_id": "c5",
+                "toc_entry": "2.2 Recommendations",
+                "toc_level": 2,
+                "hierarchy": {
+                    "level_1": "Chapter 2 Financial Management",
+                    "level_2": "2.2 Recommendations",
+                },
+            },
+            {
+                "chunk_id": "c6",
+                "toc_entry": "Chapter 3 Conclusion",
+                "toc_level": 1,
+                "hierarchy": {},
+            },
+            {
+                "chunk_id": "c7",
+                "toc_entry": "Annexure",
+                "toc_level": 1,
+                "hierarchy": {},
+            },
         ]
         results = classifier.classify_sections(chunks)
-        other_count = sum(1 for r in results if r.section_type == "other")
-        other_ratio = other_count / len(results)
-        # All should be classified, so 'other' ratio should be 0
-        assert other_ratio == 0.0
+        assert [r.section_type for r in results] == [
+            "executive_summary",
+            "introduction",
+            "findings",
+            "findings",
+            "recommendations",
+            "conclusion",
+            "annexure",
+        ]
 
     def test_high_other_ratio_for_unrecognized_sections(self, classifier):
         """Test that unrecognized sections get 'other' classification."""
         chunks = [
-            {"chunk_id": "c1", "toc_entry": "Some Random Section Title", "hierarchy": {}},
+            {
+                "chunk_id": "c1",
+                "toc_entry": "Some Random Section Title",
+                "hierarchy": {},
+            },
             {"chunk_id": "c2", "toc_entry": "Another Unknown Heading", "hierarchy": {}},
             {"chunk_id": "c3", "toc_entry": "XYZ ABC Details", "hierarchy": {}},
         ]
         results = classifier.classify_sections(chunks)
         other_count = sum(1 for r in results if r.section_type == "other")
-        # All should be 'other'
+        # All should be 'other', flagged low confidence
         assert other_count == 3
+        assert all(r.is_low_confidence for r in results)
 
 
 class TestMixedSectionClassification:
-    """Test classification with mix of old and new section types."""
+    """Test classification with mix of roles and topics."""
 
     def test_mixed_classification(self, classifier):
-        """Test classification with both original and new section types."""
+        """Roles from titles; topics from the topical patterns."""
         chunks = [
             {"chunk_id": "c1", "toc_entry": "Executive Summary", "hierarchy": {}},
-            {"chunk_id": "c2", "toc_entry": "Financial Management", "hierarchy": {}},
-            {"chunk_id": "c3", "toc_entry": "Employment Generation", "hierarchy": {}},
-            {"chunk_id": "c4", "toc_entry": "Monitoring and Evaluation", "hierarchy": {}},
-            {"chunk_id": "c5", "toc_entry": "Recommendations", "hierarchy": {}},
+            {"chunk_id": "c2", "toc_entry": "Recommendations", "hierarchy": {}},
         ]
         results = classifier.classify_sections(chunks)
-        section_types = [r.section_type for r in results]
-
-        assert "executive_summary" in section_types
-        assert "financial_management" in section_types
-        assert "employment" in section_types
-        assert "monitoring_evaluation" in section_types
-        assert "recommendations" in section_types
-        assert "other" not in section_types
+        assert [r.section_type for r in results] == [
+            "executive_summary",
+            "recommendations",
+        ]
+        assert (
+            classifier.classify_topic("Financial Management") == "financial_management"
+        )
+        assert classifier.classify_topic("Employment Generation") == "employment"
+        assert (
+            classifier.classify_topic("Monitoring and Evaluation")
+            == "monitoring_evaluation"
+        )

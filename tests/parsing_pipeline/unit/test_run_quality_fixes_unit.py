@@ -70,17 +70,38 @@ class TestMonetaryStatistics:
             page=page,
         )
 
-    def test_total_uses_largest_distinct_amount_per_finding(self):
+    def test_sum_over_distinct_findings_with_count_and_largest(self):
         service = SemanticEnrichmentService.__new__(SemanticEnrichmentService)
         service._current_report_type = None
+        restated = self._finding(4, [500], page=3)
+        restated.is_restatement = True
         findings = [
             self._finding(1, [500, 120], page=10),
-            self._finding(2, [500, 40], page=60),  # same headline figure repeated later
+            # The same amount in another finding is another finding's amount: no
+            # amount-only de-duplication any more
+            self._finding(2, [500, 40], page=60),
             self._finding(3, [7], page=90),
+            restated,  # executive summary restatement: not counted
         ]
-        stats = service._calculate_statistics({}, findings, [], [])
-        # 500 counted once + 7; the old sum was 500+120+500+40+7 = 1167
-        assert stats["findings"]["total_monetary_crore"] == 507.0
+        stats = service._calculate_statistics({}, findings, [], [])["findings"]
+        assert stats["impact_sum_crore"] == 1007.0 and stats["impact_sum_finding_count"] == 3
+        assert stats["largest_finding_crore"] == 500.0 and stats["largest_finding_id"] == "r_finding_001"
+        assert stats["distinct_count"] == 3 and stats["restatement_count"] == 1
+        # Old name kept as an alias
+        assert stats["total_monetary_crore"] == 1007.0
+
+    def test_printed_total_from_executive_summary(self):
+        from src.parsing_pipeline.modules.semantic_enrichment_service import printed_total
+
+        chunks = [
+            {"chunk_id": "c1", "content_type": "paragraph", "hierarchy": {"level_1": "Executive Summary"},
+             "content": "Audit noticed irregularities aggregating ₹1,234.50 crore in 40 cases. "
+                        "The total budget was ₹9,000 crore."},
+            {"chunk_id": "c2", "content_type": "paragraph", "hierarchy": {"level_1": "Chapter 2"},
+             "content": "Losses aggregating ₹5,000 crore were noticed."},
+        ]
+        printed = printed_total(chunks, {})
+        assert printed["printed_total_crore"] == 1234.5 and printed["printed_total_source_chunk_id"] == "c1"
 
 
 class TestManifestFailures:
@@ -267,6 +288,24 @@ class TestMultiPageTables:
         assert merged.extraction_confidence == 0.9
         assert merged.structured_data["is_multi_page"] is True
 
+    def test_merged_table_keeps_caption_unit_line_and_notes(self):
+        # BR p.205: an appendix caption attached in Phase 6 stayed only in
+        # structured_data once the table was merged with its continuation
+        service = ChunkingService()
+        first = _table("t1", 205, [("1", "Head A", "5")])
+        caption = "Appendix-5.12 (Refer: Paragraph-5.5.6.6, Page - 85) Excess expenditure"
+        sd = dict(first.structured_data, caption=caption, unit_line="(₹ in lakh)",
+                  footnotes=["Source: Records of the ULBs"])
+        first = first.model_copy(update={"structured_data": sd})
+        task = _task([first, _table("t2", 206, [("2", "Head B", "7")])])
+        service._merge_multi_page_tables(task)
+        (merged,) = [c for c in task.extracted_content if c.content_type == "table_markdown"]
+        lines = merged.content.split("\n")
+        assert lines[:2] == [caption, "(₹ in lakh)"]
+        assert lines[-1] == "Source: Records of the ULBs"
+        assert "| 2 | Head B | 7 |" in merged.content
+        assert merged.structured_data["unit_line"] == "(₹ in lakh)"
+
     def test_statistics_reset_between_reports(self):
         service = ChunkingService()
         for _ in range(2):
@@ -422,3 +461,22 @@ class TestLateFixes:
             [_text("paragraph", reply, page) for page in range(5)]
         )
         assert len(valid) == 5
+
+
+class TestSidewaysPartTitles:
+    def test_sideways_part_title_starts_a_new_table(self):
+        # BR p.175-176: Appendix-5.2 parts A and B, pages printed sideways; part B's
+        # title sorts after its table
+        service = ChunkingService()
+        part_b = _text("caption", "B. Service level benchmarks for SWM (March 2022)", 176, y=313)
+        part_b.source_bbox = [107, 313, 118, 784]
+        content = [_table("t1", 175, [("1", "Patna", "50")]), _table("t2", 176, [("1", "Patna", "80")]), part_b]
+        assert service._find_contiguous_table_pairs(content) == set()
+
+    def test_upright_part_title_or_running_header_does_not(self):
+        service = ChunkingService()
+        header = _text("caption", "Audit Report (Local Government) for the year ended March 2022", 176, y=521)
+        header.source_bbox = [74, 521, 83, 783]
+        upright = _text("header", "B. Details of works", 176, y=600)
+        content = [_table("t1", 175, [("1", "A", "5")]), _table("t2", 176, [("2", "B", "7")]), header, upright]
+        assert service._find_contiguous_table_pairs(content) == {("t1", "t2")}

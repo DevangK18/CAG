@@ -160,11 +160,34 @@ def _page_label(page, missing="N/A"):
     return page + 1 if isinstance(page, int) else missing
 
 
-def build_summary_input(json_data: dict) -> str:
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+# Characters of each finding's text in the input (findings are paragraphs, not essays)
+FINDING_TEXT_CHARS = 4000
+MAX_FINDINGS = 25
+MAX_TABLES = 8
+
+
+def rank_findings(findings: list) -> list:
+    """Distinct findings first (restatements last), then severity, then the primary amount."""
+    return sorted(
+        findings,
+        key=lambda f: (
+            bool(f.get("is_restatement")),
+            SEVERITY_RANK.get(str(f.get("severity", "")).lower(), 4),
+            -(f.get("monetary_value_paise") or f.get("monetary_value") or 0),
+        ),
+    )
+
+
+def build_summary_input(json_data: dict, chapter_summaries: list = None, overview: dict = None) -> str:
     """
-    Build optimized input for summary generation.
-    Uses pre-extracted data from JSON to minimize tokens while maximizing signal.
-    Target: ~12,000-15,000 tokens of high-signal content.
+    Input for the summary variants: report context, the overview's scope and
+    objectives, every chapter summary, the findings ranked by severity and amount,
+    recommendations, the executive summary text, the tables the findings cite and
+    the entities.
+
+    chapter_summaries: [(chapter title, summary)] from the bottom-up summaries
+    overview: the Phase 10a overview JSON (audit_scope, audit_objectives, ...)
     """
     parts = []
 
@@ -172,14 +195,14 @@ def build_summary_input(json_data: dict) -> str:
     enrichment = json_data.get("semantic_enrichment", {})
     stats = enrichment.get("statistics", {})
     findings_stats = stats.get("findings", {})
+    findings = enrichment.get("findings", [])
+    distinct = [f for f in findings if not f.get("is_restatement")]
 
     # ═══════════════════════════════════════════════════════════════════════
     # SECTION 1: REPORT CONTEXT
     # ═══════════════════════════════════════════════════════════════════════
 
-    # Build tier-aware government context
     govt_context = _build_government_context(meta)
-
     parts.append(f"""# REPORT: {meta.get("report_title", "N/A")}
 
 {govt_context}## Basic Information
@@ -190,36 +213,53 @@ def build_summary_input(json_data: dict) -> str:
 - Publication Date: {meta.get("publication_date", "N/A")}
 
 ## Findings Overview
-- Total Findings: {findings_stats.get("total_count", 0)}
-- Amounts cited in findings (largest per finding, de-duplicated; includes outlays and budgets, not an audited loss total): ₹{findings_stats.get("total_monetary_crore", 0):,.2f} Crore
+- Findings: {len(distinct)} (plus {len(findings) - len(distinct)} restated in the executive summary or conclusion)
 - By Severity: {json.dumps(findings_stats.get("by_severity", {}))}
 - By Type: {json.dumps({k: v.get("count", 0) for k, v in findings_stats.get("by_type", {}).items()})}
 """)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SECTION 2: DETAILED FINDINGS (Pre-extracted from semantic_enrichment)
+    # SECTION 2: AUDIT SCOPE AND OBJECTIVES (Phase 10a overview)
     # ═══════════════════════════════════════════════════════════════════════
 
-    findings = enrichment.get("findings", [])
+    if overview:
+        scope = overview.get("audit_scope")
+        objectives = overview.get("audit_objectives")
+        if scope or objectives:
+            parts.append("\n# AUDIT SCOPE AND OBJECTIVES\n")
+            if scope:
+                parts.append(json.dumps(scope, ensure_ascii=False, indent=1))
+            if objectives:
+                parts.append("\n".join(f"- {o if isinstance(o, str) else json.dumps(o, ensure_ascii=False)}" for o in objectives))
 
-    if findings:
-        # Sort by largest single amount (highest first)
-        sorted_findings = sorted(
-            findings, key=lambda x: x.get("monetary_value") or 0, reverse=True
-        )
+    # ═══════════════════════════════════════════════════════════════════════
+    # SECTION 3: CHAPTER SUMMARIES (bottom-up, each covers its whole chapter)
+    # ═══════════════════════════════════════════════════════════════════════
 
-        parts.append("\n# DETAILED FINDINGS (sorted by largest amount cited)\n")
+    if chapter_summaries:
+        parts.append("\n# CHAPTER SUMMARIES\n")
+        for title, summary in chapter_summaries:
+            parts.append(f"## {title}\n{summary}\n")
 
-        for i, f in enumerate(sorted_findings[:25], 1):  # Top 25 findings
+    # ═══════════════════════════════════════════════════════════════════════
+    # SECTION 4: FINDINGS (ranked by severity, then amount)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    ranked = rank_findings(findings)
+    if ranked:
+        parts.append("\n# FINDINGS (most severe first, then by amount)\n")
+        for i, f in enumerate(ranked[:MAX_FINDINGS], 1):
             # Quote amounts exactly as the report states them rather than a computed sum
             amounts = "; ".join(
                 mv.get("raw_text", "").replace("`", "₹").strip()
                 for mv in f.get("monetary_values", [])[:6]
             ) or "None"
-            text = f.get("text", f.get("summary", ""))[:600]
-
+            text = f.get("text", f.get("summary", ""))
+            if len(text) > FINDING_TEXT_CHARS:
+                text = text[:FINDING_TEXT_CHARS].rsplit(" ", 1)[0] + " ..."
+            restated = " (restated from the chapters)" if f.get("is_restatement") else ""
             parts.append(f"""
-## Finding {i} [{f.get("severity", "N/A").upper()}]
+## Finding {i} [{f.get("severity", "N/A").upper()}]{restated}
 - Type: {f.get("finding_type", "N/A")}
 - Amounts cited: {amounts}
 - Location: {f.get("chapter", "N/A")} > {f.get("section", "N/A")} (p.{_page_label(f.get("page"))})
@@ -227,19 +267,16 @@ def build_summary_input(json_data: dict) -> str:
 {text}
 """)
     else:
-        parts.append(
-            "\n# FINDINGS: No structured findings extracted from this report.\n"
-        )
+        parts.append("\n# FINDINGS: No structured findings extracted from this report.\n")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SECTION 3: RECOMMENDATIONS (Pre-extracted)
+    # SECTION 5: RECOMMENDATIONS
     # ═══════════════════════════════════════════════════════════════════════
 
     recs = enrichment.get("recommendations", [])
-
     if recs:
         parts.append("\n# RECOMMENDATIONS\n")
-        for i, r in enumerate(recs[:20], 1):  # Top 20 recommendations
+        for i, r in enumerate(recs[:20], 1):
             text = r.get("text", r.get("summary", ""))
             chapter = r.get("chapter", "")
             parts.append(f"{i}. {text}")
@@ -250,70 +287,105 @@ def build_summary_input(json_data: dict) -> str:
         parts.append("\n# RECOMMENDATIONS: No structured recommendations extracted.\n")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SECTION 4: EXECUTIVE SUMMARY (if available in child_chunks)
+    # SECTION 6: EXECUTIVE SUMMARY (original text)
     # ═══════════════════════════════════════════════════════════════════════
 
     exec_content = _get_executive_summary_content(json_data)
     if exec_content:
         parts.append("\n# EXECUTIVE SUMMARY (Original Text from Report)\n")
-        parts.append(exec_content[:6000])
+        parts.append(exec_content[:12000])
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SECTION 5: KEY TABLES (for data-heavy summaries)
+    # SECTION 7: KEY TABLES (the ones the findings cite)
     # ═══════════════════════════════════════════════════════════════════════
 
-    tables = [
-        c
-        for c in json_data.get("child_chunks", [])
-        if c.get("content_type") == "table_markdown"
-    ][:8]  # First 8 tables
-
+    tables = key_tables(json_data, ranked)
     if tables:
-        parts.append("\n# KEY TABLES\n")
+        parts.append("\n# KEY TABLES (cited by the findings)\n")
         for t in tables:
+            caption = (t.get("structured_data") or {}).get("caption")
             hierarchy = t.get("hierarchy", {})
-            section = list(hierarchy.values())[-1] if hierarchy else "Unknown Section"
-            parts.append(f"\n**Table from {section} (p.{_page_label(t.get('source_page_physical'))})**")
-            parts.append(t.get("content", "")[:1200])  # Truncate large tables
+            section = caption or (list(hierarchy.values())[-1] if hierarchy else "Unknown Section")
+            parts.append(f"\n**{section} (p.{_page_label(t.get('source_page_physical'))})**")
+            parts.append(t.get("content", "")[:1500])
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SECTION 6: ENTITIES (for context)
+    # SECTION 8: ENTITIES (for context)
     # ═══════════════════════════════════════════════════════════════════════
 
     entities = enrichment.get("entities", {})
     if entities:
         parts.append("\n# KEY ENTITIES MENTIONED\n")
         if entities.get("ministries"):
-            parts.append(
-                f"- Ministries/Departments: {', '.join(entities['ministries'][:10])}"
-            )
+            parts.append(f"- Ministries/Departments: {', '.join(entities['ministries'][:10])}")
         if entities.get("organizations"):
-            parts.append(
-                f"- Organizations: {', '.join(entities['organizations'][:10])}"
-            )
+            parts.append(f"- Organizations: {', '.join(entities['organizations'][:10])}")
         if entities.get("schemes"):
             parts.append(f"- Schemes/Programs: {', '.join(entities['schemes'][:10])}")
 
     return "\n".join(parts)
 
 
+def key_tables(json_data: dict, ranked_findings: list, limit: int = MAX_TABLES) -> list:
+    """
+    The tables the findings cite, in the findings' order: evidence links to tables
+    (by chunk ID or table number), then tables in the same section as a finding.
+    """
+    tables = [c for c in json_data.get("child_chunks", []) if c.get("content_type") == "table_markdown"]
+    by_id = {t.get("chunk_id"): t for t in tables}
+    by_number = {}
+    for t in tables:
+        number = (t.get("structured_data") or {}).get("table_number")
+        if number:
+            by_number.setdefault(str(number), t)
+    chosen, seen = [], set()
+
+    def add(table):
+        if table is not None and table.get("chunk_id") not in seen and len(chosen) < limit:
+            seen.add(table.get("chunk_id"))
+            chosen.append(table)
+
+    for f in ranked_findings:
+        for link in f.get("evidence_links") or []:
+            if link.get("evidence_type") not in ("table", "annexure"):
+                continue
+            target = str(link.get("evidence_id") or link.get("target_chunk_id") or "")
+            add(by_id.get(target) or by_number.get(target) or by_number.get(target.split("_")[-1]))
+    if len(chosen) < limit:
+        parents = {}
+        for t in tables:
+            parents.setdefault(t.get("parent_chunk_id"), []).append(t)
+        chunk_parent = {c.get("chunk_id"): c.get("parent_chunk_id") for c in json_data.get("child_chunks", [])}
+        for f in ranked_findings:
+            for t in parents.get(chunk_parent.get(f.get("source_chunk_id")), []):
+                add(t)
+    return chosen
+
+
 def _get_executive_summary_content(json_data: dict) -> str:
-    """Extract Executive Summary section content from child_chunks."""
+    """
+    The executive summary's own text: the parents Phase 9 classified as the
+    executive summary; files without that classification fall back to headings.
+    """
+    classified = {
+        s.get("chunk_id") or s.get("parent_chunk_id")
+        for s in (json_data.get("semantic_enrichment") or {}).get("section_classifications") or []
+        if s.get("section_type") == "executive_summary"
+    }
     content = []
-
     for chunk in json_data.get("child_chunks", []):
-        if chunk.get("content_type") not in ["paragraph", "text"]:
+        if chunk.get("content_type") not in ("paragraph", "list", "text"):
             continue
-
-        hierarchy = chunk.get("hierarchy", {})
-        hierarchy_str = " ".join(str(v) for v in hierarchy.values()).lower()
-
-        if "executive summary" in hierarchy_str or "preface" in hierarchy_str:
-            chunk_content = chunk.get("content", "")
-            if chunk_content and len(chunk_content) > 50:
-                content.append(chunk_content)
-
-    return "\n\n".join(content[:25])  # Limit to 25 chunks
+        if classified:
+            match = chunk.get("parent_chunk_id") in classified
+        else:
+            hierarchy = chunk.get("hierarchy", {})
+            hierarchy_str = " ".join(str(v) for v in hierarchy.values()).lower()
+            match = "executive summary" in hierarchy_str or "overview" in hierarchy_str
+        chunk_content = chunk.get("content", "")
+        if match and chunk_content and len(chunk_content) > 50:
+            content.append(chunk_content)
+    return "\n\n".join(content)
 
 
 # Appended to every variant. Earlier runs summed every amount in a finding into a

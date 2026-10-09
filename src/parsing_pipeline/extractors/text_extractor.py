@@ -6,19 +6,25 @@ Handles all textual content types: paragraphs, headers, lists, footnotes, etc.
 import logging
 
 import fitz  # PyMuPDF
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 import re
 
 from src.core.data_contracts import ExtractedContent
 from src.parsing_pipeline.extractors.text_repair import (
+    CONTROL_CHAR_RE,
     build_vocabulary,
+    is_garbled,
     is_letter_spaced,
     is_reversed,
     is_rupee_font,
+    is_shifted_span,
     repair_font_shift,
     repair_rupee_backtick,
+    repair_shifted_block,
     respace_letter_spaced,
     reverse_words,
+    shifted_fonts,
+    unshift,
 )
 from src.parsing_pipeline.modules.ocr_normalizer import get_ocr_normalizer
 
@@ -34,6 +40,198 @@ _EXPONENT_UNIT_RE = re.compile(
 )
 # "10^15": a raised number after a bare 10 is a power, not a footnote
 _POWER_BASE_RE = re.compile(r"(?:^|[^\d,.])10$")
+
+# Text a reader cannot see is not extracted: glyphs painted over by a later opaque
+# white fill (an edit pasted over the old paragraph, which then read twice:
+# "Hon'bleHon'ble", 2025_35, GJ) and glyphs set below 2 pt (Word's hidden reference
+# numbers after BR's footnote markers: "Corporations44" + "7")
+MIN_VISIBLE_SIZE = 2.0
+_WHITE = 0.95
+# Origins of a covered glyph and its rawdict char agree to rounding
+_ORIGIN_TOLERANCE = 0.05
+# Words on the same line: top or bottom within this distance (as PyMuPDF's sort)
+_LINE_TOLERANCE = 3
+
+
+def covered_glyphs(page) -> Dict[str, List[Tuple[float, float]]]:
+    """Origins of the glyphs painted over by a later opaque white fill, by character."""
+    try:
+        fills = [
+            (d["seqno"], fitz.Rect(d["rect"]))
+            for d in page.get_drawings()
+            if d.get("fill")
+            and min(d["fill"]) >= _WHITE
+            and (d.get("fill_opacity") is None or d["fill_opacity"] >= 0.99)
+        ]
+        if not fills:
+            return {}
+        spans = page.get_texttrace()
+    except Exception:
+        return {}
+    covered: Dict[str, List[Tuple[float, float]]] = {}
+    for span in spans:
+        later = [rect for seq, rect in fills if seq > span["seqno"]]
+        if not later:
+            continue
+        for unicode, _, origin, bbox in span["chars"]:
+            char = chr(unicode)
+            if char.isspace():
+                continue
+            cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+            if any(r.x0 <= cx <= r.x1 and r.y0 <= cy <= r.y1 for r in later):
+                covered.setdefault(char, []).append(tuple(origin))
+    return covered
+
+
+def _take(origins: Optional[list], origin) -> bool:
+    """Remove and report a covered origin matching this glyph's origin."""
+    for i, (x, y) in enumerate(origins or ()):
+        if (
+            abs(x - origin[0]) <= _ORIGIN_TOLERANCE
+            and abs(y - origin[1]) <= _ORIGIN_TOLERANCE
+        ):
+            del origins[i]
+            return True
+    return False
+
+
+def visible_words(textpage, covered: Dict[str, list]) -> Optional[list]:
+    """
+    The textpage's words without hidden glyphs, as extractWORDS tuples; None when no
+    glyph is hidden. A word keeps its own box unless glyphs were taken from it.
+    """
+    raw = textpage.extractRAWDICT()
+    words = textpage.extractWORDS()
+    blocks = {b.get("number"): b for b in raw.get("blocks", []) if b.get("type") == 0}
+    pending = {char: list(origins) for char, origins in covered.items()}
+    split_lines: dict = {}
+    out, dropped = [], False
+    for w in words:
+        block = blocks.get(w[5])
+        if block is None or w[6] >= len(block["lines"]):
+            out.append(w)
+            continue
+        key = (w[5], w[6])
+        if key not in split_lines:
+            parts, current = [], []
+            for span in block["lines"][w[6]]["spans"]:
+                tiny = span["size"] < MIN_VISIBLE_SIZE
+                for ch in span["chars"]:
+                    if ch["c"].isspace():
+                        if current:
+                            parts.append(current)
+                        current = []
+                    else:
+                        current.append((ch, tiny))
+            if current:
+                parts.append(current)
+            split_lines[key] = parts
+        parts = split_lines[key]
+        if w[7] >= len(parts) or "".join(c["c"] for c, _ in parts[w[7]]) != w[4]:
+            out.append(w)
+            continue
+        kept = [
+            c
+            for c, tiny in parts[w[7]]
+            if not (tiny or _take(pending.get(c["c"]), c["origin"]))
+        ]
+        if len(kept) == len(parts[w[7]]):
+            out.append(w)
+            continue
+        dropped = True
+        if kept:
+            box = fitz.Rect()
+            for c in kept:
+                box |= fitz.Rect(c["bbox"])
+            out.append((*box, "".join(c["c"] for c in kept), *w[5:]))
+    return out if dropped else None
+
+
+def sorted_text(words: list, tolerance: float = _LINE_TOLERANCE) -> str:
+    """
+    Plain text of words in reading order, laid out as PyMuPDF's
+    get_text("text", sort=True) lays out a page's words.
+    """
+    if not words:
+        return ""
+    words = sorted(words, key=lambda w: (w[3], w[0]))
+    ordered, line = [], [words[0]]
+    lrect = fitz.Rect(words[0][:4])
+    for w in words[1:]:
+        rect = fitz.Rect(w[:4])
+        if abs(rect.y0 - lrect.y0) <= tolerance or abs(rect.y1 - lrect.y1) <= tolerance:
+            line.append(w)
+            lrect |= rect
+        else:
+            ordered.extend(sorted(line, key=lambda w: w[0]))
+            line, lrect = [w], rect
+    ordered.extend(sorted(line, key=lambda w: w[0]))
+
+    boxes = [(fitz.Rect(w[:4]), w[4]) for w in ordered]
+    total = fitz.Rect()
+    for rect, _ in boxes:
+        total |= rect
+
+    def line_text(items) -> str:
+        items.sort(key=lambda item: item[0].x0)
+        text, x1 = "", total.x0
+        for rect, word in items:
+            gap = max(
+                int(round((rect.x0 - x1) / (rect.width or 1) * len(word))),
+                0 if (x1 == total.x0 or rect.x0 <= x1) else 1,
+            )
+            text += " " * gap + word
+            x1 = rect.x1
+        return text
+
+    lines, current = [], [boxes[0]]
+    lrect = boxes[0][0]
+    for rect, word in boxes[1:]:
+        if abs(lrect.y0 - rect.y0) <= tolerance or abs(lrect.y1 - rect.y1) <= tolerance:
+            current.append((rect, word))
+            lrect |= rect
+        else:
+            lines.append((lrect, line_text(current)))
+            current, lrect = [(rect, word)], rect
+    lines.append((lrect, line_text(current)))
+    lines.sort(key=lambda item: item[0].y1)
+    text, y1 = lines[0][1], lines[0][0].y1
+    for rect, ltext in lines[1:]:
+        distance = min(int(round((rect.y0 - y1) / (rect.height or 1))), 5)
+        text += "\n" * (distance + 1) + ltext
+        y1 = rect.y1
+    return text
+
+
+def coded_words(textpage, fonts: set) -> list:
+    """
+    The textpage's words with the shifted fonts' glyphs decoded. Decoding comes
+    first: the shifted space, digits and punctuation sit below U+0020, and PyMuPDF's
+    word list drops them ("Report No. 7 of 2023" read "Report No of").
+    """
+    words = []
+    for block in textpage.extractRAWDICT().get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line_no, line in enumerate(block["lines"]):
+            chars, word_no = [], 0
+            line_chars = [
+                (ch, unshift(ch["c"]) if is_shifted_span(span, fonts) else ch["c"])
+                for span in line["spans"]
+                for ch in span["chars"]
+            ]
+            for item in line_chars + [None]:
+                if item is not None and not item[1].isspace():
+                    chars.append(item)
+                    continue
+                if chars:
+                    box = fitz.Rect()
+                    for ch, _ in chars:
+                        box |= fitz.Rect(ch["bbox"])
+                    text = "".join(c for _, c in chars)
+                    words.append((*box, text, block["number"], line_no, word_no))
+                    chars, word_no = [], word_no + 1
+    return words
 
 
 def _line_superscripts(line: dict) -> List[bool]:
@@ -158,6 +356,7 @@ class TextExtractor:
     def __init__(self):
         """Initialize with text processing patterns."""
         self._vocab_cache = {}
+        self._hidden_cache: dict = {}
         logger.info("TextExtractor initialized with PyMuPDF text extraction.")
 
     def _vocabulary(self, pdf_path: str):
@@ -303,12 +502,66 @@ class TextExtractor:
             sideways = self._extract_sideways_text(page, clip_rect)
             if sideways is not None:
                 return sideways
-        text = page.get_text("text", clip=clip_rect, sort=sort)
+        text = self._visible_text(page, clip_rect)
+        if text is None:
+            text = page.get_text("text", clip=clip_rect, sort=sort)
         return self._apply_span_fixes(page, clip_rect, text)
+
+    def _hidden(self, page) -> Tuple[Dict[str, list], list, set, list]:
+        """
+        Per page: covered glyphs by character, the origins of all hidden glyphs, the
+        shifted fonts and the boxes of their spans.
+        """
+        key = (page.parent.name, page.number)
+        if key not in self._hidden_cache:
+            covered = covered_glyphs(page)
+            points = [o for origins in covered.values() for o in origins]
+            fonts, coded = set(), []
+            try:
+                layout = page.get_textpage(flags=fitz.TEXTFLAGS_TEXT).extractRAWDICT()
+                fonts = shifted_fonts(layout)
+                for block in layout["blocks"]:
+                    for line in block.get("lines", []):
+                        for span in line["spans"]:
+                            if span["size"] < MIN_VISIBLE_SIZE and any(
+                                not c["c"].isspace() for c in span["chars"]
+                            ):
+                                points.append(tuple(span["origin"]))
+                            if is_shifted_span(span, fonts):
+                                coded.append(fitz.Rect(span["bbox"]))
+            except Exception:
+                pass
+            # One page at a time: blocks arrive page by page
+            self._hidden_cache = {key: (covered, points, fonts, coded)}
+        return self._hidden_cache[key]
+
+    def _visible_text(self, page, clip_rect: fitz.Rect) -> Optional[str]:
+        """
+        The clip's text without hidden glyphs and with shifted fonts decoded; None
+        when the clip has neither (the plain extraction is then used).
+        """
+        try:
+            covered, points, fonts, coded = self._hidden(page)
+        except Exception:
+            return None
+        area = fitz.Rect(clip_rect) + (-2, -2, 2, 2)
+        hidden = any(area.contains(fitz.Point(p)) for p in points)
+        shifted = any(area.intersects(rect) for rect in coded)
+        if not (hidden or shifted):
+            return None
+        try:
+            textpage = page.get_textpage(clip=clip_rect, flags=fitz.TEXTFLAGS_TEXT)
+            if shifted:
+                return sorted_text(coded_words(textpage, fonts))
+            words = visible_words(textpage, covered)
+        except Exception:
+            return None
+        return None if words is None else sorted_text(words)
 
     def _extract_sideways_text(self, page, clip_rect: fitz.Rect) -> Optional[str]:
         """
-        Text in reading order when most of the clip is drawn vertically, else None.
+        Text in reading order when most of the clip is drawn vertically or upside
+        down, else None.
 
         Sorting top-to-bottom reversed the word order of lines that read
         bottom-to-top ("2022 March ended year the for"). Words are grouped into
@@ -321,7 +574,8 @@ class TextExtractor:
             return None
         if not isinstance(layout, dict):
             return None
-        counts = {"up": 0, "down": 0, "other": 0}
+        counts = {"up": 0, "down": 0, "flipped": 0, "other": 0}
+        flipped = []
         for block in layout.get("blocks", []):
             for line in block.get("lines", []):
                 dx, dy = line["dir"]
@@ -330,12 +584,22 @@ class TextExtractor:
                     counts["up"] += n
                 elif abs(dx) < 0.2 and dy > 0.8:
                     counts["down"] += n
+                elif dx < -0.8:
+                    counts["flipped"] += n
+                    flipped.extend(span["text"] for span in line["spans"])
                 else:
                     counts["other"] += n
         total = sum(counts.values())
-        direction = max(("up", "down"), key=counts.get)
+        direction = max(("up", "down", "flipped"), key=counts.get)
         if not total or counts[direction] <= 0.5 * total:
             return None
+        if direction == "flipped":
+            # Upside-down text on an upright page: an OCR layer read from a scan lying
+            # upside down (RJ chapter dividers: "A1-.1aJdBq3" for "Chapter-IV") is
+            # noise; upside-down text that reads as words is read along its lines
+            vocab = self._vocabulary(page.parent.name) if page.parent.name else {}
+            if is_garbled(" ".join(flipped), vocab):
+                return ""
 
         words = textpage.extractWORDS()
         # Only the rupee repair: superscript tests assume horizontal baselines
@@ -345,6 +609,10 @@ class TextExtractor:
             # Bottom-to-top lines: the first line is leftmost, words run upwards
             words.sort(key=lambda w: w[0])
             line_x, along = (lambda w: w[0]), (lambda w: -w[3])
+        elif direction == "flipped":
+            # Right-to-left lines: the first line is lowest, words run leftwards
+            words.sort(key=lambda w: -w[3])
+            line_x, along = (lambda w: w[3]), (lambda w: -w[2])
         else:
             # Top-to-bottom lines: the first line is rightmost, words run downwards
             words.sort(key=lambda w: -w[2])
@@ -441,6 +709,10 @@ class TextExtractor:
         try:
             # Extract raw text from bounding box (P1-11: returns tuple with rotation)
             raw_text, rotation = self._extract_text_from_bbox(pdf_path, page_num, bbox)
+
+            # Shifted-font digits and punctuation sit below U+0020 and would be lost
+            # as whitespace: decode them first
+            raw_text = CONTROL_CHAR_RE.sub(" ", repair_shifted_block(raw_text))
 
             # Normalize text (hyphenation, whitespace)
             normalized_text = self._normalize_text(raw_text)

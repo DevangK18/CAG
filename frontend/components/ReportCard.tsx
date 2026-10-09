@@ -163,7 +163,9 @@ export const ReportCard = React.memo<ReportCardProps>(function ReportCard({ repo
         <span className="findings-count">{report.findingsCount} findings</span>
       </div>
       <div className="card-footer">
-        <span className="impact">{report.impact !== 'N/A' ? report.impact : ''}</span>
+        <span className="impact" title={report.impactLabel}>
+          {report.impact !== 'N/A' && report.impactLabel ? `${report.impact} cited` : ''}
+        </span>
         <div className="action-link">
           Interact <ArrowRightIcon />
         </div>

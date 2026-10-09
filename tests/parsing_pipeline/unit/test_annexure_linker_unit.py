@@ -26,23 +26,23 @@ def sample_parent_chunks():
         {
             "chunk_id": "parent_1",
             "toc_entry": "Chapter 1: Introduction",
-            "page_range_physical": [1, 10]
+            "page_range_physical": [1, 10],
         },
         {
             "chunk_id": "annexure_a",
             "toc_entry": "Annexure-A: Details of Expenditure",
-            "page_range_physical": [45, 50]
+            "page_range_physical": [45, 50],
         },
         {
             "chunk_id": "annexure_b",
             "toc_entry": "Annexure B - Revenue Data",
-            "page_range_physical": [51, 55]
+            "page_range_physical": [51, 55],
         },
         {
             "chunk_id": "appendix_1",
             "toc_entry": "Appendix-I: Methodology",
-            "page_range_physical": [56, 60]
-        }
+            "page_range_physical": [56, 60],
+        },
     ]
 
 
@@ -53,13 +53,13 @@ def sample_findings():
         {
             "finding_id": "finding_1",
             "source_chunk_id": "chunk_1",
-            "text": "Loss of revenue as per Annexure-A"
+            "text": "Loss of revenue as per Annexure-A",
         },
         {
             "finding_id": "finding_2",
             "source_chunk_id": "chunk_2",
-            "text": "Details in Appendix-I"
-        }
+            "text": "Details in Appendix-I",
+        },
     ]
 
 
@@ -68,21 +68,25 @@ def sample_findings():
 
 def test_normalize_annexure_id_basic(linker):
     """Test basic annexure ID normalization."""
-    assert linker._normalize_annexure_id("Annexure-A") == "annexure_a"
-    assert linker._normalize_annexure_id("Annexure A") == "annexure_a"
-    assert linker._normalize_annexure_id("ANNEXURE - A") == "annexure_a"
+    assert linker._normalize_annexure_id("Annexure-A") == "appendix:a"
+    assert linker._normalize_annexure_id("Annexure A") == "appendix:a"
+    assert linker._normalize_annexure_id("ANNEXURE - A") == "appendix:a"
+    # Annexure and Appendix are the same thing
+    assert linker._normalize_annexure_id("Appendix A") == "appendix:a"
 
 
 def test_normalize_annexure_id_with_numbers(linker):
     """Test normalization with numeric suffixes."""
-    assert linker._normalize_annexure_id("Annexure-1") == "annexure_1"
-    assert linker._normalize_annexure_id("Annexure 3.1") == "annexure_3.1"
+    assert linker._normalize_annexure_id("Annexure-1") == "appendix:1"
+    assert linker._normalize_annexure_id("Annexure 3.1") == "appendix:3.1"
+    assert linker._normalize_annexure_id("Appendix-15 (i)") == "appendix:15(i)"
 
 
 def test_normalize_annexure_id_complex(linker):
     """Test normalization of complex IDs."""
-    assert linker._normalize_annexure_id("Annexure - II") == "annexure_ii"
-    assert linker._normalize_annexure_id("Appendix B-1") == "appendix_b_1"
+    # A Roman number meets its Arabic form
+    assert linker._normalize_annexure_id("Annexure - II") == "appendix:2"
+    assert linker._normalize_annexure_id("Appendix B-1") == "appendix:b-1"
 
 
 # ==================== ANNEXURE PARENT INDEXING TESTS ====================
@@ -92,9 +96,9 @@ def test_find_annexure_parents_basic(linker, sample_parent_chunks):
     """Test finding and indexing annexure parents."""
     index = linker._find_annexure_parents(sample_parent_chunks)
 
-    assert "annexure_a_details_of_expenditure" in index
-    assert "annexure_b_revenue_data" in index
-    assert "appendix_i_methodology" in index
+    assert index["appendix:a"]["chunk_id"] == "annexure_a"
+    assert index["appendix:b"]["chunk_id"] == "annexure_b"
+    assert index["appendix:1"]["chunk_id"] == "appendix_1"
     assert len(index) == 3  # Excludes Chapter 1
 
 
@@ -126,12 +130,14 @@ def test_find_annexure_parents_no_annexures(linker):
 # ==================== REFERENCE DETECTION TESTS ====================
 
 
-def test_link_annexures_details_given_pattern(linker, sample_parent_chunks, sample_findings):
+def test_link_annexures_details_given_pattern(
+    linker, sample_parent_chunks, sample_findings
+):
     """Test detection of 'Details are given in Annexure-A' pattern."""
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "The audit observed irregularities. Details are given in Annexure-A."
+            "content": "The audit observed irregularities. Details are given in Annexure-A.",
         }
     ]
 
@@ -139,7 +145,7 @@ def test_link_annexures_details_given_pattern(linker, sample_parent_chunks, samp
 
     assert len(links) == 1
     assert links[0]["target_annexure_ref"] == "Annexure-A"
-    assert links[0]["resolved"] == True
+    assert links[0]["resolved"] is True
     assert "Details are given in Annexure-A" in links[0]["reference_text"]
 
 
@@ -148,7 +154,7 @@ def test_link_annexures_as_per_pattern(linker, sample_parent_chunks, sample_find
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "Revenue loss as per Annexure-A amounted to ₹100 crore."
+            "content": "Revenue loss as per Annexure-A amounted to ₹100 crore.",
         }
     ]
 
@@ -164,7 +170,7 @@ def test_link_annexures_vide_pattern(linker, sample_parent_chunks, sample_findin
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "The details vide Annexure-A show significant discrepancies."
+            "content": "The details vide Annexure-A show significant discrepancies.",
         }
     ]
 
@@ -174,12 +180,14 @@ def test_link_annexures_vide_pattern(linker, sample_parent_chunks, sample_findin
     assert links[0]["target_annexure_ref"] == "Annexure-A"
 
 
-def test_link_annexures_parenthetical_pattern(linker, sample_parent_chunks, sample_findings):
+def test_link_annexures_parenthetical_pattern(
+    linker, sample_parent_chunks, sample_findings
+):
     """Test detection of '(Annexure-A)' pattern."""
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "The audit findings (Annexure-A) indicate revenue loss."
+            "content": "The audit findings (Annexure-A) indicate revenue loss.",
         }
     ]
 
@@ -194,7 +202,7 @@ def test_link_annexures_appendix_pattern(linker, sample_parent_chunks, sample_fi
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "Methodology details are shown in Appendix-I."
+            "content": "Methodology details are shown in Appendix-I.",
         }
     ]
 
@@ -202,22 +210,24 @@ def test_link_annexures_appendix_pattern(linker, sample_parent_chunks, sample_fi
 
     assert len(links) == 1
     assert links[0]["target_annexure_ref"] == "Appendix-I"
-    assert links[0]["resolved"] == True
+    assert links[0]["resolved"] is True
 
 
-def test_link_annexures_multiple_references(linker, sample_parent_chunks, sample_findings):
+def test_link_annexures_multiple_references(
+    linker, sample_parent_chunks, sample_findings
+):
     """Test detection of multiple annexure references in same chunk."""
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "Details in Annexure-A and Annexure B show revenue and expenditure data."
+            "content": "Details in Annexure-A and Annexure B show revenue and expenditure data.",
         }
     ]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
     assert len(links) == 2
-    refs = [l["target_annexure_ref"] for l in links]
+    refs = [link["target_annexure_ref"] for link in links]
     assert "Annexure-A" in refs
     assert "Annexure B" in refs
 
@@ -227,33 +237,23 @@ def test_link_annexures_multiple_references(linker, sample_parent_chunks, sample
 
 def test_link_annexures_exact_match(linker, sample_parent_chunks, sample_findings):
     """Test exact match resolution between reference and parent."""
-    child_chunks = [
-        {
-            "chunk_id": "chunk_1",
-            "content": "See Annexure-A for details."
-        }
-    ]
+    child_chunks = [{"chunk_id": "chunk_1", "content": "See Annexure-A for details."}]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
     assert len(links) == 1
-    assert links[0]["resolved"] == True
+    assert links[0]["resolved"] is True
     assert links[0]["target_parent_chunk_id"] == "annexure_a"
 
 
 def test_link_annexures_fuzzy_match(linker, sample_parent_chunks, sample_findings):
     """Test fuzzy match when exact match fails (e.g., Annexure B vs Annexure B - Revenue Data)."""
-    child_chunks = [
-        {
-            "chunk_id": "chunk_1",
-            "content": "Revenue data in Annexure B."
-        }
-    ]
+    child_chunks = [{"chunk_id": "chunk_1", "content": "Revenue data in Annexure B."}]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
     assert len(links) == 1
-    assert links[0]["resolved"] == True
+    assert links[0]["resolved"] is True
     assert links[0]["target_parent_chunk_id"] == "annexure_b"
 
 
@@ -262,43 +262,38 @@ def test_link_annexures_unresolved(linker, sample_parent_chunks, sample_findings
     child_chunks = [
         {
             "chunk_id": "chunk_1",
-            "content": "Details in Annexure-Z (not present in document)."
+            "content": "Details in Annexure-Z (not present in document).",
         }
     ]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
     assert len(links) == 1
-    assert links[0]["resolved"] == False
+    assert links[0]["resolved"] is False
     assert links[0]["target_parent_chunk_id"] is None
 
 
 def test_link_annexures_normalized_comparison(linker):
     """Test that resolution uses normalized IDs for comparison."""
-    parents = [
-        {"chunk_id": "ann_a", "toc_entry": "Annexure - A"}
-    ]
+    parents = [{"chunk_id": "ann_a", "toc_entry": "Annexure - A"}]
 
-    child_chunks = [
-        {"chunk_id": "c1", "content": "See ANNEXURE A for details."}
-    ]
+    child_chunks = [{"chunk_id": "c1", "content": "See ANNEXURE A for details."}]
 
     links = linker.link_annexures(child_chunks, parents, [])
 
     assert len(links) == 1
-    assert links[0]["resolved"] == True
+    assert links[0]["resolved"] is True
 
 
 # ==================== FINDING ATTRIBUTION TESTS ====================
 
 
-def test_link_annexures_finding_attribution(linker, sample_parent_chunks, sample_findings):
+def test_link_annexures_finding_attribution(
+    linker, sample_parent_chunks, sample_findings
+):
     """Test that links from findings include finding_id."""
     child_chunks = [
-        {
-            "chunk_id": "chunk_1",
-            "content": "Revenue loss as per Annexure-A."
-        }
+        {"chunk_id": "chunk_1", "content": "Revenue loss as per Annexure-A."}
     ]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, sample_findings)
@@ -310,11 +305,7 @@ def test_link_annexures_finding_attribution(linker, sample_parent_chunks, sample
 
 def test_link_annexures_paragraph_source(linker, sample_parent_chunks):
     """Test that links from non-finding chunks are marked as paragraph."""
-    child_chunks = [
-        {
-            "chunk_id": "chunk_nonf", "content": "See Annexure-A."
-        }
-    ]
+    child_chunks = [{"chunk_id": "chunk_nonf", "content": "See Annexure-A."}]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
@@ -328,17 +319,16 @@ def test_link_annexures_paragraph_source(linker, sample_parent_chunks):
 
 def test_link_annexures_no_annexures_in_doc(linker):
     """Test behavior when document has no annexures."""
-    parents = [
-        {"chunk_id": "p1", "toc_entry": "Chapter 1"}
-    ]
+    parents = [{"chunk_id": "p1", "toc_entry": "Chapter 1"}]
 
-    child_chunks = [
-        {"chunk_id": "c1", "content": "See Annexure-A (doesn't exist)."}
-    ]
+    child_chunks = [{"chunk_id": "c1", "content": "See Annexure-A (doesn't exist)."}]
 
     links = linker.link_annexures(child_chunks, parents, [])
 
-    assert links == []
+    # Recorded, unresolved: a report without appendix parents still keeps its references
+    assert len(links) == 1
+    assert links[0]["resolved"] is False
+    assert links[0]["target_parent_chunk_id"] is None
 
 
 def test_link_annexures_no_references(linker, sample_parent_chunks):
@@ -363,9 +353,7 @@ def test_link_annexures_reference_text_truncation(linker, sample_parent_chunks):
     """Test that reference_text is truncated to 120 chars."""
     long_text = "Details are given in Annexure-A regarding " + "x" * 200
 
-    child_chunks = [
-        {"chunk_id": "c1", "content": long_text}
-    ]
+    child_chunks = [{"chunk_id": "c1", "content": long_text}]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
@@ -375,21 +363,19 @@ def test_link_annexures_reference_text_truncation(linker, sample_parent_chunks):
 
 def test_link_annexures_case_variations(linker):
     """Test detection with various case patterns."""
-    parents = [
-        {"chunk_id": "a1", "toc_entry": "Annexure-A"}
-    ]
+    parents = [{"chunk_id": "a1", "toc_entry": "Annexure-A"}]
 
     child_chunks = [
         {"chunk_id": "c1", "content": "See ANNEXURE-A."},
-        {"chunk_id": "c2", "content": "See annexure-a."},
-        {"chunk_id": "c3", "content": "See Annexure-a."},
+        {"chunk_id": "c2", "content": "See annexure A."},
+        {"chunk_id": "c3", "content": "See Annexure - A."},
     ]
 
     links = linker.link_annexures(child_chunks, parents, [])
 
     # All should be detected and resolved
     assert len(links) == 3
-    assert all(l["resolved"] for l in links)
+    assert all(link["resolved"] for link in links)
 
 
 def test_link_annexures_roman_numerals(linker):
@@ -406,14 +392,12 @@ def test_link_annexures_roman_numerals(linker):
     links = linker.link_annexures(child_chunks, parents, [])
 
     assert len(links) == 2
-    assert all(l["resolved"] for l in links)
+    assert all(link["resolved"] for link in links)
 
 
 def test_link_data_structure(linker, sample_parent_chunks):
     """Test that link data structure contains all expected fields."""
-    child_chunks = [
-        {"chunk_id": "c1", "content": "See Annexure-A."}
-    ]
+    child_chunks = [{"chunk_id": "c1", "content": "See Annexure-A."}]
 
     links = linker.link_annexures(child_chunks, sample_parent_chunks, [])
 
@@ -432,3 +416,108 @@ def test_link_data_structure(linker, sample_parent_chunks):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ==================== EXACT ID MATCHING (C-9-03) ====================
+
+
+def test_link_resolves_to_same_number_not_prefix(linker):
+    """Appendix 2.1 never lands on Appendix 2.10; Appendix-1 never on Appendix-15(i)."""
+    parents = [
+        {"chunk_id": "app_2_10", "toc_entry": "Appendix 2.10 Statement of arrears"},
+        {"chunk_id": "app_2_1", "toc_entry": "Appendix 2.1 Statement of savings"},
+        {"chunk_id": "app_15_i", "toc_entry": "Appendix-15(i) Blocked funds"},
+        {"chunk_id": "app_1", "toc_entry": "Appendix 1 Functions devolved"},
+    ]
+    child_chunks = [
+        {"chunk_id": "c1", "content": "Savings occurred in 12 units (Appendix 2.1)."},
+        {
+            "chunk_id": "c2",
+            "content": "Twenty-nine functions (Appendix-1) were devolved.",
+        },
+    ]
+    links = {
+        link["source_chunk_id"]: link
+        for link in linker.link_annexures(child_chunks, parents, [])
+    }
+    assert links["c1"]["target_parent_chunk_id"] == "app_2_1"
+    assert links["c2"]["target_parent_chunk_id"] == "app_1"
+
+
+def test_link_sub_appendix_falls_back_to_its_appendix(linker):
+    """'Appendix-3(i)' resolves to 'Appendix 3' when the report has no 3(i) of its own."""
+    parents = [{"chunk_id": "app_3", "toc_entry": "Appendix 3 Audit coverage"}]
+    child_chunks = [
+        {"chunk_id": "c1", "content": "45 GPs were selected (Appendix-3(i))."}
+    ]
+    links = linker.link_annexures(child_chunks, parents, [])
+    assert links[0]["target_parent_chunk_id"] == "app_3"
+    assert links[0]["resolved_by"] == "ancestor"
+
+
+def test_link_ambiguous_prefix_left_unresolved(linker):
+    """'Appendix 15' with 15(i) and 15(ii) is ambiguous; one sub-appendix is not."""
+    parents = [
+        {"chunk_id": "a", "toc_entry": "Appendix-15(i) Works not started"},
+        {"chunk_id": "b", "toc_entry": "Appendix-15(ii) Works not completed"},
+        {"chunk_id": "c", "toc_entry": "Appendix-16(i) Unspent funds"},
+    ]
+    child_chunks = [
+        {"chunk_id": "c1", "content": "Details in Appendix 15 and in Appendix 16."}
+    ]
+    links = {
+        link["target_annexure_norm"]: link
+        for link in linker.link_annexures(child_chunks, parents, [])
+    }
+    assert links["appendix:15"]["resolved"] is False
+    assert links["appendix:16"]["target_parent_chunk_id"] == "c"
+
+
+def test_link_falls_back_to_appendix_heading_chunks(linker):
+    """All annexures under one 'Annexures' parent: the heading chunk that starts each one."""
+    parents = [
+        {"chunk_id": "body", "toc_entry": "4.1 Data services"},
+        {"chunk_id": "annexures", "toc_entry": "Annexures"},
+    ]
+    child_chunks = [
+        {
+            "chunk_id": "c1",
+            "parent_chunk_id": "body",
+            "content_type": "paragraph",
+            "content": "The status is given in Annexure II and in Annexure I.",
+        },
+        {
+            "chunk_id": "h1",
+            "parent_chunk_id": "annexures",
+            "content_type": "header",
+            "content": "Annexure I (Refer Para 4.1)",
+        },
+        {
+            "chunk_id": "t1",
+            "parent_chunk_id": "annexures",
+            "content_type": "table_markdown",
+            "content": "| a | b |\n| --- | --- |\n| 1 | 2 |\n| Annexure II (Refer Para 4.2) |",
+        },
+    ]
+    links = {
+        link["target_annexure_norm"]: link
+        for link in linker.link_annexures(child_chunks, parents, [])
+    }
+    assert set(links) == {"appendix:1", "appendix:2"}  # the headings are not references
+    assert links["appendix:1"]["target_chunk_id"] == "h1"
+    assert links["appendix:1"]["target_parent_chunk_id"] == "annexures"
+    assert links["appendix:2"]["target_chunk_id"] == "t1"
+
+
+def test_link_attributes_multi_chunk_findings(linker):
+    """A finding spanning several chunks owns references in any of them."""
+    parents = [{"chunk_id": "a", "toc_entry": "Appendix 4 Records"}]
+    child_chunks = [
+        {"chunk_id": "c2", "content": "Registers were not kept (Appendix-4)."}
+    ]
+    findings = [
+        {"finding_id": "f1", "source_chunk_id": "c1", "source_chunk_ids": ["c1", "c2"]}
+    ]
+    links = linker.link_annexures(child_chunks, parents, findings)
+    assert links[0]["source_type"] == "finding"
+    assert links[0]["finding_id"] == "f1"

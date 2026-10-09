@@ -1,0 +1,77 @@
+# Promote a test run's output (gs://<bucket>/<prefix>/...) to the production paths.
+#
+# - Manual only. Dry run by default: it prints every file that would be added or
+#   replaced, and changes nothing.
+# - With apply, each production file a run file replaces is first moved to
+#   quarantine/promote-<run id>/ (same path), then the run's file is copied in.
+#   The tier manifest is merged: the run's completed reports replace production's
+#   entries, other reports stay.
+# - Only reports the run's tier manifest marks completed are promoted.
+#
+# Logic and tests: scripts/pipeline/promote_run.py, tests/scripts/test_promote_run.py
+
+name: Promote Parsing Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_prefix:
+        description: 'Run prefix to promote (gs://bucket/<prefix>/processed/<tier>/ ...)'
+        required: true
+        type: string
+      tier:
+        description: 'Tier to promote'
+        required: true
+        type: choice
+        options: [union, state, local_body, all]
+      apply:
+        description: 'Apply the changes (unchecked = dry run: print what would change)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: promote-run
+  cancel-in-progress: false
+
+env:
+  DATA_BUCKET: cag-data-443e4a28
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.test_prefix }} (${{ inputs.tier }})${{ inputs.apply && '' || ' - dry run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Promote
+        env:
+          PREFIX: ${{ inputs.test_prefix }}
+          TIER: ${{ inputs.tier }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          ARGS=(--bucket "${DATA_BUCKET}" --prefix "${PREFIX}" --tier "${TIER}" --run-id "${{ github.run_id }}")
+          if [ "${APPLY}" = "true" ]; then ARGS+=(--apply); fi
+          python3 scripts/pipeline/promote_run.py "${ARGS[@]}" | tee /tmp/promote.txt
+          {
+            echo "## Promote ${PREFIX} (${TIER})"
+            if [ "${APPLY}" = "true" ]; then echo "Applied. Replaced files are in gs://${DATA_BUCKET}/quarantine/promote-${{ github.run_id }}/"; else echo "Dry run: nothing changed."; fi
+            echo '```'
+            grep -v '^  ' /tmp/promote.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

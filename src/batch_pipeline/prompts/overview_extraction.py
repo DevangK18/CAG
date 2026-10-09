@@ -190,10 +190,16 @@ def build_overview_prompt(json_data: dict) -> str:
     - Intro/Scope content from child_chunks (for details)
     """
     
-    # Extract TOC
+    # Contents: every parent at the top two levels, each heading once
     toc_lines = []
-    for chunk in json_data.get("parent_chunks", [])[:60]:
-        indent = "  " * (chunk.get("toc_level", 1) - 1)
+    seen_titles = set()
+    for chunk in json_data.get("parent_chunks", []):
+        level = chunk.get("toc_level") or len(chunk.get("hierarchy") or {}) or 1
+        title = (chunk.get("toc_entry") or "").strip()
+        if level > 2 or not title or title.lower() in seen_titles:
+            continue
+        seen_titles.add(title.lower())
+        indent = "  " * (level - 1)
         # The LLM copies these numbers into topics_covered.page_start/page_end,
         # which stay 0-based like every stored page; label them as indices so
         # they are not read as printed page numbers.
@@ -207,10 +213,11 @@ def build_overview_prompt(json_data: dict) -> str:
         ["Introduction", "Scope", "Objective", "Methodology", "Chapter 1", "Audit Scope"]
     )
     
-    # Extract glossary if present
+    # Glossary: the abbreviation sections, including their tables
     glossary_content = _get_section_content(
         json_data,
-        ["Glossary", "Abbreviation", "Acronym", "Definition", "List of Abbreviations"]
+        ["Glossary", "Abbreviation", "Acronym", "Definition", "List of Abbreviations"],
+        content_types=("paragraph", "text", "header", "list", "table_markdown"),
     )
     
     # Extract preface/executive summary for additional context
@@ -353,7 +360,7 @@ General rules:
 ## INPUT DATA
 
 ### Table of Contents:
-{toc_text[:8000]}
+{toc_text[:16000]}
 
 ### Introduction / Scope / Objectives Content:
 {intro_content[:12000]}
@@ -362,7 +369,7 @@ General rules:
 {exec_content[:4000]}
 
 ### Glossary Section (if available):
-{glossary_content[:4000]}
+{glossary_content[:12000]}
 
 ## OUTPUT FORMAT
 Return ONLY a valid JSON object with these exact keys:
@@ -384,14 +391,18 @@ IMPORTANT:
 '''
 
 
-def _get_section_content(json_data: dict, keywords: list[str], max_chunks: int = 50) -> str:
-    """Extract paragraph content from sections matching keywords."""
+def _get_section_content(
+    json_data: dict,
+    keywords: list[str],
+    max_chunks: int = 50,
+    content_types: tuple = ("paragraph", "text", "header"),
+) -> str:
+    """Extract content from sections matching keywords."""
     matching = []
     
     for chunk in json_data.get("child_chunks", []):
-        # Include paragraphs, text, and headers
         content_type = chunk.get("content_type", "")
-        if content_type not in ["paragraph", "text", "header"]:
+        if content_type not in content_types:
             continue
         
         # Check hierarchy for keyword matches

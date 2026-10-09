@@ -16,6 +16,7 @@ from datetime import datetime
 
 from src.core.data_contracts import DocumentTask, ParentChunk, ChildChunk
 from src.core.processed_manifest import TIERS, load_report_entries, tier_manifest_path
+from src.parsing_pipeline.modules.scaffolding_service import toc_record
 
 # Phase 8 writes {report_id}_chunks.json.working; Phase 9 writes the final
 # {report_id}_chunks.json. A run that stops in between never leaves a final file
@@ -667,6 +668,8 @@ class AssemblyService:
             "phase_10b_complete": False,
             # M2-FIX: Include DLQ entries for missing page visibility
             "dlq_entries": task.dlq_entries if task.dlq_entries else [],
+            # Contents source and score: Phase 4's source and candidates, the final method and score
+            "toc": toc_record(task.scaffold),
         }
 
     def _build_footnote_index(self, child_chunks: List[Dict]) -> Dict[str, Dict[str, Any]]:
@@ -1121,114 +1124,99 @@ def propagate_semantic_enrichment_to_chunks(
     # Build lookup maps: source_chunk_id -> enrichment data
     findings_by_chunk: Dict[str, List[Dict]] = {}
     recommendations_by_chunk: Dict[str, List[Dict]] = {}
-    section_types_by_chunk: Dict[str, str] = {}
 
-    # Index findings by source_chunk_id
+    # Index findings and recommendations by every chunk they cover
+    def chunks_of(item: Dict[str, Any]) -> List[str]:
+        return item.get("source_chunk_ids") or [item.get("source_chunk_id")]
+
     for finding in semantic_enrichment.get("findings", []):
-        chunk_id = finding.get("source_chunk_id")
-        if chunk_id:
-            findings_by_chunk.setdefault(chunk_id, []).append(finding)
+        for chunk_id in chunks_of(finding):
+            if chunk_id:
+                findings_by_chunk.setdefault(chunk_id, []).append(finding)
 
-    # Index recommendations by source_chunk_id
     for rec in semantic_enrichment.get("recommendations", []):
-        chunk_id = rec.get("source_chunk_id")
-        if chunk_id:
-            recommendations_by_chunk.setdefault(chunk_id, []).append(rec)
+        for chunk_id in chunks_of(rec):
+            if chunk_id:
+                recommendations_by_chunk.setdefault(chunk_id, []).append(rec)
 
-    # Index section classifications by parent_chunk_id
+    # Section classifications are keyed by the parent's chunk_id
+    parent_section_types: Dict[str, str] = {}
     for section in semantic_enrichment.get("section_classifications", []):
-        chunk_id = section.get("parent_chunk_id")
+        parent_id = section.get("chunk_id") or section.get("parent_chunk_id")
         section_type = section.get("section_type")
-        if chunk_id and section_type:
-            section_types_by_chunk[chunk_id] = section_type
+        if parent_id and section_type:
+            parent_section_types[parent_id] = section_type
 
-    # Build entity lookup from global entities
-    # Note: entities are document-level, we'll propagate based on text matching
+    # Build entity lookup from global entities (whole words only: short or noisy
+    # names must not tag unrelated chunks)
     entities = semantic_enrichment.get("entities", {})
     all_entities = (
         entities.get("schemes", [])
         + entities.get("ministries", [])
         + entities.get("organizations", [])
     )
+    entity_patterns = [
+        (entity, re.compile(r"\b" + re.escape(entity.lower()) + r"\b"))
+        for entity in all_entities
+        if entity and len(entity) >= 3
+    ]
 
     # Counters for statistics
     findings_propagated = 0
     recommendations_propagated = 0
     entities_propagated = 0
 
-    # Build parent_chunk_id to section_type lookup for child inheritance
-    parent_section_types: Dict[str, str] = {}
-    for section in semantic_enrichment.get("section_classifications", []):
-        parent_id = section.get("parent_chunk_id")
-        section_type = section.get("section_type")
-        if parent_id and section_type:
-            parent_section_types[parent_id] = section_type
-
-    # Propagate to each child chunk
+    # Propagate to each child chunk, under chunk["enrichment"]: a table's or
+    # image's structured_data keeps its own schema
     for chunk in child_chunks:
         chunk_id = chunk.get("chunk_id", "")
         parent_id = chunk.get("parent_chunk_id", "")
         content = chunk.get("content", "")
+        en: Dict[str, Any] = {}
 
-        # Initialize structured_data if not present
-        if "structured_data" not in chunk or chunk["structured_data"] is None:
-            chunk["structured_data"] = {}
-
-        sd = chunk["structured_data"]
-
-        # 1. Propagate finding data
+        # 1. Finding data
         if chunk_id in findings_by_chunk:
             findings = findings_by_chunk[chunk_id]
             # Use the first (most relevant) finding for primary fields
             primary_finding = findings[0]
 
-            sd["finding_type"] = primary_finding.get("finding_type")
-            sd["severity"] = primary_finding.get("severity")
-            # Paise (1e9 = ₹1 crore). The *_inr name is an alias kept until the full re-run
-            sd["monetary_value_paise"] = primary_finding.get("monetary_value_paise") or primary_finding.get("monetary_value")
-            sd["monetary_value_crore"] = primary_finding.get("monetary_value_crore")
-            total_paise = primary_finding.get("total_amount_paise") or primary_finding.get("total_amount_inr") or 0
-            sd["total_amount_paise"] = total_paise
-            sd["total_amount_inr"] = total_paise
-            # The total, as in the Qdrant payload (it was the primary amount here)
-            sd["total_amount_crore"] = round(total_paise / 1e9, 4) if total_paise else None
-            sd["is_finding"] = True
-
-            # Store all finding IDs if multiple findings reference this chunk
-            sd["finding_ids"] = [f.get("finding_id") for f in findings]
-
-            # Entities from finding
+            en["finding_type"] = primary_finding.get("finding_type")
+            en["severity"] = primary_finding.get("severity")
+            # Paise (1e9 = ₹1 crore)
+            en["monetary_value_paise"] = primary_finding.get("monetary_value_paise") or primary_finding.get("monetary_value")
+            en["monetary_value_crore"] = primary_finding.get("monetary_value_crore")
+            en["is_finding"] = True
+            en["finding_ids"] = [f.get("finding_id") for f in findings]
             if primary_finding.get("entities_mentioned"):
-                sd["entities_mentioned"] = primary_finding["entities_mentioned"]
+                en["entities_mentioned"] = primary_finding["entities_mentioned"]
                 entities_propagated += 1
-
             findings_propagated += 1
 
-        # 2. Propagate recommendation data
+        # 2. Recommendation data
         if chunk_id in recommendations_by_chunk:
             recs = recommendations_by_chunk[chunk_id]
             primary_rec = recs[0]
 
-            sd["is_recommendation"] = True
-            sd["recommendation_target"] = primary_rec.get("target_entity")
-            sd["recommendation_ids"] = [r.get("recommendation_id") for r in recs]
+            en["is_recommendation"] = True
+            en["recommendation_target"] = primary_rec.get("target_entity")
+            en["recommendation_ids"] = [r.get("recommendation_id") for r in recs]
 
             recommendations_propagated += 1
 
-        # 3. Propagate section type from parent
+        # 3. Section type from the parent
         if parent_id and parent_id in parent_section_types:
-            sd["section_type"] = parent_section_types[parent_id]
+            en["section_type"] = parent_section_types[parent_id]
 
-        # 4. Quick entity mention check for chunks without finding data
-        if "entities_mentioned" not in sd and content:
-            mentioned = []
+        # 4. Entity mentions for chunks without finding data
+        if "entities_mentioned" not in en and content:
             content_lower = content.lower()
-            for entity in all_entities:
-                if entity.lower() in content_lower:
-                    mentioned.append(entity)
+            mentioned = [entity for entity, pattern in entity_patterns if pattern.search(content_lower)]
             if mentioned:
-                sd["entities_mentioned"] = mentioned[:10]  # Cap at 10
+                en["entities_mentioned"] = mentioned[:10]  # Cap at 10
                 entities_propagated += 1
+
+        if en:
+            chunk["enrichment"] = en
 
     logger.info(
         f"  Propagated semantic enrichment: "

@@ -12,7 +12,7 @@ import { AuditReport, ViewState } from '../../types';
 import { TierSelector } from '../TierSelector';
 import { ReportCard } from '../ReportCard';
 import { SearchIcon, FilterIcon, LayoutGridIcon, ListIcon } from '../Icons';
-import { GovernmentTier, SHOW_MONETARY_IMPACT } from '../../constants';
+import { GovernmentTier, SHOW_CORPUS_MONETARY_SUM } from '../../constants';
 
 interface DirectoryPageProps {
     // Tier state
@@ -154,7 +154,7 @@ export const DirectoryPage: React.FC<DirectoryPageProps> = ({
                     <span className="stat-value">{reportsLoading ? '–' : enhancedStats ? `${enhancedStats.totalFindings}+` : '–'}</span>
                     <span className="stat-label">Total Findings</span>
                 </div>
-                {SHOW_MONETARY_IMPACT && (
+                {SHOW_CORPUS_MONETARY_SUM && (
                     <div className="stat-item">
                         <span className="stat-value">{reportsLoading ? '–' : enhancedStats?.monetaryDisplay ?? 'N/A'}</span>
                         <span className="stat-label">Monetary Impact</span>

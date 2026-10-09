@@ -53,10 +53,14 @@ def test_scaffold_structure(scaffolding_service, pdf_path):
 
     assert result.processing_status in VALID_STATUSES
 
-    # Page map covers every physical page with a non-empty label
+    # Page map covers every physical page: its printed label, or None where no number
+    # is printed (never physical + 1)
     page_map = result.scaffold["page_map"]
     assert sorted(page_map) == list(range(page_count))
-    assert all(isinstance(label, str) and label.strip() for label in page_map.values())
+    assert all(
+        label is None or (isinstance(label, str) and label.strip())
+        for label in page_map.values()
+    )
 
     # TOC entries are [level, title, 0-indexed physical page]
     for level, title, page in result.scaffold["toc"]:
@@ -67,6 +71,9 @@ def test_scaffold_structure(scaffolding_service, pdf_path):
     if result.scaffold["toc"]:
         assert result.scaffold["toc_method"] in {"embedded_bookmarks", "printed_toc", "heuristic"}
         assert isinstance(result.scaffold["toc_quality"], int)
+        # The source and its score are recorded for the output
+        assert result.scaffold["toc_source"] == result.scaffold["toc_method"]
+        assert result.scaffold["toc_method"] in result.scaffold["toc_candidates"]
 
 
 def test_scaffold_is_deterministic(scaffolding_service):

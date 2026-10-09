@@ -90,7 +90,13 @@ def get_gemini_client(force_new: bool = False):
 
 _TRANSIENT_MARKERS = (
     "429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED", "Empty response",
+    # An access token that expired mid-run: the retry goes out with refreshed credentials
+    "UNAUTHENTICATED",
 )
+
+
+# Safety cap on retries; the limiter's retry window (~5 min) normally ends them first
+MAX_RETRIES = 20
 
 
 def is_transient(error) -> bool:
@@ -98,23 +104,59 @@ def is_transient(error) -> bool:
     return any(marker in str(error) for marker in _TRANSIENT_MARKERS)
 
 
-def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = None, **kwargs):
+def _prompt_size(contents, config=None) -> tuple:
+    """(characters of text, number of images or other media) in a request."""
+    chars = images = 0
+
+    def visit(item):
+        nonlocal chars, images
+        if item is None:
+            return
+        if isinstance(item, str):
+            chars += len(item)
+        elif isinstance(item, (list, tuple)):
+            for sub in item:
+                visit(sub)
+        elif getattr(item, "parts", None) is not None:
+            visit(item.parts)
+        elif getattr(item, "text", None):
+            chars += len(item.text)
+        elif getattr(item, "inline_data", None) is not None or getattr(item, "file_data", None) is not None:
+            images += 1
+        elif isinstance(item, dict):
+            if item.get("text"):
+                chars += len(item["text"])
+            elif item.get("inline_data") or item.get("file_data"):
+                images += 1
+            elif item.get("parts"):
+                visit(item["parts"])
+
+    visit(contents)
+    visit(getattr(config, "system_instruction", None))
+    return chars, images
+
+
+def generate_with_retry(
+    client=None, max_retries: Optional[int] = None, tag: Optional[str] = None, **kwargs
+):
     """
-    client.models.generate_content with exponential backoff on transient errors.
+    client.models.generate_content, admitted by the limiter, retried alone on
+    transient errors.
 
-    Agent Platform serves Gemini from shared capacity (Dynamic Shared Quota), so
-    429 RESOURCE_EXHAUSTED can occur on paid projects when a model is busy; it is
-    not a fixed quota (gemini-3.8-flash has no per-project limit to raise) and
-    succeeds on retry. Busy spells can last several minutes, so the retry window
-    is ~5 min. Empty responses are retried too.
+    Agent Platform serves Gemini from shared capacity, so 429 RESOURCE_EXHAUSTED
+    can occur on paid projects when a model is busy; it is not a fixed quota and
+    succeeds on retry. Empty responses are retried too.
 
-    Every attempt takes a slot from the process-wide limiter (gemini_limiter): a
-    429 here lowers concurrency and cools down every caller, and the group's
-    deadline (the tag prefix, e.g. "phase10b") stops further attempts.
+    Every attempt is admitted by the process-wide limiter (gemini_limiter): it
+    waits for its model's token budget and in-flight ceiling, and the group's
+    deadline (the tag prefix, e.g. "phase10b") stops further attempts. A failed
+    attempt waits 1-3 s, doubling up to 30 s, within a ~5 min window; no other
+    call waits for it.
 
     Args:
         client: genai.Client to use (default: shared Agent Platform client)
-        max_retries: Retries after the first attempt (~5s, 10s, 20s, 40s, then 60s each)
+        max_retries: Retries after the first attempt at most (default: until the
+            limiter's retry window is used up)
         tag: Usage-accounting tag (phase or purpose, e.g. "phase10a.summary");
             defaults to the calling module's name
 
@@ -128,9 +170,7 @@ def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = 
     returned a response are summed, because rejected responses (empty, MAX_TOKENS)
     are still billed.
     """
-    import random
-
-    from src.core.gemini_limiter import GeminiDeadlineExceeded, get_limiter, group_for_tag, is_throttle
+    from src.core.gemini_limiter import GeminiDeadlineExceeded, Usage, get_limiter, group_for_tag, is_throttle
 
     tag = tag or _caller_module()
     model = kwargs.get("model")
@@ -139,15 +179,28 @@ def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = 
     client = client or get_gemini_client()
     limiter = get_limiter()
     group = group_for_tag(tag)
-    for attempt in range(max_retries + 1):
+    config = kwargs.get("config")
+    chars, images = _prompt_size(kwargs.get("contents"), config)
+    max_output = getattr(config, "max_output_tokens", None)
+    seq = None
+    attempt = 0
+    first_failure = None
+    while True:
         try:
-            with limiter.slot(group) as slot:
+            with limiter.attempt(model, group, tag, chars, images, max_output, seq) as outcome:
+                seq = outcome["seq"]  # a retry keeps its place in the order
                 try:
                     response = client.models.generate_content(**kwargs)
                 except Exception as e:
-                    slot["throttled"] = is_throttle(e)
+                    outcome["throttled"] = is_throttle(e)
                     raise
-            _add_tokens(tokens, _tokens_from_response(response))
+                counts = _tokens_from_response(response)
+                outcome["usage"] = Usage(
+                    prompt=counts["prompt"] + counts["tool_use_prompt"],
+                    cached=counts["cached"],
+                    output=counts["candidates"] + counts["thoughts"],
+                )
+            _add_tokens(tokens, counts)
             if not response.text:
                 finish_reason = (
                     response.candidates[0].finish_reason if response.candidates else None
@@ -160,18 +213,26 @@ def generate_with_retry(client=None, max_retries: int = 8, tag: Optional[str] = 
                     latency_s=time.monotonic() - started, success=True)
             return response
         except Exception as e:
-            if not is_transient(e) or attempt == max_retries:
+            # The retry window runs from the first failure: time spent waiting for
+            # admission or on a long successful-looking call does not use it up
+            first_failure = first_failure or time.monotonic()
+            out_of_retries = (
+                attempt >= (MAX_RETRIES if max_retries is None else max_retries)
+                or time.monotonic() - first_failure >= limiter.settings.retry_window_s
+            )
+            if isinstance(e, GeminiDeadlineExceeded) or not is_transient(e) or out_of_retries:
                 _record(model, tag, tokens, retries=attempt,
                         latency_s=time.monotonic() - started, success=False, error=e)
                 raise
-            delay = min(5 * 2 ** attempt, 60) * random.uniform(0.8, 1.2)
-            logger.warning(f"Gemini call failed ({e}), retry {attempt + 1}/{max_retries} in {delay:.0f}s")
+            delay = limiter.retry_delay(attempt)
+            logger.warning(f"Gemini call failed ({e}), retry {attempt + 1} in {delay:.0f}s")
             try:
                 limiter.backoff(delay, group)
             except GeminiDeadlineExceeded as deadline_error:
                 _record(model, tag, tokens, retries=attempt,
                         latency_s=time.monotonic() - started, success=False, error=deadline_error)
                 raise deadline_error from e
+            attempt += 1
 
 
 def get_client_mode() -> Optional[str]:

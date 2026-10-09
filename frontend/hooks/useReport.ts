@@ -30,6 +30,7 @@ function transformReport(apiReport: APIReportDetail): AuditReport {
     pages: apiReport.pages,
     findingsCount: apiReport.findings_count,
     impact: impact,
+    impactLabel: apiReport.monetary_impact_label || undefined,
     status: statusMap[apiReport.status] || 'Under Review',
     summary: apiReport.executive_summary,
     findings: apiReport.key_findings,

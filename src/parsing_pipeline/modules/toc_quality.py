@@ -22,13 +22,18 @@ from src.parsing_pipeline.modules.printed_toc_parser import (
     is_chapter_title,
 )
 
-CHAPTER_NUM_RE = re.compile(r"^\s*chapter\s*[-:]?\s*([ivxlc]+|\d+)\b", re.IGNORECASE)
+CHAPTER_NUM_RE = re.compile(r"^\s*chapter\s*[-–—:]?\s*([ivxlc]+|\d+)\b", re.IGNORECASE)
 # Chapter number of an L1 title: "Chapter-2 ...", "III AN OVERVIEW ..." (BR), "2 Mandate ..."
 L1_NUMBER_RE = re.compile(
-    r"^\s*(?:chapter\s*[-:]?\s*(?P<a>[ivxlc]+|\d+)\b|(?P<r>[IVX]{1,4})\s+[A-Z]{2}|(?P<n>\d{1,2})\.?\s+[A-Z])",
+    r"^\s*(?:chapter\s*[-–—:]?\s*(?P<a>[ivxlc]+|\d+)\b|(?P<r>[IVX]{1,4})\s+[A-Z]{2}|(?P<n>\d{1,2})\.?\s+[A-Z])",
     re.IGNORECASE,
 )
 SECTION_LEAD_RE = re.compile(r"^\s*(?P<chapter>\d+)\.\d+")
+# A part of a combined report: chapter numbers restart in each ("PART II – ECONOMIC
+# SERVICES" / "CHAPTER-I : GENERAL", KL)
+PART_TITLE_RE = re.compile(
+    r"^\s*part\s*[-–—:.]?\s*([ivxlc]+|\d+|[a-z])\b", re.IGNORECASE
+)
 SECTION_NUM_RE = re.compile(r"^\s*\d+\.\d+")
 SHIFTED_SIGNATURE_RE = re.compile(r"&[A-Z]{3}|\$[A-Z]{3}|[A-Z]{2,}\\")
 MAX_L1 = 35
@@ -276,8 +281,13 @@ def score_toc(toc: List[List], total_pages: int = 0, doc=None) -> Dict:
         # Numbered sections ("1.3 ...") at chapter level mean levels were not detected
         sections_at_l1 = sum(1 for e in l1 if SECTION_NUM_RE.match(str(e[1])))
         deduct("sections_at_l1", 40 * sections_at_l1 / len(l1))
-        # A chapter banner split into several L1 entries lands them on one page
-        same_page = sum(1 for a, b in zip(l1, l1[1:]) if a[2] == b[2])
+        # A chapter banner split into several L1 entries lands them on one page; a
+        # part title printed above its first chapter does not count
+        same_page = sum(
+            1
+            for a, b in zip(l1, l1[1:])
+            if a[2] == b[2] and not PART_TITLE_RE.match(str(a[1]))
+        )
         counts["l1_same_page"] = same_page
         deduct("l1_same_page", 40 * same_page / len(l1))
 
@@ -285,8 +295,15 @@ def score_toc(toc: List[List], total_pages: int = 0, doc=None) -> Dict:
     if nums:
         missing = len(set(range(1, max(nums) + 1)) - set(nums))
         deduct("missing_chapters", min(30, 10 * missing))
-    l1_nums = [x for x in (_l1_number(str(e[1])) for e in l1) if x is not None]
-    duplicates = len(l1_nums) - len(set(l1_nums))
+    duplicates, seen = 0, set()
+    for e in l1:
+        if PART_TITLE_RE.match(str(e[1])):
+            seen = set()
+            continue
+        number = _l1_number(str(e[1]))
+        if number is not None:
+            duplicates += number in seen
+            seen.add(number)
     counts["duplicate_chapters"] = duplicates
     deduct("duplicate_chapters", min(30, 10 * duplicates))
 
@@ -343,7 +360,7 @@ def junk_share(toc: List[List]) -> float:
 def _title_key(title: str) -> str:
     """Comparable form of a title: no chapter/section label, letters and digits only."""
     body = re.sub(
-        r"^\s*(chapter|part)\s*[-:.]?\s*([ivxlc]+|\d+)\b", "", title, flags=re.I
+        r"^\s*(chapter|part)\s*[-–—:.]?\s*([ivxlc]+|\d+)\b", "", title, flags=re.I
     )
     body = re.sub(r"^\s*[\d.]+\s*[.:]?\s*", "", body)
     return re.sub(r"[^a-z0-9]+", "", body.lower())[:25]

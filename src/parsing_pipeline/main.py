@@ -79,6 +79,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from src.core.gemini_client import log_usage_summary, reset_usage
+from src.core.gemini_limiter import get_limiter  # noqa: E402
 
 # Import services from modules
 from src.parsing_pipeline.modules.manifest_ingestion_service import (
@@ -261,15 +262,16 @@ class PipelineOrchestrator:
         finally:
             self._close_pool()
 
-        # Phase 10a: Overview & Summary (optional)
+        # Phases 10a and 10b run side by side: 10a is mostly Pro and 10b is Flash,
+        # so each model's budget stays busy
+        self._phase10_started = get_limiter().snapshot()
+        self._phase10a_inputs_read = asyncio.Event()
+        if "10a" in self.skip:
+            self._phase10a_inputs_read.set()
+        with self._timed("10"):
+            await asyncio.gather(self._run_phase10a(), self._run_phase10b())
         if "10a" not in self.skip:
-            with self._gemini_budget("phase10a"), self._timed("10a"):
-                self._phase_overview_summary()
-
-        # Phase 10b: Visual Extraction (optional)
-        if "10b" not in self.skip:
-            with self._gemini_budget("phase10b"), self._timed("10b"):
-                await self._phase_visual_extraction()
+            self._write_content_summaries()
 
         # Phase 10c: Visual Post-processing (optional)
         if "10c" not in self.skip:
@@ -559,7 +561,7 @@ class PipelineOrchestrator:
     # PER-REPORT WORK (here or in worker processes)
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _per_report(self, phase: str, fn, tasks, args_for=None, parallel: bool = True):
+    def _per_report(self, phase: str, fn, tasks, args_for=None, parallel: bool = True, min_reports: int = 2):
         """
         (task, _ReportResult) for every task, in order, for fn(task, emitter, *args).
 
@@ -571,7 +573,7 @@ class PipelineOrchestrator:
         tasks = list(tasks)
         emitter = self.state.trace_emitter
         args_for = args_for or (lambda task: ())
-        if self.workers <= 1 or not parallel or len(tasks) < 2:
+        if self.workers <= 1 or not parallel or len(tasks) < min_reports:
             return [
                 (
                     task,
@@ -618,18 +620,52 @@ class PipelineOrchestrator:
         finally:
             self.phase_seconds[phase] = round(self.phase_seconds.get(phase, 0.0) + time.monotonic() - started, 1)
 
+    # Past the conversion limit, the Docling process gets this long before it is killed
+    DOCLING_KILL_GRACE_S = 30
+
+    def _docling_time_limit(self, task) -> float:
+        """The conversion limit Phase 5 applies: max(timeout, pages x per-page timeout)."""
+        from src.parsing_pipeline.config import get_config
+
+        cfg = get_config().layout
+        pages = 0
+        pdf = self._pdf_for_checks(task) if getattr(task, "local_pdf_path", None) else None
+        if pdf:
+            try:
+                import fitz
+
+                with fitz.open(pdf) as doc:
+                    pages = doc.page_count
+            except Exception:
+                pages = 0
+        return max(cfg.conversion_timeout, pages * cfg.conversion_timeout_per_page)
+
+    def _kill_docling_process(self) -> None:
+        """Stop the Docling process now (a hung conversion never returns on its own)."""
+        pool, self._docling_pool = self._docling_pool, None
+        if pool is None:
+            return
+        for process in list((getattr(pool, "_processes", None) or {}).values()):
+            process.kill()
+        pool.shutdown(wait=False, cancel_futures=True)
+
     def _layout_in_docling_process(self, task):
         """
         Phase 5 for one report in the Docling process. If the process dies (a native
         crash), it is started again and the report tried once more; a second crash
-        fails this report only.
+        fails this report only. A conversion still running at its time limit (plus a
+        grace period) is killed with its process; that report fails and the next one
+        gets a new process.
         """
+        from concurrent.futures import TimeoutError as FuturesTimeout
         from concurrent.futures.process import BrokenProcessPool
 
         emitter = self.state.trace_emitter
+        limit = self._docling_time_limit(task)
         for attempt in (1, 2):
             if self._docling_pool is None:
                 self._docling_pool = self._new_process_pool(1)
+            started = time.monotonic()
             try:
                 outcome = self._docling_pool.submit(
                     report_workers.run_in_worker,
@@ -637,7 +673,19 @@ class PipelineOrchestrator:
                     task,
                     (),
                     emitter.get_red_flags(task.report_id),
-                ).result()
+                ).result(timeout=limit + self.DOCLING_KILL_GRACE_S)
+            except FuturesTimeout:
+                self._kill_docling_process()
+                elapsed = time.monotonic() - started
+                message = (
+                    f"Docling conversion stopped after {elapsed:.0f}s (limit {limit:.0f}s); "
+                    "its process was killed and restarted"
+                )
+                self._log(f"             ⚠ {message}", force=True)
+                task.processing_status = "failed_layout"
+                task.error_log.append(message)
+                emitter.emit_red_flag("5", "Docling conversion timed out", {"report_id": task.report_id})
+                return task
             except BrokenProcessPool:
                 self._docling_pool.shutdown(wait=False, cancel_futures=True)
                 self._docling_pool = None
@@ -646,7 +694,13 @@ class PipelineOrchestrator:
             emitter.add_red_flags(task.report_id, outcome.red_flags)
             if outcome.error is not None:
                 raise report_workers.WorkerError(outcome.error)
-            return outcome.value
+            value = outcome.value
+            if getattr(value, "processing_status", None) == "failed_layout" and any(
+                "timed out" in str(e) for e in (getattr(value, "error_log", None) or [])[-1:]
+            ):
+                # The timed-out conversion is still running in that process: start afresh
+                self._kill_docling_process()
+            return value
 
         task.processing_status = "failed_layout"
         task.error_log.append("Docling process crashed twice on this report (native crash)")
@@ -1311,16 +1365,19 @@ class PipelineOrchestrator:
             "Extracting findings, recommendations, and entities for cross-report analytics..."
         )
 
-        # Gemini calls stay in this process (one shared limiter): with LLM validation
-        # on, Phase 9 runs one report at a time here
+        # Gemini calls stay in this process (one limiter); each report goes to a
+        # worker for the rest of Phase 9 as soon as its calls are done
         phases_completed = self._phases_completed()
-        results = self._per_report(
-            "9",
-            report_workers.enrich_report,
-            self.state.assembly_complete,
-            args_for=lambda t: (self.run_id, phases_completed, self._pdf_for_checks(t)),
-            parallel=not llm_validation_enabled(),
-        )
+        with self._gemini_budget("phase9"):
+            results = []
+            for task, record in self._phase9_extractions(self.state.assembly_complete):
+                results += self._per_report(
+                    "9",
+                    report_workers.enrich_report,
+                    [task],
+                    args_for=lambda t, r=record: (self.run_id, phases_completed, self._pdf_for_checks(t), r),
+                    min_reports=1,
+                )
         for i, (task, pending) in enumerate(results, 1):
             # Switch to this report's trace context (Fix 1: per-report isolation)
             emitter.set_current_report(task.report_id)
@@ -1345,11 +1402,13 @@ class PipelineOrchestrator:
                 # Store enrichment stats for summary
                 stats = done["statistics"]
                 task.enrichment_stats = stats
+                self._record_phase9_extraction(task.report_id, stats.get("extraction") or {})
 
                 self._log(
                     f"             ✓ {stats['findings']['total_count']} findings, "
                     f"{stats['recommendations']['total_count']} recommendations, "
-                    f"₹{stats['findings']['total_monetary_crore']:,.2f} crore"
+                    f"₹{stats['findings']['impact_sum_crore']:,.2f} crore cited in "
+                    f"{stats['findings']['impact_sum_finding_count']} findings (sum)"
                 )
                 summary = self.quality_summaries[task.report_id]
                 self._log(
@@ -1374,20 +1433,102 @@ class PipelineOrchestrator:
             len(self.state.assembly_complete),
         )
 
-    def _configure_gemini(self) -> None:
-        """One limiter for every Gemini call in this run (Phase 9 validation, 10a, 10b)."""
-        from src.core.gemini_limiter import configure_limiter
+    def _phase9_extractions(self, tasks):
+        """
+        (task, Gemini extraction record or None) per report, in order. Every report's
+        calls are sent at once; a report is yielded when its own calls are done.
+        """
         from src.parsing_pipeline.config import get_config
+        from src.parsing_pipeline.modules import report_type_profiles
+        from src.parsing_pipeline.modules.enrichment import llm_finding_extractor as lfx
 
-        cfg = get_config().gemini
-        configure_limiter(
-            max_concurrency=cfg.max_concurrency,
-            group_caps={
-                "phase9": cfg.phase9_concurrency,
-                "phase10a": cfg.phase10a_concurrency,
-                "phase10b": cfg.phase10b_concurrency,
-            },
-        )
+        cfg = get_config().semantic_enrichment
+        if not cfg.llm_extraction:
+            for task in tasks:
+                yield task, None
+            return
+        settings = lfx.settings_from_config(cfg)
+        plans, by_report = [], {}
+        for task in tasks:
+            try:
+                with open(task.assembled_output_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                plan = lfx.plan_calls(
+                    task.report_id,
+                    data["report_metadata"],
+                    data["child_chunks"],
+                    report_type_profiles.detect_report_type(task),
+                    settings["max_chars_per_call"],
+                )
+                plans.append(plan)
+                by_report[task.report_id] = task
+            except Exception as e:
+                # Regex only for this report, counted as a loss
+                self.state.phase9_losses[task.report_id] = {"error": f"extraction plan failed: {e}"}
+        done = lfx.run_plans(plans, settings)
+        for task in tasks:
+            if task.report_id not in by_report:
+                yield task, None
+                continue
+            report_id, record = next(done)
+            yield by_report[report_id], record
+
+    def _record_phase9_extraction(self, report_id: str, extraction: dict) -> None:
+        """Keep the run's extraction settings and counts; sections that fell back to regex are losses."""
+        self.state.phase9_extraction[report_id] = {
+            k: extraction.get(k)
+            for k in ("method", "model", "prompt_version", "thinking_level", "temperature",
+                      "calls", "calls_failed", "seconds", "items", "regex_only_findings",
+                      "regex_only_recommendations")
+        }
+        if extraction.get("calls_failed"):
+            self.state.phase9_losses[report_id] = {
+                "regex_fallback_sections": extraction["calls_failed"],
+                "sections": extraction.get("fallback_sections"),
+            }
+
+    def _write_content_summaries(self) -> None:
+        """Chapter and section summaries into their parents' content_summary (after 10b wrote the files)."""
+        from src.batch_pipeline.phase10a_runner import write_content_summaries
+
+        filled = 0
+        for task in self.state.enrichment_complete:
+            path = Path(task.assembled_output_path or "")
+            hierarchical = Path("data/batch_jobs/hierarchical") / f"{task.report_id}_hierarchical.json"
+            overview = path.parent / f"{task.report_id}_overview.json"
+            try:
+                filled += write_content_summaries(path, hierarchical, overview)
+            except Exception as e:  # the summaries stay in the hierarchical file
+                self._log(f"⚠️  Could not write summaries into {path.name}: {e}", force=True)
+        self._log(f"   Summaries written to {filled} parent chunks")
+
+    def _configure_gemini(self) -> None:
+        """One limiter for every Gemini call in this run, with a budget per model."""
+        from src.core.gemini_limiter import configure_limiter
+
+        configure_limiter()
+
+    async def _run_phase10a(self) -> None:
+        """Phase 10a in a thread. Its inputs are read before 10b starts writing chunk files."""
+        if "10a" in self.skip:
+            return
+        try:
+            prepared = self._prepare_phase10a()
+        finally:
+            self._phase10a_inputs_read.set()
+
+        def run():
+            with self._gemini_budget("phase10a"), self._timed("10a"):
+                self._phase_overview_summary(prepared)
+
+        await asyncio.to_thread(run)
+
+    async def _run_phase10b(self) -> None:
+        if "10b" in self.skip:
+            return
+        await self._phase10a_inputs_read.wait()
+        with self._gemini_budget("phase10b"), self._timed("10b"):
+            await self._phase_visual_extraction()
 
     @contextmanager
     def _gemini_budget(self, group: str):
@@ -1403,14 +1544,9 @@ class PipelineOrchestrator:
         finally:
             limiter.set_deadline(group, None)
 
-    @staticmethod
-    def _limiter_stats() -> dict:
-        """429s seen, the lowest concurrency reached and time spent waiting for a slot."""
-        from src.core.gemini_limiter import get_limiter
-
-        stats = dict(get_limiter().stats)
-        stats["wait_s"] = round(stats["wait_s"], 1)
-        return stats
+    def _limiter_stats(self) -> dict:
+        """Per model: capacity, utilisation, tokens per minute, budget share, 429s, steps, waits."""
+        return get_limiter().summary(since=getattr(self, "_phase10_started", None))
 
     def _phases_completed(self) -> List[str]:
         """Phases that ran for a report reaching the end of Phase 9."""
@@ -1431,119 +1567,93 @@ class PipelineOrchestrator:
     # PHASE 10a: OVERVIEW & SUMMARY GENERATION
     # ═══════════════════════════════════════════════════════════════════════
 
-    def _phase_overview_summary(self):
+    def _prepare_phase10a(self):
+        """Chunk files for Phase 10a, read into memory so Phase 10b can write them meanwhile."""
+        self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
+        logger = logging.getLogger(__name__)
+        logger.info(f"Phase 10a: enrichment_complete has {len(self.state.enrichment_complete)} reports")
+        if not self.state.enrichment_complete:
+            self._log("No reports completed enrichment. Skipping Phase 10a.")
+            return None
+        try:
+            from src.batch_pipeline.batch_service import BatchService
+        except ImportError:
+            self._log("⚠️  batch_pipeline module not found. Phase 10a skipped.", force=True)
+            return None
+
+        json_files = []
+        for task in self.state.enrichment_complete:
+            if task.assembled_output_path:
+                path = Path(task.assembled_output_path)
+                if path.exists():
+                    json_files.append(path)
+                else:
+                    logger.warning(f"Phase 10a: File not found: {path}")
+            else:
+                logger.warning(f"Phase 10a: No assembled_output_path for {task.report_id}")
+        logger.info(f"Phase 10a: Found {len(json_files)} valid JSON files")
+        if not json_files:
+            self._log("No JSON files found for Phase 10a processing.")
+            return None
+        try:
+            service = BatchService(trace_emitter=self.state.trace_emitter)
+            service.preload(json_files)
+        except Exception as e:
+            self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
+            return None
+        return service, json_files
+
+    def _phase_overview_summary(self, prepared):
         """
         Phase 10a: Overview & Summary Generation.
 
         Gemini on Vertex AI: direct concurrent calls, completes within this run.
         """
-        self._phase_header("10a", "OVERVIEW & SUMMARY GENERATION")
+        if prepared is None:
+            return
+        service, json_files = prepared
+        try:
+            self._log(f"Submitting {len(json_files)} reports for Phase 10a processing...")
+            self._log("  (Overview extraction + 5 summary variants + RAPTOR chapter/section summaries)")
 
-        # Add explicit logging for debugging
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Phase 10a: enrichment_complete has {len(self.state.enrichment_complete)} reports")
+            # Gemini calls run to completion here, each sent as soon as its inputs
+            # exist: overviews at once, summaries from the leaves up, variants once
+            # a report's chapter summaries and overview are done
+            job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            overview_batch_id, summary_batch_id, hierarchical_batch_id = service.run_phase10a(
+                json_files, job_timestamp
+            )
 
-        if self.state.enrichment_complete:
-            try:
-                # Import batch service (will fail gracefully if not installed)
-                from src.batch_pipeline.batch_service import BatchService
+            report_ids = [f.stem.replace("_chunks", "") for f in json_files]
+            phase10_tracker_path = service.create_job_tracker(
+                overview_batch_id=overview_batch_id,
+                summary_batch_id=summary_batch_id,
+                report_ids=report_ids,
+                hierarchical_batch_id=hierarchical_batch_id,
+            )
 
-                # Get JSON files for successfully enriched reports
-                json_files = []
-                for task in self.state.enrichment_complete:
-                    if task.assembled_output_path:
-                        path = Path(task.assembled_output_path)
-                        if path.exists():
-                            json_files.append(path)
-                        else:
-                            logger.warning(f"Phase 10a: File not found: {path}")
-                    else:
-                        logger.warning(f"Phase 10a: No assembled_output_path for {task.report_id}")
+            # Outputs are already on disk; build final overview files now
+            from src.batch_pipeline.process_results import build_final_overviews
 
-                logger.info(f"Phase 10a: Found {len(json_files)} valid JSON files")
+            merged, merge_failed = build_final_overviews(service, report_ids)
 
-                if json_files:
-                    self._log(
-                        f"Submitting {len(json_files)} reports for Phase 10a processing..."
-                    )
-                    self._log(
-                        "  (Overview extraction + 5 summary variants + RAPTOR chapter/section summaries)"
-                    )
+            with open(phase10_tracker_path) as f:
+                tracker = json.load(f)
+            tracker["status"] = "completed"
+            tracker["completed_at"] = datetime.now().isoformat()
+            with open(phase10_tracker_path, "w") as f:
+                json.dump(tracker, f, indent=2)
 
-                    emitter = self.state.trace_emitter
-                    logger.info("Phase 10a: Initializing BatchService...")
-                    service = BatchService(trace_emitter=emitter)
-                    logger.info("Phase 10a: BatchService initialized, submitting batches...")
-
-                    # Gemini calls run to completion here. The three batches are
-                    # independent; with --workers > 1 they go to the shared limiter
-                    # together instead of one after another
-                    if self.workers > 1:
-                        from concurrent.futures import ThreadPoolExecutor
-
-                        # One timestamp for all three (as BatchService's own submit-all does),
-                        # set before the threads start so none of them makes its own
-                        job_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        service._current_job_timestamp = job_timestamp
-                        with ThreadPoolExecutor(max_workers=3) as batches:
-                            overview = batches.submit(service.submit_overview_batch, json_files, job_timestamp)
-                            summary = batches.submit(service.submit_summary_batch, json_files, job_timestamp)
-                            hierarchical = batches.submit(
-                                service.submit_hierarchical_batch, json_files, job_timestamp=job_timestamp
-                            )
-                            overview_batch_id = overview.result()
-                            summary_batch_id = summary.result()
-                            hierarchical_batch_id = hierarchical.result()
-                    else:
-                        overview_batch_id = service.submit_overview_batch(json_files)
-                        summary_batch_id = service.submit_summary_batch(json_files)
-                        hierarchical_batch_id = service.submit_hierarchical_batch(json_files)
-
-                    # Create job tracker
-                    report_ids = [f.stem.replace("_chunks", "") for f in json_files]
-                    phase10_tracker_path = service.create_job_tracker(
-                        overview_batch_id=overview_batch_id,
-                        summary_batch_id=summary_batch_id,
-                        report_ids=report_ids,
-                        hierarchical_batch_id=hierarchical_batch_id,
-                    )
-
-                    # Outputs are already on disk; build final overview files now
-                    from src.batch_pipeline.process_results import build_final_overviews
-
-                    merged, merge_failed = build_final_overviews(service, report_ids)
-
-                    with open(phase10_tracker_path) as f:
-                        tracker = json.load(f)
-                    tracker["status"] = "completed"
-                    tracker["completed_at"] = datetime.now().isoformat()
-                    with open(phase10_tracker_path, "w") as f:
-                        json.dump(tracker, f, indent=2)
-
-                    self.state.phase10a_completed = merged > 0
-                    self._record_phase10a_losses(service, report_ids, merge_failed)
-                    self._log(
-                        f"\n✅ Phase 10a complete: {merged} overview(s) created, "
-                        f"{merge_failed} failed",
-                        force=True,
-                    )
-                    self._log(f"   Job Tracker: {phase10_tracker_path}")
-                else:
-                    self._log("No JSON files found for Phase 10a processing.")
-
-            except ImportError:
-                self._log(
-                    "⚠️  batch_pipeline module not found. Phase 10a skipped.", force=True
-                )
-                self._log("   To enable Overview & Summary generation:")
-                self._log("   1. Copy batch_pipeline/ to services/batch_pipeline/")
-                self._log("   2. Ensure google-genai package is installed")
-            except Exception as e:
-                self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
-                self._log("   Pipeline completed through Phase 9.")
-        else:
-            self._log("No reports completed enrichment. Skipping Phase 10a.")
+            self.state.phase10a_completed = merged > 0
+            self._record_phase10a_losses(service, report_ids, merge_failed)
+            self._log(
+                f"\n✅ Phase 10a complete: {merged} overview(s) created, {merge_failed} failed",
+                force=True,
+            )
+            self._log(f"   Job Tracker: {phase10_tracker_path}")
+        except Exception as e:
+            self._log(f"⚠️  Phase 10a submission failed: {str(e)}", force=True)
+            self._log("   Pipeline completed through Phase 9.")
 
     # ═══════════════════════════════════════════════════════════════════════
     # PHASE 10b: VISUAL EXTRACTION
@@ -1857,7 +1967,7 @@ class PipelineOrchestrator:
                 if hasattr(t, "enrichment_stats") and t.enrichment_stats
             )
             total_monetary = sum(
-                t.enrichment_stats["findings"]["total_monetary_crore"]
+                t.enrichment_stats["findings"]["impact_sum_crore"]
                 for t in self.state.enrichment_complete
                 if hasattr(t, "enrichment_stats") and t.enrichment_stats
             )
@@ -1865,7 +1975,7 @@ class PipelineOrchestrator:
             print(f"\n📊 CORPUS ENRICHMENT TOTALS:")
             print(f"   • {total_findings} findings extracted")
             print(f"   • {total_recommendations} recommendations extracted")
-            print(f"   • ₹{total_monetary:,.2f} crore in monetary values identified")
+            print(f"   • ₹{total_monetary:,.2f} crore: sum of the amounts cited in findings")
 
             # Show findings by ministry
             print(f"\n📈 FINDINGS BY MINISTRY:")
@@ -1874,7 +1984,7 @@ class PipelineOrchestrator:
                 if hasattr(task, "enrichment_stats") and task.enrichment_stats:
                     ministry = task.enrichment_stats["report_info"]["ministry"]
                     count = task.enrichment_stats["findings"]["total_count"]
-                    amount = task.enrichment_stats["findings"]["total_monetary_crore"]
+                    amount = task.enrichment_stats["findings"]["impact_sum_crore"]
                     if ministry not in ministry_findings:
                         ministry_findings[ministry] = {"count": 0, "amount": 0}
                     ministry_findings[ministry]["count"] += count
@@ -2040,6 +2150,7 @@ class PipelineOrchestrator:
             any(s["status"] != "completed" for s in statuses)
             or self._phase10_shortfalls()
             or self.state.phase10_losses
+            or self.state.phase9_losses
             or self.missing_report_ids
         ):
             return EXIT_PARTIAL
@@ -2071,6 +2182,9 @@ class PipelineOrchestrator:
                 "10b": "skipped" if "10b" in self.skip else ("completed" if self.state.phase10b_completed else "not_run"),
                 "10c": "skipped" if "10c" in self.skip else ("completed" if self.state.phase10c_completed else "not_run"),
             },
+            # Sections whose Gemini call failed and kept the regex result
+            "phase9_losses": self.state.phase9_losses,
+            "phase9_extraction": self.state.phase9_extraction,
             "phase10_losses": self.state.phase10_losses,
             # The workflow moves exactly these objects from GCS processed/ to quarantine/<run_id>/
             "quarantined_files": self.quarantined_files,
@@ -2161,16 +2275,6 @@ class PipelineOrchestrator:
 
 
 SKIPPABLE_PHASES = ("5.5", "10a", "10b", "10c")
-
-
-def llm_validation_enabled() -> bool:
-    """Phase 9 LLM validation calls Gemini (off by default in the pattern config)."""
-    from src.parsing_pipeline.modules.enrichment.pattern_loader import get_pattern_loader
-
-    try:
-        return bool(get_pattern_loader().get_llm_validation_config().get("enabled", False))
-    except Exception:
-        return False
 
 
 def parse_skip_phases(values) -> list:

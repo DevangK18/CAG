@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from src.parsing_pipeline.instrumentation import TraceEmitter
 
 
+PAISE_PER_CRORE = 1_000_000_000
+
 # Leading paragraph number of a section heading ("3.2.1 Delay in ..."), and content words
 _SECTION_NO = re.compile(r"\s*(\d+(?:\.\d+)+)")
 _WORD = re.compile(r"[a-z]{4,}")
@@ -72,13 +74,8 @@ from src.parsing_pipeline.modules.enrichment.executive_summary_parser import (
 # Evidence linker (in parent directory)
 from src.parsing_pipeline.modules import evidence_linker
 
-# LLM Validator for hybrid validation (P3)
-from src.parsing_pipeline.modules.enrichment.llm_validator import (
-    LLMValidator,
-    ValidationVerdict,
-    create_finding_validation_request,
-)
-from src.parsing_pipeline.modules.enrichment.pattern_loader import get_pattern_loader
+# Findings and recommendations from Gemini (calls made by the orchestrator)
+from src.parsing_pipeline.modules.enrichment import llm_finding_extractor
 
 
 class SemanticEnrichmentService:
@@ -110,26 +107,8 @@ class SemanticEnrichmentService:
         self._xref_resolver = CrossReferenceResolver()
         self._evidence_linker = evidence_linker.EvidenceLinker()
 
-        # P3: LLM Validator for hybrid validation
-        self._llm_validator: Optional[LLMValidator] = None
-        self._llm_validation_enabled = False
-        try:
-            llm_config = get_pattern_loader().get_llm_validation_config()
-            self._llm_validation_enabled = llm_config.get("enabled", False)
-            if self._llm_validation_enabled:
-                self._llm_validator = LLMValidator()
-                logger.info("LLM validation enabled for low-confidence findings")
-        except Exception as e:
-            logger.debug(f"LLM validation not configured: {e}")
-
         # Current report type (set per document)
         self._current_report_type = "general"
-
-        logger.info(
-            "SemanticEnrichmentService initialized with focused extractors, "
-            "evidence linking, temporal extraction, annexure linking, "
-            f"cross-reference resolution, llm_validation={self._llm_validation_enabled}."
-        )
 
     def enrich_document(
         self,
@@ -139,6 +118,7 @@ class SemanticEnrichmentService:
         child_chunks: List[Dict],
         task: Optional[DocumentTask] = None,
         trace_emitter: Optional["TraceEmitter"] = None,
+        llm_extraction: Optional[Dict[str, Any]] = None,
     ) -> SemanticEnrichment:
         """
         Run all enrichment extractions on a document.
@@ -150,6 +130,9 @@ class SemanticEnrichmentService:
             child_chunks: List of child chunk dicts
             task: Optional DocumentTask for report type detection
             trace_emitter: Optional trace emitter for instrumentation
+            llm_extraction: The Gemini items for this report (llm_finding_extractor.
+                extraction_record). Without it, findings and recommendations come
+                from the regex extractors alone.
 
         Returns:
             SemanticEnrichment object with all extracted data
@@ -172,8 +155,9 @@ class SemanticEnrichmentService:
 
         # 1. Classify sections (with error handling - P1-A)
         try:
+            # Children give the classifier its text cues (finding cues in a body section)
             section_classifications = self._section_classifier.classify_sections(
-                parent_chunks
+                parent_chunks, child_chunks
             )
             logger.info(f"  Classified {len(section_classifications)} sections")
         except Exception as e:
@@ -184,92 +168,30 @@ class SemanticEnrichmentService:
                 {"error": str(e), "report_id": report_id}
             )
 
-        # 2. Extract findings (report-type aware with tier-specific severity)
+        # 2-3. Findings and recommendations: Gemini items checked against the text,
+        # regex for any section whose call failed, regex everywhere without Gemini
         government_body_type = report_metadata.get("government_body_type", "union")
-        try:
-            self._finding_extractor.set_report_type(self._current_report_type)
-            # P1-13: Pass parent_chunks for source attribution (section from toc_entry)
-            findings = self._finding_extractor.extract_findings(
-                report_id, child_chunks, government_body_type, parent_chunks
-            )
-
-            # Populate entities_mentioned for each finding
-            for finding in findings:
-                try:
-                    finding.entities_mentioned = self._entity_extractor.extract_entities_from_text(
-                        finding.text
-                    )
-                except Exception as entity_err:
-                    logger.warning(f"  Entity extraction for finding failed: {entity_err}")
-                    finding.entities_mentioned = []
-
-            logger.info(f"  Extracted {len(findings)} findings")
-
-            # P3: LLM validation for low-confidence findings
-            if self._llm_validation_enabled and self._llm_validator and findings:
-                findings = self._validate_findings_with_llm(
-                    findings, child_chunks, report_id, trace_emitter
+        findings, recommendations, extraction_stats = self._extract_findings_and_recommendations(
+            report_id,
+            parent_chunks,
+            child_chunks,
+            section_classifications,
+            government_body_type,
+            llm_extraction,
+            trace_emitter,
+        )
+        for finding in findings:
+            try:
+                finding.entities_mentioned = self._entity_extractor.extract_entities_from_text(
+                    finding.text
                 )
-
-        except Exception as e:
-            logger.warning(f"  Finding extraction failed: {e}")
-            findings = []
-            trace_emitter.emit_red_flag(
-                "9", "finding_extractor_failed",
-                {"error": str(e), "report_id": report_id}
-            )
-
-        # 3. Extract recommendations with multi-strategy extractor (with error handling - P1-A)
-        try:
-            raw_recs = self._rec_extractor.extract_all(
-                report_id,
-                parent_chunks,
-                child_chunks,
-                [s.model_dump() for s in section_classifications],
-            )
-
-            # Convert to Recommendation data contracts
-            recommendations = []
-            for i, raw in enumerate(raw_recs):
-                recommendations.append(
-                    Recommendation(
-                        recommendation_id=f"{report_id}_rec_{i+1:03d}",
-                        report_id=report_id,
-                        text=raw.text,
-                        summary=raw.text[:200],
-                        target_entity=raw.target_entity,
-                        action_required=raw.action_required,
-                        chapter=raw.chapter,
-                        section=raw.section,
-                        page=raw.page,
-                        source_chunk_id=raw.source_chunk_id,
-                        status="pending",
-                        extraction_strategy=raw.extraction_strategy,
-                        rec_number=raw.rec_number,
-                        paragraph_citations=raw.paragraph_citations,
-                    )
-                )
-
-            # Print extraction strategy breakdown
-            structural_count = sum(
-                1 for r in raw_recs if r.extraction_strategy == "structural"
-            )
-            numbered_count = sum(
-                1 for r in raw_recs if r.extraction_strategy == "numbered"
-            )
-            verb_count = sum(1 for r in raw_recs if r.extraction_strategy == "verb")
-            logger.info(
-                f"  Extracted {len(recommendations)} recommendations "
-                f"(structural={structural_count}, numbered={numbered_count}, verb={verb_count})"
-            )
-        except Exception as e:
-            logger.warning(f"  Recommendation extraction failed: {e}")
-            recommendations = []
-            raw_recs = []
-            trace_emitter.emit_red_flag(
-                "9", "recommendation_extractor_failed",
-                {"error": str(e), "report_id": report_id}
-            )
+            except Exception as entity_err:
+                logger.warning(f"  Entity extraction for finding failed: {entity_err}")
+                finding.entities_mentioned = []
+        logger.info(
+            f"  Extracted {len(findings)} findings, {len(recommendations)} recommendations "
+            f"({extraction_stats.get('method')})"
+        )
 
         # 4. Link findings to recommendations (with error handling - P1-A)
         try:
@@ -279,7 +201,7 @@ class SemanticEnrichmentService:
 
         # 5. Create evidence links for findings (with error handling - P1-A)
         try:
-            evidence_links_map = self._link_evidence_to_findings(findings, child_chunks)
+            evidence_links_map = self._link_evidence_to_findings(findings, child_chunks, parent_chunks)
             logger.info(f"  Created evidence links for {len(evidence_links_map)} findings")
         except Exception as e:
             logger.warning(f"  Evidence linking failed: {e}")
@@ -386,8 +308,9 @@ class SemanticEnrichmentService:
 
         # 9. Calculate statistics (includes report type)
         statistics = self._calculate_statistics(
-            report_metadata, findings, recommendations, section_classifications
+            report_metadata, findings, recommendations, section_classifications, child_chunks
         )
+        statistics["extraction"] = extraction_stats
 
         # Emit Phase 9 trace events
         with trace_emitter.phase_timer("9"):
@@ -460,7 +383,7 @@ class SemanticEnrichmentService:
                 "state": 100_000,      # ₹1 lakh crore
                 "local_body": 10_000,  # ₹10,000 crore
             }
-            total_monetary_crore = statistics.get("findings", {}).get("total_monetary_crore", 0)
+            total_monetary_crore = statistics.get("findings", {}).get("impact_sum_crore", 0)
             detected_report_type = self._current_report_type
 
             # C3 fix: Use report-type threshold if available, else tier-based
@@ -555,7 +478,7 @@ class SemanticEnrichmentService:
                     "entities": sum(len(v) for v in entities.values()),
                     "sections_classified": len(section_classifications),
                     "box_elements": len(box_elements) if box_elements else 0,
-                    "monetary_crore": statistics.get("findings", {}).get("total_monetary_crore", 0),
+                    "impact_sum_crore": statistics.get("findings", {}).get("impact_sum_crore", 0),
                 },
             )
 
@@ -611,108 +534,98 @@ class SemanticEnrichmentService:
             executive_summary_index=exec_summary_index,
         )
 
-    def _validate_findings_with_llm(
-        self,
-        findings: List[Finding],
-        child_chunks: List[Dict],
-        report_id: str,
-        trace_emitter: "TraceEmitter",
+    # ── findings and recommendations ────────────────────────────────────────
+
+    def _regex_findings(
+        self, report_id: str, child_chunks: List[Dict], government_body_type: str, parent_chunks: List[Dict]
     ) -> List[Finding]:
-        """
-        P3: Validate low-confidence findings using LLM.
-
-        Filters out findings that the LLM determines are invalid (false positives).
-        Collects data on invalid findings for pattern refinement.
-
-        Args:
-            findings: List of extracted findings
-            child_chunks: Child chunks for text lookup
-            report_id: Report ID for tracking
-            trace_emitter: Trace emitter for instrumentation
-
-        Returns:
-            Filtered list of findings (invalid ones removed)
-        """
-        if not self._llm_validator:
-            return findings
-
-        # Build chunk lookup for text retrieval
-        chunk_lookup = {c.get("chunk_id"): c.get("content", "") for c in child_chunks}
-
-        # Identify findings needing validation
-        to_validate = []
-        for finding in findings:
-            confidence = getattr(finding, "confidence", 0.5)
-            if self._llm_validator.needs_validation(confidence):
-                to_validate.append(finding)
-
-        if not to_validate:
-            logger.info("  No findings need LLM validation")
-            return findings
-
-        logger.info(f"  Validating {len(to_validate)} low-confidence findings via LLM...")
-
-        # Validate each finding
-        validated_findings = []
-        invalid_count = 0
-        valid_count = 0
-
-        for finding in findings:
-            confidence = getattr(finding, "confidence", 0.5)
-
-            if not self._llm_validator.needs_validation(confidence):
-                # High confidence or below threshold - keep as-is
-                validated_findings.append(finding)
-                continue
-
-            # Get chunk text
-            chunk_text = chunk_lookup.get(finding.source_chunk_id, finding.text)
-
-            # Create validation request
-            request = create_finding_validation_request(
-                finding=finding.model_dump(),
-                chunk_text=chunk_text,
-                parent_section=finding.chapter,
-            )
-
-            # Validate with data collection
-            try:
-                result = self._llm_validator.validate_and_collect(
-                    request, report_id=report_id
-                )
-
-                if result.verdict == ValidationVerdict.INVALID:
-                    invalid_count += 1
-                    logger.debug(f"    Invalid finding filtered: {finding.finding_id} - {result.reasoning[:100]}")
-                    # Don't add to validated_findings - this filters it out
-                else:
-                    valid_count += 1
-                    validated_findings.append(finding)
-
-            except Exception as e:
-                logger.warning(f"    LLM validation error for {finding.finding_id}: {e}")
-                # On error, keep the finding (fail-open)
-                validated_findings.append(finding)
-
-        # Emit trace data
-        trace_emitter.emit_io(
-            "9",
-            {"llm_validation_input": len(to_validate)},
-            {
-                "llm_validated": len(to_validate),
-                "llm_valid": valid_count,
-                "llm_invalid": invalid_count,
-                "findings_after_validation": len(validated_findings),
-            },
+        self._finding_extractor.set_report_type(self._current_report_type)
+        return self._finding_extractor.extract_findings(
+            report_id, child_chunks, government_body_type, parent_chunks
         )
 
-        if invalid_count > 0:
-            logger.info(
-                f"  LLM validation: {invalid_count} invalid findings filtered, "
-                f"{valid_count} validated, {len(validated_findings)} total remaining"
+    def _regex_recommendations(
+        self,
+        report_id: str,
+        parent_chunks: List[Dict],
+        child_chunks: List[Dict],
+        section_classifications: List[SectionClassification],
+    ) -> List[Recommendation]:
+        raw_recs = self._rec_extractor.extract_all(
+            report_id,
+            parent_chunks,
+            child_chunks,
+            [s.model_dump() for s in section_classifications],
+        )
+        return [
+            Recommendation(
+                recommendation_id=f"{report_id}_rec_{i + 1:03d}",
+                report_id=report_id,
+                text=raw.text,
+                summary=raw.text[:200],
+                target_entity=raw.target_entity,
+                action_required=raw.action_required,
+                chapter=raw.chapter,
+                section=raw.section,
+                page=raw.page,
+                source_chunk_id=raw.source_chunk_id,
+                status="pending",
+                extraction_strategy=raw.extraction_strategy,
+                rec_number=raw.rec_number,
+                paragraph_citations=raw.paragraph_citations,
+            )
+            for i, raw in enumerate(raw_recs)
+        ]
+
+    def _extract_findings_and_recommendations(
+        self,
+        report_id: str,
+        parent_chunks: List[Dict],
+        child_chunks: List[Dict],
+        section_classifications: List[SectionClassification],
+        government_body_type: str,
+        llm_extraction: Optional[Dict[str, Any]],
+        trace_emitter,
+    ):
+        """(findings, recommendations, extraction statistics)."""
+        try:
+            regex_findings = self._regex_findings(report_id, child_chunks, government_body_type, parent_chunks)
+        except Exception as e:
+            logger.warning(f"  Finding extraction failed: {e}")
+            regex_findings = []
+            trace_emitter.emit_red_flag("9", "finding_extractor_failed", {"error": str(e), "report_id": report_id})
+        try:
+            regex_recs = self._regex_recommendations(report_id, parent_chunks, child_chunks, section_classifications)
+        except Exception as e:
+            logger.warning(f"  Recommendation extraction failed: {e}")
+            regex_recs = []
+            trace_emitter.emit_red_flag(
+                "9", "recommendation_extractor_failed", {"error": str(e), "report_id": report_id}
             )
 
-        return validated_findings
+        if not llm_extraction:
+            self._mark_restatements(regex_findings, child_chunks, section_classifications)
+            return regex_findings, regex_recs, {"method": "regex"}
+
+        from src.parsing_pipeline.modules.enrichment.llm_items import build_from_llm
+
+        return build_from_llm(
+            self,
+            report_id,
+            parent_chunks,
+            child_chunks,
+            section_classifications,
+            government_body_type,
+            llm_extraction,
+            regex_findings,
+            regex_recs,
+            trace_emitter,
+        )
+
+    def _mark_restatements(self, findings, child_chunks, section_classifications) -> None:
+        from src.parsing_pipeline.modules.enrichment.llm_items import mark_restatements
+
+        mark_restatements(findings, child_chunks, section_classifications)
 
     def _link_findings_to_recommendations(
         self,
@@ -761,137 +674,17 @@ class SemanticEnrichmentService:
         self,
         findings: List[Finding],
         child_chunks: List[Dict],
+        parent_chunks: Optional[List[Dict]] = None,
     ) -> Dict[str, List]:
-        """
-        Link findings to their supporting evidence.
-
-        Args:
-            findings: List of Finding objects
-            child_chunks: List of child chunk dicts
-
-        Returns:
-            Dict mapping finding_id to list of evidence links
-        """
-        # Convert findings to dicts for evidence linker
-        finding_dicts = [f.model_dump() for f in findings]
-
-        # Extract tables from child_chunks
-        tables = [
-            chunk for chunk in child_chunks if chunk.get("content_type") == "table"
-        ]
-
-        # Create evidence links
+        """Link findings to the tables, appendices and paragraphs their text cites."""
+        # The linker finds the table chunks (table_markdown) in child_chunks itself
         evidence_links_map = self._evidence_linker.link_all_findings(
-            finding_dicts, tables, child_chunks
+            [f.model_dump() for f in findings], [], child_chunks, parent_chunks
         )
-
-        # Update findings with their evidence links
         for finding in findings:
             if finding.finding_id in evidence_links_map:
-                links = evidence_links_map[finding.finding_id]
-                finding.evidence_links = [link.to_dict() for link in links]
-
+                finding.evidence_links = [link.to_dict() for link in evidence_links_map[finding.finding_id]]
         return evidence_links_map
-
-    def _deduplicate_cross_finding_amounts(
-        self, findings: List[Finding], tolerance: float = 0.01, page_gap: int = 15
-    ) -> tuple[List[Finding], Dict[str, Any]]:
-        """
-        R3: Deduplicate monetary amounts appearing in multiple findings.
-
-        When the same audit finding amount appears multiple times (e.g., in
-        executive summary and detailed chapter), marks later occurrences as
-        duplicates to avoid inflating totals.
-
-        Strategy:
-        - Group by similar amounts (within tolerance)
-        - Check page proximity (within page_gap pages)
-        - Mark later occurrences (by page number) as duplicates
-        - First occurrence keeps is_duplicate=False
-
-        Args:
-            findings: List of Finding objects
-            tolerance: Tolerance for amount matching (default 1%)
-            page_gap: Maximum page distance to consider as duplicate (default 15)
-
-        Returns:
-            Tuple of (modified findings list, dedup statistics dict)
-        """
-        from collections import defaultdict
-
-        if not findings:
-            return findings, {"groups": 0, "duplicates_found": 0, "total_examined": 0}
-
-        # Build list of (amount, page, finding) for comparison
-        findings_with_amounts: List[tuple[int, int, Finding]] = []
-
-        for f in findings:
-            # Use total_amount_inr for comparison
-            if hasattr(f, 'total_amount_inr') and f.total_amount_inr and f.total_amount_inr > 0:
-                finding_page = f.page if hasattr(f, 'page') and f.page else 0
-                findings_with_amounts.append((f.total_amount_inr, finding_page, f))
-
-        # Group by similar amounts using pairwise comparison
-        # Two amounts are "similar" if they're within tolerance of each other
-        processed: set[str] = set()  # Track which findings have been processed
-
-        dedup_stats = {
-            "groups": 0,
-            "duplicates_found": 0,
-            "total_examined": len(findings),
-        }
-
-        # Sort by page to ensure first occurrence is earliest
-        findings_with_amounts.sort(key=lambda x: x[1])
-
-        for i, (amount_i, page_i, finding_i) in enumerate(findings_with_amounts):
-            if finding_i.finding_id in processed:
-                continue
-
-            # Find all other findings with similar amounts
-            similar_group = [(amount_i, page_i, finding_i)]
-            processed.add(finding_i.finding_id)
-
-            for j, (amount_j, page_j, finding_j) in enumerate(findings_with_amounts):
-                if i == j or finding_j.finding_id in processed:
-                    continue
-
-                # Check if amounts are within tolerance
-                max_amount = max(amount_i, amount_j)
-                min_amount = min(amount_i, amount_j)
-                if max_amount > 0 and (max_amount - min_amount) / max_amount <= tolerance:
-                    similar_group.append((amount_j, page_j, finding_j))
-                    processed.add(finding_j.finding_id)
-
-            # If we have multiple similar findings, mark duplicates
-            if len(similar_group) > 1:
-                # First (by page) is original, rest are duplicates if within page_gap
-                # Sort is already done, so first item is earliest
-                first_page = similar_group[0][1]
-                group_id = f"dedup_{amount_i}_{i}"
-
-                for k in range(1, len(similar_group)):
-                    _, current_page, current_finding = similar_group[k]
-
-                    # If within page_gap of first occurrence, mark as duplicate
-                    if current_page - first_page <= page_gap:
-                        current_finding.is_duplicate = True
-                        current_finding.dedup_group_id = group_id
-                        dedup_stats["duplicates_found"] += 1
-
-                # Count as a group if we marked any duplicates in this group
-                group_has_dups = any(
-                    similar_group[k][2].is_duplicate for k in range(1, len(similar_group))
-                )
-                if group_has_dups:
-                    dedup_stats["groups"] += 1
-
-        logger.info(
-            f"  R3 Dedup: {dedup_stats['duplicates_found']} duplicates found in "
-            f"{dedup_stats['groups']} groups (examined {dedup_stats['total_examined']} findings)"
-        )
-
-        return findings, dedup_stats
 
     def _calculate_statistics(
         self,
@@ -899,80 +692,36 @@ class SemanticEnrichmentService:
         findings: List[Finding],
         recommendations: List[Recommendation],
         sections: List[SectionClassification],
+        child_chunks: Optional[List[Dict]] = None,
     ) -> Dict[str, Any]:
         """Calculate aggregate statistics for the report."""
-        # R3: Deduplicate findings before calculating totals
-        findings, dedup_stats = self._deduplicate_cross_finding_amounts(findings)
+        # Distinct findings: restatements (executive summary, conclusion) excluded
+        distinct = [f for f in findings if not f.is_restatement]
+        impact = report_impact(distinct, child_chunks or [], self._section_classifier_types(sections))
 
-        # R3 + R4: Filter out duplicates and exec summary for primary totals
-        primary_findings = [
-            f for f in findings
-            if not getattr(f, 'is_duplicate', False)
-            and not getattr(f, 'is_executive_summary', False)
-        ]
-
-        # Headline total: largest amount per primary finding, each distinct amount counted once.
-        # Summing every amount in a finding double-counts outlays, budgets and repeated figures.
-        seen_amounts: set = set()
-        total_monetary = 0
-        for f in primary_findings:
-            amount = f.monetary_value or 0
-            if amount and amount not in seen_amounts:
-                seen_amounts.add(amount)
-                total_monetary += amount
-        total_monetary_crore = total_monetary / 10_000_000_00
-
-        # Also track raw totals for transparency
-        raw_total_monetary = sum(f.total_amount_inr for f in findings)
-        raw_total_monetary_crore = raw_total_monetary / 10_000_000_00
-
-        # R4: Track executive summary totals separately
-        exec_summary_findings = [
-            f for f in findings if getattr(f, 'is_executive_summary', False)
-        ]
-        exec_summary_total = sum(f.total_amount_inr for f in exec_summary_findings)
-        exec_summary_total_crore = exec_summary_total / 10_000_000_00
-
-        # R3: Track duplicate totals
-        duplicate_findings = [
-            f for f in findings if getattr(f, 'is_duplicate', False)
-        ]
-        duplicate_total = sum(f.total_amount_inr for f in duplicate_findings)
-
-        # Finding statistics by type (using primary findings only)
         findings_by_type: Dict[str, Dict] = {}
-        for f in primary_findings:
-            ft = f.finding_type
-            if ft not in findings_by_type:
-                findings_by_type[ft] = {"count": 0, "total_inr": 0}
-            findings_by_type[ft]["count"] += 1
-            findings_by_type[ft]["total_inr"] += f.monetary_value or 0
+        for f in distinct:
+            entry = findings_by_type.setdefault(f.finding_type, {"count": 0, "sum_paise": 0})
+            entry["count"] += 1
+            entry["sum_paise"] += f.monetary_value_paise or 0
+        for entry in findings_by_type.values():
+            entry["sum_crore"] = round(entry["sum_paise"] / PAISE_PER_CRORE, 2)
+            # Old names, kept until every reader moves over
+            entry["total_inr"] = entry["sum_paise"]
+            entry["total_crore"] = entry["sum_crore"]
 
-        # Convert to crore for readability
-        for ft in findings_by_type:
-            findings_by_type[ft]["total_crore"] = (
-                findings_by_type[ft]["total_inr"] / 10_000_000_00
-            )
-
-        # Severity distribution
         severity_counts: Dict[str, int] = {}
         for f in findings:
-            sev = f.severity
-            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+            severity_counts[f.severity] = severity_counts.get(f.severity, 0) + 1
 
-        # Section type distribution
         section_type_counts: Dict[str, int] = {}
         for s in sections:
-            st = s.section_type
-            section_type_counts[st] = section_type_counts.get(st, 0) + 1
+            section_type_counts[s.section_type] = section_type_counts.get(s.section_type, 0) + 1
 
-        # Recommendation statistics
         target_entity_counts: Dict[str, int] = {}
         for r in recommendations:
             if r.target_entity:
-                target_entity_counts[r.target_entity] = (
-                    target_entity_counts.get(r.target_entity, 0) + 1
-                )
+                target_entity_counts[r.target_entity] = target_entity_counts.get(r.target_entity, 0) + 1
 
         return {
             "report_info": {
@@ -984,21 +733,15 @@ class SemanticEnrichmentService:
             },
             "findings": {
                 "total_count": len(findings),
-                "primary_count": len(primary_findings),  # R3+R4: Non-duplicate, non-exec-summary
-                "total_monetary_inr": total_monetary,  # Distinct max amount per primary finding
-                "total_monetary_crore": round(total_monetary_crore, 2),
-                "raw_total_monetary_inr": raw_total_monetary,  # R3: Before dedup
-                "raw_total_monetary_crore": round(raw_total_monetary_crore, 2),
+                "distinct_count": len(distinct),
+                "restatement_count": len(findings) - len(distinct),
+                **impact,
+                # Old names of the sum, kept as aliases until the full re-run
+                "primary_count": len(distinct),
+                "total_monetary_inr": impact["impact_sum_paise"],
+                "total_monetary_crore": impact["impact_sum_crore"],
                 "by_type": findings_by_type,
                 "by_severity": severity_counts,
-                # R3: Deduplication stats
-                "dedup_stats": dedup_stats,
-                "duplicate_count": len(duplicate_findings),
-                "duplicate_total_inr": duplicate_total,
-                # R4: Executive summary breakdown
-                "exec_summary_count": len(exec_summary_findings),
-                "exec_summary_total_inr": exec_summary_total,
-                "exec_summary_total_crore": round(exec_summary_total_crore, 2),
             },
             "recommendations": {
                 "total_count": len(recommendations),
@@ -1009,6 +752,82 @@ class SemanticEnrichmentService:
                 "by_type": section_type_counts,
             },
         }
+
+    @staticmethod
+    def _section_classifier_types(sections: List[SectionClassification]) -> Dict[str, str]:
+        return {s.chunk_id: s.section_type for s in sections}
+
+
+_TOTAL_CUE = re.compile(r"\b(?:total(?:ling)?|aggregat\w*|overall|cumulative|in all)\b", re.I)
+_IMPACT_CUE = re.compile(
+    r"financial implication|money value|monetary (?:value|impact)|irregular|loss|recover|"
+    r"wasteful|unfruitful|idle|blocked|excess|short|non-?realisation|non-?realization|avoidable",
+    re.I,
+)
+# A dot between digits ("₹1,234.50") does not end a sentence
+_SENTENCE = re.compile(r"(?:[^.;]|\.(?=\d))+(?:[.;]|$)")
+
+
+def report_impact(
+    distinct: List[Finding], child_chunks: List[Dict], parent_types: Dict[str, str]
+) -> Dict[str, Any]:
+    """
+    The report-level money figures. Amounts of different kinds (loss, unspent funds,
+    irregular spending) and overlapping findings make any sum something other than
+    a "total impact", so the fields say what they are: the sum of the primary amounts
+    cited in N distinct findings, the largest single finding, and the total the
+    report prints itself (executive summary or overview), when it does.
+    """
+    with_amount = [f for f in distinct if f.monetary_value_paise]
+    impact_sum = sum(f.monetary_value_paise for f in with_amount)
+    largest = max(with_amount, key=lambda f: f.monetary_value_paise, default=None)
+    out = {
+        "impact_sum_paise": impact_sum,
+        "impact_sum_crore": round(impact_sum / PAISE_PER_CRORE, 2),
+        "impact_sum_finding_count": len(with_amount),
+        "largest_finding_id": largest.finding_id if largest else None,
+        "largest_finding_paise": largest.monetary_value_paise if largest else None,
+        "largest_finding_crore": round(largest.monetary_value_paise / PAISE_PER_CRORE, 2) if largest else None,
+        "printed_total_paise": None,
+        "printed_total_crore": None,
+        "printed_total_text": None,
+        "printed_total_source_chunk_id": None,
+    }
+    printed = printed_total(child_chunks, parent_types)
+    if printed:
+        out.update(printed)
+    return out
+
+
+def printed_total(child_chunks: List[Dict], parent_types: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """
+    A total the report states itself in its executive summary or overview: a sentence
+    with a total cue ("aggregating", "in all") and an impact cue ("irregular",
+    "financial implication") and a rupee amount. The largest such amount is kept.
+    """
+    from src.parsing_pipeline.modules.enrichment.llm_items import chunk_location
+    from src.parsing_pipeline.modules.enrichment.monetary_processor import MonetaryProcessor
+
+    mp = MonetaryProcessor()
+    best = None
+    for chunk in child_chunks:
+        if chunk.get("content_type") not in ("paragraph", "list"):
+            continue
+        if chunk_location(chunk, parent_types) != "executive_summary":
+            continue
+        for sentence in _SENTENCE.findall(chunk.get("content") or ""):
+            if not (_TOTAL_CUE.search(sentence) and _IMPACT_CUE.search(sentence)):
+                continue
+            values = [v for v in mp.extract_monetary_values_with_preference(sentence) if v.currency == "INR"]
+            for v in values:
+                if best is None or (v.normalized_paise or 0) > best["printed_total_paise"]:
+                    best = {
+                        "printed_total_paise": v.normalized_paise,
+                        "printed_total_crore": round((v.normalized_paise or 0) / PAISE_PER_CRORE, 2),
+                        "printed_total_text": sentence.strip()[:400],
+                        "printed_total_source_chunk_id": chunk.get("chunk_id"),
+                    }
+    return best
 
 
 # ==================== STANDALONE FUNCTIONS ====================

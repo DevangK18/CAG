@@ -103,6 +103,59 @@ def build_section_summary_prompt(
 ## Summary (1-2 sentences, include key finding and amount if any):"""
 
 
+def build_node_summary_prompt(
+    title: str,
+    path: list,
+    own_text: str,
+    child_summaries: list,
+    tier: str = "union",
+    report_title: Optional[str] = None,
+    is_chapter: bool = False,
+) -> str:
+    """
+    Prompt for one node of the bottom-up summary tree: its own text plus the
+    summaries of its sub-sections (already written), so a chapter summary rests
+    on the whole chapter, not on its first pages.
+
+    Args:
+        title: The node's heading
+        path: Headings from the chapter down to this node
+        own_text: Text that sits directly under this heading (may be empty)
+        child_summaries: [(sub-section title, summary)] in reading order
+        tier: Government tier for terminology hints
+        report_title: Report title for context
+        is_chapter: Chapter (4-6 sentences) or section (2-4 sentences)
+    """
+    unit = "chapter" if is_chapter else "section"
+    length = "4-6 sentences" if is_chapter else "2-4 sentences"
+    parts = []
+    if report_title:
+        parts.append(f"Report: {report_title}")
+    if len(path) > 1:
+        parts.append("Location: " + " > ".join(path[:-1]))
+    parts.append(f"## {unit.title()}: {title}")
+    if child_summaries:
+        parts.append("## Summaries of its sub-sections (in order)")
+        parts.extend(f"- {t}: {summary}" for t, summary in child_summaries)
+    if own_text:
+        parts.append("## Its own text" if child_summaries else "## Text")
+        parts.append(own_text)
+    body = "\n\n".join(parts)
+    return f"""Summarise this {unit} of a CAG {tier} audit report in {length}.
+
+{_get_tier_context(tier)}
+
+## Instructions:
+1. Cover what was examined and the main audit findings, with their amounts as the report states them
+2. Include the main recommendation if there is one
+3. Every number you give must appear in the text below; never add amounts together or derive new figures
+4. Objective, formal tone; start directly with the substance (not "This {unit}...")
+
+{body}
+
+## Summary ({length}):"""
+
+
 def _get_tier_context(tier: str) -> str:
     """Get tier-specific terminology hints."""
     if tier == "state":

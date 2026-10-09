@@ -376,3 +376,32 @@ class TestNumberedFit:
         ]
         out_p, _ = HierarchyEnricher().enrich_hierarchy([org], children, RID, aggressive=True)
         assert [p["toc_entry"] for p in out_p if p.get("detected_by")] == ["1.2.1 Structure of the Panchayats"]
+
+
+class TestNumberedBodyParagraphs:
+    """A long numbered body paragraph is not a heading (KL 2025_06 p.20)."""
+
+    LONG = (
+        "1.1.1 The tax and non-tax revenue raised by Government of Kerala during the year "
+        "2022-23, the State's share of net proceeds of divisible Union taxes and duties "
+        "assigned to the State, Grants-in-aid received from the Government of India and "
+        "total revenue receipts of the State during 2018-19 to 2022-23 are given below."
+    )
+
+    def _detected(self, content, ctype):
+        org = parent("p_org", "1.1 Trend of Revenue Receipts", 2, 20, 21)
+        chunk = child("c1", org, 20, 120, content, ctype)
+        return [s.title for s in HierarchyEnricher()._detect_sections([chunk], org, RID, aggressive=True)]
+
+    def test_long_numbered_paragraph_not_a_section(self):
+        assert self._detected(self.LONG, "paragraph") == []
+
+    def test_heading_on_first_line_of_paragraph_still_found(self):
+        content = "1.1.2 Composition of revenue receipts\n" + self.LONG[6:]
+        assert self._detected(content, "paragraph") == ["1.1.2 Composition of revenue receipts"]
+
+    def test_long_header_block_still_a_section(self):
+        # Docling labelled it a heading: keep it, cut to the title limit
+        title = "2.3.5 Name of project: " + "Construction of alternate road " * 8
+        found = self._detected(title, "header")
+        assert len(found) == 1 and found[0].startswith("2.3.5 Name of project")

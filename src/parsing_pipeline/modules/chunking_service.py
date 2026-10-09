@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 TABLE_TITLE_RE = re.compile(
     r"^\s*(annexure|appendix|table|statement|exhibit|schedule|chart|figure)\b", re.IGNORECASE
 )
+# A lettered part of an appendix: "B. Service level …", "(A) Status of …"
+TABLE_PART_RE = re.compile(r"^(?:\([A-H]\)|[A-H]\.)\s+\S")
 SENTENCE_END_RE = re.compile(r"(?<=[.;])\s+(?=[A-Z(])")
 
 
@@ -298,13 +300,20 @@ class ChunkingService:
                 new_extracted_content.append(item)
                 continue
             # A copy of the base item keeps its other fields (block ID, logical page,
-            # provenance); only the table content changes
+            # provenance); only the table content changes. The caption, unit line and
+            # notes Phase 6 attached stay in the searchable text, as for a one-page table
+            structured = merged_table.model_dump()
+            unit_line = (item.structured_data or {}).get("unit_line")
+            if unit_line:
+                structured["unit_line"] = unit_line
+            text = [x for x in (merged_table.caption, unit_line) if x]
+            text += [merged_table.markdown_representation] + list(merged_table.footnotes)
             new_extracted_content.append(
                 item.model_copy(update={
-                    "content": merged_table.markdown_representation,
+                    "content": "\n".join(text),
                     "source_page_physical": merged_table.source_page_physical,
                     "source_bbox": merged_table.source_bbox,
-                    "structured_data": merged_table.model_dump(),
+                    "structured_data": structured,
                 })
             )
 
@@ -343,16 +352,36 @@ class ChunkingService:
         """
         pairs: Set[Tuple[str, str]] = set()
         prev_id: Optional[str] = None
+        prev_page: Optional[int] = None
         broken = False
+        titled: Set[str] = set()
         for item in sorted(content, key=self._reading_order_key):
             if item.content_type == "table_markdown" and item.structured_data:
                 table_id = item.structured_data.get("table_id")
                 if prev_id and table_id and not broken:
                     pairs.add((prev_id, table_id))
-                prev_id, broken = table_id, False
-            elif self._breaks_table_run(item):
-                broken = True
-        return pairs
+                prev_id, prev_page, broken = table_id, item.source_page_physical, False
+            else:
+                if prev_id and item.source_page_physical == prev_page and self._is_sideways_part_title(item):
+                    titled.add(prev_id)
+                if self._breaks_table_run(item):
+                    broken = True
+        return {pair for pair in pairs if pair[1] not in titled}
+
+    @staticmethod
+    def _is_sideways_part_title(item: ExtractedContent) -> bool:
+        """
+        A part title ("B. Service level benchmarks …") set sideways beside a table.
+
+        On a page printed sideways the title of a table sorts after it in reading
+        order, so it cannot separate the table from the one before (BR p.176).
+        """
+        box = item.source_bbox
+        if item.content_type not in ("caption", "header") or not box or len(box) < 4:
+            return False
+        if (box[3] - box[1]) < 3 * (box[2] - box[0]):
+            return False
+        return bool(TABLE_PART_RE.match((item.content or "").strip()))
 
     def _split_oversized_content(
         self, content: List[ExtractedContent]

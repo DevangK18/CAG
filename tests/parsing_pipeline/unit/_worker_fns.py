@@ -38,3 +38,14 @@ def crash_always(task, emitter):
     import signal
 
     os.kill(os.getpid(), signal.SIGSEGV)
+
+
+def hang_on_a(task, emitter):
+    """A conversion that never returns for report A; B converts at once."""
+    import time
+
+    if task.report_id == "A":
+        time.sleep(3600)
+    task.processing_status = "layout_complete"
+    task.layout = {0: []}
+    return task

@@ -210,10 +210,11 @@ def test_phase10a_orchestration_runs_to_completion(tmp_path, monkeypatch):
         def __init__(self, trace_emitter=None):
             pass
 
-        def submit_overview_batch(self, files):
-            return "gemini_sync_1"
+        def preload(self, files):
+            pass
 
-        submit_summary_batch = submit_hierarchical_batch = submit_overview_batch
+        def run_phase10a(self, files, job_timestamp):
+            return "gemini_sync_1", "gemini_sync_1", "gemini_sync_1"
 
         def create_job_tracker(self, **kwargs):
             path = tmp_path / "tracker.json"
@@ -235,7 +236,7 @@ def test_phase10a_orchestration_runs_to_completion(tmp_path, monkeypatch):
 
     monkeypatch.setattr(bs, "BatchService", FakeService)
     monkeypatch.setattr(pr, "build_final_overviews", lambda service, ids: (len(ids), 0))
-    orch._phase_overview_summary()
+    orch._phase_overview_summary(orch._prepare_phase10a())
     assert orch.state.phase10a_completed
     assert json.loads((tmp_path / "tracker.json").read_text())["status"] == "completed"
     assert orch.state.phase10_losses == {}

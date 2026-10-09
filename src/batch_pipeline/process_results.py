@@ -114,6 +114,12 @@ def extract_overview_from_json(json_path: Path) -> dict:
         ],
         "findings_summary": {
             "total_count": findings_stats.get("total_count", 0),
+            # Sum of the amounts cited in distinct findings (not a total impact)
+            "impact_sum_crore": findings_stats.get("impact_sum_crore"),
+            "impact_sum_finding_count": findings_stats.get("impact_sum_finding_count"),
+            "largest_finding_crore": findings_stats.get("largest_finding_crore"),
+            "printed_total_crore": findings_stats.get("printed_total_crore"),
+            # Old name, kept until every reader moves over
             "total_monetary_crore": findings_stats.get("total_monetary_crore", 0),
             "by_severity": findings_stats.get("by_severity", {}),
             "by_type": findings_stats.get("by_type", {}),
@@ -123,12 +129,17 @@ def extract_overview_from_json(json_path: Path) -> dict:
                 "id": f.get("finding_id"),
                 "severity": f.get("severity"),
                 "type": f.get("finding_type"),
-                "amount_crore": (f.get("monetary_value") or 0) / 1_000_000_000,  # paise -> crore
+                # paise -> crore (monetary_value is the old name of monetary_value_paise)
+                "amount_crore": (f.get("monetary_value_paise") or f.get("monetary_value") or 0) / 1_000_000_000,
                 "chapter": f.get("chapter"),
                 "section": f.get("section"),
                 "page": f.get("page"),
                 "text": f.get("text"),
                 "summary": f.get("summary"),
+                # Executive summary or conclusion items restate a chapter finding (older files: False)
+                "is_restatement": bool(f.get("is_restatement")),
+                "restates": f.get("restates"),
+                "location": f.get("location"),
             }
             for f in enrichment.get("findings", [])
         ],
@@ -139,6 +150,9 @@ def extract_overview_from_json(json_path: Path) -> dict:
                 "summary": r.get("summary"),
                 "chapter": r.get("chapter"),
                 "page": r.get("page"),
+                "rec_number": r.get("rec_number"),
+                "target_entity": r.get("target_entity"),
+                "related_finding_ids": r.get("related_finding_ids") or [],
             }
             for r in enrichment.get("recommendations", [])
         ],

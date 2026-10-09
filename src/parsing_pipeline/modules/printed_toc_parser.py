@@ -14,11 +14,17 @@ page's header or footer (`build_printed_page_map`, also the source of logical pa
 import logging
 import re
 from collections import Counter
+from difflib import SequenceMatcher
+from itertools import takewhile
 from typing import Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
 
-from src.parsing_pipeline.extractors.text_repair import repair_font_shift, unshift
+from src.parsing_pipeline.extractors.text_repair import (
+    repair_font_shift,
+    repair_rupee_backtick,
+    unshift,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +81,13 @@ PAGE_TAIL_RE = re.compile(
     rf"^(?P<body>.*?)[\s.·…_-]*\s(?P<start>\d{{1,3}}|{ROMAN})(?:\s*[-–—]\s*(?P<end>\d{{1,3}}|{ROMAN}))?\s*$"
 )
 NUMBERED_RE = re.compile(r"^(?P<num>\d+(?:\.\d+)*)\.?\s+(?P<title>.+)$")
-CHAPTER_RE = re.compile(r"^(chapter|part)\s*[-:]?\s*([ivxlc]+|\d+)\b", re.IGNORECASE)
+CHAPTER_RE = re.compile(r"^(chapter|part)\s*[-–—:]?\s*([ivxlc]+|\d+)\b", re.IGNORECASE)
 # "I AN OVERVIEW OF ...", "II COMPLIANCE AUDIT" (BR); "PART-A", "Part B"
 ROMAN_CHAPTER_RE = re.compile(r"^[IVX]{1,4}\s+[A-Z][A-Z]")
-PART_RE = re.compile(r"^part\s*[-:]?\s*[a-z]\b", re.IGNORECASE)
+PART_RE = re.compile(r"^part\s*[-–—:]?\s*[a-z]\b", re.IGNORECASE)
 # A chapter label alone on its row: its number is not a page ("CHAPTER I", "Chapter 2")
 CHAPTER_ONLY_RE = re.compile(
-    r"^(chapter|part)\s*[-:.]?\s*([ivxlc]+|\d+)$", re.IGNORECASE
+    r"^(chapter|part)\s*[-–—:.]?\s*([ivxlc]+|\d+)$", re.IGNORECASE
 )
 APPENDIX_BLOCK_RE = re.compile(
     r"^(list\s+of\s+)?(annexures?|appendices)\s*$", re.IGNORECASE
@@ -99,7 +105,7 @@ ANNEX_LABEL_RE = re.compile(
 )
 # The number at the start of an entry: "Chapter-1", "Chapter III", "Appendix 2.1", "5.2 (A)", "1.2"
 LEAD_RE = re.compile(
-    r"^(?P<lead>(?:chapter|part|appendix|annexure)\s*[-:.]?\s*(?:[ivxlc]+|\d+(?:\.\d+)*|[a-z])\b(?:\s*\([A-Za-z]\))?"
+    r"^(?P<lead>(?:chapter|part|appendix|annexure)\s*[-–—:.]?\s*(?:[ivxlc]+|\d+(?:\.\d+)*|[a-z])\b(?:\s*\([A-Za-z]\))?"
     r"|\d+(?:\.\d+)*(?:\s*\([A-Za-z]\))?)(?P<punct>[.:]?)(?:\s+|$)(?P<rest>.*)$",
     re.IGNORECASE,
 )
@@ -107,11 +113,14 @@ LEAD_RE = re.compile(
 PARA_TAIL_RE = re.compile(
     r"^(?P<body>.*?)\s*(?<![\w.])(?P<para>\d+(?:\.\d+)+(?:\s*\((?:[ivx]+|[A-Za-z])\))?)$"
 )
+# A serial-number column (UK: "Sl. No. | Description | Paragraph | Page No.")
+SERIAL_HEADER_RE = re.compile(r"^(sl|s|sr)\.?\s*no", re.IGNORECASE)
+SERIAL_RE = re.compile(r"^\d{1,3}\.?$")
 # Appendix number column of an ATIR appendix list: "Detail of 15-line departments 2 62"
 APPENDIX_NO_TAIL_RE = re.compile(r"^(?P<body>.*?)\s+(?P<num>\d{1,2})$")
 
 ENUMERATOR_RE = re.compile(
-    r"^\s*(chapter|part)?\s*[-:]?\s*(\(?[ivxlc]+[.)]|\(?[a-z][.)]|\d+(\.\d+)*\.?|[ivxlc]+\b)?\s*[-:–]?\s*",
+    r"^\s*(chapter|part)?\s*[-–—:]?\s*(\(?[ivxlc]+[.)]|\(?[a-z][.)]|\d+(\.\d+)*\.?|[ivxlc]+\b)?\s*[-:–]?\s*",
     re.IGNORECASE,
 )
 
@@ -146,8 +155,10 @@ def _page_rows_y(page: fitz.Page) -> List[Tuple[float, str]]:
     return [
         (
             (row[0][1] + row[0][3]) / 2,
-            repair_font_shift(
-                " ".join(w[4] for w in sorted(row, key=lambda w: w[0]))
+            repair_rupee_backtick(
+                repair_font_shift(
+                    " ".join(w[4] for w in sorted(row, key=lambda w: w[0]))
+                )
             ).strip(),
         )
         for row in rows
@@ -221,7 +232,9 @@ class _Entry:
         return re.sub(r"\s+", " ", f"{self.lead} {body}").strip(" .·…_-–")
 
 
-def _parse_page_row(match: "re.Match", in_appendix: bool) -> Tuple[str, str]:
+def _parse_page_row(
+    match: "re.Match", in_appendix: bool, serial: bool = False
+) -> Tuple[str, str]:
     """(lead number, title text) of a row with a page number, from its body."""
     body = match.group("body").strip(" .·…_-–")
     lead_m = LEAD_RE.match(body)
@@ -230,6 +243,10 @@ def _parse_page_row(match: "re.Match", in_appendix: bool) -> Tuple[str, str]:
         if lead_m
         else ("", body)
     )
+    if serial and SERIAL_RE.match(lead):
+        # "Sl. No. | Description | Paragraph | Page": the serial is not a section
+        # number ("3. Introduction 1.1 1" is 1.1 Introduction)
+        lead = ""
     para = ""
     m = PARA_TAIL_RE.match(text)
     if m:
@@ -321,14 +338,16 @@ def _parse_rows(rows, state: Optional[dict] = None) -> List[Tuple[str, Optional[
         row = row.strip()
         if not row or CONTENTS_HEADING_RE.match(row) or RUNNING_HEADER_RE.match(row):
             continue
-        if row in state.get("repeated", ()):
-            continue
         if _is_header_row(row):
             if "appendix" in row.lower() or "annexure" in row.lower():
                 state["appendix"] = True
+            if SERIAL_HEADER_RE.match(row):
+                state["serial"] = True
             continue
-        if idx == len(rows) - 1 and re.fullmatch(r"\d{1,3}|" + ROMAN, row):
-            continue  # the contents page's own page number
+        if row in state.get("repeated", ()):
+            continue
+        if idx == len(rows) - 1 and re.fullmatch(rf"\(?(\d{{1,3}}|{ROMAN})\)?", row):
+            continue  # the contents page's own page number: "7", "iii", "(ii)"
         if ANNEX_LABEL_RE.match(row):
             labels.append(row)
             continue
@@ -340,7 +359,9 @@ def _parse_rows(rows, state: Optional[dict] = None) -> List[Tuple[str, Optional[
             # Page printed on its own row below a title
             match = re.match(r"(?P<body>)(?P<start>.+)", row)
         if match:
-            lead, text = _parse_page_row(match, state.get("appendix", False))
+            lead, text = _parse_page_row(
+                match, state.get("appendix", False), state.get("serial", False)
+            )
             if labels and not lead:
                 lead = labels.pop(0)
             labels = []
@@ -397,9 +418,14 @@ def _parse_rows(rows, state: Optional[dict] = None) -> List[Tuple[str, Optional[
 
 
 def _runs_backwards(match: "re.Match", entries: List["_Entry"]) -> bool:
-    """A lead-less row continuing a title, whose trailing number is below the last page."""
+    """
+    A lead-less row continuing a title, or a chapter row ending in a number ("Chapter
+    IX - Sustainable Development Goal - 3"), whose trailing number is below the last page.
+    """
     body = match.group("body").strip()
-    if not body or not (body[:1].islower() or body[:1] in "(["):
+    if not body or not (
+        body[:1].islower() or body[:1] in "([" or is_chapter_title(body)
+    ):
         return False
     last = next((e.page for e in reversed(entries) if e.page), None)
     page = match.group("start")
@@ -729,10 +755,23 @@ def parse_printed_toc(
     pages = list(range(start, min(start + 8, doc.page_count)))
     page_rows = {i: _page_rows_y(doc[i]) for i in pages}
     # Running and column headers repeated on continuation pages ("Audit Report (Local
-    # Government) for the year ended March 2022"); an entry row never repeats exactly
-    edges = {i: {t for _, t in page_rows[i][:5] + page_rows[i][-2:]} for i in pages}
-    seen = Counter(text for i in pages for text in edges[i])
-    state = {"repeated": {text for text, n in seen.items() if n >= 2}}
+    # Government) for the year ended March 2022"); an entry row never repeats exactly.
+    # Only contents pages count: a chapter's title page inside these pages prints
+    # its contents row again ("CHAPTER I: INTRODUCTION"), and a chapter row is never
+    # taken for a header
+    probe: dict = {}
+    contents_pages = [start] + list(
+        takewhile(lambda i: len(_parse_rows(page_rows[i], probe)) >= 3, pages[1:])
+    )
+    edges = {
+        i: {t for _, t in page_rows[i][:5] + page_rows[i][-2:]} for i in contents_pages
+    }
+    seen = Counter(text for i in contents_pages for text in edges[i])
+    state = {
+        "repeated": {
+            text for text, n in seen.items() if n >= 2 and not is_chapter_title(text)
+        }
+    }
 
     raw_entries: List[Tuple[str, Optional[str]]] = []
     contents_end = start
@@ -796,11 +835,76 @@ def parse_printed_toc(
         return [], 0.0
 
     confidence = _verify_on_pages(doc, toc, exact_pages)
+    toc = _add_missing_chapters(doc, toc)
     logger.info(
         f"[{report_id}] Printed TOC: {len(toc)} entries from page {start}, "
         f"verified {confidence:.0%}"
     )
     return toc, confidence
+
+
+def _chapter_number(title: str) -> Tuple[Optional[int], bool]:
+    """(number, printed in roman) of a "Chapter N" title."""
+    m = CHAPTER_RE.match(title)
+    if not m or m.group(1).lower() == "part":
+        return None, False
+    token = m.group(2)
+    return (int(token), False) if token.isdigit() else (roman_to_int(token), True)
+
+
+def _add_missing_chapters(doc: fitz.Document, toc: List[List]) -> List[List]:
+    """
+    Add the chapter row of numbered sections whose chapter the contents list lost, so
+    the sections sit under their own chapter (RJ: the OCR layer skipped the
+    white-on-green chapter bars, leaving 3.1 under Chapter II). Only for lists that
+    print chapter rows at all; the title is read from the chapter's pages.
+    """
+    present = {}
+    for level, title, _ in toc:
+        number, roman = _chapter_number(str(title)) if level == 1 else (None, False)
+        if number:
+            present[number] = roman
+    if not present:
+        return toc
+    roman = sum(present.values()) * 2 > len(present)
+    out: List[List] = []
+    current = None
+    for entry in toc:
+        level, title, page = entry
+        if level == 1:
+            current = _chapter_number(str(title))[0]
+        else:
+            m = re.match(r"^(\d+)\.\d+", str(title))
+            number = int(m.group(1)) if m else None
+            if number and number != current and number not in present:
+                out.append([1, _chapter_title(doc, number, roman, page), page])
+                present[number] = roman
+                current = number
+        out.append(entry)
+    return out
+
+
+def _chapter_title(doc: fitz.Document, number: int, roman: bool, page: int) -> str:
+    """The chapter's title as printed near its first section, else "Chapter N"."""
+    label = int_to_roman(number).upper() if roman else str(number)
+    label_re = re.compile(
+        rf"^chapter\s*[-–:.]?\s*(?:{int_to_roman(number)}|{number})\b\s*[-–:.]?\s*(?P<rest>.*)$",
+        re.IGNORECASE,
+    )
+    for i in range(max(0, page - 1), min(doc.page_count, page + 3)):
+        lines = [
+            line.strip()
+            for line in repair_font_shift(doc[i].get_text("text")).splitlines()
+            if line.strip()
+        ]
+        for k, line in enumerate(lines[:12]):
+            m = label_re.match(line)
+            if not m:
+                continue
+            rest = m.group("rest") or (lines[k + 1] if k + 1 < len(lines) else "")
+            if re.search(r"[A-Za-z]{3}", rest):
+                return f"Chapter {label} - {rest}".strip()
+    return f"Chapter {label}"
 
 
 def _printed_to_physical(printed: str, arabic, roman, min_page: int) -> Optional[int]:
@@ -858,9 +962,29 @@ def _verify_on_pages(doc: fitz.Document, toc: List[List], exact_pages: set) -> f
             continue
         # Contents may number sections "i." / "(a)" where the body uses "1.1"
         key = _normalize(ENUMERATOR_RE.sub("", title))[:30]
-        if key and any(key in page_text(p) for p in (page - 1, page, page + 1)):
+        if key and any(_found(key, page_text(p)) for p in (page - 1, page, page + 1)):
             hits += 1
     return hits / len(toc)
+
+
+# Share of a title's letters that must match where it is printed; OCR'd and badly
+# mapped fonts drop or swap letters ("Ra·asthan", "Fundin", RJ)
+FUZZY_MATCH = 0.85
+
+
+def _found(key: str, text: str) -> bool:
+    """The normalised title is in the normalised page text, allowing a few bad letters."""
+    if key in text:
+        return True
+    if len(key) < 12:
+        return False
+    start = text.find(key[:5])
+    while start >= 0:
+        window = text[start : start + len(key) + 3]
+        if SequenceMatcher(None, key, window).ratio() >= FUZZY_MATCH:
+            return True
+        start = text.find(key[:5], start + 1)
+    return False
 
 
 PART_ROW_RE = re.compile(r"^\s*PART\s*[-–:.]?\s*[A-Z]\b", re.IGNORECASE)
@@ -875,7 +999,11 @@ def fold_part_rows(toc: List[List]) -> List[List]:
     out = []
     for i, entry in enumerate(toc):
         if PART_ROW_RE.match(str(entry[1])):
-            near = [e for e in toc[max(0, i - 2): i + 3] if e is not entry and abs(e[2] - entry[2]) <= 1]
+            near = [
+                e
+                for e in toc[max(0, i - 2) : i + 3]
+                if e is not entry and abs(e[2] - entry[2]) <= 1
+            ]
             if any(is_chapter_title(str(e[1])) for e in near):
                 continue
         out.append(entry)

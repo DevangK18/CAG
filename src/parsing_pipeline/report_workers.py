@@ -131,10 +131,14 @@ def enrich_report(
     run_id: str,
     phases_completed: List[str],
     pdf_for_checks: Optional[str],
+    llm_extraction: Optional[dict] = None,
 ):
     """
     Phase 9: enrich the working file, run the preflight checks and write the final
     *_chunks.json. Returns a dict for the orchestrator's manifest and log lines.
+
+    llm_extraction holds the report's Gemini items, fetched by the orchestrator
+    (Gemini calls stay in the main process, with its limiter).
     """
     import json
     import os
@@ -160,6 +164,7 @@ def enrich_report(
         child_chunks=assembled_data["child_chunks"],
         task=task,  # report type (ATIR, state_*) comes from the manifest metadata
         trace_emitter=emitter,
+        llm_extraction=llm_extraction,
     )
     assembled_data["semantic_enrichment"] = enrichment.model_dump()
 

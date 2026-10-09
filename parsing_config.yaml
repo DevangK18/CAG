@@ -164,6 +164,14 @@ chunking:
 # PHASE 9: SEMANTIC ENRICHMENT (FINDINGS, RECOMMENDATIONS)
 # ==============================================================================
 semantic_enrichment:
+  # Findings and recommendations from Gemini, one call per section (packed up to
+  # llm_max_chars_per_call characters); the regex extractors are the cross-check and
+  # the fallback for a section whose call fails
+  llm_extraction: true
+  llm_model: "gemini-3.8-flash"
+  llm_thinking_level: "low"
+  llm_max_chars_per_call: 24000
+
   # Tier-specific monetary thresholds for finding severity (in crore)
   # Union reports: Larger amounts
   # State reports: Medium amounts
@@ -193,15 +201,59 @@ semantic_enrichment:
 # GEMINI LIMITER (all LLM calls: Phase 9 validation, 10a, 10b)
 # ==============================================================================
 gemini:
-  # Requests in flight across the run; a 429 halves it and cools down every caller
-  max_concurrency: 16
+  # One budget per model, in tokens per minute, enforced over a rolling window.
+  # Capacity: Standard PayGo Tier 1 baseline throughput (org level, per model):
+  # Pro 500,000 and Flash 2,000,000 TPM.
+  # https://docs.cloud.google.com/vertex-ai/generative-ai/docs/standard-paygo (read 2026-10-08).
+  # The page does not say how tokens are counted, and states that the tiers do not
+  # apply to preview models; Agent Platform's consumed_token_throughput metric counts
+  # input x1, cached input x0.1 and output (thinking included) x5 on 3.8 Flash and
+  # x6 on 3.1 Pro (matches our Cloud Monitoring data exactly), so the budget counts
+  # the same way. Traffic may burst past the baseline on a best-effort basis.
+  models:
+    gemini-3.1-pro-preview:
+      capacity_tpm: 500000
+      ceiling: 24
+      output_weight: 6
+    gemini-3.8-flash:
+      capacity_tpm: 2000000
+      # 96 for one run: 429s on 32-47% of attempts at under 60% of the token budget.
+      # At 64 (three reports) there were none: the 429s follow calls in flight
+      ceiling: 64
+      output_weight: 5
+  # Any other model
+  default_model:
+    capacity_tpm: 500000
+    ceiling: 16
+    output_weight: 6
 
-  # Requests in flight per phase
-  phase9_concurrency: 4
-  phase10a_concurrency: 8
-  phase10b_concurrency: 8
+  window_seconds: 60
+  # Budget = capacity x utilisation. A step down needs 429s on at least 50% of the
+  # window's attempts and at least 5 of them; a window under 2% steps back up.
+  # After any step, hold for a full window. The full run showed stepping down at 10%
+  # did not lower the 429 rate (they follow calls in flight, not tokens), so the
+  # model holds at 100% and absorbs the retries unless most attempts fail.
+  start_utilisation: 1.0
+  max_utilisation: 1.0
+  min_utilisation: 0.30
+  utilisation_step: 0.10
+  step_down_rate: 0.50
+  step_down_min_throttles: 5
+  step_up_rate: 0.02
+  hold_seconds: 60
+
+  # Estimates before a call: prompt characters / 4, plus these until a tag has real counts
+  image_tokens: 1100
+  default_output_tokens: 1500
+
+  # A failed call retries alone: random 1-3 s first wait, doubling, capped at 30 s,
+  # for up to 5 minutes
+  retry_first_wait_seconds: [1, 3]
+  retry_max_wait_seconds: 30
+  retry_window_seconds: 300
 
   # Time budget per phase (minutes); later requests fail and count as losses. 0 = none
+  phase9_deadline_minutes: 60
   phase10a_deadline_minutes: 180
   phase10b_deadline_minutes: 180
 

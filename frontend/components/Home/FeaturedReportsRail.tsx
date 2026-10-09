@@ -74,7 +74,9 @@ export const FeaturedReportsRail: React.FC<FeaturedReportsRailProps> = ({ onRepo
                             )}
                             <div className="home-report-stats">
                                 {report.findings_count} findings
-                                {report.monetary_impact && ` · ${report.monetary_impact}`}
+                                {report.monetary_impact && report.monetary_impact_label && (
+                                    <span title={report.monetary_impact_label}>{` · ${report.monetary_impact} cited`}</span>
+                                )}
                             </div>
                         </div>
                     );

@@ -159,11 +159,11 @@ class TestPropagateFindings:
 
         # First chunk should have loss_of_revenue
         chunk_1 = sample_child_chunks[0]
-        assert chunk_1["structured_data"]["finding_type"] == "loss_of_revenue"
+        assert chunk_1["enrichment"]["finding_type"] == "loss_of_revenue"
 
         # Fourth chunk should have non_compliance
         chunk_4 = sample_child_chunks[3]
-        assert chunk_4["structured_data"]["finding_type"] == "non_compliance"
+        assert chunk_4["enrichment"]["finding_type"] == "non_compliance"
 
     def test_severity_propagated(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -174,10 +174,10 @@ class TestPropagateFindings:
         )
 
         chunk_1 = sample_child_chunks[0]
-        assert chunk_1["structured_data"]["severity"] == "critical"
+        assert chunk_1["enrichment"]["severity"] == "critical"
 
         chunk_4 = sample_child_chunks[3]
-        assert chunk_4["structured_data"]["severity"] == "high"
+        assert chunk_4["enrichment"]["severity"] == "high"
 
     def test_monetary_values_propagated(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -188,9 +188,9 @@ class TestPropagateFindings:
         )
 
         chunk_1 = sample_child_chunks[0]
-        assert chunk_1["structured_data"]["total_amount_crore"] == 847.71
-        assert chunk_1["structured_data"]["total_amount_inr"] == 847710000000
-        assert chunk_1["structured_data"]["total_amount_paise"] == 847710000000
+        assert chunk_1["enrichment"]["monetary_value_crore"] == 847.71
+        # Enrichment is kept apart from the chunk's own structured_data
+        assert "finding_type" not in (chunk_1.get("structured_data") or {})
 
     def test_is_finding_flag_set(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -201,12 +201,12 @@ class TestPropagateFindings:
         )
 
         chunk_1 = sample_child_chunks[0]
-        assert chunk_1["structured_data"]["is_finding"] is True
+        assert chunk_1["enrichment"]["is_finding"] is True
 
         # Chunk without finding should not have is_finding
         chunk_2 = sample_child_chunks[1]
-        assert chunk_2["structured_data"].get("is_finding") is None or \
-               chunk_2["structured_data"].get("is_finding") is False
+        assert chunk_2["enrichment"].get("is_finding") is None or \
+               chunk_2["enrichment"].get("is_finding") is False
 
     def test_finding_ids_stored(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -217,7 +217,7 @@ class TestPropagateFindings:
         )
 
         chunk_1 = sample_child_chunks[0]
-        assert "report_001_finding_001" in chunk_1["structured_data"]["finding_ids"]
+        assert "report_001_finding_001" in chunk_1["enrichment"]["finding_ids"]
 
     def test_entities_from_finding_propagated(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -228,7 +228,7 @@ class TestPropagateFindings:
         )
 
         chunk_1 = sample_child_chunks[0]
-        entities = chunk_1["structured_data"].get("entities_mentioned", [])
+        entities = chunk_1["enrichment"].get("entities_mentioned", [])
         assert "Ministry of Railways" in entities
         assert "NHAI" in entities
 
@@ -245,7 +245,7 @@ class TestPropagateRecommendations:
         )
 
         chunk_2 = sample_child_chunks[1]
-        assert chunk_2["structured_data"]["is_recommendation"] is True
+        assert chunk_2["enrichment"]["is_recommendation"] is True
 
     def test_recommendation_target_propagated(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -256,7 +256,7 @@ class TestPropagateRecommendations:
         )
 
         chunk_2 = sample_child_chunks[1]
-        assert chunk_2["structured_data"]["recommendation_target"] == "NHAI"
+        assert chunk_2["enrichment"]["recommendation_target"] == "NHAI"
 
     def test_recommendation_ids_stored(
         self, sample_child_chunks, sample_semantic_enrichment
@@ -267,7 +267,7 @@ class TestPropagateRecommendations:
         )
 
         chunk_2 = sample_child_chunks[1]
-        assert "report_001_rec_001" in chunk_2["structured_data"]["recommendation_ids"]
+        assert "report_001_rec_001" in chunk_2["enrichment"]["recommendation_ids"]
 
 
 class TestPropagateSectionTypes:
@@ -283,14 +283,14 @@ class TestPropagateSectionTypes:
 
         # Chunk 1 and 4 share parent L2_001 which is audit_findings
         chunk_1 = sample_child_chunks[0]
-        assert chunk_1["structured_data"]["section_type"] == "audit_findings"
+        assert chunk_1["enrichment"]["section_type"] == "audit_findings"
 
         chunk_4 = sample_child_chunks[3]
-        assert chunk_4["structured_data"]["section_type"] == "audit_findings"
+        assert chunk_4["enrichment"]["section_type"] == "audit_findings"
 
         # Chunk 2 has parent L2_002 which is recommendations
         chunk_2 = sample_child_chunks[1]
-        assert chunk_2["structured_data"]["section_type"] == "recommendations"
+        assert chunk_2["enrichment"]["section_type"] == "recommendations"
 
 
 class TestPropagateEntities:
@@ -306,7 +306,7 @@ class TestPropagateEntities:
 
         # Chunk 2 mentions NHAI in content
         chunk_2 = sample_child_chunks[1]
-        entities = chunk_2["structured_data"].get("entities_mentioned", [])
+        entities = chunk_2["enrichment"].get("entities_mentioned", [])
         assert "NHAI" in entities
 
     def test_entity_cap_at_10(self, sample_child_chunks):
@@ -331,7 +331,7 @@ class TestPropagateEntities:
         propagate_semantic_enrichment_to_chunks(sample_child_chunks, enrichment)
 
         chunk_1 = sample_child_chunks[0]
-        entities = chunk_1["structured_data"].get("entities_mentioned", [])
+        entities = chunk_1["enrichment"].get("entities_mentioned", [])
         assert len(entities) <= 10
 
 
@@ -368,7 +368,7 @@ class TestPropagateEdgeCases:
         # Existing field should be preserved
         assert chunks[0]["structured_data"]["existing_field"] == "preserved"
         # New field should be added
-        assert chunks[0]["structured_data"]["finding_type"] == "loss_of_revenue"
+        assert chunks[0]["enrichment"]["finding_type"] == "loss_of_revenue"
 
     def test_handles_missing_source_chunk_id(self):
         """Test handling of findings without source_chunk_id."""
@@ -432,12 +432,12 @@ class TestPropagateEdgeCases:
         propagate_semantic_enrichment_to_chunks(chunks, enrichment)
 
         # Primary finding (first) should set type/severity
-        assert chunks[0]["structured_data"]["finding_type"] == "loss_of_revenue"
-        assert chunks[0]["structured_data"]["severity"] == "critical"
+        assert chunks[0]["enrichment"]["finding_type"] == "loss_of_revenue"
+        assert chunks[0]["enrichment"]["severity"] == "critical"
 
         # Both finding IDs should be stored
-        assert "f1" in chunks[0]["structured_data"]["finding_ids"]
-        assert "f2" in chunks[0]["structured_data"]["finding_ids"]
+        assert "f1" in chunks[0]["enrichment"]["finding_ids"]
+        assert "f2" in chunks[0]["enrichment"]["finding_ids"]
 
 
 class TestPropagateIntegration:
@@ -457,32 +457,34 @@ class TestPropagateIntegration:
 
         # Verify first chunk (finding with monetary)
         chunk_1 = sample_child_chunks[0]
-        sd_1 = chunk_1["structured_data"]
+        sd_1 = chunk_1["enrichment"]
         assert sd_1["finding_type"] == "loss_of_revenue"
         assert sd_1["severity"] == "critical"
-        assert sd_1["total_amount_crore"] == 847.71
+        assert sd_1["monetary_value_crore"] == 847.71
         assert sd_1["is_finding"] is True
         assert sd_1["section_type"] == "audit_findings"
         assert "Ministry of Railways" in sd_1["entities_mentioned"]
 
         # Verify second chunk (recommendation)
         chunk_2 = sample_child_chunks[1]
-        sd_2 = chunk_2["structured_data"]
+        sd_2 = chunk_2["enrichment"]
         assert sd_2["is_recommendation"] is True
         assert sd_2["recommendation_target"] == "NHAI"
         assert sd_2["section_type"] == "recommendations"
 
         # Verify third chunk (table - no finding/rec)
         chunk_3 = sample_child_chunks[2]
-        sd_3 = chunk_3["structured_data"]
+        sd_3 = chunk_3["enrichment"]
+        # The table keeps its own structured payload, untouched
+        assert chunk_3["structured_data"] == {"rows": 2, "cols": 2}
         assert sd_3.get("is_finding") is None
         assert sd_3.get("is_recommendation") is None
         assert sd_3["section_type"] == "annexures"
 
         # Verify fourth chunk (finding without monetary)
         chunk_4 = sample_child_chunks[3]
-        sd_4 = chunk_4["structured_data"]
+        sd_4 = chunk_4["enrichment"]
         assert sd_4["finding_type"] == "non_compliance"
         assert sd_4["severity"] == "high"
-        assert sd_4.get("total_amount_crore") is None
+        assert sd_4.get("monetary_value_crore") is None
         assert sd_4["is_finding"] is True

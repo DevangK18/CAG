@@ -500,11 +500,12 @@ class SemanticPayloadExtractor:
 
         chunk_id = chunk.get("chunk_id", "")
 
-        # Check Findings
+        # Check Findings (a finding may cover several chunks; older files list one)
         for finding in semantic_enrichment.get("findings", []):
-            if finding.get("source_chunk_id") == chunk_id:
+            if chunk_id in (finding.get("source_chunk_ids") or [finding.get("source_chunk_id")]):
                 payload["finding_type"] = finding.get("finding_type")
                 payload["severity"] = finding.get("severity")
+                payload["is_restatement"] = bool(finding.get("is_restatement"))
 
                 # Convert to crore for easier filtering
                 total_paise = finding.get("total_amount_paise") or finding.get("total_amount_inr", 0)
@@ -516,7 +517,7 @@ class SemanticPayloadExtractor:
 
         # Check Recommendations (includes target ministries)
         for rec in semantic_enrichment.get("recommendations", []):
-            if rec.get("source_chunk_id") == chunk_id:
+            if chunk_id in (rec.get("source_chunk_ids") or [rec.get("source_chunk_id")]):
                 payload["is_recommendation"] = True
                 payload["recommendation_target"] = rec.get("target_entity")
                 payload["action_required"] = rec.get("action_required")
@@ -530,9 +531,10 @@ class SemanticPayloadExtractor:
                         ]
                 break
 
-        # Section type classification
+        # Section type of the chunk's parent (classifications are keyed by parent chunk)
+        parent_id = chunk.get("parent_chunk_id")
         for section in semantic_enrichment.get("section_classifications", []):
-            if section.get("chunk_id") == chunk_id:
+            if section.get("chunk_id") in (chunk_id, parent_id):
                 payload["section_type"] = section.get("section_type")
                 break
 

@@ -20,6 +20,7 @@ Folder Structure:
 import re
 import json
 import asyncio
+import functools
 import logging
 from collections import Counter
 from pathlib import Path
@@ -27,6 +28,8 @@ from datetime import datetime
 from typing import Any, List, Dict, Optional
 
 import fitz  # PyMuPDF — for cropping table/chart images from PDF
+
+from src.core.json_files import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -429,6 +432,7 @@ class GeminiVisualExtractor:
 
         # Initialize Gemini client (lazy — created on first use)
         self._client = None
+        self._pool = None
 
     @property
     def client(self):
@@ -446,11 +450,39 @@ class GeminiVisualExtractor:
     # Concurrency, 429 back-off and the phase deadline come from the shared limiter
     # (src/core/gemini_limiter.py) inside generate_with_retry.
 
+    def _config(self, max_output_tokens: int):
+        """Request config: temperature at the Gemini 3 default, thinking level per role."""
+        from google.genai import types
+
+        from src.core.phase10_models import thinking_level
+
+        level = thinking_level("visual")
+        return types.GenerateContentConfig(
+            max_output_tokens=max_output_tokens,
+            thinking_config=types.ThinkingConfig(thinking_level=level) if level else None,
+        )
+
     async def _generate(self, tag: str = "phase10b.visual", **kwargs):
         """generate_content with backoff on transient errors (see gemini_client.generate_with_retry)."""
         from src.core.gemini_client import generate_with_retry
 
-        return await asyncio.to_thread(generate_with_retry, tag=tag, **kwargs)
+        # Own threads, as many as the model's ceiling: asyncio's default pool
+        # (CPUs + 4) would cap calls in flight below what the limiter allows
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            self._executor(), functools.partial(generate_with_retry, tag=tag, **kwargs)
+        )
+
+    def _executor(self):
+        if getattr(self, "_pool", None) is None:
+            from concurrent.futures import ThreadPoolExecutor
+
+            from src.core.gemini_limiter import get_limiter
+
+            self._pool = ThreadPoolExecutor(
+                max_workers=get_limiter().ceiling(getattr(self, "model", None)), thread_name_prefix="phase10b"
+            )
+        return self._pool
 
     async def _generate_json(
         self, item_type: str, max_attempts: int = 3, **kwargs
@@ -509,10 +541,7 @@ class GeminiVisualExtractor:
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                     types.Part.from_text(text=prompt),
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=8192,
-                ),
+                config=self._config(8192),
             )
 
         except Exception as e:
@@ -550,10 +579,7 @@ class GeminiVisualExtractor:
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                     types.Part.from_text(text=prompt),
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=8192,
-                ),
+                config=self._config(8192),
             )
 
         except Exception as e:
@@ -582,10 +608,8 @@ class GeminiVisualExtractor:
                     types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                     types.Part.from_text(text=prompt),
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=1024,
-                ),
+                # Thinking counts against the limit: 1,024 left too little room
+                config=self._config(4096),
             )
 
         except Exception as e:
@@ -655,8 +679,8 @@ class GeminiVisualExtractor:
         """Extract items concurrently; results keep the order of items."""
         from src.core.gemini_limiter import get_limiter
 
-        # Bounds the worker threads; the shared limiter bounds requests in flight
-        gate = asyncio.Semaphore(get_limiter().group_caps.get("phase10b", 8))
+        # Items in progress at once: the model's ceiling; the limiter decides what is sent
+        gate = asyncio.Semaphore(get_limiter().ceiling(getattr(self, "model", None)))
         total = len(items)
 
         async def run(i: int, item: Dict) -> Dict:
@@ -949,8 +973,8 @@ class GeminiVisualExtractor:
 
         # Images not sent keep (or get) caption text instead of a file path
         if changed:
-            with open(json_path, "w") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # Phase 10a may be reading chunk files meanwhile: replace, never rewrite in place
+            write_json_atomic(json_path, data)
         return items
 
     # Signatures (~120x55 pt), emblems on the cover and icons/QR codes are far smaller than
@@ -1210,8 +1234,7 @@ class GeminiVisualExtractor:
                     # B5 fix: Set phase_10b_complete flag truthfully
                     if updated > 0 and "processing_stats" in data:
                         data["processing_stats"]["phase_10b_complete"] = True
-                    with open(json_file, "w") as f:
-                        json.dump(data, f, indent=2, ensure_ascii=False)
+                    write_json_atomic(json_file, data)
                     files_updated += 1
                     logger.info(
                         f"✅ Updated {updated} chunks in {Path(json_file).name}"

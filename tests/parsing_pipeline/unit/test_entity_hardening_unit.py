@@ -20,9 +20,15 @@ class TestCleanEntityFilter:
 
     def test_valid_entity_accepted(self, service):
         """Valid entities should pass through."""
-        assert service._clean_entity("National Highways Authority") == "National Highways Authority"
+        assert (
+            service._clean_entity("National Highways Authority")
+            == "National Highways Authority"
+        )
         assert service._clean_entity("Ministry of Finance") == "Ministry of Finance"
-        assert service._clean_entity("Pradhan Mantri Awas Yojana") == "Pradhan Mantri Awas Yojana"
+        assert (
+            service._clean_entity("Pradhan Mantri Awas Yojana")
+            == "Pradhan Mantri Awas Yojana"
+        )
 
     def test_too_short_rejected(self, service):
         """Entities shorter than 4 chars should be rejected."""
@@ -48,9 +54,19 @@ class TestCleanEntityFilter:
 
     def test_too_many_words_rejected(self, service):
         """Entities with more than 8 words should be rejected."""
-        assert service._clean_entity("Central Public Works Department Delhi Circle Zone Office Unit") is None
+        assert (
+            service._clean_entity(
+                "Central Public Works Department Delhi Circle Zone Office Unit"
+            )
+            is None
+        )
         # Eight words still fit names like "Ministry of Micro, Small & Medium Enterprises"
-        assert service._clean_entity("Central Public Works Department Delhi Circle Zone Office") is not None
+        assert (
+            service._clean_entity(
+                "Central Public Works Department Delhi Circle Zone Office"
+            )
+            is not None
+        )
 
     def test_sentence_punctuation_rejected(self, service):
         """Entities containing mid-sentence punctuation should be rejected."""
@@ -110,7 +126,9 @@ class TestEnhancedPatterns:
             "Pradhan Mantri Gram Sadak Yojana (PMGSY) received funding."
         )
         # Should capture the full name with acronym
-        assert any("PMGSY" in e or "Pradhan Mantri Gram Sadak Yojana" in e for e in entities)
+        assert any(
+            "PMGSY" in e or "Pradhan Mantri Gram Sadak Yojana" in e for e in entities
+        )
 
     def test_common_cag_acronyms_captured(self, service):
         """Common CAG acronyms should be explicitly matched."""
@@ -131,12 +149,13 @@ class TestEntityDeduplication:
         child_chunks = [
             {
                 "content": "National Highways Authority manages roads. "
-                          "National Highways Authority of India reported delays."
+                "National Highways Authority of India reported delays."
             }
         ]
 
         entities = service.extract_entities(child_chunks)
-        assert entities["organizations"] == ["National Highways Authority"]
+        # The short form is an alias (enrichment_patterns.yaml) of the full name
+        assert entities["organizations"] == ["National Highways Authority of India"]
 
         deduped = service._deduplicate_by_substring(
             {"National Highways Authority", "National Highways Authority of India"}
@@ -146,9 +165,7 @@ class TestEntityDeduplication:
     def test_no_false_deduplication(self, service):
         """Different entities should not be deduplicated."""
         child_chunks = [
-            {
-                "content": "Ministry of Finance and Ministry of Defence are separate."
-            }
+            {"content": "Ministry of Finance and Ministry of Defence are separate."}
         ]
 
         entities = service.extract_entities(child_chunks)
@@ -194,15 +211,21 @@ class TestEndToEndExtraction:
 
         # Check ministries
         ministries = entities.get("ministries", [])
-        assert any("Railway" in m for m in ministries), f"Found ministries: {ministries}"
+        assert any(
+            "Railway" in m for m in ministries
+        ), f"Found ministries: {ministries}"
 
         # Check schemes
         schemes = entities.get("schemes", [])
-        assert any("Pradhan Mantri" in s or "PMGSY" in s for s in schemes), f"Found schemes: {schemes}"
+        assert any(
+            "Pradhan Mantri" in s or "PMGSY" in s for s in schemes
+        ), f"Found schemes: {schemes}"
 
         # Check organizations
         orgs = entities.get("organizations", [])
-        assert any("NHAI" in o or "National Highways Authority" in o for o in orgs), f"Found orgs: {orgs}"
+        assert any(
+            "NHAI" in o or "National Highways Authority" in o for o in orgs
+        ), f"Found orgs: {orgs}"
 
         # Should NOT contain garbage like "the aforementioned Corporation"
         assert not any(e.startswith("the ") for e in orgs)
@@ -253,7 +276,9 @@ class TestEndToEndExtraction:
         # Check all entities
         for entity_type, entity_list in entities.items():
             for entity in entity_list:
-                assert 4 <= len(entity) <= 60, f"Entity '{entity}' violates length bounds"
+                assert (
+                    4 <= len(entity) <= 60
+                ), f"Entity '{entity}' violates length bounds"
 
     def test_empty_content_handled(self, service):
         """Empty or whitespace-only content should not crash."""
@@ -287,7 +312,9 @@ class TestEdgeCases:
             "Ministry of Micro, Small & Medium Enterprises reported."
         )
         # Should extract ministry with commas and ampersands
-        assert any("Enterprises" in e and ("Micro" in e or "Ministry" in e) for e in entities)
+        assert any(
+            "Enterprises" in e and ("Micro" in e or "Ministry" in e) for e in entities
+        )
 
     def test_multiple_occurrences_deduplicated(self, service):
         """Multiple occurrences of same entity should result in single entry."""

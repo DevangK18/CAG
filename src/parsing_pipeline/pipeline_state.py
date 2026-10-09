@@ -49,6 +49,10 @@ class PipelineState:
 
     # Phase 9: Semantic Enrichment
     enrichment_complete: list = field(default_factory=list)
+    # Per-report sections that fell back to regex (their Gemini call failed)
+    phase9_losses: dict = field(default_factory=dict)
+    # Per-report Gemini extraction summary (model, prompt version, calls, items)
+    phase9_extraction: dict = field(default_factory=dict)
 
     # Phase 10b: Chunk files for visual extraction
     chunk_files: list = field(default_factory=list)

@@ -53,7 +53,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Title ends with a word that takes a number ("Chapter", "Annexure", "No.")
-TITLE_LABEL_END_RE = re.compile(r"\b(chapter|annexure|appendix|part|table|schedule|statement|no\.?)\s*$", re.IGNORECASE)
+TITLE_LABEL_END_RE = re.compile(
+    r"\b(chapter|annexure|appendix|part|table|schedule|statement|no\.?)\s*$",
+    re.IGNORECASE,
+)
 
 
 # =============================================================================
@@ -457,6 +460,7 @@ class ScaffoldingService:
         # Use no-op emitter if none provided
         if trace_emitter is None:
             from src.parsing_pipeline.instrumentation import get_noop_emitter
+
             trace_emitter = get_noop_emitter()
 
         pdf_path = self._get_pdf_path(task)
@@ -485,7 +489,9 @@ class ScaffoldingService:
                 )
 
                 # Phase 1: Extract ToC via bookmarks/embedded outlines
-                task = self._extract_embedded_toc(task, doc, trace_emitter=trace_emitter)
+                task = self._extract_embedded_toc(
+                    task, doc, trace_emitter=trace_emitter
+                )
 
                 if task.scaffold["toc"]:
                     toc_method = task.scaffold.get("toc_method", "embedded_bookmarks")
@@ -493,17 +499,37 @@ class ScaffoldingService:
                 # Phase 2: Printed contents page, the author's own structure. A verified
                 # printed contents page beats bookmarks, unless the bookmarks are richer
                 # and agree with it on the chapters (FRBM/Accounts reports) (A-4-02)
-                printed_toc, printed_confidence = self._extract_printed_toc(doc, task.report_id)
+                printed_toc, printed_confidence = self._extract_printed_toc(
+                    doc, task.report_id
+                )
                 printed_quality = assess_toc_quality(printed_toc, doc.page_count)
+                # Every candidate's score is kept, so the output says why a source won
+                candidates: Dict[str, Dict] = {}
+                bookmark_score = task.scaffold.get("bookmark_score")
+                if bookmark_score:
+                    candidates["embedded_bookmarks"] = {
+                        "quality": bookmark_score.get("score"),
+                        "rejected": bookmark_score.get("rejected"),
+                    }
+                if printed_toc:
+                    candidates["printed_toc"] = {
+                        "entries": len(printed_toc),
+                        "quality": printed_quality,
+                        "verified": round(printed_confidence, 2),
+                    }
                 printed_ok = (
                     len(printed_toc) >= 5
                     and printed_confidence >= 0.8
                     and printed_quality >= ACCEPT_THRESHOLD
                 )
                 bookmarks = task.scaffold["toc"]
-                if printed_ok and bookmarks and not (
-                    len(bookmarks) > len(printed_toc)
-                    and chapter_agreement(printed_toc, bookmarks) >= 0.7
+                if (
+                    printed_ok
+                    and bookmarks
+                    and not (
+                        len(bookmarks) > len(printed_toc)
+                        and chapter_agreement(printed_toc, bookmarks) >= 0.7
+                    )
                 ):
                     task.scaffold["toc"] = []
                     task.error_log.append(
@@ -528,8 +554,16 @@ class ScaffoldingService:
 
                 # Phase 3: Fallback to heuristic ToC generation if none found
                 if not task.scaffold["toc"]:
-                    heuristic_toc, heading_positions = self._generate_heuristic_toc(doc, task.report_id)
-                    heuristic_quality = assess_toc_quality(heuristic_toc, doc.page_count)
+                    heuristic_toc, heading_positions = self._generate_heuristic_toc(
+                        doc, task.report_id
+                    )
+                    heuristic_quality = assess_toc_quality(
+                        heuristic_toc, doc.page_count
+                    )
+                    candidates["heuristic"] = {
+                        "entries": len(heuristic_toc),
+                        "quality": heuristic_quality,
+                    }
                     # A good printed contents page that verifies only in part (OCR'd scans
                     # print page numbers poorly) still beats a weaker heuristic TOC
                     if (
@@ -552,6 +586,7 @@ class ScaffoldingService:
                         # Score it: without a score, later phases defaulted to 50 and
                         # low-quality TOCs never reached LLM validation
                         task.scaffold["toc_quality"] = heuristic_quality
+                        task.scaffold["toc_method"] = "heuristic"
                         toc_method = "heuristic"
                         task.error_log.append(
                             f"Heuristic ToC generated with {len(heuristic_toc)} entries"
@@ -582,6 +617,13 @@ class ScaffoldingService:
                             },
                         )
                         self._last_toc_alert = None
+
+                # Phase 4's choice; Phase 5.5 extends toc_method and rescores toc_quality
+                task.scaffold["toc_source"] = toc_method
+                task.scaffold["toc_source_quality"] = task.scaffold.get("toc_quality")
+                if toc_method == "printed_toc":
+                    task.scaffold["toc_verified"] = round(printed_confidence, 2)
+                task.scaffold["toc_candidates"] = candidates
 
                 # PART-A/B banners on a chapter's page would become empty parents
                 if task.scaffold["toc"]:
@@ -617,12 +659,19 @@ class ScaffoldingService:
 
                 trace_emitter.emit_io(
                     "4",
-                    {"pdf_path": pdf_path, "page_count": task.scaffold.get("page_map", {}).get("total_pages", 0)},
+                    {
+                        "pdf_path": pdf_path,
+                        "page_count": task.scaffold.get("page_map", {}).get(
+                            "total_pages", 0
+                        ),
+                    },
                     {
                         "toc_entries": final_toc_count,
                         "toc_quality": final_quality,
                         "toc_method": toc_method,
-                        "heading_positions": len(task.scaffold.get("heading_positions", {})),
+                        "heading_positions": len(
+                            task.scaffold.get("heading_positions", {})
+                        ),
                     },
                 )
 
@@ -666,7 +715,9 @@ class ScaffoldingService:
             return task.local_pdf_path
         return None
 
-    def _extract_printed_toc(self, doc: fitz.Document, report_id: str = "unknown") -> Tuple[List[List], float]:
+    def _extract_printed_toc(
+        self, doc: fitz.Document, report_id: str = "unknown"
+    ) -> Tuple[List[List], float]:
         """
         Parse the printed contents page into [[level, title, physical_page], ...].
 
@@ -695,6 +746,7 @@ class ScaffoldingService:
         # Use no-op emitter if none provided
         if trace_emitter is None:
             from src.parsing_pipeline.instrumentation import get_noop_emitter
+
             trace_emitter = get_noop_emitter()
 
         try:
@@ -705,7 +757,9 @@ class ScaffoldingService:
             # page 1) reject the whole set; otherwise junk entries are dropped and the
             # rest is scored on content, not shape (A-4-02, A-TQ-01)
             entries = [e[:3] for e in toc if len(e) >= 3]
-            low_targets = sum(1 for e in entries if e[2] <= 1) / len(entries) if entries else 0.0
+            low_targets = (
+                sum(1 for e in entries if e[2] <= 1) / len(entries) if entries else 0.0
+            )
             share = junk_share(entries)
             if share > 0.3 or low_targets > 0.3:
                 cleaned_toc = []
@@ -717,13 +771,22 @@ class ScaffoldingService:
                         continue
                     cleaned_title = self._clean_toc_title(title)
                     if cleaned_title:
-                        cleaned_toc.append([level, cleaned_title, self._bookmark_page(doc, page)])
+                        cleaned_toc.append(
+                            [level, cleaned_title, self._bookmark_page(doc, page)]
+                        )
                 reject_reason = None
-            scored = score_toc(cleaned_toc, doc.page_count, doc) if cleaned_toc else score_toc([])
+            scored = (
+                score_toc(cleaned_toc, doc.page_count, doc)
+                if cleaned_toc
+                else score_toc([])
+            )
             score = scored["score"] if len(cleaned_toc) >= 5 else 0
             threshold_score = ACCEPT_THRESHOLD
-            task.scaffold["bookmark_score"] = {"score": score, "deductions": scored["deductions"],
-                                               "rejected": reject_reason}
+            task.scaffold["bookmark_score"] = {
+                "score": score,
+                "deductions": scored["deductions"],
+                "rejected": reject_reason,
+            }
 
             # Trace the bookmark quality scoring decision
             trace_emitter.emit_decision(
@@ -783,7 +846,9 @@ class ScaffoldingService:
 
         return task
 
-    def _score_embedded_toc(self, toc: List[List], total_pages: int) -> TOCQualityMetrics:
+    def _score_embedded_toc(
+        self, toc: List[List], total_pages: int
+    ) -> TOCQualityMetrics:
         """
         Score embedded TOC quality with assembly/CAG pattern detection.
 
@@ -814,16 +879,10 @@ class ScaffoldingService:
         level_count = len(levels)
 
         # Check for chapters
-        has_chapters = any(
-            "chapter" in entry[1].lower()
-            for entry in toc
-        )
+        has_chapters = any("chapter" in entry[1].lower() for entry in toc)
 
         # Check for numbered sections (e.g., "2.3 Section Title")
-        has_sections = any(
-            re.match(r"^\d+\.\d+", entry[1])
-            for entry in toc
-        )
+        has_sections = any(re.match(r"^\d+\.\d+", entry[1]) for entry in toc)
 
         # Calculate page coverage
         pages_covered = set()
@@ -837,7 +896,8 @@ class ScaffoldingService:
 
         # Penalty for file-assembly patterns (garbage PDF-merger bookmarks)
         assembly_count = sum(
-            1 for entry in toc
+            1
+            for entry in toc
             if any(p.match(entry[1]) for p in self._assembly_patterns)
         )
         if assembly_count > 0:
@@ -845,8 +905,7 @@ class ScaffoldingService:
 
         # Bonus for CAG-specific patterns (Chapter, Annexure, Executive Summary, etc.)
         cag_count = sum(
-            1 for entry in toc
-            if any(p.match(entry[1]) for p in self._cag_patterns)
+            1 for entry in toc if any(p.match(entry[1]) for p in self._cag_patterns)
         )
         if cag_count > 0:
             confidence += min(0.2, cag_count * 0.05)
@@ -1095,10 +1154,15 @@ class ScaffoldingService:
         # Examples: "Chapter IV 77-99", "Appendix 101", "Contents i-xii"
         # A number right after a label word is part of the title: "Chapter IV", "Annexure 4".
         # Printed page numbers in front matter are lowercase roman, so "IV" is never stripped.
-        for pattern in (r"\s+\d+[-–]\d+\s*$", r"\s+\d+\s*$", r"\s+[ivxlc]+[-–][ivxlc]+\s*$", r"\s+[ivxlc]+\s*$"):
+        for pattern in (
+            r"\s+\d+[-–]\d+\s*$",
+            r"\s+\d+\s*$",
+            r"\s+[ivxlc]+[-–][ivxlc]+\s*$",
+            r"\s+[ivxlc]+\s*$",
+        ):
             match = re.search(pattern, title)
-            if match and not TITLE_LABEL_END_RE.search(title[:match.start()]):
-                title = title[:match.start()]
+            if match and not TITLE_LABEL_END_RE.search(title[: match.start()]):
+                title = title[: match.start()]
 
         # Step 4: Remove dots/leaders before page numbers (if any remain)
         title = re.sub(r"\.{2,}\s*\d*\s*$", "", title)  # "Chapter I..........12"
@@ -1152,7 +1216,9 @@ class ScaffoldingService:
             hierarchy_map = self._infer_hierarchy(heading_candidates)
 
             # Phase 5: Synthetic ToC construction with Y-positions
-            toc, heading_positions = self._construct_toc(heading_candidates, hierarchy_map)
+            toc, heading_positions = self._construct_toc(
+                heading_candidates, hierarchy_map
+            )
 
             return toc, heading_positions
 
@@ -1267,8 +1333,14 @@ class ScaffoldingService:
         # margin is wrong for landscape pages and other paper sizes
         width, height, left_margin = 595.0, 842.0, 72.0
         if doc is not None and doc.page_count:
-            widths = [doc[i].rect.width for i in range(0, doc.page_count, max(1, doc.page_count // 20))]
-            heights = [doc[i].rect.height for i in range(0, doc.page_count, max(1, doc.page_count // 20))]
+            widths = [
+                doc[i].rect.width
+                for i in range(0, doc.page_count, max(1, doc.page_count // 20))
+            ]
+            heights = [
+                doc[i].rect.height
+                for i in range(0, doc.page_count, max(1, doc.page_count // 20))
+            ]
             width, height = float(np.median(widths)), float(np.median(heights))
             body_x = [b.position[0] for b in text_blocks if b.word_count >= 8]
             if body_x:
@@ -1304,7 +1376,8 @@ class ScaffoldingService:
         seen_entries: set = set()
 
         scored = [
-            block for block in text_blocks
+            block
+            for block in text_blocks
             if self._calculate_heading_score(block, style_profile) >= 75
         ]
         for block in self._merge_heading_lines(scored):
@@ -1312,8 +1385,11 @@ class ScaffoldingService:
             # "Total (iii) 1,00,000 4. Sh. Victor Bhisty", "(₹ in lakh) Sl. No"
             if self._looks_like_table_row(block.text):
                 self.toc_rejection_logger.log_rejection(
-                    text=block.text, page_num=block.page_num, reason="table_row",
-                    pattern_matched=None, font_size=block.font_size,
+                    text=block.text,
+                    page_num=block.page_num,
+                    reason="table_row",
+                    pattern_matched=None,
+                    font_size=block.font_size,
                 )
                 continue
 
@@ -1326,7 +1402,11 @@ class ScaffoldingService:
             )
             # Sentences, junk and OCR debris are never headings (A-TQ-01 predicates)
             if is_valid and is_garbage_title(cleaned_text):
-                is_valid, rejection_reason, matched_pattern = False, "garbage_title", None
+                is_valid, rejection_reason, matched_pattern = (
+                    False,
+                    "garbage_title",
+                    None,
+                )
 
             if not is_valid:
                 self.toc_rejection_logger.log_rejection(
@@ -1360,7 +1440,9 @@ class ScaffoldingService:
         return heading_candidates
 
     TABLE_ROW_NUMBER_RE = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w.])")
-    TABLE_ROW_WORDS_RE = re.compile(r"\bSl\.?\s*No\b|\(\s*(?:₹|`|Rs\.?)\s*in\s+\w+\s*\)|\bTotal\b", re.IGNORECASE)
+    TABLE_ROW_WORDS_RE = re.compile(
+        r"\bSl\.?\s*No\b|\(\s*(?:₹|`|Rs\.?)\s*in\s+\w+\s*\)|\bTotal\b", re.IGNORECASE
+    )
 
     def _looks_like_table_row(self, text: str) -> bool:
         """Two or more standalone numbers, or table furniture (Sl. No, unit, Total)."""
@@ -1389,8 +1471,12 @@ class ScaffoldingService:
             ):
                 merged[-1] = TextBlock(
                     page_num=prev.page_num,
-                    bbox=(min(prev.bbox[0], block.bbox[0]), prev.bbox[1],
-                          max(prev.bbox[2], block.bbox[2]), block.bbox[3]),
+                    bbox=(
+                        min(prev.bbox[0], block.bbox[0]),
+                        prev.bbox[1],
+                        max(prev.bbox[2], block.bbox[2]),
+                        block.bbox[3],
+                    ),
                     text=f"{prev.text} {block.text}",
                     font_name=prev.font_name,
                     font_size=prev.font_size,
@@ -1578,3 +1664,21 @@ class ScaffoldingService:
             )
 
         return task
+
+
+def toc_record(scaffold: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Where the report's contents structure came from and how it scored, for the output
+    (processing_stats["toc"]). Old scaffolds without the source fields give None there.
+    """
+    scaffold = scaffold or {}
+    return {
+        "source": scaffold.get("toc_source"),
+        "source_quality": scaffold.get("toc_source_quality"),
+        "verified": scaffold.get("toc_verified"),
+        "method": scaffold.get("toc_method"),
+        "quality": scaffold.get("toc_quality"),
+        "reconciliation": scaffold.get("reconciliation_strategy"),
+        "entries": len(scaffold.get("toc") or []),
+        "candidates": scaffold.get("toc_candidates") or {},
+    }
