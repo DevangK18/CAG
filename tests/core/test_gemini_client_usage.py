@@ -321,3 +321,9 @@ class TestDatedPrices:
         total = gc.get_usage_summary()["totals"]["estimated_cost_usd"]
         assert total == pytest.approx((300_000 * 4.0 + 100_000 * 2.0) / 1e6)
         gc.reset_usage()
+
+
+def test_expired_token_is_retried():
+    from src.core.gemini_client import is_transient
+
+    assert is_transient("401 UNAUTHENTICATED. Request is missing required authentication credential")

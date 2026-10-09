@@ -217,9 +217,9 @@ gemini:
       output_weight: 6
     gemini-3.8-flash:
       capacity_tpm: 2000000
-      # 64 at first; Phase 10 on three reports kept 64 in flight with no 429s at 4% of
-      # the budget, so the ceiling, not the budget, was the limit
-      ceiling: 96
+      # 96 for one run: 429s on 32-47% of attempts at under 60% of the token budget.
+      # At 64 (three reports) there were none: the 429s follow calls in flight
+      ceiling: 64
       output_weight: 5
   # Any other model
   default_model:
@@ -228,14 +228,16 @@ gemini:
     output_weight: 6
 
   window_seconds: 60
-  # Budget = capacity x utilisation. A step down needs 429s on at least 10% of the
+  # Budget = capacity x utilisation. A step down needs 429s on at least 50% of the
   # window's attempts and at least 5 of them; a window under 2% steps back up.
-  # After any step, hold for a full window.
+  # After any step, hold for a full window. The full run showed stepping down at 10%
+  # did not lower the 429 rate (they follow calls in flight, not tokens), so the
+  # model holds at 100% and absorbs the retries unless most attempts fail.
   start_utilisation: 1.0
   max_utilisation: 1.0
   min_utilisation: 0.30
   utilisation_step: 0.10
-  step_down_rate: 0.10
+  step_down_rate: 0.50
   step_down_min_throttles: 5
   step_up_rate: 0.02
   hold_seconds: 60

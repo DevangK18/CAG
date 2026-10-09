@@ -356,7 +356,7 @@ class GeminiConfig:
     utilisation_step: float = 0.10
     """Budget = capacity x utilisation; utilisation moves in steps between the floor and the cap."""
 
-    step_down_rate: float = 0.10
+    step_down_rate: float = 0.50
     step_down_min_throttles: int = 5
     """Step down when 429s are at least this share of attempts in the window, and at least this many."""
 

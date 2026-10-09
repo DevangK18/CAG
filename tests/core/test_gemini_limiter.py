@@ -247,7 +247,7 @@ def test_settings_from_config():
 
     settings = settings_from_config(ParsingPipelineConfig.from_yaml().gemini)
     assert settings.models[PRO].capacity_tpm == 500_000 and settings.models[PRO].ceiling == 24
-    assert settings.models[FLASH].capacity_tpm == 2_000_000 and settings.models[FLASH].ceiling == 96
+    assert settings.models[FLASH].capacity_tpm == 2_000_000 and settings.models[FLASH].ceiling == 64
     assert settings.models[FLASH].output_weight == 5
     assert settings.retry_first_wait_s == (1, 3)
 

@@ -90,6 +90,8 @@ def get_gemini_client(force_new: bool = False):
 
 _TRANSIENT_MARKERS = (
     "429", "500", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED", "Empty response",
+    # An access token that expired mid-run: the retry goes out with refreshed credentials
+    "UNAUTHENTICATED",
 )
 
 
