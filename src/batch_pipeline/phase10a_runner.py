@@ -389,7 +389,9 @@ class Phase10aRun:
         return path
 
 
-def write_content_summaries(chunk_file: Path, hierarchical_file: Path, overview_file: Optional[Path] = None) -> int:
+def write_content_summaries(
+    chunk_file: Path, hierarchical_file: Path, overview_file: Optional[Path] = None
+) -> int:
     """
     Copy chapter and section summaries into their parent chunks' content_summary,
     where the indexer reads them, and fill an empty audit_period from the report's
@@ -405,7 +407,8 @@ def write_content_summaries(chunk_file: Path, hierarchical_file: Path, overview_
         summaries = json.loads(hierarchical_file.read_text())
         by_parent = {
             e["parent_chunk_id"]: e["summary"]
-            for e in (summaries.get("chapter_summaries") or []) + (summaries.get("section_summaries") or [])
+            for e in (summaries.get("chapter_summaries") or [])
+            + (summaries.get("section_summaries") or [])
             if e.get("summary")
         }
         for parent in data.get("parent_chunks") or []:
@@ -415,7 +418,9 @@ def write_content_summaries(chunk_file: Path, hierarchical_file: Path, overview_
                 filled += 1
         changed = filled > 0
     if overview_file is not None and overview_file.exists():
-        from src.parsing_pipeline.modules.enrichment.temporal_extractor import fill_audit_period_from_overview
+        from src.parsing_pipeline.modules.enrichment.temporal_extractor import (
+            fill_audit_period_from_overview,
+        )
 
         enrichment = data.get("semantic_enrichment") or {}
         coverage = enrichment.get("temporal_coverage")
@@ -425,7 +430,9 @@ def write_content_summaries(chunk_file: Path, hierarchical_file: Path, overview_
             overview = None
         if coverage is not None and fill_audit_period_from_overview(coverage, overview):
             for finding in enrichment.get("findings") or []:
-                finding["audit_period"] = finding.get("audit_period") or coverage["audit_period"]
+                finding["audit_period"] = (
+                    finding.get("audit_period") or coverage["audit_period"]
+                )
             changed = True
     if changed:
         write_json_atomic(chunk_file, data)
